@@ -1,0 +1,18 @@
+# Flux secrets (never commit)
+**/secret*.yaml
+**/secrets.yaml
+**/*-secret.yaml
+**/*-secrets.yaml
+
+# Kustomize build output
+kustomize-output/
+rendered/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
