@@ -1,0 +1,23 @@
+# Groupe 13b — ClusterIssuers cert-manager (OpenBao PKI)
+# Séparé du groupe 13 pour éviter le dry-run chicken-and-egg :
+# les CRDs cert-manager.io/v1 n'existent qu'après que le HelmRelease cert-manager
+# soit installé. Cette Kustomization attend cert-manager Ready avant de s'appliquer.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cert-manager-issuers
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/cert-manager-issuers
+  prune: true
+  wait: true
+  dependsOn:
+    - name: cert-manager
+    - name: foundation-vault

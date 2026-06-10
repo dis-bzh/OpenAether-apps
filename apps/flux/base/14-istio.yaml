@@ -19,4 +19,4 @@ spec:
   wait: true
   dependsOn:
     - name: platform-gateway-api
-    - name: cert-manager
+    - name: cert-manager-issuers

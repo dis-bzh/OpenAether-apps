@@ -46,13 +46,12 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # 4. cert-manager (sign certs via OpenBao PKI)
-    #    Sprint B: vérifier au déploiement que le chart cert-manager pose bien
-    #    `app: cert-manager` sur le pod controller (cf. bug ESO ci-dessus).
+    # 4. cert-manager (sign certs via OpenBao PKI workload)
+    #    Le chart cert-manager pose app.kubernetes.io/instance (pas app: nu).
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: cert-manager
-            app: cert-manager
+            app.kubernetes.io/instance: cert-manager
       toPorts:
         - ports:
             - port: "8200"
