@@ -11,6 +11,7 @@ resources:
   - namespace.yaml
   - install.yaml
   - rbac-cert-controller-create.yaml
+  - networkpolicy.yaml
 
 patches:
   - path: patch-cert-controller-ns.yaml
