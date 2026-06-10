@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Provider CRs — appliqués APRÈS que l'operator ait créé leurs CRDs.
+# CoreProvider + CABPT + CACPPT + CAPS + CAPO + CAPOSC.
+# Flux Kustomization 51-cluster-api-providers.yaml dépend de 50-cluster-api-operator.
+resources:
+  - core-providers.yaml
+  - infra-providers.yaml
+
+labels:
+  - includeSelectors: true
+    pairs:
+      openaether.io/managed: "true"
+      openaether.io/component: "cluster-api-providers"

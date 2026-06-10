@@ -15,4 +15,5 @@ resources:
   - 21-storage.yaml
   - 30-observability.yaml
   - 40-kyverno.yaml
-  - 50-cluster-api.yaml
+  - 50-cluster-api-operator.yaml
+  - 51-cluster-api-providers.yaml
