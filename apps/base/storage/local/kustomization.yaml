@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Local storage stub — remplace apps/base/storage en local.
+# Longhorn requiert l'extension Talos iscsi-tools, absente de l'image Docker.
+# En local: local-path-provisioner est la seule StorageClass (déployée via
+# apps/flux/local/00b-local-storage.yaml → platform-local-storage).
+# Ce répertoire est intentionnellement vide pour éviter tout déploiement Longhorn.
+resources: []
