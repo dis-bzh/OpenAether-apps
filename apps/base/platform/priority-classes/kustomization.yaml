@@ -1,5 +1,5 @@
 # OpenAether 0.5.0 — Priority classes (hiérarchie platform)
-# P0: platform-critical (OpenBao, cert-manager, ESO, CSI, ArgoCD)
+# P0: platform-critical (OpenBao, cert-manager, ESO, CSI, Flux)
 # P1: platform-medium (Keycloak/CNPG/Jetstack controllers)
 # P2: platform-low (observability, demo, dashboards)
 # P3: workload-batch (KEDA scaledobjects)

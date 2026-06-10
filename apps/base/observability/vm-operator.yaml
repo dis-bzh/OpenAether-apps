@@ -4,7 +4,7 @@
 # VMServiceScrape, VMNodeScrape, VMPodScrape, VMRule, VMAlertManager.
 # Ces CRDs permettent de déclarer scrapes, alertes et clusters en GitOps.
 #
-# selfHeal ArgoCD gère le race CRDs → CRs (VMCluster/VMAgent appliqués
+# selfHeal Flux gère le race CRDs → CRs (VMCluster/VMAgent appliqués
 # avant que le CRD soit installé → selfHeal re-applique automatiquement).
 ---
 apiVersion: source.toolkit.fluxcd.io/v1

@@ -123,7 +123,7 @@ spec:
               echo "════ Lecture root_token workload ════"
               if ! kubectl get secret openbao-workload-recovery -n "$VAULT_NS" >/dev/null 2>&1; then
                 echo "⚠ Secret openbao-workload-recovery absent — workload non initialisé."
-                echo "  Ce Job sera re-exécuté au prochain sync ArgoCD."
+                echo "  Ce Job sera re-exécuté au prochain sync Flux."
                 echo "  Pour forcer: kubectl delete job openbao-vault-bootstrap -n $VAULT_NS"
                 exit 1
               fi
