@@ -1,0 +1,60 @@
+---
+# InfrastructureProvider — Scaleway (CAPS)
+# https://github.com/scaleway/cluster-api-provider-scaleway
+apiVersion: operator.cluster.x-k8s.io/v1alpha2
+kind: InfrastructureProvider
+metadata:
+  name: scaleway
+  namespace: capi-system
+spec:
+  version: v0.2.1
+  deployment:
+    containers:
+      - name: manager
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+---
+# InfrastructureProvider — OVH / OpenStack (CAPO)
+# https://github.com/kubernetes-sigs/cluster-api-provider-openstack
+apiVersion: operator.cluster.x-k8s.io/v1alpha2
+kind: InfrastructureProvider
+metadata:
+  name: openstack
+  namespace: capi-system
+spec:
+  version: v0.14.4
+  deployment:
+    containers:
+      - name: manager
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+---
+# InfrastructureProvider — Outscale / Numspot (CAPOSC)
+# https://github.com/outscale/cluster-api-provider-outscale
+apiVersion: operator.cluster.x-k8s.io/v1alpha2
+kind: InfrastructureProvider
+metadata:
+  name: outscale
+  namespace: capi-system
+spec:
+  version: v1.5.0
+  deployment:
+    containers:
+      - name: manager
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi

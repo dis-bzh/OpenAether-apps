@@ -1,0 +1,60 @@
+---
+# CoreProvider — Cluster API core controllers
+# https://github.com/kubernetes-sigs/cluster-api
+apiVersion: operator.cluster.x-k8s.io/v1alpha2
+kind: CoreProvider
+metadata:
+  name: cluster-api
+  namespace: capi-system
+spec:
+  version: v1.13.2
+  deployment:
+    containers:
+      - name: manager
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+---
+# BootstrapProvider — Talos bootstrap (generates Talos machine configs)
+# https://github.com/siderolabs/cluster-api-bootstrap-provider-talos
+apiVersion: operator.cluster.x-k8s.io/v1alpha2
+kind: BootstrapProvider
+metadata:
+  name: talos
+  namespace: capi-system
+spec:
+  version: v0.6.12
+  deployment:
+    containers:
+      - name: manager
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+---
+# ControlPlaneProvider — Talos control plane (manages Talos CP lifecycle)
+# https://github.com/siderolabs/cluster-api-control-plane-provider-talos
+apiVersion: operator.cluster.x-k8s.io/v1alpha2
+kind: ControlPlaneProvider
+metadata:
+  name: talos
+  namespace: capi-system
+spec:
+  version: v0.5.13
+  deployment:
+    containers:
+      - name: manager
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
