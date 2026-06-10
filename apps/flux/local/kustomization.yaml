@@ -9,6 +9,8 @@ kind: Kustomization
 #     inaccessible en Docker / nécessitent Longhorn + Istio non disponibles).
 #   - cnpg : suspendu (webhook ESO + OpenBao requis, non dispos en local).
 #   - storage-minio : suspendu (namespace créé par storage/Longhorn, lui-même suspendu).
+#   - platform-local-storage : suspendu (kustomize build fetche raw.githubusercontent.com, DNS Docker cassé ; ressources déjà déployées).
+#   - platform-gateway-api : suspendu (kustomize build fetche github.com, DNS Docker cassé ; CRDs déjà présents).
 #   - cluster-api-operator/providers : suspendus (nécessitent cert-manager, suspendu).
 #   - foundation-pki-root : dépendance ajoutée sur platform-local-storage (PVC openbao).
 #
@@ -73,6 +75,43 @@ patches:
       - { op: add,     path: /spec/suspend, value: true }
       - { op: replace, path: /spec/wait,    value: false }
 
+  # platform-local-storage suspendu : kustomize build fetche raw.githubusercontent.com (DNS Docker cassé).
+  # Ressources local-path-provisioner déjà déployées (vendored + kubectl apply direct).
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: platform-local-storage
+    patch: |-
+      - { op: add,     path: /spec/suspend, value: true }
+      - { op: replace, path: /spec/wait,    value: false }
+
+  # platform-gateway-api suspendu : kustomize build fetche github.com (DNS Docker cassé).
+  # CRDs Gateway API déjà présents (vendored + kubectl apply direct).
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: platform-gateway-api
+    patch: |-
+      - { op: add,     path: /spec/suspend, value: true }
+      - { op: replace, path: /spec/wait,    value: false }
+
+  # foundation-vault : retirer dep platform-gateway-api (suspendu local).
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: foundation-vault
+    patch: |-
+      - { op: replace, path: /spec/dependsOn, value: [{ name: foundation-pki-root }] }
+
+  # foundation-pki-root : retirer dep platform-local-storage (suspendu local).
+  # La dep platform-local-storage locale (PVC openbao) est déjà déployée.
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: foundation-pki-root
+    patch: |-
+      - { op: replace, path: /spec/dependsOn, value: [{ name: namespaces }, { name: foundation-pki-root-rbac }] }
+
   # cluster-api-operator suspendu : nécessite cert-manager (suspendu en local).
   - target:
       group: kustomize.toolkit.fluxcd.io
@@ -91,10 +130,3 @@ patches:
       - { op: add,     path: /spec/suspend, value: true }
       - { op: replace, path: /spec/wait,    value: false }
 
-  # foundation-pki-root : ajouter dep platform-local-storage (local-only, PVC openbao).
-  - target:
-      group: kustomize.toolkit.fluxcd.io
-      kind: Kustomization
-      name: foundation-pki-root
-    patch: |-
-      - { op: add, path: /spec/dependsOn/-, value: { name: platform-local-storage } }
