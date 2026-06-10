@@ -183,6 +183,10 @@ spec:
               wlapi POST /v1/sys/mounts/pki/workload '{"type":"pki"}' "$WL_TOKEN" >/dev/null || true
               echo "  pki/workload mount: HTTP=$(WH) (204=créé, 400=déjà)"
 
+              # 4c. enable KV v2 engine (secret/) — chemin pour ESO + seeder
+              wlapi POST /v1/sys/mounts/secret '{"type":"kv","options":{"version":"2"}}' "$WL_TOKEN" >/dev/null || true
+              echo "  kv v2 secret/ mount: HTTP=$(WH) (204=créé, 400=déjà)"
+
               # ── 5) Policy ESO (read-only KV) ───────────────────────────────
               # Lecture secrets applicatifs dans le KV engine (secret/).
               ESO_POLICY="$(printf 'path "secret/data/*" {\n  capabilities = ["read"]\n}\npath "secret/metadata/*" {\n  capabilities = ["read", "list"]\n}\n')"
@@ -263,14 +267,18 @@ spec:
                 wlapi POST "/v1/secret/data/${path}" \
                   "$(jq -nc --argjson d "$payload" '{"data":$d}')" \
                   "$WL_TOKEN" >/dev/null
-                echo "    → HTTP=$(WH)"
+                local wcode
+                wcode="$(WH)"
+                echo "    → HTTP=$wcode"
+                case "$wcode" in 200|204) : ;; *)
+                  echo "ERREUR: write secret/${path} échoué (HTTP=$wcode)"; cat /tmp/wlbody; exit 1 ;; esac
               }
 
               # Générer les valeurs aléatoires AVANT le kv_seed (set +x actif).
-              GRAFANA_PASS="$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
-              GRAFANA_DB_PASS="$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
-              MINIO_SECRET="$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
-              LONGHORN_PASS="$(openssl rand -base64 48 | tr -d '/+=')"
+              GRAFANA_PASS="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
+              GRAFANA_DB_PASS="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
+              MINIO_SECRET="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
+              LONGHORN_PASS="$(dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 | tr -d '/+=')"
 
               kv_seed "grafana/admin" \
                 "$(jq -nc --arg p "$GRAFANA_PASS" '{username:"admin",password:$p}')"
