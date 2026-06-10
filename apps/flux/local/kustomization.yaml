@@ -7,6 +7,9 @@ kind: Kustomization
 #   - storage-minio actif (21b) : S3 local pour test Loki/Grafana.
 #   - cert-manager, istio, storage, observability : suspendus (HelmReleases, réseau chart
 #     inaccessible en Docker / nécessitent Longhorn + Istio non disponibles).
+#   - cnpg : suspendu (webhook ESO + OpenBao requis, non dispos en local).
+#   - storage-minio : suspendu (namespace créé par storage/Longhorn, lui-même suspendu).
+#   - cluster-api-operator/providers : suspendus (nécessitent cert-manager, suspendu).
 #   - foundation-pki-root : dépendance ajoutée sur platform-local-storage (PVC openbao).
 #
 # Règle DAG (invariant) : l'ensemble {suspended} doit être fermé vers le haut —
@@ -51,6 +54,42 @@ patches:
       name: observability
     patch: |-
       - { op: add, path: /spec/suspend, value: true }
+
+  # cnpg suspendu : nécessite le webhook ESO + OpenBao opérationnels (non dispos en local).
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: cnpg
+    patch: |-
+      - { op: add,     path: /spec/suspend, value: true }
+      - { op: replace, path: /spec/wait,    value: false }
+
+  # storage-minio suspendu : namespace foundation-storage créé par storage (Longhorn, suspendu).
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: storage-minio
+    patch: |-
+      - { op: add,     path: /spec/suspend, value: true }
+      - { op: replace, path: /spec/wait,    value: false }
+
+  # cluster-api-operator suspendu : nécessite cert-manager (suspendu en local).
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: cluster-api-operator
+    patch: |-
+      - { op: add,     path: /spec/suspend, value: true }
+      - { op: replace, path: /spec/wait,    value: false }
+
+  # cluster-api-providers suspendu : dépend de cluster-api-operator (suspendu).
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: cluster-api-providers
+    patch: |-
+      - { op: add,     path: /spec/suspend, value: true }
+      - { op: replace, path: /spec/wait,    value: false }
 
   # foundation-pki-root : ajouter dep platform-local-storage (local-only, PVC openbao).
   - target:
