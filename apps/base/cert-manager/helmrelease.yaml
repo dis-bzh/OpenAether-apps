@@ -14,6 +14,7 @@ metadata:
   name: cert-manager
   namespace: cert-manager
 spec:
+  interval: 10m
   chart:
     spec:
       chart: cert-manager
@@ -31,7 +32,9 @@ spec:
     global:
       leaderElection:
         namespace: cert-manager
-    installCRDs: false
+    installCRDs: true
+    startupapicheck:
+      enabled: false
     replicaCount: 2
     webhook:
       replicaCount: 2

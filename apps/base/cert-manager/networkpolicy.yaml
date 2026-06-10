@@ -1,0 +1,88 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cert-manager
+  namespace: cert-manager
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprintB"
+    openaether.io/component: cert-manager
+spec:
+  description: "cert-manager: webhook ingress kube-apiserver + intra-namespace,
+    egress DNS + kube-api + OpenBao PKI (signer) + OpenBao workload (signer)."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/instance: cert-manager
+  ingress:
+    # kube-apiserver → webhook (ValidatingWebhookConfiguration)
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+    # intra-namespace : cainjector → webhook, startupapicheck → webhook
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: cert-manager
+            app.kubernetes.io/instance: cert-manager
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "10250"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # kube-apiserver (watch CRDs, CertificateRequests, etc.)
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # intra-namespace : controller → webhook, cainjector → apiserver local
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: cert-manager
+            app.kubernetes.io/instance: cert-manager
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "10250"
+              protocol: TCP
+    # OpenBao root PKI (signer pki/root/sign/*)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-pki-root
+            app: openbao-pki-root
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP
+    # OpenBao workload PKI (signer pki/workload/sign/*)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-vault
+            app: openbao
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP

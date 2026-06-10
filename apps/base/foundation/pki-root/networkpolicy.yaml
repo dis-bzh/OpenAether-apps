@@ -42,7 +42,16 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # 3. Prometheus scraper (ServiceMonitor)
+    # 3. cert-manager (signer pki/root/sign/*)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: cert-manager
+            app.kubernetes.io/instance: cert-manager
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP
+    # 4. Prometheus scraper (ServiceMonitor)
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
