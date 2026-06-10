@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# CAPI Operator — installe l'operator qui crée les CRDs Provider.
+# Doit être déployé AVANT apps/base/cluster-api-providers (via dependsOn Flux).
+resources:
+  - namespace.yaml
+  - operator.yaml
+
+labels:
+  - includeSelectors: true
+    pairs:
+      openaether.io/managed: "true"
+      openaether.io/component: "cluster-api-operator"
