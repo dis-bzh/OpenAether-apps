@@ -62,7 +62,7 @@ bao login "$ROOT_TOKEN" >/dev/null
 
 # Re-trigger le Job 20 (workload-seal-token)
 kubectl delete job openbao-workload-seal-token -n foundation-vault --ignore-not-found
-# ArgoCD re-appliquera le Job au prochain sync, OU relancer manuellement
+# Flux re-appliquera le Job au prochain sync, OU relancer manuellement
 kubectl apply -f apps/base/foundation/pki-root/bootstrap/20-workload-seal-token-job.yaml
 
 # Vérifier unseal
@@ -95,7 +95,7 @@ bao login "$ROOT_TOKEN" >/dev/null
 
 # Re-trigger le Job 20 (régénère wrapping token)
 kubectl delete job openbao-workload-seal-token -n foundation-vault --ignore-not-found
-# ArgoCD re-applique au prochain sync OU kubectl apply manuel
+# Flux re-applique au prochain sync OU kubectl apply manuel
 ```
 
 ## Métriques d'alerte (cf. prometheusrule.yaml)
@@ -110,7 +110,7 @@ kubectl delete job openbao-workload-seal-token -n foundation-vault --ignore-not-
 - TLS désactivé (`tls_disable = 1`) sur listener workload. **À activer
   sprint 1** via cert-manager + openbao-server-tls.
 - Le `httproute.yaml` référence un Gateway pas encore déployé (Cilium GW
-  arrive sprint 1+). Ne casse pas le sync ArgoCD mais la route sera
+  arrive sprint 1+). Ne casse pas le sync Flux mais la route sera
   `NoMatchingParent` jusqu'à la création du Gateway.
 - Pas de backup S3 automatique (raft snapshot). **Sprint 4 obs:**
   ajouter barman CNPG + cron snapshot.

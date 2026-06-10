@@ -24,12 +24,12 @@ Il ne stocke **aucune donnée applicative** : il sert **uniquement** de seal
 > **Validé localement (Talos) : 26/26 tests e2e passants.**
 
 En fonctionnement nominal, le **Job bootstrap consolidé**
-(`bootstrap/00-bootstrap-job.yaml`, ArgoCD PostSync, idempotent) gère TOUT :
+(`bootstrap/00-bootstrap-job.yaml`, Flux PostSync, idempotent) gère TOUT :
 init Shamir 5/3 → stockage des unseal keys dans le Secret
 `openbao-root-recovery` → unseal du root (3 clés) → transit → seal token
 workload → init raft workload. **Au redémarrage du root**, relancer le Job
 suffit : il lit les unseal keys depuis le Secret et re-unseal automatiquement
-(c'est ce que fait ArgoCD au prochain sync, ou manuellement :
+(c'est ce que fait Flux au prochain sync, ou manuellement :
 `kubectl delete job openbao-bootstrap -n foundation-pki-root && kubectl apply -k apps/base/foundation/pki-root`).
 
 ⚠️ **Sécurité** : le Secret `openbao-root-recovery` (unseal keys + root token)
@@ -101,7 +101,7 @@ kubectl exec -n foundation-pki-root openbao-pki-root-0 -- \
 Si le root OpenBao est perdu (PVC corrompu, cluster détruit sans backup) :
 
 1. **Re-créer le root** depuis la définition apps/base/foundation/pki-root/
-   (GitOps ArgoCD).
+   (GitOps Flux).
 2. **Réinit** : Job bootstrap `00-bootstrap-job` (idempotent : vérifie
    `/v1/sys/seal-status .initialized` → false, donc init). Le Job
    redéploie transit, key, role, seal token workload, init raft workload.
@@ -145,7 +145,7 @@ facile sans toucher au workload :
 - TLS désactivé (`tls_disable = 1`) sur listener root. **À activer
   sprint 1** via cert-manager + openbao-server-tls.
 - L'init + l'unseal + la config transit + l'init raft workload se font via
-  un **unique Job consolidé** `bootstrap/00-bootstrap-job.yaml` (ArgoCD
+  un **unique Job consolidé** `bootstrap/00-bootstrap-job.yaml` (Flux
   PostSync, idempotent, API HTTP — image `alpine/k8s` car `kubectl`+`jq`+`curl`
   absents de l'image openbao).
 - Root pod redémarre = **re-unseal automatique** par re-run du Job (lit le

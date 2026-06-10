@@ -873,7 +873,7 @@ spec:
                             Warning: Using Generic target. Make sure access policies and encryption are properly configured.
                           properties:
                             apiVersion:
-                              description: APIVersion of the target resource (e.g., "v1" for ConfigMap, "argoproj.io/v1alpha1" for ArgoCD Application)
+                              description: APIVersion of the target resource (e.g., "v1" for ConfigMap, "argoproj.io/v1alpha1" for Flux Application)
                               minLength: 1
                               type: string
                             kind:
@@ -15198,7 +15198,7 @@ spec:
                         Warning: Using Generic target. Make sure access policies and encryption are properly configured.
                       properties:
                         apiVersion:
-                          description: APIVersion of the target resource (e.g., "v1" for ConfigMap, "argoproj.io/v1alpha1" for ArgoCD Application)
+                          description: APIVersion of the target resource (e.g., "v1" for ConfigMap, "argoproj.io/v1alpha1" for Flux Application)
                           minLength: 1
                           type: string
                         kind:
