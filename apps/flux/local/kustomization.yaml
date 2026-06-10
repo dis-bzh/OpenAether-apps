@@ -30,3 +30,11 @@ patches:
       kind: Kustomization
     patch: |-
       - { op: add, path: /spec/suspend, value: true }
+  # Longhorn requiert iscsi-tools (extension Talos absente de l'image Docker).
+  # Redirige storage vers un stub vide — protège contre un apply accidentel en local.
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: storage
+    patch: |-
+      - { op: replace, path: /spec/path, value: ./apps/base/storage/local }
