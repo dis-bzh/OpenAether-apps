@@ -1,0 +1,78 @@
+---
+# longhorn-system: allow internal Longhorn traffic
+# CiliumClusterwideNetworkPolicies (allow-dns, allow-kube-api) create default-deny.
+# Longhorn components need to talk to each other on port 9500.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn
+  namespace: longhorn-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "storage"
+spec:
+  description: "longhorn: allow intra-namespace traffic (manager, driver-deployer, csi, ui) on port 9500 + egress DNS + kube-api."
+  endpointSelector:
+    matchLabels: {}
+  ingress:
+    # Allow all intra-namespace traffic
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: longhorn-system
+      toPorts:
+        - ports:
+            - port: "9500"
+              protocol: TCP
+    # Allow health/readiness probes from kube-apiserver
+    - fromEntities:
+        - kube-apiserver
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "9500"
+              protocol: TCP
+  egress:
+    # Intra-namespace
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: longhorn-system
+      toPorts:
+        - ports:
+            - port: "9500"
+              protocol: TCP
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # kube-api
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # iSCSI targets (Longhorn uses TCP 3260 for iSCSI)
+    - toEndpoints:
+        - matchLabels: {}
+      toPorts:
+        - ports:
+            - port: "3260"
+              protocol: TCP
+    # Cross-node Longhorn replica traffic (TCP 9500 + 10050-10053 range)
+    - toEntities:
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "9500"
+              protocol: TCP
