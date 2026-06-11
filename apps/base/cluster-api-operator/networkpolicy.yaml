@@ -1,0 +1,59 @@
+# OpenAether 0.5.0 — Cluster API Operator NetworkPolicy
+# CAPI operator webhook (si activé) écoute sur le port 9443 (standard kubebuilder).
+# Le Service capi-operator-webhook expose 443 → 9443.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: capi-operator
+  namespace: capi-operator-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprintA"
+    openaether.io/component: "cluster-api-operator"
+spec:
+  description: "CAPI operator webhook: ingress kube-apiserver sur webhook:9443,
+    egress DNS + kube-api."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: cluster-api-operator
+  ingress:
+    # kube-apiserver → webhook CAPI operator (ValidatingWebhookConfiguration)
+    # Port standard kubebuilder 9443.
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
+    # intra-namespace: controller → webhook (cert rotation)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: capi-operator-system
+            app.kubernetes.io/name: cluster-api-operator
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Kubernetes API
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver

@@ -1,0 +1,59 @@
+# OpenAether 0.5.0 — Kyverno NetworkPolicy
+# Kyverno webhook écoute sur le port 9443 (standard kubebuilder).
+# Le Service kyverno-webhook expose 443 → 9443.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kyverno
+  namespace: kyverno
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprint0"
+    openaether.io/component: "kyverno"
+spec:
+  description: "Kyverno webhook: ingress kube-apiserver sur webhook:9443,
+    egress DNS + kube-api."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: kyverno
+  ingress:
+    # kube-apiserver → webhook Kyverno (ValidatingWebhookConfiguration / MutatingWebhookConfiguration)
+    # Port standard kubebuilder 9443.
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
+    # intra-namespace: controller → webhook (cert rotation)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kyverno
+            app.kubernetes.io/name: kyverno
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Kubernetes API
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver

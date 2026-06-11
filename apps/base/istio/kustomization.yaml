@@ -21,7 +21,7 @@ resources:
 # Un namespace: global renommerait istio-system → foundation-service-mesh (conflit namespaces.yaml).
 
 labels:
-  - includeSelectors: true
+  - includeSelectors: false
     pairs:
       openaether.io/managed: "true"
       openaether.io/sprint: "0.5.0-sprintB"
