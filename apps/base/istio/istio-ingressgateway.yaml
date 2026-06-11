@@ -17,9 +17,4 @@ spec:
       interval: 1h
   dependsOn:
     - name: istiod
-  values:
-    # Gateway API: pods qui recevront les Gateway/HTTPRoute
-    autoscaling:
-      enabled: true
-      minReplicas: 2
-      maxReplicas: 5
+  # Gateway API: pods recevront les Gateway/HTTPRoute (defaults chart = 1 replica)
