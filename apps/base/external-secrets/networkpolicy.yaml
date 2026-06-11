@@ -8,15 +8,29 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: external-secrets
 spec:
-  description: "ESO: egress vers OpenBao workload (pull secrets), webhook ingress
-    depuis kube-apiserver, cert-controller egress kube-api."
+  description: "ESO controller+webhook+cert-controller: label commun app.kubernetes.io/instance=external-secrets.
+    Ingress: kube-apiserver → webhook:10250. Egress: DNS, kube-api, OpenBao workload.
+    Intra-ns: cert-controller → webhook (rotation TLS)."
+  # Couvre les 3 pods (controller/webhook/cert-controller) via le label instance commun.
+  # app.kubernetes.io/name diffère par pod (external-secrets / external-secrets-webhook /
+  # external-secrets-cert-controller) — utiliser instance qui est identique sur tous.
   endpointSelector:
     matchLabels:
-      app.kubernetes.io/name: external-secrets
+      app.kubernetes.io/instance: external-secrets
   ingress:
-    # kube-apiserver → webhook ESO (validation ExternalSecret / SecretStore)
+    # kube-apiserver → webhook ESO (ValidatingWebhookConfiguration sur port 10250)
+    # Le Service external-secrets-webhook expose 443→10250 en backend.
     - fromEntities:
         - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+    # intra-namespace: cert-controller → webhook (rotation certificat TLS webhook)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-pki-management
+            app.kubernetes.io/instance: external-secrets
       toPorts:
         - ports:
             - port: "10250"
@@ -33,7 +47,7 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # Kube API (auth + watch ExternalSecret CRDs)
+    # Kube API (watch CRDs ExternalSecret/SecretStore, auth kubernetes)
     - toServices:
         - k8sService:
             serviceName: kubernetes
@@ -44,7 +58,7 @@ spec:
               protocol: TCP
     - toEntities:
         - kube-apiserver
-    # OpenBao workload (pull secrets KV)
+    # OpenBao workload (pull secrets KV via auth kubernetes)
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault
