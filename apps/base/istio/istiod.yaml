@@ -4,6 +4,7 @@ metadata:
   name: istiod
   namespace: foundation-service-mesh
 spec:
+  interval: 10m
   chart:
     spec:
       chart: istiod
