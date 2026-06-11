@@ -7,7 +7,6 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintB"
     openaether.io/component: "istio"
     pod-security.kubernetes.io/enforce: privileged
-    istio.io/rev: default
 
 ---
 # CRDs Istio (wave 0 - avant istiod)
