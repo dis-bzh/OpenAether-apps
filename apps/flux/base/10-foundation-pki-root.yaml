@@ -36,6 +36,7 @@ spec:
   path: ./apps/base/foundation/pki-root
   prune: true
   wait: false
+  force: true
   dependsOn:
     - name: namespaces
     - name: foundation-pki-root-rbac
