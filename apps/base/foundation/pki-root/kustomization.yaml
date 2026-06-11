@@ -24,7 +24,7 @@ resources:
   - bootstrap
 
 labels:
-  - includeSelectors: true
+  - includeSelectors: false
     pairs:
       openaether.io/managed: "true"
       openaether.io/sprint: "0.5.0-sprint0"
