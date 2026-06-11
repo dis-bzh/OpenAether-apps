@@ -19,10 +19,8 @@ spec:
     - name: istio-base
   values:
     pilot:
-      replicaCount: 2
-      autoscaleEnabled: true
-      autoscaleMin: 2
-      autoscaleMax: 5
+      replicaCount: 1
+      autoscaleEnabled: false
       env:
         PILOT_ENABLE_AMBIENT: "true"
     meshConfig:
