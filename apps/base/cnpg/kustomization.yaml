@@ -9,6 +9,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - cnpg-1.23.1.yaml  # vendored from v1.23.1 — évite fetch remote (DNS/IPv6)
+  - networkpolicy.yaml
   - cluster.yaml
   - secret.yaml
   - grafana-db-cluster.yaml

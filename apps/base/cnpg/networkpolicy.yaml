@@ -1,0 +1,59 @@
+# OpenAether 0.5.0 — CNPG (CloudNativePG) NetworkPolicy
+# Webhook CNPG écoute sur le port 9443 (webhook-server).
+# Le Service cnpg-webhook expose 443 → 9443.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprint0"
+    openaether.io/component: "cnpg"
+spec:
+  description: "CNPG operator + webhook: ingress kube-apiserver sur webhook:9443,
+    egress DNS + kube-api + OpenBao workload (pour secrets via ESO si futur CSI)."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg
+  ingress:
+    # kube-apiserver → webhook CNPG (ValidatingWebhookConfiguration)
+    # Le Service cnpg-webhook expose 443/TCP → targetPort 9443/TCP (webhook-server).
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
+    # intra-namespace: operator → webhook (cert rotation)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-databases
+            app.kubernetes.io/name: cloudnative-pg
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Kubernetes API (watch Cluster/Backup/ScheduledBackup CRDs)
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver

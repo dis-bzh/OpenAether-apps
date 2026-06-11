@@ -5,10 +5,12 @@ kind: Kustomization
 # Doit être déployé AVANT apps/base/cluster-api-providers (via dependsOn Flux).
 resources:
   - namespace.yaml
+  - networkpolicy.yaml
   - operator.yaml
 
 labels:
-  - includeSelectors: true
+  - includeSelectors: false
     pairs:
       openaether.io/managed: "true"
+      openaether.io/sprint: "0.5.0-sprintA"
       openaether.io/component: "cluster-api-operator"

@@ -9,7 +9,8 @@ resources:
   - infra-providers.yaml
 
 labels:
-  - includeSelectors: true
+  - includeSelectors: false
     pairs:
       openaether.io/managed: "true"
+      openaether.io/sprint: "0.5.0-sprintA"
       openaether.io/component: "cluster-api-providers"
