@@ -23,6 +23,8 @@ spec:
       autoscaleEnabled: true
       autoscaleMin: 2
       autoscaleMax: 5
+      env:
+        PILOT_ENABLE_AMBIENT: "true"
     meshConfig:
       enableAutoMtls: true
       trustDomain: openaether.local
