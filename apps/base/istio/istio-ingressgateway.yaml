@@ -22,6 +22,9 @@ spec:
   dependsOn:
     - name: istiod
   values:
+    # revision: default → pod gets istio.io/rev=default label → webhook injects image
+    # No need for namespace-level injection label on istio-system
+    revision: default
     resources:
       requests:
         cpu: 100m
