@@ -19,8 +19,11 @@ spec:
   ingress:
     # kube-apiserver → webhook CNPG (ValidatingWebhookConfiguration)
     # Le Service cnpg-webhook expose 443/TCP → targetPort 9443/TCP (webhook-server).
+    # remote-node: sur Talos, le static pod kube-apiserver est identifié
+    # comme nœud (node identity) par Cilium, pas comme kube-apiserver entity.
     - fromEntities:
         - kube-apiserver
+        - remote-node
       toPorts:
         - ports:
             - port: "9443"

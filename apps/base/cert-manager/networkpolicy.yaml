@@ -15,8 +15,11 @@ spec:
       app.kubernetes.io/instance: cert-manager
   ingress:
     # kube-apiserver → webhook (ValidatingWebhookConfiguration)
+    # remote-node: sur Talos, le static pod kube-apiserver est identifié
+    # comme nœud (node identity) par Cilium, pas comme kube-apiserver entity.
     - fromEntities:
         - kube-apiserver
+        - remote-node
       toPorts:
         - ports:
             - port: "10250"
