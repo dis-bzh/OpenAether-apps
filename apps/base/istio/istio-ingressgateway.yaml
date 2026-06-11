@@ -15,6 +15,10 @@ spec:
         name: istio
         namespace: foundation-service-mesh
       interval: 1h
+  install:
+    disableSchemaValidation: true
+  upgrade:
+    disableSchemaValidation: true
   dependsOn:
     - name: istiod
   # Gateway API: pods recevront les Gateway/HTTPRoute (defaults chart = 1 replica)
