@@ -21,4 +21,7 @@ spec:
     disableSchemaValidation: true
   dependsOn:
     - name: istiod
-  # Gateway API: pods recevront les Gateway/HTTPRoute (defaults chart = 1 replica)
+  values:
+    global:
+      hub: docker.io/istio
+      tag: "1.24.2"
