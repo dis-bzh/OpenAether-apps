@@ -18,8 +18,6 @@ spec:
   dependsOn:
     - name: istio-base
   values:
-    global:
-      defaultRevision: default
     pilot:
       replicaCount: 2
       autoscaleEnabled: true
@@ -29,4 +27,3 @@ spec:
       enableAutoMtls: true
       trustDomain: openaether.local
       trustDomainAliases: ["openaether.eu"]
-    revision: default
