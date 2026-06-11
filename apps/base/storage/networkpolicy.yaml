@@ -11,7 +11,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "storage"
 spec:
-  description: "longhorn: allow intra-namespace traffic on ports 9500 + 8500-8503 (instance manager gRPC) + egress DNS + kube-api."
+  description: "longhorn: allow all intra-ns traffic + webhook ports 9501-9502 + instance manager 8500-8503 + egress DNS + kube-api."
   endpointSelector:
     matchLabels: {}
   ingress:
@@ -30,13 +30,17 @@ spec:
               protocol: TCP
             - port: "8503"
               protocol: TCP
-    # Allow health/readiness probes from kube-apiserver
+    # kube-apiserver → webhooks (admission 9502, conversion 9501, backend 9500)
     - fromEntities:
         - kube-apiserver
         - remote-node
       toPorts:
         - ports:
             - port: "9500"
+              protocol: TCP
+            - port: "9501"
+              protocol: TCP
+            - port: "9502"
               protocol: TCP
   egress:
     # Intra-namespace: allow all (Longhorn pods don't always have ns label)
