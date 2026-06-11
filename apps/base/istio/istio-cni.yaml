@@ -5,6 +5,7 @@ metadata:
   namespace: foundation-service-mesh
 spec:
   interval: 10m
+  targetNamespace: kube-system
   chart:
     spec:
       chart: cni
