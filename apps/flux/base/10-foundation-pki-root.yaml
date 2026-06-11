@@ -56,6 +56,7 @@ spec:
   path: ./apps/base/foundation/pki-root/bootstrap-job
   prune: true
   wait: false
+  force: true
   dependsOn:
     - name: foundation-pki-root
     - name: foundation-vault
