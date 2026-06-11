@@ -11,7 +11,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "storage"
 spec:
-  description: "longhorn: allow intra-namespace traffic (manager, driver-deployer, csi, ui) on port 9500 + egress DNS + kube-api."
+  description: "longhorn: allow intra-namespace traffic (manager, driver-deployer, csi, ui) on ports 9500 + 8500 (instance manager gRPC) + egress DNS + kube-api."
   endpointSelector:
     matchLabels: {}
   ingress:
@@ -22,6 +22,8 @@ spec:
       toPorts:
         - ports:
             - port: "9500"
+              protocol: TCP
+            - port: "8500"
               protocol: TCP
     # Allow health/readiness probes from kube-apiserver
     - fromEntities:
@@ -39,6 +41,8 @@ spec:
       toPorts:
         - ports:
             - port: "9500"
+              protocol: TCP
+            - port: "8500"
               protocol: TCP
     # DNS
     - toEndpoints:
