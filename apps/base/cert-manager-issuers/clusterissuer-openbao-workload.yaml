@@ -8,7 +8,7 @@ spec:
     server: http://openbao.foundation-vault.svc.cluster.local:8200
     auth:
       kubernetes:
-        mountPath: kubernetes
+        mountPath: /v1/auth/kubernetes
         role: cert-manager-issuer
         serviceAccountRef:
           name: cert-manager
