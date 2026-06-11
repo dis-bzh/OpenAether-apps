@@ -8,14 +8,3 @@ metadata:
     openaether.io/component: "gateway"
 spec:
   controllerName: istio.io/gateway-controller
-  parametersRef:
-    group: networking.istio.io
-    kind: GatewayClassParameters
-    name: default
----
-apiVersion: networking.istio.io/v1
-kind: GatewayClassParameters
-metadata:
-  name: default
-spec:
-  defaultRevision: default
