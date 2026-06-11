@@ -23,6 +23,13 @@ spec:
       autoscaleEnabled: false
       env:
         PILOT_ENABLE_AMBIENT: "true"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: 1000m
+          memory: 1Gi
     meshConfig:
       enableAutoMtls: true
       trustDomain: openaether.local
