@@ -199,7 +199,7 @@ spec:
 
               # 5b. Policy secret-seeder (write KV — utilisée par ce Job step 10)
               # Scoped au prefixe exact, pas wildcard général.
-              SEEDER_POLICY="$(printf 'path "secret/data/grafana/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/minio/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/longhorn/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/metadata/*" {\n  capabilities = ["read","list"]\n}\n')"
+              SEEDER_POLICY="$(printf 'path "secret/data/grafana/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/minio/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/longhorn/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/keycloak/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/metadata/*" {\n  capabilities = ["read","list"]\n}\n')"
               wlapi PUT /v1/sys/policies/acl/secret-seeder \
                 "$(jq -nc --arg p "$SEEDER_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
               echo "  policy secret-seeder: HTTP=$(WH)"
@@ -254,7 +254,7 @@ spec:
               # Utilise le root_token workload déjà chargé (WL_TOKEN).
               # set +x déjà actif depuis le début de ce bloc secret.
               echo ""
-              echo "════ 10) Seed secrets Sprint C (grafana/admin, minio/root, longhorn/encryption) ════"
+              echo "════ 10) Seed secrets Sprint C (grafana/admin, minio/root, longhorn/encryption, keycloak/db) ════"
 
               kv_seed() {
                 local path="$1"
@@ -282,6 +282,7 @@ spec:
               GRAFANA_DB_PASS="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
               MINIO_SECRET="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
               LONGHORN_PASS="$(dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 | tr -d '/+=')"
+              KEYCLOAK_DB_PASS="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
 
               kv_seed "grafana/admin" \
                 "$(jq -nc --arg p "$GRAFANA_PASS" '{username:"admin",password:$p}')"
@@ -291,6 +292,8 @@ spec:
                 "$(jq -nc --arg s "$MINIO_SECRET" '{accessKey:"minio",secretKey:$s}')"
               kv_seed "longhorn/encryption" \
                 "$(jq -nc --arg p "$LONGHORN_PASS" '{passphrase:$p}')"
+              kv_seed "keycloak/db" \
+                "$(jq -nc --arg p "$KEYCLOAK_DB_PASS" '{username:"keycloak",password:$p}')"
 
               echo "  ✅ Secrets Sprint C seedés (idempotents)"
               set -x; set +x
