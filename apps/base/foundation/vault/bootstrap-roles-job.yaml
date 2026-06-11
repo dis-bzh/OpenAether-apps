@@ -92,6 +92,9 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+        - name: tmp
+          emptyDir: {}
       containers:
         - name: bootstrap-roles
           image: alpine/k8s:1.31.1
@@ -298,9 +301,12 @@ spec:
             capabilities:
               drop: ["ALL"]
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false   # kubectl/curl écrivent dans /tmp
+            readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 1000
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 50m
