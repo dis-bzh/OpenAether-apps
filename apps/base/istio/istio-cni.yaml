@@ -26,3 +26,5 @@ spec:
       - kube-system
       - management-gitops
       - local-path-storage
+    ambient:
+      enabled: true
