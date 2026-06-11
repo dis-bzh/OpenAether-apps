@@ -1,0 +1,210 @@
+---
+# istiod: accepte connexions des proxies/ztunnel/webhooks, émet vers kube-api
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: istiod
+  namespace: istio-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "istio"
+spec:
+  description: "istiod: ingress depuis proxies (15012 xDS/CA, 15010 xDS plaintext, 443 webhook, 15014 debug), egress DNS + kube-api."
+  endpointSelector:
+    matchLabels:
+      app: istiod
+  ingress:
+    # Proxies Envoy, ztunnel, ingressgateway → xDS + CA
+    - fromEndpoints:
+        - matchLabels: {}
+      toPorts:
+        - ports:
+            - port: "15012"
+              protocol: TCP
+            - port: "15010"
+              protocol: TCP
+    # kube-apiserver → webhook MutatingWebhookConfiguration
+    - fromEntities:
+        - kube-apiserver
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+# ztunnel: DaemonSet ambient — doit joindre istiod (xDS+CA) et kube-api
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ztunnel
+  namespace: istio-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "istio"
+spec:
+  description: "ztunnel: egress istiod (15012 CA+xDS, 15010), kube-api, DNS. Ingress HBONE (15008) depuis tous pods."
+  endpointSelector:
+    matchLabels:
+      app: ztunnel
+  ingress:
+    # HBONE tunnels depuis n'importe quel pod ambient
+    - fromEndpoints:
+        - matchLabels: {}
+      toPorts:
+        - ports:
+            - port: "15008"
+              protocol: TCP
+    # stats/health depuis kube-apiserver
+    - fromEntities:
+        - kube-apiserver
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "15020"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # istiod xDS + CA
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: istio-system
+            app: istiod
+      toPorts:
+        - ports:
+            - port: "15012"
+              protocol: TCP
+            - port: "15010"
+              protocol: TCP
+    # kube-api (watch pods, services, etc.)
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # Trafic ambient HBONE vers autres pods/noeuds
+    - toEndpoints:
+        - matchLabels: {}
+      toPorts:
+        - ports:
+            - port: "15008"
+              protocol: TCP
+    # Remote ztunnel sur autres noeuds (HBONE cross-node)
+    - toEntities:
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "15008"
+              protocol: TCP
+---
+# istio-ingressgateway: accepte HTTP/HTTPS, émet vers istiod xDS
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: istio-ingressgateway
+  namespace: istio-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "istio"
+spec:
+  description: "ingressgateway: ingress 80/443/15021 depuis world+lb, egress istiod xDS/CA + DNS + kube-api."
+  endpointSelector:
+    matchLabels:
+      istio: ingressgateway
+  ingress:
+    - fromEntities:
+        - world
+        - cluster
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+            - port: "15021"
+              protocol: TCP
+    - fromEntities:
+        - kube-apiserver
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "15021"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: istio-system
+            app: istiod
+      toPorts:
+        - ports:
+            - port: "15012"
+              protocol: TCP
+            - port: "15010"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # Trafic applicatif vers les services backend
+    - toEndpoints:
+        - matchLabels: {}
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+            - port: "8443"
+              protocol: TCP
