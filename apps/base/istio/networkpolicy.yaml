@@ -23,13 +23,13 @@ spec:
               protocol: TCP
             - port: "15010"
               protocol: TCP
-    # kube-apiserver → webhook MutatingWebhookConfiguration
+    # kube-apiserver → webhook MutatingWebhookConfiguration (istiod listens on 15017)
     - fromEntities:
         - kube-apiserver
         - remote-node
       toPorts:
         - ports:
-            - port: "443"
+            - port: "15017"
               protocol: TCP
   egress:
     - toEndpoints:
@@ -144,7 +144,7 @@ spec:
   description: "ingressgateway: ingress 80/443/15021 depuis world+lb, egress istiod xDS/CA + DNS + kube-api."
   endpointSelector:
     matchLabels:
-      istio: ingressgateway
+      app: istio-system-istio-ingressgateway
   ingress:
     - fromEntities:
         - world
