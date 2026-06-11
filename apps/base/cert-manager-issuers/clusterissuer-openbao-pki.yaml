@@ -4,7 +4,7 @@ metadata:
   name: openbao-pki-root
 spec:
   vault:
-    path: pki/root/sign/openaether-intermediate
+    path: pki-root/sign/openaether-intermediate
     server: http://openbao-internal.foundation-pki-root.svc.cluster.local:8200
     auth:
       kubernetes:
@@ -19,7 +19,7 @@ metadata:
   name: openbao-pki-intermediate
 spec:
   vault:
-    path: pki/intermediate/sign/openaether-leaf
+    path: pki-intermediate/sign/openaether-leaf
     server: http://openbao-internal.foundation-pki-root.svc.cluster.local:8200
     auth:
       kubernetes:

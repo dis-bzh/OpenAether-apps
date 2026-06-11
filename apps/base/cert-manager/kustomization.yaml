@@ -8,6 +8,7 @@ resources:
   - namespace.yaml
   - helmrelease.yaml
   - networkpolicy.yaml
+  - rbac-vault-auth.yaml
 
 labels:
   - includeSelectors: false

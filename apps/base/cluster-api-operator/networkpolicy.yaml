@@ -19,8 +19,11 @@ spec:
   ingress:
     # kube-apiserver → webhook CAPI operator (ValidatingWebhookConfiguration)
     # Port standard kubebuilder 9443.
+    # remote-node: sur Talos, le static pod kube-apiserver est identifié
+    # comme nœud (node identity) par Cilium, pas comme kube-apiserver entity.
     - fromEntities:
         - kube-apiserver
+        - remote-node
       toPorts:
         - ports:
             - port: "9443"

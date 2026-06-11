@@ -190,6 +190,33 @@ spec:
                     token_ttl:"168h"}')" \
                 "$ROOT_TOKEN" >/dev/null
               echo "  role workload-unseal: HTTP=$(H)"
+
+              # 4g. PKI engines sur le vault root (pour signer les intermédiaires cert-manager)
+              # pki-root: CA racine (signe les intermédiaires)
+              # pki-intermediate: CA intermédiaire (signe les leaf certs)
+              api POST /v1/sys/mounts/pki-root '{"type":"pki"}' "$ROOT_TOKEN" >/dev/null || true
+              echo "  pki-root mount: HTTP=$(H) (204=créé, 400=déjà)"
+
+              api POST /v1/sys/mounts/pki-intermediate '{"type":"pki"}' "$ROOT_TOKEN" >/dev/null || true
+              echo "  pki-intermediate mount: HTTP=$(H) (204=créé, 400=déjà)"
+
+              # 4h. policy cert-manager-pki-root (signer sur pki-root/sign/* et pki-intermediate/sign/*)
+              CM_ROOT_POLICY="$(printf 'path "pki-root/sign/*" {\n  capabilities = ["create", "update"]\n}\npath "pki-root/cert/*" {\n  capabilities = ["read"]\n}\npath "pki-intermediate/sign/*" {\n  capabilities = ["create", "update"]\n}\npath "pki-intermediate/cert/*" {\n  capabilities = ["read"]\n}\n')"
+              api PUT /v1/sys/policies/acl/cert-manager-pki-root \
+                "$(jq -nc --arg p "$CM_ROOT_POLICY" '{policy:$p}')" "$ROOT_TOKEN" >/dev/null
+              echo "  policy cert-manager-pki-root: HTTP=$(H)"
+
+              # 4i. role cert-manager-issuer sur le vault root
+              # SA: cert-manager, ns: cert-manager
+              api POST /v1/auth/kubernetes/role/cert-manager-issuer \
+                "$(jq -nc '{
+                    bound_service_account_names:"cert-manager",
+                    bound_service_account_namespaces:"cert-manager",
+                    token_policies:"cert-manager-pki-root",
+                    token_ttl:"1h",
+                    token_max_ttl:"4h"}')" \
+                "$ROOT_TOKEN" >/dev/null
+              echo "  role cert-manager-issuer: HTTP=$(H)"
               set -x; set +x
 
               echo "════ 5) Seal token workload (login k8s) ════"

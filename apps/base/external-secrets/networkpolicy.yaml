@@ -20,8 +20,11 @@ spec:
   ingress:
     # kube-apiserver → webhook ESO (ValidatingWebhookConfiguration sur port 10250)
     # Le Service external-secrets-webhook expose 443→10250 en backend.
+    # remote-node: sur Talos, le static pod kube-apiserver est identifié
+    # comme nœud (node identity) par Cilium, pas comme kube-apiserver entity.
     - fromEntities:
         - kube-apiserver
+        - remote-node
       toPorts:
         - ports:
             - port: "10250"

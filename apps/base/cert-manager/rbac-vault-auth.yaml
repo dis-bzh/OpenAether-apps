@@ -1,0 +1,35 @@
+# cert-manager Kubernetes auth vers OpenBao/Vault
+# cert-manager doit créer un token pour son propre SA afin de s'authentifier
+# auprès d'OpenBao via le Kubernetes auth method.
+# Ref: https://cert-manager.io/docs/configuration/vault/#secretless-authentication
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cert-manager-vault-token
+  namespace: cert-manager
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprint0"
+    openaether.io/component: cert-manager
+rules:
+  - apiGroups: [""]
+    resources: ["serviceaccounts/token"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cert-manager-vault-token
+  namespace: cert-manager
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprint0"
+    openaether.io/component: cert-manager
+subjects:
+  - kind: ServiceAccount
+    name: cert-manager
+    namespace: cert-manager
+roleRef:
+  kind: Role
+  name: cert-manager-vault-token
+  apiGroup: rbac.authorization.k8s.io
