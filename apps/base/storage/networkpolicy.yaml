@@ -15,10 +15,9 @@ spec:
   endpointSelector:
     matchLabels: {}
   ingress:
-    # Allow all intra-namespace traffic
+    # Allow all intra-namespace traffic (Longhorn pods don't always have ns label)
     - fromEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: longhorn-system
+        - matchLabels: {}
       toPorts:
         - ports:
             - port: "9500"
@@ -40,10 +39,9 @@ spec:
             - port: "9500"
               protocol: TCP
   egress:
-    # Intra-namespace
+    # Intra-namespace: allow all (Longhorn pods don't always have ns label)
     - toEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: longhorn-system
+        - matchLabels: {}
       toPorts:
         - ports:
             - port: "9500"
