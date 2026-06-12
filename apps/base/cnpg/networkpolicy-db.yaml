@@ -1,0 +1,89 @@
+# OpenAether 0.5.0 — CNPG Database Ingress (K8s standard)
+# Autorise UNIQUEMENT les consommateurs légitimes vers PostgreSQL
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cnpg-database-ingress
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: platform
+spec:
+  podSelector:
+    matchExpressions:
+      - key: "cnpg.io/cluster"
+        operator: Exists
+  policyTypes:
+    - Ingress
+  ingress:
+    # 1. Grafana (datasource PostgreSQL) - foundation-monitoring namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: foundation-monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
+      ports:
+        - protocol: TCP
+          port: 5432
+    # 2. VictoriaMetrics / vmagent (scraping metrics) - foundation-monitoring
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: foundation-monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vmagent
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: foundation-monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: victoriametrics-single
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 9187
+    # 3. CNPG Backup Jobs (pg_dump, etc.) - même namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: foundation-databases
+          podSelector:
+            matchExpressions:
+              - key: "cnpg.io/cluster"
+                operator: Exists
+      ports:
+        - protocol: TCP
+          port: 5432
+    # 4. Réplication interne CNPG (instances entre elles)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: foundation-databases
+          podSelector:
+            matchExpressions:
+              - key: "cnpg.io/instanceName"
+                operator: Exists
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 8000
+    # 5. CNPG Operator (gestion cluster) - namespace foundation-databases
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: foundation-databases
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cnpg-cloudnative-pg
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 9187
