@@ -3,7 +3,7 @@ kind: Namespace
 metadata:
   name: foundation-networking
   labels:
-    # Sprint 1: Istio ambient labels seront ajoutés (istio.io/dataplane-mode: ambient)
+    istio.io/dataplane-mode: ambient
     # baseline: tolérance pour Gateway API controllers (hostPort potentiel)
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/warn: restricted
@@ -27,6 +27,7 @@ kind: Namespace
 metadata:
   name: foundation-pki-root
   labels:
+    istio.io/dataplane-mode: ambient
     # restricted: OpenBao tourne runAsNonRoot uid=100, drop ALL caps, readOnlyRootFS.
     # Aucune raison de privileged pour un secret store.
     pod-security.kubernetes.io/enforce: restricted
@@ -41,6 +42,7 @@ kind: Namespace
 metadata:
   name: foundation-vault
   labels:
+    istio.io/dataplane-mode: ambient
     # restricted: OpenBao workload même profil que root (runAsNonRoot, drop ALL).
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/warn: restricted

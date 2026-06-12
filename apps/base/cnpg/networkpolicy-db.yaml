@@ -1,0 +1,27 @@
+# Autorise Ingress vers les instances CNPG PostgreSQL
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg-database-ingress
+  namespace: foundation-databases
+spec:
+  endpointSelector:
+    matchExpressions:
+      - key: "cnpg.io/cluster"
+        operator: Exists
+  ingress:
+    # Trafic client intra-cluster vers 5432
+    - toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # Trafic de réplication / interne CNPG (opérateur, instances)
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": foundation-databases
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+            - port: "9187" # Metrics
+              protocol: TCP

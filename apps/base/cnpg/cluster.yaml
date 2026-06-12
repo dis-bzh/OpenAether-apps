@@ -26,7 +26,7 @@ spec:
   # par base/storage (local-path). openebs-hostpath n'existe pas dans le cluster.
   storage:
     size: 5Gi
-    storageClass: local-path
+    storageClass: longhorn-x1-rwo-encrypted
 
   # Bootstrap from SQL (create DB/User if needed)
   bootstrap:
