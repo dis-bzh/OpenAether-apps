@@ -1,0 +1,102 @@
+# OpenAether 0.5.0 — Flux Egress Restricted (Zero Trust)
+# Remplace flux-egress-allow-all.yaml (trop permissif: world + host + remote-node)
+# Autorise UNIQUEMENT les destinations nécessaires:
+# - github.com (GitRepository + Helm charts GitHub Pages)
+# - Helm registries: charts.jetstack.io, charts.longhorn.io, charts.min.io, istio-release.storage.googleapis.com, victoriametrics.github.io, grafana.github.io, prometheus-community.github.io, kubernetes-sigs.github.io
+# - CoreDNS (cluster) pour résolution DNS
+# - Kube-API (cluster) pour opérations Kubernetes
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: flux-egress-restricted
+  namespace: flux-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: platform
+spec:
+  description: "Restrict Flux egress to specific FQDNs + cluster DNS/API"
+  endpointSelector: {}
+  egress:
+    # 1. GitHub (GitRepository + Helm charts via GitHub Pages)
+    - toFQDNs:
+        - matchName: github.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # 2. cert-manager Helm repository
+    - toFQDNs:
+        - matchName: charts.jetstack.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # 3. Longhorn Helm repository
+    - toFQDNs:
+        - matchName: charts.longhorn.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # 4. MinIO Helm repository
+    - toFQDNs:
+        - matchName: charts.min.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # 5. Istio Helm repository (GCS)
+    - toFQDNs:
+        - matchName: istio-release.storage.googleapis.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # 6. VictoriaMetrics Operator Helm (GitHub Pages)
+    - toFQDNs:
+        - matchName: victoriametrics.github.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # 7. Grafana Loki Helm (GitHub Pages)
+    - toFQDNs:
+        - matchName: grafana.github.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # 8. Prometheus Community Helm (GitHub Pages) - kube-state-metrics
+    - toFQDNs:
+        - matchName: prometheus-community.github.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # 9. Cluster API Operator Helm (GitHub Pages)
+    - toFQDNs:
+        - matchName: kubernetes-sigs.github.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # 10. CoreDNS (kube-system) pour résolution DNS
+    - toEntities:
+        - cluster
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # 11. Kube-API Server pour opérations Kubernetes
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
