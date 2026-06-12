@@ -13,9 +13,10 @@ spec:
     - name: http
       port: 80
       protocol: HTTP
+      # Par défaut, n'accepte aucune route HTTP en clair — redirect géré par une HTTPRoute
       allowedRoutes:
         namespaces:
-          from: All
+          from: Same
     - name: https
       port: 443
       protocol: HTTPS

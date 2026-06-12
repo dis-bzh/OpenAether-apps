@@ -8,6 +8,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - networkpolicy.yaml
+  - peerauthentication-strict.yaml
   - istio-base.yaml
   - istiod.yaml
   - istio-cni.yaml
@@ -15,6 +16,7 @@ resources:
   - istio-ingressgateway.yaml
   - gatewayclass-istio.yaml
   - gateway-openaether.yaml
+  - httproute-redirect.yaml
   - waypoints.yaml
 
 # Pas de `namespace:` global: les HelmRelease ont namespace explicite (foundation-service-mesh),

@@ -1,0 +1,15 @@
+# OpenAether 0.5.0 — Default Deny All (Ingress)
+# Ferme toutes les connexions Ingress par défaut sur le cluster.
+# Chaque pod/namespace doit avoir sa propre policy pour être joint.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: default-deny-all-ingress
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: platform
+spec:
+  description: "Default deny all INGRESS traffic cluster-wide"
+  endpointSelector: {}
+  ingress:
+    - {} # Empty ingress rule acts as a default deny
