@@ -7,6 +7,5 @@ kind: Kustomization
 resources:
   - allow-dns.yaml
   - allow-kube-api.yaml
-  - allow-flux-egress.yaml
-  - allow-coredns-egress.yaml
+  - allow-infra-egress.yaml
   - default-deny-all.yaml
