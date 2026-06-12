@@ -16,6 +16,8 @@ spec:
   egress:
     - toEntities:
         - world
+        - host
+        - remote-node
       toPorts:
         - ports:
             - port: "53"
