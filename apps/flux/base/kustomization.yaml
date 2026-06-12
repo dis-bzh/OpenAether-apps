@@ -18,3 +18,5 @@ resources:
   - 40-kyverno.yaml
   - 50-cluster-api-operator.yaml
   - 51-cluster-api-providers.yaml
+  - 55-flux-egress.yaml
+  - 56-coredns-ingress.yaml
