@@ -8,4 +8,5 @@ resources:
   - allow-dns.yaml
   - allow-kube-api.yaml
   - allow-flux-egress.yaml
+  - allow-coredns-egress.yaml
   - default-deny-all.yaml
