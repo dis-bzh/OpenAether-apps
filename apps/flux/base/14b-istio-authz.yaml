@@ -1,0 +1,21 @@
+# Groupe 14b — Istio AuthorizationPolicies (après CRDs Istio prêts)
+# Dépend du Kustomization 'istio' (qui installe CRDs via istio-base HelmRelease).
+# Applique le sous-dossier authz/ qui contient les AuthorizationPolicies.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: istio-authorizationpolicies
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 10m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/istio/authz
+  prune: true
+  wait: true
+  dependsOn:
+    - name: istio

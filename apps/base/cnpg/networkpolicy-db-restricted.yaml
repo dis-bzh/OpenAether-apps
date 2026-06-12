@@ -41,9 +41,9 @@ spec:
         - ports:
             - port: "5432"
               protocol: TCP
-            - ports:
-                - port: "9187"
-                  protocol: TCP  # PG exporter metrics
+        - ports:
+            - port: "9187"
+              protocol: TCP  # PG exporter metrics
     # 3. CNPG Backup Jobs (pg_dump, etc.) - même namespace
     - fromEndpoints:
         - matchLabels:

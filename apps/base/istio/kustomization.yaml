@@ -18,9 +18,6 @@ resources:
   - gateway-openaether.yaml
   - httproute-redirect.yaml
   - waypoints.yaml
-  - authorizationpolicy-default-deny.yaml
-  - authorizationpolicy-explicit-allows.yaml
-
 # Pas de `namespace:` global: les HelmRelease ont namespace explicite (foundation-service-mesh),
 # istio-base.yaml déclare istio-system (requis Istio), Gateway est dans services-gateway.
 # Un namespace: global renommerait istio-system → foundation-service-mesh (conflit namespaces.yaml).

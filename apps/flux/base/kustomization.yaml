@@ -12,6 +12,7 @@ resources:
   - 13-cert-manager.yaml
   - 13b-cert-manager-issuers.yaml
   - 14-istio.yaml
+  - 14b-istio-authz.yaml
   - 20-cnpg.yaml
   - 21-storage.yaml
   - 30-observability.yaml
