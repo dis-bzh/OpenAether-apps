@@ -21,17 +21,11 @@ spec:
     matchLabels:
       k8s-app: kube-dns
   ingress:
-    # FLUX-SYSTEM: controllers qui font des requêtes DNS externes
+    # FLUX-SYSTEM: tous les pods (namespace infra de confiance)
+    # source-controller, helm-controller, kustomize-controller, notification-controller, image-automation-controller, image-reflector-controller
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": flux-system
-            "app.kubernetes.io/name": source-controller
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": flux-system
-            "app.kubernetes.io/name": helm-controller
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": flux-system
-            "app.kubernetes.io/name": kustomize-controller
       toPorts:
         - ports:
             - port: "53"
@@ -48,11 +42,10 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # CAPI-SYSTEM: controller manager
+    # CAPI-SYSTEM: namespace infra de confiance
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": capi-system
-            "app.kubernetes.io/name": capi-controller-manager
       toPorts:
         - ports:
             - port: "53"
@@ -63,21 +56,16 @@ spec:
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": capi-operator-system
-            "app.kubernetes.io/name": cluster-api-operator
       toPorts:
         - ports:
             - port: "53"
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # LONGHORN-SYSTEM: manager + driver deployer
+    # LONGHORN-SYSTEM
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": longhorn-system
-            "app.kubernetes.io/name": longhorn-manager
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": longhorn-system
-            "app.kubernetes.io/name": longhorn-driver-deployer
       toPorts:
         - ports:
             - port: "53"
@@ -88,10 +76,6 @@ spec:
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": kyverno
-            "app.kubernetes.io/name": kyverno
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": kyverno
-            "app.kubernetes.io/name": kyverno-background-controller
       toPorts:
         - ports:
             - port: "53"
