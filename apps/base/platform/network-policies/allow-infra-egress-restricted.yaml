@@ -66,10 +66,10 @@ spec:
             - port: "443"
               protocol: TCP
       toCIDR:
-        - cidr: "51.158.0.0/16"  # OVH cloud endpoints range
-        - cidr: "54.38.0.0/16"   # OVH cloud endpoints range
-        - cidr: "158.69.0.0/16"  # OVH cloud endpoints range
-        - cidr: "147.135.0.0/16" # OVH cloud endpoints range
+        - "51.158.0.0/16"  # OVH cloud endpoints range
+        - "54.38.0.0/16"   # OVH cloud endpoints range
+        - "158.69.0.0/16"  # OVH cloud endpoints range
+        - "147.135.0.0/16" # OVH cloud endpoints range
     # ===== CAPI-OPERATOR-SYSTEM (Cluster API Operator) =====
     # Même besoins que capi-system pour providers
     - toFQDNs:
@@ -82,10 +82,10 @@ spec:
             - port: "443"
               protocol: TCP
       toCIDR:
-        - cidr: "51.158.0.0/16"  # OVH cloud endpoints range
-        - cidr: "54.38.0.0/16"   # OVH cloud endpoints range
-        - cidr: "158.69.0.0/16"  # OVH cloud endpoints range
-        - cidr: "147.135.0.0/16" # OVH cloud endpoints range
+        - "51.158.0.0/16"  # OVH cloud endpoints range
+        - "54.38.0.0/16"   # OVH cloud endpoints range
+        - "158.69.0.0/16"  # OVH cloud endpoints range
+        - "147.135.0.0/16" # OVH cloud endpoints range
     # ===== LONGHORN-SYSTEM =====
     # Longhorn a besoin d'accéder à son registry et potentiellement aux API cloud pour CSI
     - toFQDNs:
@@ -99,10 +99,10 @@ spec:
             - port: "443"
               protocol: TCP
       toCIDR:
-        - cidr: "51.158.0.0/16"  # OVH cloud endpoints range
-        - cidr: "54.38.0.0/16"   # OVH cloud endpoints range
-        - cidr: "158.69.0.0/16"  # OVH cloud endpoints range
-        - cidr: "147.135.0.0/16" # OVH cloud endpoints range
+        - "51.158.0.0/16"  # OVH cloud endpoints range
+        - "54.38.0.0/16"   # OVH cloud endpoints range
+        - "158.69.0.0/16"  # OVH cloud endpoints range
+        - "147.135.0.0/16" # OVH cloud endpoints range
     # ===== KYVERNO =====
     # Kyverno a besoin de GitHub pour les policies externes et releases
     - toFQDNs:
