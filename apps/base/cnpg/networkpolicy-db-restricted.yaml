@@ -1,0 +1,79 @@
+# OpenAether 0.5.0 — CNPG Database Ingress Restricted (Zero Trust)
+# Remplace networkpolicy-db.yaml (autorisait tout le namespace foundation-databases)
+# Autorise UNIQUEMENT les consommateurs légitimes:
+# - Grafana (monitoring) depuis foundation-monitoring
+# - VictoriaMetrics (metrics scraping) depuis foundation-monitoring
+# - Backup jobs (CNPG backups) depuis foundation-databases
+# - Réplication interne CNPG (instances + operator)
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg-database-ingress-restricted
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: platform
+spec:
+  description: "Restrict CNPG ingress to legitimate consumers only"
+  endpointSelector:
+    matchExpressions:
+      - key: "cnpg.io/cluster"
+        operator: Exists
+  ingress:
+    # 1. Grafana (datasource PostgreSQL) - foundation-monitoring namespace
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": foundation-monitoring
+            "app.kubernetes.io/name": grafana
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # 2. VictoriaMetrics / vmagent (scraping metrics) - foundation-monitoring
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": foundation-monitoring
+            "app.kubernetes.io/name": vmagent
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": foundation-monitoring
+            "app.kubernetes.io/name": victoriametrics-single
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - ports:
+                - port: "9187"
+                  protocol: TCP  # PG exporter metrics
+    # 3. CNPG Backup Jobs (pg_dump, etc.) - même namespace
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": foundation-databases
+            "cnpg.io/cluster": ""  # Exists - tout pod CNPG backup
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # 4. Réplication interne CNPG (instances entre elles)
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": foundation-databases
+            "cnpg.io/instanceName": ""
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP  # Réplication stream
+    # 5. CNPG Operator (gestion cluster) - namespace foundation-databases
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": foundation-databases
+            "app.kubernetes.io/name": cnpg-cloudnative-pg
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+            - port: "9187"
+              protocol: TCP

@@ -1,0 +1,145 @@
+# OpenAether 0.5.0 — Istio AuthorizationPolicy Default Deny (Zero Trust)
+# Appliqué dans CHAQUE namespace ambient: ferme tout le trafic L7 par défaut.
+# Chaque workload doit avoir son AuthorizationPolicy explicite pour être accessible.
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: istio-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "istio"
+spec:
+  action: DENY
+  rules:
+    - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: flux-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: DENY
+  rules:
+    - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: cert-manager
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: DENY
+  rules:
+    - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: capi-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: DENY
+  rules:
+    - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: capi-operator-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: DENY
+  rules:
+    - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: longhorn-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: DENY
+  rules:
+    - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: kyverno
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: DENY
+  rules:
+    - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: DENY
+  rules:
+    - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: foundation-monitoring
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: DENY
+  rules:
+    - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: foundation-service-mesh
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "istio"
+spec:
+  action: DENY
+  rules:
+    - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: services-gateway
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: DENY
+  rules:
+    - {}

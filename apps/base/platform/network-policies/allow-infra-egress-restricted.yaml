@@ -1,0 +1,102 @@
+# OpenAether 0.5.0 — Allow Infrastructure Egress (Restricted / Zero Trust)
+# Remplace allow-infra-egress.yaml (trop permissif: world)
+# Chaque namespace a ses FQDNs spécifiques autorisés.
+# DNS (53 UDP/TCP) vers cluster (CoreDNS) autorisé pour tous.
+# Kube-API (443) autorisé pour tous via allow-kube-api.yaml (CCNP séparé).
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: allow-infra-egress-restricted
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: platform
+spec:
+  description: "Restricted egress per infrastructure namespace to specific FQDNs"
+  endpointSelector:
+    matchExpressions:
+      - key: "k8s:io.kubernetes.pod.namespace"
+        operator: In
+        values:
+          - flux-system
+          - cert-manager
+          - capi-system
+          - capi-operator-system
+          - longhorn-system
+          - kyverno
+  egress:
+    # ===== COMMUN: CoreDNS pour tous =====
+    - toEntities:
+        - cluster
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # ===== FLUX-SYSTEM =====
+    - toFQDNs:
+        - matchName: github.com
+        - matchName: charts.jetstack.io
+        - matchName: charts.longhorn.io
+        - matchName: charts.min.io
+        - matchName: istio-release.storage.googleapis.com
+        - matchName: victoriametrics.github.io
+        - matchName: grafana.github.io
+        - matchName: prometheus-community.github.io
+        - matchName: kubernetes-sigs.github.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # ===== CERT-MANAGER =====
+    - toFQDNs:
+        - matchName: acme-v02.api.letsencrypt.org
+        - matchName: acme-staging-v02.api.letsencrypt.org
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # ===== CAPI-SYSTEM (Cluster API controllers) =====
+    - toFQDNs:
+        - matchName: api.scaleway.com
+        - matchName: api.ovh.com
+        - matchName: "*.cloud.ovh.net"
+        - matchName: api.outscale.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # ===== CAPI-OPERATOR-SYSTEM (Cluster API Operator) =====
+    # Même besoins que capi-system pour providers
+    - toFQDNs:
+        - matchName: api.scaleway.com
+        - matchName: api.ovh.com
+        - matchName: "*.cloud.ovh.net"
+        - matchName: api.outscale.com
+        - matchName: github.com  # Pour installer CRDs/manifests
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # ===== LONGHORN-SYSTEM =====
+    # Longhorn a besoin d'accéder à son registry et potentiellement aux API cloud pour CSI
+    - toFQDNs:
+        - matchName: charts.longhorn.io
+        - matchName: github.com
+        - matchName: api.scaleway.com
+        - matchName: api.ovh.com
+        - matchName: "*.cloud.ovh.net"
+        - matchName: api.outscale.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # ===== KYVERNO =====
+    # Kyverno a besoin de GitHub pour les policies externes et releases
+    - toFQDNs:
+        - matchName: github.com
+        - matchName: raw.githubusercontent.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

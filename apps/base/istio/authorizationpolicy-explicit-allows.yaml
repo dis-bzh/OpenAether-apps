@@ -1,0 +1,251 @@
+# OpenAether 0.5.0 — Istio AuthorizationPolicy Explicit Allows (Zero Trust)
+# Uniquement les flux L7 LÉGITIMES entre workloads.
+# Ordre: DENY (default-deny-all) évalué en premier, puis ALLOW explicites.
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-grafana-to-postgres
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/foundation-monitoring/sa/grafana"
+              - "cluster.local/ns/foundation-monitoring/sa/vmagent"
+              - "cluster.local/ns/foundation-monitoring/sa/victoriametrics-single"
+      to:
+        - operation:
+            ports:
+              - "5432"
+              - "9187"
+---
+# Flux: accès Kube-API (via sidecar/ztunnel) + DNS
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-flux-to-kubeapi
+  namespace: flux-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/flux-system/sa/source-controller"
+              - "cluster.local/ns/flux-system/sa/helm-controller"
+              - "cluster.local/ns/flux-system/sa/kustomize-controller"
+      to:
+        - operation:
+            methods:
+              - "*"
+            paths:
+              - "*"
+---
+# Cert-Manager: webhook + OpenBao (PKI) + DNS + Kube-API
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-cert-manager-webhook
+  namespace: cert-manager
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/kube-system/sa/kube-apiserver"
+      to:
+        - operation:
+            ports:
+              - "10250"
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-cert-manager-to-openbao
+  namespace: cert-manager
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/cert-manager/sa/cert-manager"
+              - "cluster.local/ns/cert-manager/sa/cert-manager-webhook"
+              - "cluster.local/ns/cert-manager/sa/cert-manager-cainjector"
+      to:
+        - operation:
+            ports:
+              - "8200"
+---
+# CNPG: Grafana + VictoriaMetrics + Backup + Réplication + Operator
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-grafana-to-cnpg
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/foundation-monitoring/sa/grafana"
+              - "cluster.local/ns/foundation-monitoring/sa/vmagent"
+      to:
+        - operation:
+            ports:
+              - "5432"
+              - "9187"
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-cnpg-internal
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/foundation-databases/sa/cnpg-cloudnative-pg"
+              - "cluster.local/ns/foundation-databases/sa/postgres-operator"
+      to:
+        - operation:
+            ports:
+              - "5432"
+              - "8000"
+              - "9187"
+---
+# Istio System: istiod ↔ ztunnel ↔ ingressgateway (xDS/CA/HBONE)
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-istiod-ztunnel
+  namespace: istio-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "istio"
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/istio-system/sa/ztunnel"
+              - "cluster.local/ns/istio-system/sa/istio-ingressgateway"
+      to:
+        - operation:
+            ports:
+              - "15010"
+              - "15012"
+              - "15017"
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-ztunnel-hbone
+  namespace: istio-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "istio"
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/istio-system/sa/ztunnel"
+      to:
+        - operation:
+            ports:
+              - "15008"
+---
+# Longhorn: pas de trafic L7 applicatif externe, seulement CSI + manager interne
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-longhorn-internal
+  namespace: longhorn-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/longhorn-system/sa/longhorn-manager"
+              - "cluster.local/ns/longhorn-system/sa/longhorn-driver-deployer"
+      to:
+        - operation:
+            ports:
+              - "9500"
+              - "9501"
+---
+# Kyverno: webhook (kube-apiserver) + policy sync
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-kyverno-webhook
+  namespace: kyverno
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/kube-system/sa/kube-apiserver"
+      to:
+        - operation:
+            ports:
+              - "9443"
+---
+# Gateway: ingress externe vers services backend
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-gateway-to-backends
+  namespace: services-gateway
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/istio-system/sa/istio-ingressgateway"
+      to:
+        - operation:
+            ports:
+              - "80"
+              - "443"
+              - "8080"
+              - "8443"
