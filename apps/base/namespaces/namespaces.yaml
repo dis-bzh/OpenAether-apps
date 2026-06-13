@@ -27,7 +27,12 @@ kind: Namespace
 metadata:
   name: foundation-pki-root
   labels:
-    istio.io/dataplane-mode: ambient
+    # PAS de istio.io/dataplane-mode: ambient — couche fondation HORS mesh.
+    # Raison: la PKI/secrets vit SOUS le mesh (cycle de dépendance sinon:
+    # istio→cert-manager-issuers→cert-manager→openbao→ztunnel→istio). En ambient,
+    # ztunnel encapsule le trafic dans HBONE/15008, bloqué par les
+    # CiliumNetworkPolicy L4 (allow-list 8200/8201 only) + default-deny → reset.
+    # Sécurité assurée par CiliumNetworkPolicy L3/L4 (identité SA) + OpenBao k8s-auth.
     # restricted: OpenBao tourne runAsNonRoot uid=100, drop ALL caps, readOnlyRootFS.
     # Aucune raison de privileged pour un secret store.
     pod-security.kubernetes.io/enforce: restricted
@@ -42,7 +47,10 @@ kind: Namespace
 metadata:
   name: foundation-vault
   labels:
-    istio.io/dataplane-mode: ambient
+    # PAS de istio.io/dataplane-mode: ambient — couche fondation HORS mesh.
+    # Même raison que foundation-pki-root: cycle de dépendance + HBONE/15008
+    # bloqué par CiliumNetworkPolicy. Bonus: le raft inter-pod (8201) repasse
+    # en direct (en ambient il partait aussi en HBONE → join cassé silencieusement).
     # restricted: OpenBao workload même profil que root (runAsNonRoot, drop ALL).
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/warn: restricted

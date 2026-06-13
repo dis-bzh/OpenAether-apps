@@ -1,5 +1,11 @@
 # Groupe 14 — Istio ambient (5 HelmReleases : base, istiod, cni, ztunnel, ingressgateway)
-# Dépend de cert-manager (certificats mTLS).
+# Dépend de cert-manager (le CONTROLLER, pour CRDs/webhook) — PAS de
+# cert-manager-issuers : istiod utilise sa PROPRE CA auto-signée
+# (istio-ca-root-cert, trustDomain openaether.local), il n'a pas besoin
+# d'OpenBao. Dépendre des issuers OpenBao recréait un cycle :
+#   istio → cert-manager-issuers → cert-manager → openbao → ztunnel → istio.
+# Le cert TLS de la Gateway (openaether-tls), lui, dépend des issuers, mais se
+# réconcilie APRÈS sans bloquer le control plane (cf. gateway-openaether.yaml).
 # Blast-radius isolé : une mise à jour Istio n'impacte pas la stack foundation.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
@@ -19,4 +25,4 @@ spec:
   wait: true
   dependsOn:
     - name: platform-gateway-api
-    - name: cert-manager-issuers
+    - name: cert-manager
