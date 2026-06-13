@@ -1,7 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# AuthorizationPolicies - appliqués APRÈS que les CRDs Istio soient installées
+# Ressources Istio nécessitant les CRDs security.istio.io (installés par istio-base HelmRelease)
+# Appliqués APRÈS que le Kustomization 'istio' soit Ready (wait: true)
 resources:
+  - peerauthentication-strict.yaml
   - authorizationpolicy-default-deny.yaml
   - authorizationpolicy-explicit-allows.yaml
