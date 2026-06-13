@@ -22,11 +22,12 @@ resources:
   # (Kustomization Flux 'namespaces', étape précoce) car la Kustomization
   # istio-authorizationpolicies (14b) y crée une policy avant que ce groupe (30)
   # ne tourne. Le déclarer ici aussi → double-ownership SSA entre 2 Kustomizations.
-  # VictoriaMetrics Operator + Cluster HA
+  # VictoriaMetrics Operator (installe les CRDs VMCluster/VMAgent/VM*Scrape).
+  # Les Custom Resources qui CONSOMMENT ces CRDs (vmcluster/vmagent/vmscapes)
+  # sont dans vm-customresources/ — appliquées par une Kustomization Flux
+  # séparée APRÈS cet opérateur, pour éviter le rejet du bundle au dry-run
+  # ("no matches for kind VMAgent"). Cf. vm-customresources/kustomization.yaml.
   - vm-operator.yaml
-  - vmcluster.yaml
-  - vmagent.yaml
-  - vmscapes.yaml
   # Exporters métriques
   - kube-state-metrics.yaml
   - node-exporter.yaml
