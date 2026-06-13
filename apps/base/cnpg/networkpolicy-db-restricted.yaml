@@ -64,11 +64,16 @@ spec:
               protocol: TCP
             - port: "8000"
               protocol: TCP  # Réplication stream
-    # 5. CNPG Operator (gestion cluster) - namespace foundation-databases
+    # 5. CNPG Operator (gestion cluster + extraction status :8000/pg/status).
+    # L'operator tourne dans cnpg-system (PAS foundation-databases) et porte le
+    # label app.kubernetes.io/name=cloudnative-pg. L'ancien selector
+    # (ns foundation-databases + name cnpg-cloudnative-pg) ne matchait RIEN →
+    # operator→instance:8000 droppé → "Instance Status Extraction Error:
+    # i/o timeout" → Cluster jamais "healthy" (visible une fois le ns hors mesh).
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": foundation-databases
-            "app.kubernetes.io/name": cnpg-cloudnative-pg
+            "k8s:io.kubernetes.pod.namespace": cnpg-system
+            "app.kubernetes.io/name": cloudnative-pg
       toPorts:
         - ports:
             - port: "5432"

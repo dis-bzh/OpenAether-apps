@@ -49,3 +49,18 @@ spec:
               protocol: TCP
     - toEntities:
         - kube-apiserver
+    # Instances Postgres (foundation-databases) : l'operator scrute le status via
+    # l'instance-manager (:8000 /pg/status) et opère le SQL (:5432). Sans cette
+    # règle egress, l'operator ne sort pas → "Instance Status Extraction Error:
+    # i/o timeout" → Cluster jamais "healthy". Le pendant ingress est dans
+    # networkpolicy-db-restricted.yaml (règle #5, operator depuis cnpg-system).
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-databases
+            cnpg.io/podRole: instance
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+            - port: "5432"
+              protocol: TCP
