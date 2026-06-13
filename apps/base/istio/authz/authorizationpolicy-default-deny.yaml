@@ -109,7 +109,7 @@ apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
   name: default-deny-all
-  namespace: foundation-monitoring
+  namespace: services-observability
   labels:
     openaether.io/managed: "true"
     openaether.io/component: "platform"
