@@ -58,6 +58,7 @@ spec:
             - port: "443"
               protocol: TCP
     # ===== CAPI-SYSTEM (Cluster API controllers) =====
+    # Cilium ne supporte pas toFQDNs + toCIDR dans la même règle → règles séparées
     - toFQDNs:
         - matchName: api.scaleway.com
         - matchName: api.ovh.com
@@ -66,11 +67,15 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-      toCIDR:
+    - toCIDR:
         - "51.158.0.0/16"  # OVH cloud endpoints range
         - "54.38.0.0/16"   # OVH cloud endpoints range
         - "158.69.0.0/16"  # OVH cloud endpoints range
         - "147.135.0.0/16" # OVH cloud endpoints range
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
     # ===== CAPI-OPERATOR-SYSTEM (Cluster API Operator) =====
     # Même besoins que capi-system pour providers
     - toFQDNs:
@@ -82,11 +87,15 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-      toCIDR:
+    - toCIDR:
         - "51.158.0.0/16"  # OVH cloud endpoints range
         - "54.38.0.0/16"   # OVH cloud endpoints range
         - "158.69.0.0/16"  # OVH cloud endpoints range
         - "147.135.0.0/16" # OVH cloud endpoints range
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
     # ===== LONGHORN-SYSTEM =====
     # Longhorn a besoin d'accéder à son registry et potentiellement aux API cloud pour CSI
     - toFQDNs:
@@ -99,11 +108,15 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-      toCIDR:
+    - toCIDR:
         - "51.158.0.0/16"  # OVH cloud endpoints range
         - "54.38.0.0/16"   # OVH cloud endpoints range
         - "158.69.0.0/16"  # OVH cloud endpoints range
         - "147.135.0.0/16" # OVH cloud endpoints range
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
     # ===== KYVERNO =====
     # Kyverno a besoin de GitHub pour les policies externes et releases
     - toFQDNs:
