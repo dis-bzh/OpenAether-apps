@@ -190,39 +190,26 @@ spec:
               wlapi POST /v1/sys/mounts/secret '{"type":"kv","options":{"version":"2"}}' "$WL_TOKEN" >/dev/null || true
               echo "  kv v2 secret/ mount: HTTP=$(WH) (204=créé, 400=déjà)"
 
-              # ── 5) Policy ESO (read-only KV) ───────────────────────────────
-              # Lecture secrets applicatifs dans le KV engine (secret/).
+              # ── 5) Policies (ESO + secret-seeder + cert-manager) ──────────
+              # Les policies n'ont pas besoin d'auth/kubernetes, on les crée d'abord.
               ESO_POLICY="$(printf 'path "secret/data/*" {\n  capabilities = ["read"]\n}\npath "secret/metadata/*" {\n  capabilities = ["read", "list"]\n}\n')"
               wlapi PUT /v1/sys/policies/acl/external-secrets-read \
                 "$(jq -nc --arg p "$ESO_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
               echo "  policy external-secrets-read: HTTP=$(WH)"
 
-              # 5b. Policy secret-seeder (write KV — utilisée par ce Job step 10)
-              # Scoped au prefixe exact, pas wildcard général.
               SEEDER_POLICY="$(printf 'path "secret/data/grafana/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/minio/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/longhorn/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/keycloak/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/metadata/*" {\n  capabilities = ["read","list"]\n}\n')"
               wlapi PUT /v1/sys/policies/acl/secret-seeder \
                 "$(jq -nc --arg p "$SEEDER_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
               echo "  policy secret-seeder: HTTP=$(WH)"
 
-              # ── 6) Role ESO ─────────────────────────────────────────────────
-              # SA: external-secrets, ns: foundation-pki-management
-              wlapi POST /v1/auth/kubernetes/role/external-secrets-operator \
-                "$(jq -nc '{
-                    bound_service_account_names:"external-secrets",
-                    bound_service_account_namespaces:"foundation-pki-management",
-                    token_policies:"external-secrets-read",
-                    token_ttl:"1h",
-                    token_max_ttl:"4h"}')" "$WL_TOKEN" >/dev/null
-              echo "  role external-secrets-operator: HTTP=$(WH)"
-
-              # ── 7) Policy cert-manager ──────────────────────────────────────
-              # Signer sur pki/workload/sign/* (chemin ClusterIssuer openbao-workload)
               CM_POLICY="$(printf 'path "pki/workload/sign/*" {\n  capabilities = ["create", "update"]\n}\npath "pki/workload/cert/*" {\n  capabilities = ["read"]\n}\n')"
               wlapi PUT /v1/sys/policies/acl/cert-manager-pki \
                 "$(jq -nc --arg p "$CM_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
               echo "  policy cert-manager-pki: HTTP=$(WH)"
 
-              # ── 8) Auth Kubernetes sur workload ────────────────────────────
+              # ── 6) Auth Kubernetes sur workload ────────────────────────────
+              # Doit être activé + configuré AVANT de créer les rôles : les rôles
+              # vivent sous /v1/auth/kubernetes/role/* → 404 si le backend n'est pas monté.
               wlapi POST /v1/sys/auth/kubernetes '{"type":"kubernetes"}' "$WL_TOKEN" >/dev/null || true
               echo "  auth kubernetes workload: HTTP=$(WH) (204=activé, 400=déjà)"
 
@@ -237,8 +224,19 @@ spec:
               case "$CODE" in 200|204) : ;; *)
                 echo "ERREUR: config auth k8s workload a échoué (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
 
-              # ── 9) Role cert-manager ────────────────────────────────────────
-              # SA: cert-manager, ns: cert-manager
+              # ── 7) Rôles (ESO + cert-manager) — APRÈS auth/kubernetes ───────
+              wlapi POST /v1/auth/kubernetes/role/external-secrets-operator \
+                "$(jq -nc '{
+                    bound_service_account_names:"external-secrets",
+                    bound_service_account_namespaces:"foundation-pki-management",
+                    token_policies:"external-secrets-read",
+                    token_ttl:"1h",
+                    token_max_ttl:"4h"}')" "$WL_TOKEN" >/dev/null
+              CODE="$(WH)"
+              echo "  role external-secrets-operator: HTTP=$CODE"
+              case "$CODE" in 200|204) : ;; *)
+                echo "ERREUR: role external-secrets-operator échoué (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
+
               wlapi POST /v1/auth/kubernetes/role/cert-manager-issuer \
                 "$(jq -nc '{
                     bound_service_account_names:"cert-manager",
@@ -246,7 +244,10 @@ spec:
                     token_policies:"cert-manager-pki",
                     token_ttl:"1h",
                     token_max_ttl:"4h"}')" "$WL_TOKEN" >/dev/null
-              echo "  role cert-manager-issuer: HTTP=$(WH)"
+              CODE="$(WH)"
+              echo "  role cert-manager-issuer: HTTP=$CODE"
+              case "$CODE" in 200|204) : ;; *)
+                echo "ERREUR: role cert-manager-issuer échoué (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
               set -x; set +x
 
               # ── 10) Seed secrets Sprint C (grafana, minio, longhorn) ────────
