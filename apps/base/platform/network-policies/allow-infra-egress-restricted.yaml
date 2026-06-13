@@ -23,6 +23,7 @@ spec:
           - capi-operator-system
           - longhorn-system
           - kyverno
+          - cnpg-system
   egress:
     # ===== COMMUN: CoreDNS pour tous =====
     - toEntities:
