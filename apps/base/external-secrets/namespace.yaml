@@ -3,7 +3,13 @@ kind: Namespace
 metadata:
   name: foundation-pki-management
   labels:
-    istio.io/dataplane-mode: ambient
+    # PAS de istio.io/dataplane-mode: ambient — couche fondation (secrets).
+    # external-secrets a un webhook de validation appelé par le kube-apiserver
+    # sur :443. En ambient, ztunnel veut tunneliser cet appel en HBONE/15008,
+    # bloqué par CiliumNetworkPolicy (allow-list 443/10250) → Cilium DROP =
+    # "operation not permitted" (EPERM) → ExternalSecret dry-run échoue → cnpg
+    # bloqué. Un admission/validation webhook ne doit jamais dépendre du mesh.
+    # Même raison que cert-manager/foundation-pki-root/foundation-vault.
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
