@@ -3,7 +3,12 @@ kind: Namespace
 metadata:
   name: kyverno
   labels:
-    istio.io/dataplane-mode: ambient
+    # PAS de istio.io/dataplane-mode: ambient — admission webhook control-plane.
+    # Le kube-apiserver appelle kyverno-svc:443 (mutate/validate). En ambient,
+    # ztunnel veut HBONE/15008, bloqué par CiliumNetworkPolicy → Cilium DROP =
+    # "operation not permitted" (EPERM) → toute création d'objet soumise au
+    # webhook échoue (dry-run inclus). Un admission webhook DOIT être joignable
+    # par l'apiserver hors mesh. Même raison que cert-manager/external-secrets.
     # baseline: Kyverno background-controller utilise hostPID pour certaines ops.
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/warn: restricted
