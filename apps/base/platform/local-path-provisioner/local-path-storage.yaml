@@ -121,6 +121,22 @@ volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Delete
 
 ---
+# Variante Retain pour les composants PKI/secrets (OpenBao root + workload).
+# reclaimPolicy: Retain → le PV survit si le PVC est supprimé accidentellement,
+# ce qui permet une récupération manuelle des données raft.
+# WaitForFirstConsumer → PV créé sur le nœud où le pod est schedulé (co-localité).
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-path-retain
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: platform
+provisioner: rancher.io/local-path
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+
+---
 kind: ConfigMap
 apiVersion: v1
 metadata:
