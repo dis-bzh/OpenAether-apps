@@ -16,7 +16,6 @@ spec:
   path: ./apps/base/kyverno
   prune: true
   wait: true
-  suspend: true
   dependsOn:
     - name: namespaces
 ---
@@ -35,6 +34,5 @@ spec:
   path: ./apps/base/kyverno-policies
   prune: true
   wait: true
-  suspend: true
   dependsOn:
     - name: kyverno
