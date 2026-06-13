@@ -44,26 +44,24 @@ spec:
         - ports:
             - port: "9187"
               protocol: TCP  # PG exporter metrics
-    # 3. CNPG Backup Jobs (pg_dump, etc.) - même namespace
+    # 3+4. Trafic INTERNE foundation-databases : réplication streaming entre
+    # instances, pods "join" (pg_basebackup d'un nouveau replica), instance-manager
+    # peer (:8000), backup jobs. Selector NAMESPACE-ONLY volontaire.
+    # ATTENTION PIÈGE (cause du blocage juin 2026) : `cnpg.io/cluster: ""` en
+    # matchLabels = label de VALEUR VIDE, PAS "Exists". Les instances ont
+    # cnpg.io/cluster=<nom> (non vide) → l'ancienne règle ne matchait RIEN → la
+    # réplication cross-node (join→primary:5432) était droppée → Cluster bloqué
+    # en 1/2 "Instance Status Extraction Error". On autorise donc le trafic
+    # intra-ns sans label (les pods d'un même cluster DB se parlent légitimement).
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": foundation-databases
-            "cnpg.io/cluster": ""  # Exists - tout pod CNPG backup
-      toPorts:
-        - ports:
-            - port: "5432"
-              protocol: TCP
-    # 4. Réplication interne CNPG (instances entre elles)
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": foundation-databases
-            "cnpg.io/instanceName": ""
       toPorts:
         - ports:
             - port: "5432"
               protocol: TCP
             - port: "8000"
-              protocol: TCP  # Réplication stream
+              protocol: TCP
     # 5. CNPG Operator (gestion cluster + extraction status :8000/pg/status).
     # L'operator tourne dans cnpg-system (PAS foundation-databases) et porte le
     # label app.kubernetes.io/name=cloudnative-pg. L'ancien selector
@@ -112,11 +110,14 @@ spec:
               protocol: TCP
     - toEntities:
         - kube-apiserver
-    # Instances Postgres entre elles (réplication streaming + instance-manager)
+    # Trafic INTERNE foundation-databases (réplication streaming + instance-manager
+    # peer + join pods). Selector namespace-only — même raison que l'ingress #3+4 :
+    # `cnpg.io/cluster: ""` ne matche pas les instances (label non vide). Sans ça,
+    # le join pod (pg_basebackup) ne sort pas vers le primary:5432 → replica jamais
+    # formé. Le pendant ingress est ci-dessus.
     - toEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": foundation-databases
-            "cnpg.io/cluster": ""
       toPorts:
         - ports:
             - port: "5432"
