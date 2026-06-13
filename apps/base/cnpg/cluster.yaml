@@ -22,11 +22,13 @@ spec:
       shared_buffers: "128MB"
 
   # Storage Configuration
-  # OpenAether 0.5.0 fix P0 sync: storageClassName aligné sur la SC provisionnée
-  # par base/storage (local-path). openebs-hostpath n'existe pas dans le cluster.
+  # local-path-retain: CNPG gère la HA (3 instances, streaming replication +
+  # failover transaction-aware). Pas de Longhorn sous CNPG (anti-pattern: double
+  # réplication bloc+transaction → write amplification, volumes faulted). Retain:
+  # données conservées si le PVC est supprimé. Cf. grafana-db-cluster.yaml.
   storage:
     size: 5Gi
-    storageClass: longhorn-x1-rwo-encrypted
+    storageClass: local-path-retain
 
   # Bootstrap from SQL (create DB/User if needed)
   bootstrap:

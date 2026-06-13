@@ -2,8 +2,12 @@
 # ──────────────────────────────────────────────────────────────────
 # Grafana HA (2 répliques) requiert un backend DB partagé pour la session,
 # les dashboards, les utilisateurs, les alertes.
-# PostgreSQL CNPG: 2 instances (streaming replication), StorageClass
-# longhorn-x1-rwo-encrypted (CNPG gère sa propre HA + données sensibles).
+# PostgreSQL CNPG: 2 instances (streaming replication) sur stockage local-path.
+# CNPG gère TOUTE la HA (réplication WAL transaction-aware + failover). Empiler
+# Longhorn (réplication bloc, aveugle aux transactions) = anti-pattern: write
+# amplification, double failover concurrent (cause des volumes "faulted" 06/2026),
+# et x1-rwo n'apporte aucune HA stockage de toute façon. Voir openbao-workload qui
+# applique déjà ce principe (raft réplique → stockage local suffit).
 #
 # Namespace: foundation-databases (même cluster CNPG existant).
 # ExternalSecret: grafana-db-credentials (externalsecrets-grafana.yaml)
@@ -23,9 +27,10 @@ spec:
   imageName: ghcr.io/cloudnative-pg/postgresql:16.3
   primaryUpdateStrategy: unsupervised
   storage:
-    # CNPG gère sa propre réplication (streaming) → x1 Longhorn.
-    # Chiffrement LUKS: données Grafana (sessions, alertes, credentials).
-    storageClass: longhorn-x1-rwo-encrypted
+    # local-path-retain: stockage node-local, montage immédiat (pas de CSI
+    # attach/detach), Retain (données conservées si le PVC est supprimé).
+    # La HA vient des 2 instances CNPG, pas du stockage.
+    storageClass: local-path-retain
     size: 5Gi
   # Connexion Grafana: user grafana, base grafana.
   # Le superuser postgres est géré par CNPG (secret auto-généré).
