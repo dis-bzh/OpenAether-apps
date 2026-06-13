@@ -26,10 +26,10 @@ rules:
   - apiGroups: [""]
     resources: ["serviceaccounts/token"]
     verbs: ["create"]
-  # Rollout du StatefulSet workload après création du seal token.
+  # Rollout + suivi du StatefulSet workload (kubectl rollout status nécessite list+watch).
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
-    verbs: ["get", "patch"]
+    verbs: ["get", "list", "watch", "patch"]
   # Lire l'état des pods workload (vérif auto-unseal).
   - apiGroups: [""]
     resources: ["pods"]
