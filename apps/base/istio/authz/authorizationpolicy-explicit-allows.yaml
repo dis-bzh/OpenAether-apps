@@ -15,9 +15,9 @@ spec:
     - from:
         - source:
             principals:
-              - "cluster.local/ns/foundation-monitoring/sa/grafana"
-              - "cluster.local/ns/foundation-monitoring/sa/vmagent"
-              - "cluster.local/ns/foundation-monitoring/sa/victoriametrics-single"
+              - "cluster.local/ns/services-observability/sa/grafana"
+              - "cluster.local/ns/services-observability/sa/vmagent"
+              - "cluster.local/ns/services-observability/sa/victoriametrics-single"
       to:
         - operation:
             ports:
@@ -107,8 +107,8 @@ spec:
     - from:
         - source:
             principals:
-              - "cluster.local/ns/foundation-monitoring/sa/grafana"
-              - "cluster.local/ns/foundation-monitoring/sa/vmagent"
+              - "cluster.local/ns/services-observability/sa/grafana"
+              - "cluster.local/ns/services-observability/sa/vmagent"
       to:
         - operation:
             ports:

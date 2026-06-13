@@ -1,8 +1,8 @@
 # OpenAether 0.5.0 — CNPG Database Ingress Restricted (Zero Trust)
 # Remplace networkpolicy-db.yaml (autorisait tout le namespace foundation-databases)
 # Autorise UNIQUEMENT les consommateurs légitimes:
-# - Grafana (monitoring) depuis foundation-monitoring
-# - VictoriaMetrics (metrics scraping) depuis foundation-monitoring
+# - Grafana (monitoring) depuis services-observability
+# - VictoriaMetrics (metrics scraping) depuis services-observability
 # - Backup jobs (CNPG backups) depuis foundation-databases
 # - Réplication interne CNPG (instances + operator)
 apiVersion: cilium.io/v2
@@ -20,22 +20,22 @@ spec:
       - key: "cnpg.io/cluster"
         operator: Exists
   ingress:
-    # 1. Grafana (datasource PostgreSQL) - foundation-monitoring namespace
+    # 1. Grafana (datasource PostgreSQL) - services-observability namespace
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": foundation-monitoring
+            "k8s:io.kubernetes.pod.namespace": services-observability
             "app.kubernetes.io/name": grafana
       toPorts:
         - ports:
             - port: "5432"
               protocol: TCP
-    # 2. VictoriaMetrics / vmagent (scraping metrics) - foundation-monitoring
+    # 2. VictoriaMetrics / vmagent (scraping metrics) - services-observability
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": foundation-monitoring
+            "k8s:io.kubernetes.pod.namespace": services-observability
             "app.kubernetes.io/name": vmagent
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": foundation-monitoring
+            "k8s:io.kubernetes.pod.namespace": services-observability
             "app.kubernetes.io/name": victoriametrics-single
       toPorts:
         - ports:

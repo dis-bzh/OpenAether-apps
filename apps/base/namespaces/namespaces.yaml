@@ -58,3 +58,22 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao-workload
+---
+# services-observability déclaré ICI (et non dans observability/) car les
+# AuthorizationPolicy Istio (Kustomization istio-authorizationpolicies, étape 14b)
+# créent une policy default-deny DANS ce namespace AVANT que la Kustomization
+# observability (étape 30) ne tourne. Sans déclaration précoce → 14b échoue
+# "namespaces services-observability not found". Règle: tout namespace ciblé
+# par une couche précoce doit exister tôt. Ambient conservé: c'est une app (mesh).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: services-observability
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+    istio.io/dataplane-mode: ambient
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprintC"
+    openaether.io/component: "observability"

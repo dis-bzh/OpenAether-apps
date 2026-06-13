@@ -18,7 +18,10 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - namespace.yaml
+  # NB: le Namespace services-observability est déclaré dans apps/base/namespaces/
+  # (Kustomization Flux 'namespaces', étape précoce) car la Kustomization
+  # istio-authorizationpolicies (14b) y crée une policy avant que ce groupe (30)
+  # ne tourne. Le déclarer ici aussi → double-ownership SSA entre 2 Kustomizations.
   # VictoriaMetrics Operator + Cluster HA
   - vm-operator.yaml
   - vmcluster.yaml
