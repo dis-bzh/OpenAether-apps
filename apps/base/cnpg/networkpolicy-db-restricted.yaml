@@ -82,3 +82,44 @@ spec:
               protocol: TCP
             - port: "9187"
               protocol: TCP
+  # EGRESS — cette CNP s'applique aux instances Postgres (cnpg.io/cluster Exists) ;
+  # dès qu'une règle existe, Cilium active le default-deny EGRESS sur ces pods.
+  # Sans egress explicite, une instance ne peut RIEN émettre : ni réplication
+  # streaming vers le primary (:5432), ni status/instance-manager peer (:8000),
+  # ni DNS (résolution des peers), ni kube-api (l'instance-manager watch l'API).
+  # Symptôme observé hors-mesh : replica join droppé en egress :5432 cross-node,
+  # Cluster bloqué "Instance Status Extraction Error". Cf. [[cilium-ambient-debug]].
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Kubernetes API (instance-manager watch Cluster/config)
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    # Instances Postgres entre elles (réplication streaming + instance-manager)
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": foundation-databases
+            "cnpg.io/cluster": ""
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
