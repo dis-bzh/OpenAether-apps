@@ -5,6 +5,9 @@
 # - PriorityClass platform-critical
 # - Volume /bao/seal/token: Secret openbao-seal-token (créé par Job bootstrap)
 # - Probes: readiness tolère sealed=200 (workload devrait être unsealed), liveness strict
+# - Storage: local-path-retain (local-path provisioner, Retain policy)
+#   Raft réplique les données entre les 3 nœuds → réplication storage inutile.
+#   local-path: montage immédiat (pas de CSI attach/detach), pas de volume fault.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -158,7 +161,7 @@ spec:
       spec:
         accessModes:
           - ReadWriteOnce
-        storageClassName: longhorn-x1-rwo
+        storageClassName: local-path-retain
         resources:
           requests:
             storage: 10Gi
