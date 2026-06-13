@@ -7,6 +7,9 @@
 #   - Les policies EGRESS sur les pods sources (chaque pod ne peut contacter que ce
 #     dont il a besoin, DNS compris via allow-dns CCNP ou sa propre CNP)
 #   - L'isolation réseau Cilium entre pods dans les namespaces
+#
+# Note Cilium: utiliser fromEntities: cluster (pas fromEndpoints: [{}])
+# car Cilium 1.19 n'étend pas le sélecteur vide à tous les pods en ingress.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -23,8 +26,8 @@ spec:
   ingress:
     # Tous les pods du cluster peuvent utiliser DNS (port 53 uniquement).
     # La restriction se fait à l'EGRESS (allow-dns CCNP + CNP par composant).
-    - fromEndpoints:
-        - matchLabels: {}
+    - fromEntities:
+        - cluster
       toPorts:
         - ports:
             - port: "53"
