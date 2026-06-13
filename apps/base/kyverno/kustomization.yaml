@@ -4,10 +4,18 @@ kind: Kustomization
 resources:
   - networkpolicy.yaml
   - https://github.com/kyverno/kyverno/releases/download/v1.12.0/install.yaml
-  - namespace.yaml  # Override du namespace kyverno créé par install.yaml: labels Istio ambient + PSS
   - policies.yaml
 
 patches:
+  # Le Namespace kyverno est DÉJÀ déclaré par install.yaml (base distante).
+  # Le re-déclarer dans resources: provoque "may not add resource with an
+  # already registered id: Namespace/kyverno". On applique donc nos labels
+  # (Istio ambient + PSS + openaether.io/*) via un strategic-merge patch sur
+  # le namespace existant — namespace.yaml n'est plus une resource.
+  - path: namespace.yaml
+    target:
+      kind: Namespace
+      name: kyverno
   - target:
       kind: CronJob
       name: kyverno-cleanup-admission-reports
