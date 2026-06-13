@@ -14,10 +14,15 @@
 #   3. Unseal root (3 clés depuis le Secret)
 #   4. Configurer transit (engine + clé aether-workload + policy + auth k8s + role)
 #   5. Login k8s (SA openbao-workload) → token périodique → Secret openbao-seal-token
-#   6. Rollout du StatefulSet workload pour qu'il lise le seal token
-#   7. Init workload raft (transit auto-unseal) → Secret openbao-workload-recovery
+#   6. Constater si rollout nécessaire (REGEN) — NE PAS déclencher encore
+#   7. Init workload raft via pod-0 (évite round-robin headless) → wait all Ready
+#   8. Rollout du StatefulSet workload si REGEN=1 (raft déjà stable → pas de deadlock)
 #
-# Step 8 (roles ESO + cert-manager) est dans vault/bootstrap-roles-job.yaml
+# ORDRE CRITIQUE: le rollout (8) doit venir APRÈS l'init raft (7). Déclencher le
+# rollout avant l'init vide les PVCs des nouveaux pods → deadlock: les pods ne
+# peuvent pas s'auto-unsealer sans stored key, et retry_join tourne dans le vide.
+#
+# Step 9 (roles ESO + cert-manager) est dans vault/bootstrap-roles-job.yaml
 # (PostSync vault, BeforeHookCreation) — dépend du workload healthy, pas du root.
 #
 # Sécurité: set +x partout où des secrets transitent; aucune clé/token loggé.
@@ -34,7 +39,7 @@ metadata:
   annotations: {}
 spec:
   backoffLimit: 5
-  activeDeadlineSeconds: 900
+  activeDeadlineSeconds: 1800
   template:
     metadata:
       labels:
@@ -247,14 +252,19 @@ spec:
               fi
               set -x; set +x
 
-              echo "════ 6) Rollout workload (lecture du seal token) ════"
+              echo "════ 6) Vérification seal token workload ════"
+              # On constate si un rollout sera nécessaire (REGEN=1) mais on ne le
+              # déclenche PAS ici. Le rollout interviendra en step 8, APRÈS que le
+              # raft soit formé et tous les pods Ready.
+              # Déclencher le rollout avant l'init raft crée un deadlock : les pods
+              # remplacés ont des PVCs vides, ne peuvent pas s'auto-unsealer via
+              # transit (pas de stored key), et retry_join tourne dans le vide.
+              NEEDS_ROLLOUT="${REGEN:-1}"
               if kubectl get statefulset openbao -n "$VAULT_NS" >/dev/null 2>&1; then
-                if [ "${REGEN:-1}" = "1" ]; then
-                  kubectl patch statefulset openbao -n "$VAULT_NS" --type=merge \
-                    -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"openaether.io/seal-bootstrapped-at\":\"$(date +%s)\"}}}}}" >/dev/null
-                  echo "  rollout déclenché"
+                if [ "$NEEDS_ROLLOUT" = "1" ]; then
+                  echo "  nouveau seal token → rollout prévu après init raft (step 8)"
                 else
-                  echo "  seal token inchangé → pas de rollout"
+                  echo "  seal token inchangé → pas de rollout nécessaire"
                 fi
               else
                 echo "  ⚠ StatefulSet openbao absent (foundation/vault pas encore appliqué) — skip init"
@@ -267,47 +277,71 @@ spec:
               # Le workload doit être initialisé UNE fois (operator init) pour créer
               # la barrière raft. Avec seal transit, l'init renvoie des recovery keys
               # et les pods s'auto-unsealent. Idempotent: si déjà init → no-op.
+              # On cible openbao-0 directement (DNS pod StatefulSet) pour garantir
+              # que l'init écrit sur data-openbao-0 et non sur un pod aléatoire
+              # (le headless service avec publishNotReadyAddresses=true distribue les
+              # appels en round-robin — dangereux pour l'init).
               set +x
               WL_ADDR="http://openbao.${VAULT_NS}.svc.cluster.local:8200"
+              WL_POD0="http://openbao-0.openbao.${VAULT_NS}.svc.cluster.local:8200"
               wlapi() {
-                local m="$1" p="$2" d="${3:-}" t="${4:-}"
+                local m="$1" p="$2" d="${3:-}" t="${4:-}" addr="${5:-$WL_ADDR}"
                 local a=(-s -o /tmp/wlbody -w '%{http_code}' -X "$m")
                 [ -n "$t" ] && a+=(-H "X-Vault-Token: $t")
                 [ -n "$d" ] && a+=(-d "$d")
-                curl "${a[@]}" "${WL_ADDR}${p}" > /tmp/wlhttp
+                curl "${a[@]}" "${addr}${p}" > /tmp/wlhttp
                 cat /tmp/wlbody
               }
               echo "  attente API workload ($WL_ADDR)"
               for i in $(seq 1 60); do
                 c="$(curl -s -o /dev/null -w '%{http_code}' \
-                  "${WL_ADDR}/v1/sys/health?uninitcode=200&sealedcode=200&standbyok=true&uninitcode=200" || true)"
+                  "${WL_ADDR}/v1/sys/health?uninitcode=200&sealedcode=200&standbyok=true" || true)"
                 [ "$c" != "000" ] && [ -n "$c" ] && { echo "    workload API up (health=$c)"; break; }
                 echo "    waiting... ${i}/60 (code=$c)"; sleep 5
               done
-              WL_INIT="$(wlapi GET /v1/sys/seal-status | jq -r '.initialized')"
+              # Vérification et init via pod-0 (cible stable, évite le round-robin headless)
+              WL_INIT="$(wlapi GET /v1/sys/seal-status '' '' "$WL_POD0" | jq -r '.initialized')"
               if [ "$WL_INIT" = "true" ]; then
                 echo "  workload déjà initialisé → no-op"
               else
-                echo "  operator init workload (recovery_shares=3 recovery_threshold=2)"
-                BODY="$(wlapi PUT /v1/sys/init '{"recovery_shares":3,"recovery_threshold":2}')"
+                echo "  operator init workload sur pod-0 (recovery_shares=3 recovery_threshold=2)"
+                BODY="$(wlapi PUT /v1/sys/init '{"recovery_shares":3,"recovery_threshold":2}' '' "$WL_POD0")"
                 CODE="$(cat /tmp/wlhttp)"
                 [ "$CODE" = "200" ] || { echo "ERREUR init workload HTTP=$CODE"; echo "$BODY" | jq -r '.errors // .'; exit 1; }
-                # Stocke recovery keys + root token workload (jamais loggés/committés).
                 kubectl create secret generic openbao-workload-recovery -n "$VAULT_NS" \
                   --from-literal=recovery_keys="$(echo "$BODY" | jq -r '.recovery_keys_base64 | join(",")')" \
                   --from-literal=recovery_keys_json="$(echo "$BODY" | jq -c '.recovery_keys_base64')" \
                   --from-literal=root_token="$(echo "$BODY" | jq -r '.root_token')" \
                   --from-literal=initialized_at="$(date -u +%FT%TZ)" \
                   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-                echo "  ✅ workload initialisé + Secret openbao-workload-recovery créé"
-                echo "  ⏳ attente auto-unseal transit + formation raft (3 voters)"
-                for i in $(seq 1 24); do
-                  S="$(wlapi GET /v1/sys/seal-status | jq -r '.sealed')"
-                  [ "$S" = "false" ] && { echo "    workload unsealed (transit OK)"; break; }
-                  echo "    waiting unseal... ${i}/24"; sleep 5
-                done
+                echo "  ✅ workload initialisé (pod-0) + Secret openbao-workload-recovery créé"
               fi
+              echo "  ⏳ attente que tous les pods workload soient Ready (raft formé)"
+              kubectl wait pod -l app=openbao -n "$VAULT_NS" \
+                --for=condition=Ready --timeout=10m || {
+                echo "  ⚠ timeout attente pods Ready — état courant:"
+                kubectl get pods -n "$VAULT_NS" -l app=openbao
+                exit 1
+              }
+              echo "  ✅ tous les pods workload Ready (raft HA opérationnel)"
               set -x; set +x
+
+              echo "════ 8) Rollout workload (nouveau seal token, raft déjà stable) ════"
+              # Rollout ICI, après formation raft, pour que les nouveaux pods trouvent
+              # les données raft dans leurs PVCs et s'auto-unsealent immédiatement.
+              if [ "$NEEDS_ROLLOUT" = "1" ]; then
+                kubectl patch statefulset openbao -n "$VAULT_NS" --type=merge \
+                  -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"openaether.io/seal-bootstrapped-at\":\"$(date +%s)\"}}}}}" >/dev/null
+                echo "  rollout déclenché — attente rolling update complet"
+                kubectl rollout status statefulset openbao -n "$VAULT_NS" --timeout=10m || {
+                  echo "  ⚠ timeout rolling update — état courant:"
+                  kubectl get pods -n "$VAULT_NS" -l app=openbao
+                  exit 1
+                }
+                echo "  ✅ rolling update terminé (pods avec nouveau seal token)"
+              else
+                echo "  seal token inchangé → pas de rollout"
+              fi
 
               echo ""
               echo "✅ Bootstrap root COMPLET (root unsealed + transit + workload HA auto-unsealed)"
