@@ -1,5 +1,25 @@
 # Groupe 01 — Platform (priority classes + network policies de base)
 ---
+# local-path-provisioner: installé par OpenTofu à l'init cluster, géré ici par Flux
+# pour assurer la cohérence des StorageClasses (local-path + local-path-retain).
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: platform-local-path-provisioner
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 3m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/platform/local-path-provisioner
+  prune: true
+  wait: true
+  dependsOn:
+    - name: namespaces
+---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
