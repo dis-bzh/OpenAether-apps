@@ -2,7 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # OpenAether 0.5.0 Sprint B — Istio Ambient Mesh (Istio 1.24+)
-# Profile: ambient (ztunnel DaemonSet + istiod + istio-ingressgateway)
+# Profile: ambient (ztunnel DaemonSet + istiod)
 # IMPORTANT: Requiert Cilium reconfiguré (cni-exclusive=false, bpf-lb-sock-hostns-only=true)
 # Bootstrap Cilium mis à jour AVANT ce kustomize.
 resources:
@@ -12,7 +12,6 @@ resources:
   - istiod.yaml
   - istio-cni.yaml
   - ztunnel.yaml
-  - istio-ingressgateway.yaml
   - gatewayclass-istio.yaml
   - waypoints.yaml
 # NB: la Gateway nord-sud (openaether-gateway), son cert TLS (openaether-tls, émis
