@@ -51,13 +51,13 @@ metadata:
     # Même raison que foundation-pki-root: cycle de dépendance + HBONE/15008
     # bloqué par CiliumNetworkPolicy. Bonus: le raft inter-pod (8201) repasse
     # en direct (en ambient il partait aussi en HBONE → join cassé silencieusement).
-    # restricted: OpenBao workload même profil que root (runAsNonRoot, drop ALL).
+    # restricted: OpenBao même profil que root (runAsNonRoot, drop ALL).
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprint0"
-    openaether.io/component: openbao-workload
+    openaether.io/component: openbao
 ---
 # services-observability déclaré ICI (et non dans observability/) car les
 # AuthorizationPolicy Istio (Kustomization istio-authorizationpolicies, étape 14b)

@@ -1,17 +1,17 @@
-# OpenAether 0.5.0 — Roles ESO + cert-manager sur OpenBao workload (Job idempotent)
+# OpenAether 0.5.0 — Roles ESO + cert-manager sur OpenBao (Job idempotent)
 # ───────────────────────────────────────────────────────────────────────────────────
 # PostSync vault — s'exécute après que le StatefulSet openbao soit Healthy (3/3).
 # BeforeHookCreation: supprimé + recréé à chaque sync → idempotent sur bootstrap,
 # DRP (perte PVCs), config change, montée de version.
 #
 # Ce Job était l'ancien "step 8" de pki-root/bootstrap/00-bootstrap-job.yaml.
-# Extrait ici car il dépend du workload OpenBao (pas du root) et doit s'exécuter
-# APRÈS la Healthy du workload, pas juste après le root.
+# Extrait ici car il dépend du OpenBao (pas du root) et doit s'exécuter
+# APRÈS la Healthy du, pas juste après le root.
 #
 # Sécurité: set +x partout où des secrets transitent; aucune clé/token loggé.
 #
 # SA: openbao-vault-bootstrap (ns foundation-vault) — droits lecture-seule Secret
-# openbao-workload-recovery (root_token workload) + accès API OpenBao workload.
+# openbao-recovery (root_token) + accès API OpenBao.
 # RBAC défini dans ce fichier (même kustomization → même namespace).
 # ───────────────────────────────────────────────────────────────────────────────────
 apiVersion: v1
@@ -35,12 +35,12 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao-vault-bootstrap
 rules:
-  # Lire le root_token workload pour configurer auth/policies/roles.
+  # Lire le root_token pour configurer auth/policies/roles.
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get"]
-    resourceNames: ["openbao-workload-recovery"]
-  # Attendre que les pods workload soient Ready avant d'appeler l'API.
+    resourceNames: ["openbao-recovery"]
+  # Attendre que les pods soient Ready avant d'appeler l'API.
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
@@ -109,7 +109,7 @@ spec:
 
               WL_ADDR="http://openbao.${VAULT_NS}.svc.cluster.local:8200"
 
-              # ── helper API workload ─────────────────────────────────────────
+              # ── helper API ─────────────────────────────────────────
               # Résultat dans /tmp/wlbody; code HTTP dans /tmp/wlhttp.
               wlapi() {
                 local m="$1" p="$2" d="${3:-}" t="${4:-}"
@@ -121,29 +121,29 @@ spec:
               }
               WH() { cat /tmp/wlhttp 2>/dev/null || echo "000"; }
 
-              # ── 1) Récupérer root_token workload ───────────────────────────
+              # ── 1) Récupérer root_token ───────────────────────────
               set +x
-              echo "════ Lecture root_token workload ════"
-              if ! kubectl get secret openbao-workload-recovery -n "$VAULT_NS" >/dev/null 2>&1; then
-                echo "⚠ Secret openbao-workload-recovery absent — workload non initialisé."
+              echo "════ Lecture root_token ════"
+              if ! kubectl get secret openbao-recovery -n "$VAULT_NS" >/dev/null 2>&1; then
+                echo "⚠ Secret openbao-recovery absent — non initialisé."
                 echo "  Ce Job sera re-exécuté au prochain sync Flux."
                 echo "  Pour forcer: kubectl delete job openbao-vault-bootstrap -n $VAULT_NS"
                 exit 1
               fi
-              WL_TOKEN="$(kubectl get secret openbao-workload-recovery -n "$VAULT_NS" \
+              WL_TOKEN="$(kubectl get secret openbao-recovery -n "$VAULT_NS" \
                 -o jsonpath='{.data.root_token}' | base64 -d 2>/dev/null)"
               if [ -z "$WL_TOKEN" ]; then
-                echo "ERREUR: root_token workload vide dans le Secret"; exit 1
+                echo "ERREUR: root_token vide dans le Secret"; exit 1
               fi
-              echo "  root_token workload récupéré"
+              echo "  root_token récupéré"
               set -x; set +x
 
-              # ── 2) Attente API workload ─────────────────────────────────────
-              echo "════ Attente API workload ($WL_ADDR) ════"
+              # ── 2) Attente API ─────────────────────────────────────
+              echo "════ Attente API ($WL_ADDR) ════"
               for i in $(seq 1 60); do
                 c="$(curl -s -o /dev/null -w '%{http_code}' \
                   "${WL_ADDR}/v1/sys/health?uninitcode=200&sealedcode=200&standbyok=true" || true)"
-                [ "$c" != "000" ] && [ -n "$c" ] && { echo "  workload API up (health=$c)"; break; }
+                [ "$c" != "000" ] && [ -n "$c" ] && { echo "  API up (health=$c)"; break; }
                 echo "  waiting API... ${i}/60 (code=$c)"; sleep 5
               done
 
@@ -151,7 +151,7 @@ spec:
               # Le service headless round-robin vers tous les pods (standby inclus).
               # /v1/sys/leader donne l'URL du nœud actif → on y pointe toutes les
               # écritures. Si le nœud actuel répond avec redirect_addr, on suit.
-              echo "════ Résolution leader raft workload ════"
+              echo "════ Résolution leader raft ════"
               set +x
               LEADER_URL=""
               for i in $(seq 1 24); do
@@ -175,16 +175,61 @@ spec:
               set -x; set +x
 
               # ── 4) PKI engine (idempotent) ──────────────────────────────────
-              echo "════ PKI + auth kubernetes workload ════"
+              echo "════ PKI + auth kubernetes ════"
               set +x
 
-              # 4a. enable pki engine (ignore 400 = déjà présent)
-              wlapi POST /v1/sys/mounts/pki '{"type":"pki"}' "$WL_TOKEN" >/dev/null || true
+              # 4a. monter le PKI (intermediate CA) au chemin EXACT attendu
+              #     par l'issuer openbao : pki.
+              #     NE PAS monter `pki/` à la racine : ça occuperait le préfixe et
+              #     empêcherait le mount imbriqué pki (conflit → HTTP 400,
+              #     puis 404 sur pki/intermediate/...). max_lease_ttl long
+              #     pour couvrir la durée de l'intermediate (17520h).
+              wlapi POST /v1/sys/mounts/pki \
+                '{"type":"pki","config":{"max_lease_ttl":"87600h"}}' "$WL_TOKEN" >/dev/null || true
               echo "  pki mount: HTTP=$(WH) (204=créé, 400=déjà)"
 
-              # 4b. mount pki/workload (chemin attendu par ClusterIssuer openbao-workload)
-              wlapi POST /v1/sys/mounts/pki/workload '{"type":"pki"}' "$WL_TOKEN" >/dev/null || true
-              echo "  pki/workload mount: HTTP=$(WH) (204=créé, 400=déjà)"
+              # 4c. Intermediate CA — génère le CSR si absent, l'AFFICHE, NE BLOQUE PAS.
+              #     L'import du certificat signé est une étape MANUELLE (root offline) :
+              #     signer le CSR hors-ligne avec la ROOT CA (Bitwarden EU) puis
+              #     `bao write pki/intermediate/set-signed certificate=@signed.pem`.
+              #     Voir pki-root-offline-runbook.md. Tant que set-signed n'est pas fait,
+              #     la PKI ne signe pas de leaf (issuers NotReady) — PAR DESIGN.
+              #     (Avant: un `read -r` bloquant faisait timeout le Job en GitOps.)
+              echo "════ Intermediate CA (génération CSR — import = étape manuelle) ════"
+              set +x
+              INT_CERT="$(wlapi GET /v1/pki/cert/ca | jq -r '.data.certificate // empty' 2>/dev/null || true)"
+              if [ -n "$INT_CERT" ]; then
+                echo "  intermediate CA déjà présente (signée + importée) → no-op"
+              else
+                echo "  génération du CSR intermediate..."
+                CSR_RESP="$(wlapi POST /v1/pki/intermediate/generate/internal \
+                  '{"common_name":"OpenAether Workload Intermediate CA","ttl":"17520h"}' "$WL_TOKEN")"
+                CSR="$(echo "$CSR_RESP" | jq -r '.data.csr // empty')"
+                if [ -z "$CSR" ]; then
+                  echo "  ⚠ génération CSR échouée (HTTP=$(WH)) — sera re-tentée au prochain sync"
+                  echo "$CSR_RESP"
+                else
+                  echo ""
+                  echo "  >>> ÉTAPE MANUELLE (runbook PKI root-offline) :"
+                  echo "  >>> 1. Signer ce CSR avec la ROOT CA hors-ligne (clé dans Bitwarden EU)"
+                  echo "  >>> 2. Importer le signé : bao write pki/intermediate/set-signed \\"
+                  echo "  >>>      certificate=@intermediate-signed.pem"
+                  echo "  ----- BEGIN INTERMEDIATE CSR -----"
+                  echo "$CSR"
+                  echo "  ----- END INTERMEDIATE CSR -----"
+                fi
+              fi
+              set -x; set +x
+
+              # 4d. Rôle PKI leaf — utilisé par l'issuer openbao pour signer
+              #     les certs via pki/sign/openaether. Le rôle est de la
+              #     config (indépendant de la CA) → créable avant l'import de
+              #     l'intermediate signé ; la signature EFFECTIVE nécessitera la CA.
+              #     Domaines dérivés du Certificate openaether-tls (openaether.local + *).
+              wlapi POST /v1/pki/roles/openaether \
+                '{"allowed_domains":["openaether.local"],"allow_subdomains":true,"allow_bare_domains":true,"allow_localhost":false,"max_ttl":"2160h","key_type":"rsa","key_bits":2048,"server_flag":true,"client_flag":true}' \
+                "$WL_TOKEN" >/dev/null || true
+              echo "  pki role openaether: HTTP=$(WH) (204=créé/maj)"
 
               # 4c. enable KV v2 engine (secret/) — chemin pour ESO + seeder
               wlapi POST /v1/sys/mounts/secret '{"type":"kv","options":{"version":"2"}}' "$WL_TOKEN" >/dev/null || true
@@ -202,16 +247,16 @@ spec:
                 "$(jq -nc --arg p "$SEEDER_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
               echo "  policy secret-seeder: HTTP=$(WH)"
 
-              CM_POLICY="$(printf 'path "pki/workload/sign/*" {\n  capabilities = ["create", "update"]\n}\npath "pki/workload/cert/*" {\n  capabilities = ["read"]\n}\n')"
+              CM_POLICY="$(printf 'path "pki/sign/*" {\n  capabilities = ["create", "update"]\n}\npath "pki/cert/*" {\n  capabilities = ["read"]\n}\n')"
               wlapi PUT /v1/sys/policies/acl/cert-manager-pki \
                 "$(jq -nc --arg p "$CM_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
               echo "  policy cert-manager-pki: HTTP=$(WH)"
 
-              # ── 6) Auth Kubernetes sur workload ────────────────────────────
+              # ── 6) Auth Kubernetes sur ────────────────────────────
               # Doit être activé + configuré AVANT de créer les rôles : les rôles
               # vivent sous /v1/auth/kubernetes/role/* → 404 si le backend n'est pas monté.
               wlapi POST /v1/sys/auth/kubernetes '{"type":"kubernetes"}' "$WL_TOKEN" >/dev/null || true
-              echo "  auth kubernetes workload: HTTP=$(WH) (204=activé, 400=déjà)"
+              echo "  auth kubernetes: HTTP=$(WH) (204=activé, 400=déjà)"
 
               CA_CRT="$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)"
               wlapi POST /v1/auth/kubernetes/config \
@@ -220,9 +265,9 @@ spec:
                     kubernetes_ca_cert:$ca,
                     disable_iss_validation:true}')" "$WL_TOKEN" >/dev/null
               CODE="$(WH)"
-              echo "  config auth k8s workload: HTTP=$CODE"
+              echo "  config auth k8s: HTTP=$CODE"
               case "$CODE" in 200|204) : ;; *)
-                echo "ERREUR: config auth k8s workload a échoué (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
+                echo "ERREUR: config auth k8s a échoué (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
 
               # ── 7) Rôles (ESO + cert-manager) — APRÈS auth/kubernetes ───────
               wlapi POST /v1/auth/kubernetes/role/external-secrets-operator \
@@ -252,7 +297,7 @@ spec:
 
               # ── 10) Seed secrets Sprint C (grafana, minio, longhorn) ────────
               # Idempotent: GET kv → HTTP 404 → générer + PUT ; HTTP 200 → no-op.
-              # Utilise le root_token workload déjà chargé (WL_TOKEN).
+              # Utilise le root_token déjà chargé (WL_TOKEN).
               # set +x déjà actif depuis le début de ce bloc secret.
               echo ""
               echo "════ 10) Seed secrets Sprint C (grafana/admin, minio/root, longhorn/encryption, keycloak/db) ════"

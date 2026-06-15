@@ -1,10 +1,8 @@
-# OpenAether 0.5.0 — OpenBao workload StatefulSet (3 répl, seal transit)
+# OpenAether 0.5.0 — OpenBao StatefulSet (3 répl, Shamir seal + unsealer HA)
 # - Raft cluster 3/3
-# - Seal transit: auto-unseal via root OpenBao
+# - Seal: Shamir 5/3 (auto-unseal via unsealer HA externe)
 # - PSS privileged (PKI system-level)
 # - PriorityClass platform-critical
-# - Volume /bao/seal/token: Secret openbao-seal-token (créé par Job bootstrap)
-# - Probes: readiness tolère sealed=200 (workload devrait être unsealed), liveness strict
 # - Storage: local-path-retain (local-path provisioner, Retain policy)
 #   Raft réplique les données entre les 3 nœuds → réplication storage inutile.
 #   local-path: montage immédiat (pas de CSI attach/detach), pas de volume fault.
@@ -17,8 +15,7 @@ metadata:
     app: openbao
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprint0"
-    openaether.io/component: openbao-workload
-    openaether.io/role: workload
+    openaether.io/component: openbao
 spec:
   serviceName: openbao
   replicas: 3
@@ -33,9 +30,9 @@ spec:
     metadata:
       labels:
         app: openbao
-        openaether.io/component: openbao-workload
+        openaether.io/component: openbao
     spec:
-      serviceAccountName: openbao-workload
+      serviceAccountName: openbao
       priorityClassName: platform-critical
       securityContext:
         runAsNonRoot: true
@@ -60,18 +57,20 @@ spec:
       containers:
         - name: openbao
           image: openbao/openbao:2.5.4
-          # Wrapper: exporte VAULT_TOKEN (seal transit) + api/cluster addr (POD_IP),
-          # attend le Secret openbao-seal-token monté (Job bootstrap PostSync).
+          # Wrapper: Shamir seal — pas de transit token. L'unsealer HA gère l'unseal.
+          # api_addr/cluster_addr via DNS stable (POD FQDN).
           command: ["/bin/sh", "/bao/config/entrypoint.sh"]
           env:
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            # Adresse du CLI `bao` dans le pod (kubectl exec ... bao status). Le
+            # serveur écoute en clair (tls_disable=1, TLS = Wave 2) → http://, sinon
+            # le CLI tente https:// par défaut ("HTTP response to HTTPS client").
+            # N'affecte PAS `bao server` (qui utilise BAO_API_ADDR/BAO_CLUSTER_ADDR).
+            - name: BAO_ADDR
+              value: "http://127.0.0.1:8200"
           ports:
             - containerPort: 8200
               name: api
@@ -88,9 +87,8 @@ spec:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 100
-          # Probes (validées localement): startup tolère uninit/sealed (le temps
-          # que le Job bootstrap crée le seal token et que le transit auto-unseal
-          # opère). readiness retire le pod sealed du Service. liveness stricte.
+          # Probes: startup tolère uninit/sealed (le temps que l'unsealer HA opère).
+          # readiness retire le pod sealed du Service. liveness stricte.
           startupProbe:
             httpGet:
               path: /v1/sys/health?standbyok=true&uninitcode=200&sealedcode=200
@@ -98,7 +96,7 @@ spec:
               scheme: HTTP
             initialDelaySeconds: 10
             periodSeconds: 10
-            failureThreshold: 60  # 10min: boot + attente seal token + raft join
+            failureThreshold: 60  # 10min: boot + attente unsealer + raft join
           livenessProbe:
             httpGet:
               path: /v1/sys/health?standbyok=true&uninitcode=200&sealedcode=200
@@ -127,28 +125,12 @@ spec:
               mountPath: /bao/data
             - name: config
               mountPath: /bao/config
-            - name: seal-token
-              mountPath: /bao/seal
-              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: config
           configMap:
             name: openbao-config
-        - name: seal-token
-          secret:
-            secretName: openbao-seal-token
-            # optional: le Secret est créé par le Job bootstrap APRÈS le déploiement
-            # du StatefulSet. Sans optional, les pods restent ContainerCreating.
-            # Le wrapper entrypoint.sh attend l'apparition du fichier (60×5s).
-            optional: true
-            items:
-              - key: token
-                path: token
-                # 0440: owner=root, group=fsGroup(1000); le process (uid 100,
-                # gid 1000) lit via le groupe. 0400 bloquerait (owner=root).
-                mode: 0440
         - name: tmp
           emptyDir: {}
   volumeClaimTemplates:
@@ -157,7 +139,7 @@ spec:
         labels:
           openaether.io/managed: "true"
           openaether.io/sprint: "0.5.0-sprint0"
-          openaether.io/component: openbao-workload
+          openaether.io/component: openbao
       spec:
         accessModes:
           - ReadWriteOnce

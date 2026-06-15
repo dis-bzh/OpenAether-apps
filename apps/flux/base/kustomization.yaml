@@ -6,7 +6,6 @@ resources:
   - gitrepository.yaml
   - 00-namespaces.yaml
   - 01-platform.yaml
-  - 10-foundation-pki-root.yaml
   - 11-foundation-vault.yaml
   - 12-external-secrets.yaml
   - 13-cert-manager.yaml

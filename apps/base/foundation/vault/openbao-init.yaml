@@ -1,0 +1,205 @@
+# OpenAether 0.5.0 — OpenBao INIT (one-shot, idempotent)
+# ─────────────────────────────────────────────────────────────────────────────
+# Pièce manquante de la fondation agnostique : avec un seal Shamir, OpenBao démarre
+# NON-INITIALISÉ. Quelqu'un doit faire `operator init` (génère 5 parts + root_token)
+# UNE fois, puis peupler les Secrets que consomment l'unsealer et le bootstrap-roles.
+#
+# Ce Job automatise cette étape pour la phase DEV (destroy/rebuild fréquents).
+# Cible long terme : injection humaine des parts (RAM-only) — voir unsealer.yaml.
+#
+# Idempotent : si déjà initialisé + Secrets présents → no-op. Sinon init + écriture.
+# Cible openbao-0 explicitement : sur raft on initialise UN seul nœud (il devient
+# leader) ; les pods 1/2 rejoignent via retry_join une fois desscellés par l'unsealer.
+#
+# ⚠ SÉCURITÉ DEV : les parts + root_token sont affichés UNE fois dans les logs (pour
+# escrow manuel Bitwarden EU) et stockés en Secret (etcd). Après escrow :
+#   kubectl delete job openbao-init -n foundation-vault   (purge les logs)
+# Cible prod : escrow direct Bitwarden + pas d'affichage. Voir Risques du plan.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao-init
+  namespace: foundation-vault
+  labels:
+    app: openbao-init
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprint0"
+    openaether.io/component: openbao-init
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openbao-init
+  namespace: foundation-vault
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprint0"
+    openaether.io/component: openbao-init
+rules:
+  # Créer/mettre à jour les 2 Secrets de seal/recovery (create ne supporte pas
+  # resourceNames ; get/update/patch restreints aux 2 noms).
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "update", "patch"]
+    resourceNames: ["openbao-unseal-keys", "openbao-recovery"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openbao-init
+  namespace: foundation-vault
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprint0"
+    openaether.io/component: openbao-init
+subjects:
+  - kind: ServiceAccount
+    name: openbao-init
+    namespace: foundation-vault
+roleRef:
+  kind: Role
+  name: openbao-init
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openbao-init
+  namespace: foundation-vault
+  labels:
+    app: openbao-init
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprint0"
+    openaether.io/component: openbao-init
+  annotations:
+    # Re-créé à chaque sync Flux (idempotent : no-op si déjà init + Secrets présents).
+    kustomize.toolkit.fluxcd.io/force: "enabled"
+spec:
+  backoffLimit: 10
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: openbao-init
+        openaether.io/component: openbao-init
+    spec:
+      serviceAccountName: openbao-init
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+      containers:
+        - name: init
+          image: alpine/k8s:1.31.1
+          env:
+            - name: VAULT_NS
+              value: "foundation-vault"
+            - name: KEY_SHARES
+              value: "5"
+            - name: KEY_THRESHOLD
+              value: "3"
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              ADDR="http://openbao-0.openbao.${VAULT_NS}.svc.cluster.local:8200"
+
+              # ── 1) Attente API openbao-0 ───────────────────────────────────
+              echo "════ Attente API openbao-0 ($ADDR) ════"
+              for i in $(seq 1 60); do
+                c="$(curl -s -o /dev/null -w '%{http_code}' \
+                  "${ADDR}/v1/sys/health?uninitcode=200&sealedcode=200&standbyok=true" || true)"
+                if [ -n "$c" ] && [ "$c" != "000" ]; then
+                  echo "  API up (health=$c)"; break
+                fi
+                echo "  waiting... ${i}/60 (code=$c)"; sleep 5
+                [ "$i" = "60" ] && { echo "ERREUR: API openbao-0 injoignable"; exit 1; }
+              done
+
+              # ── 2) État d'initialisation ────────────────────────────────────
+              INITED="$(curl -s "${ADDR}/v1/sys/init" | jq -r '.initialized // false')"
+              echo "════ sys/init: initialized=${INITED} ════"
+
+              secrets_present() {
+                kubectl get secret openbao-unseal-keys -n "$VAULT_NS" >/dev/null 2>&1 \
+                  && kubectl get secret openbao-recovery -n "$VAULT_NS" >/dev/null 2>&1
+              }
+
+              if [ "$INITED" = "true" ]; then
+                if secrets_present; then
+                  echo "  Déjà initialisé + Secrets présents → no-op."
+                  exit 0
+                fi
+                echo "ERREUR: OpenBao est initialisé mais les Secrets de seal sont absents."
+                echo "  Les parts ne sont récupérables QU'À l'init. Récupère-les depuis"
+                echo "  Bitwarden EU et recrée les Secrets, OU wipe les PVCs pour re-init."
+                exit 1
+              fi
+
+              # ── 3) Init (génère parts + root_token) — secrets, pas de trace ──
+              set +x
+              echo "════ operator init (${KEY_SHARES} parts, seuil ${KEY_THRESHOLD}) ════"
+              RESP="$(curl -s -X POST "${ADDR}/v1/sys/init" \
+                -d "{\"secret_shares\":${KEY_SHARES},\"secret_threshold\":${KEY_THRESHOLD}}")"
+              if ! echo "$RESP" | jq -e '.keys_base64 and .root_token' >/dev/null 2>&1; then
+                echo "ERREUR: init a échoué"; echo "$RESP"; exit 1
+              fi
+              KEYS_NL="$(echo "$RESP" | jq -r '.keys_base64[]')"
+              ROOT_TOKEN="$(echo "$RESP" | jq -r '.root_token')"
+
+              # ── 4) Écrire les 2 Secrets (idempotent via apply) ──────────────
+              printf '%s' "$KEYS_NL" > /tmp/keys.txt
+              kubectl create secret generic openbao-unseal-keys -n "$VAULT_NS" \
+                --from-file=unseal_keys=/tmp/keys.txt \
+                --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+              kubectl create secret generic openbao-recovery -n "$VAULT_NS" \
+                --from-literal=root_token="$ROOT_TOKEN" \
+                --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+              shred -u /tmp/keys.txt 2>/dev/null || rm -f /tmp/keys.txt
+              echo "  Secrets openbao-unseal-keys + openbao-recovery écrits."
+
+              # ── 5) ESCROW (affichage one-time — copier dans Bitwarden EU) ────
+              echo ""
+              echo "╔══════════════════════════════════════════════════════════════════╗"
+              echo "║  ESCROW MANUEL REQUIS — copie ces valeurs dans Bitwarden EU MAINTENANT"
+              echo "║  puis : kubectl delete job openbao-init -n ${VAULT_NS}  (purge logs)"
+              echo "╠══════════════════════════════════════════════════════════════════╣"
+              echo "║  PARTS SHAMIR (${KEY_SHARES}, seuil ${KEY_THRESHOLD}) :"
+              echo "$KEYS_NL" | nl -ba -w2 -s'. ' | sed 's/^/║    /'
+              echo "║"
+              echo "║  ROOT TOKEN :"
+              echo "║    ${ROOT_TOKEN}"
+              echo "╚══════════════════════════════════════════════════════════════════╝"
+              echo ""
+              echo "✅ Init terminé. L'unsealer va desceller les 3 pods (parts via Secret)."
+          securityContext:
+            capabilities:
+              drop: ["ALL"]
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

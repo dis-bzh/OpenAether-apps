@@ -18,4 +18,4 @@ spec:
   wait: false
   dependsOn:
     - name: platform-gateway-api
-    - name: foundation-pki-root
+    # - name: foundation-pki-root  # SUPPRIMÉ: plus de root OpenBao, unsealer HA gère le Shamir

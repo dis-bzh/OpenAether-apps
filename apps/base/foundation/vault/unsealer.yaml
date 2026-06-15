@@ -1,0 +1,171 @@
+# OpenAether 0.5.0 — OpenBao Unsealer HA (route A : image officielle, RAM-only)
+# ─────────────────────────────────────────────────────────────────────────────
+# Remplace l'ancien sidecar transit + le Secret openbao-seal-token.
+#
+# Choix d'archi : on RÉUTILISE l'image officielle openbao/openbao:2.5.4 (déjà
+# présente sur chaque nœud, tirée par le StatefulSet). PAS de binaire custom, pas
+# de registre, pas de digest à pinner, aucune dépendance nouvelle — aligné avec le
+# principe « fondation agnostique ».
+#
+# Sécurité (réponse à la réticence « shell + root ») :
+#   - Tourne en uid 100 (openbao), runAsNonRoot, JAMAIS root.
+#   - readOnlyRootFilesystem, drop ALL caps, allowPrivilegeEscalation=false,
+#     seccomp RuntimeDefault.
+#   - automountServiceAccountToken: false → aucun token API monté (l'unsealer ne
+#     parle PAS à l'API k8s ; il lit les parts depuis un volume monté en RO).
+#   - Surface = busybox sh + binaire `bao` officiel. Pas de curl/wget : on utilise
+#     `bao status` (code de sortie 2 = sealed) et `bao operator unseal`.
+#
+# RAM-only : les parts ne sont JAMAIS écrites sur disque par l'unsealer ; elles
+# viennent d'un tmpfs (Secret monté = tmpfs en mémoire côté kubelet) et restent
+# dans l'environnement du process. Cible long terme : injection humaine (stdin)
+# au lieu du fichier — voir UNSEAL_SOURCE dans le bloc TODO ci-dessous.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openbao-unsealer
+  namespace: foundation-vault
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: openbao-unsealer
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: openbao-unsealer
+  template:
+    metadata:
+      labels:
+        app: openbao-unsealer
+        openaether.io/component: openbao-unsealer
+    spec:
+      serviceAccountName: openbao-unsealer
+      automountServiceAccountToken: false
+      priorityClassName: platform-critical
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: unsealer
+          image: openbao/openbao:2.5.4
+          env:
+            - name: UNSEAL_KEYS_FILE
+              value: "/unseal/keys.txt"
+            - name: UNSEAL_THRESHOLD
+              value: "3"
+            - name: UNSEAL_INTERVAL
+              value: "15"   # secondes entre deux passes de surveillance
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: HOME
+              value: "/tmp"
+          # Boucle de surveillance : pour chaque pod raft, si `bao status` indique
+          # sealed (exit 2), on rejoue les parts jusqu'au seuil. `bao` gère le HTTP
+          # (BAO_ADDR), donc pas de curl. Une fois unsealed (exit 0), no-op.
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -u
+              KEYS_FILE="${UNSEAL_KEYS_FILE:-/unseal/keys.txt}"
+              INTERVAL="${UNSEAL_INTERVAL:-15}"
+              NS="${POD_NAMESPACE:-foundation-vault}"
+              PODS="openbao-0 openbao-1 openbao-2"
+
+              if [ ! -s "$KEYS_FILE" ]; then
+                echo "[unsealer] FATAL: fichier de parts vide/absent ($KEYS_FILE)"
+                # On ne tue pas le pod en boucle rapide : attendre que le Secret
+                # soit peuplé (init-Job) puis réessayer.
+              fi
+
+              unseal_pod() {
+                addr="$1"
+                export BAO_ADDR="$addr"
+                # exit 0 = unsealed, 2 = sealed, autre = injoignable/erreur
+                bao status >/dev/null 2>&1
+                rc=$?
+                if [ "$rc" = "0" ]; then
+                  return 0                      # déjà unsealed
+                fi
+                if [ "$rc" != "2" ]; then
+                  echo "[unsealer] $addr injoignable (rc=$rc) — skip"
+                  return 1
+                fi
+                echo "[unsealer] $addr sealed → application des parts"
+                # Rejouer les parts ligne à ligne ; s'arrêter dès unsealed.
+                while IFS= read -r key; do
+                  [ -z "$key" ] && continue
+                  bao operator unseal "$key" >/dev/null 2>&1 || true
+                  if bao status >/dev/null 2>&1; then
+                    echo "[unsealer] $addr UNSEALED"
+                    return 0
+                  fi
+                done < "$KEYS_FILE"
+                echo "[unsealer] $addr toujours sealed après les parts dispo"
+                return 1
+              }
+
+              echo "[unsealer] démarrage — surveillance toutes les ${INTERVAL}s"
+              while true; do
+                for p in $PODS; do
+                  unseal_pod "http://${p}.openbao.${NS}.svc.cluster.local:8200"
+                done
+                sleep "$INTERVAL"
+              done
+          securityContext:
+            capabilities:
+              drop: ["ALL"]
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 100
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: unseal-keys
+              mountPath: /unseal
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: unseal-keys
+          secret:
+            secretName: openbao-unseal-keys
+            # optional: false → si le Secret n'existe pas encore (avant que l'init-Job
+            # l'ait créé), le pod attend en ContainerCreating puis démarre AVEC le
+            # fichier présent (lecture propre au mount). Évite la fenêtre ~60s de
+            # propagation kubelet d'un secret optionnel apparu après coup.
+            optional: false
+            items:
+              - key: unseal_keys
+                path: keys.txt
+        - name: tmp
+          emptyDir:
+            medium: Memory   # tmpfs : rien sur disque
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: openbao-unsealer
+              topologyKey: kubernetes.io/hostname
+# ─────────────────────────────────────────────────────────────────────────────
+# TODO (cible souveraine, Wave 3) : remplacer UNSEAL_KEYS_FILE (Secret en etcd)
+# par une injection humaine RAM-only. Deux options :
+#   - UNSEAL_SOURCE=stdin : `kubectl attach` sur le pod, l'opérateur colle les
+#     parts → gardées en mémoire du process, jamais sur disque ni en etcd.
+#   - UNSEAL_SOURCE=bitwarden : fetch direct Bitwarden EU (token court) au boot.
+# Le Secret openbao-unseal-keys reste le chemin DEV (destroy/rebuild fréquents).
