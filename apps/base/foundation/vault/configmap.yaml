@@ -1,4 +1,4 @@
-# OpenAether 0.5.0 — OpenBao workload config (Shamir seal + raft 3)
+# OpenAether 0.5.0 — OpenBao config (Shamir seal + raft 3)
 # Seal: Shamir 5/3 (défaut OpenBao quand aucun seal n'est configuré)
 # - Les 5 parts Shamir sont gérées par l'unsealer HA (apps/base/foundation/vault/unsealer.yaml)
 # - L'unsealer charge les 3 parts nécessaires en RAM-only et appelle /v1/sys/unseal
@@ -16,7 +16,7 @@ metadata:
   labels:
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprint0"
-    openaether.io/component: openbao-workload
+    openaether.io/component: openbao
 data:
   config.hcl: |
     ui = true

@@ -1,4 +1,4 @@
-# OpenAether 0.5.0 — OpenBao workload (3 répl raft 3, Shamir seal + unsealer HA)
+# OpenAether 0.5.0 — OpenBao (3 répl raft 3, Shamir seal + unsealer HA)
 # Refacto de l'ancien apps/base/openbao/ — single OpenBao HA, pas de root.
 # Seal: Shamir 5/3 (auto-unseal via unsealer HA externe)
 # Unsealer HA: 2-3 répliques RAM-only, source configurable (file/bitwarden/manual).
@@ -35,5 +35,4 @@ labels:
     pairs:
       openaether.io/managed: "true"
       openaether.io/sprint: "0.5.0-sprint0"
-      openaether.io/component: openbao-workload
-      openaether.io/role: workload
+      openaether.io/component: openbao

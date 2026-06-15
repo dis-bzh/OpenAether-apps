@@ -1,15 +1,15 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: openbao-workload
+  name: openbao
   namespace: foundation-vault
   labels:
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprint0"
-    openaether.io/component: openbao-workload
+    openaether.io/component: openbao
 spec:
   groups:
-    - name: openbao-workload
+    - name: openbao
       interval: 30s
       rules:
         # Workload sealed > 2min = critical (unsealer HA fail)
@@ -18,18 +18,18 @@ spec:
           for: 2m
           labels:
             severity: critical
-            component: openbao-workload
+            component: openbao
           annotations:
-            summary: "OpenBao workload sealed > 2min"
-            description: "Le workload OpenBao (ns foundation-vault) est scellé. Unsealer HA inopérant (parts Shamir non chargées, network policy, ou unsealer down). Vérifier les logs de l'unsealer + statut OpenBao."
-            runbook_url: "https://github.com/dis-bzh/OpenAether/blob/main/docs/runbooks/openbao-workload-unseal.md"
+            summary: "OpenBao sealed > 2min"
+            description: "OpenBao (ns foundation-vault) est scellé. Unsealer HA inopérant (parts Shamir non chargées, network policy, ou unsealer down). Vérifier les logs de l'unsealer + statut OpenBao."
+            runbook_url: "https://github.com/dis-bzh/OpenAether/blob/main/docs/runbooks/openbao-unseal.md"
         # Raft no leader = critical
         - alert: OpenBaoRaftNoLeader
           expr: openbao_raft_state != 1
           for: 1m
           labels:
             severity: critical
-            component: openbao-workload
+            component: openbao
           annotations:
             summary: "OpenBao raft cluster has no leader"
             description: "Aucune instance raft n'est leader. Le cluster ne peut pas traiter de requêtes d'écriture."
@@ -39,7 +39,7 @@ spec:
           for: 5m
           labels:
             severity: warning
-            component: openbao-workload
+            component: openbao
           annotations:
             summary: "OpenBao raft commit lag > 100 entries"
             description: "Une réplique est en retard sur le commit. Possible I/O lente ou network."

@@ -1,5 +1,5 @@
 # OpenAether 0.5.0 — Gateway TLS Certificate (via cert-manager + OpenBao)
-# Ce certificat est émis par le ClusterIssuer openbao-workload (déjà Ready)
+# Ce certificat est émis par le ClusterIssuer openbao (déjà Ready)
 # et stocké dans le Secret openaether-tls référencé par la Gateway.
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -15,7 +15,7 @@ spec:
   renewBefore: 360h # 15 jours
   issuerRef:
     kind: ClusterIssuer
-    name: openbao-workload
+    name: openbao
   commonName: openaether.local
   dnsNames:
     - openaether.local

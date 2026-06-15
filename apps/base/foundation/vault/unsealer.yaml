@@ -142,7 +142,11 @@ spec:
         - name: unseal-keys
           secret:
             secretName: openbao-unseal-keys
-            optional: true   # absent au 1er boot tant que l'init-Job n'a pas tourné
+            # optional: false → si le Secret n'existe pas encore (avant que l'init-Job
+            # l'ait créé), le pod attend en ContainerCreating puis démarre AVEC le
+            # fichier présent (lecture propre au mount). Évite la fenêtre ~60s de
+            # propagation kubelet d'un secret optionnel apparu après coup.
+            optional: false
             items:
               - key: unseal_keys
                 path: keys.txt
