@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# OpenAether — Gateway nord-sud (ns services-gateway), DÉCOUPLÉE du mesh istio.
+# Séparée d'apps/base/istio car le cert `openaether-tls` est émis par OpenBao
+# (issuer openbao → pki/sign/openaether) et requiert une signature OFFLINE
+# manuelle de l'intermediate. Le laisser dans la Kustomization istio (wait:true)
+# bloquait istio + ses dépendants (observability, authz-policies). Le mesh a sa
+# propre CA → il ne doit pas dépendre de la PKI OpenBao.
+# Déployée par flux 14c-services-gateway (wait:false, dependsOn istio +
+# cert-manager-issuers + foundation-vault). Le ns services-gateway + la
+# GatewayClass `istio` sont fournis par la Kustomization istio.
+resources:
+  - gateway-openaether.yaml
+  - certificate-openaether-tls.yaml
+  - httproute-redirect.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      openaether.io/managed: "true"
+      openaether.io/sprint: "0.5.0-sprintB"
+      openaether.io/component: "gateway"

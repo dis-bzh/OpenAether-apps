@@ -1,0 +1,26 @@
+# Groupe 14c — Gateway nord-sud (Gateway API + cert TLS émis par OpenBao).
+# DÉCOUPLÉ d'istio (14) : le cert `openaether-tls` dépend des issuers OpenBao ET
+# d'une signature OFFLINE manuelle de l'intermediate. En `wait: true` dans istio,
+# il bloquait le control plane + observability. Ici `wait: false` → applique la
+# Gateway/cert/route et n'attend pas leur readiness (réconciliation async).
+# Le mesh istio (14) a sa propre CA et reste indépendant de la PKI OpenBao.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: services-gateway
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/services-gateway
+  prune: true
+  wait: false
+  dependsOn:
+    - name: istio                 # GatewayClass `istio` + ns services-gateway
+    - name: cert-manager-issuers  # ClusterIssuer openbao
+    - name: foundation-vault      # PKI pki/sign/openaether

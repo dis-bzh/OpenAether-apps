@@ -1,0 +1,17 @@
+# OpenAether — CiliumL2AnnouncementPolicy
+# ─────────────────────────────────────────────────────────────────────────────
+# Permet à Cilium de répondre aux requêtes ARP pour les VIPs du pool LB-IPAM
+# sur le réseau privé VPC. Sans cette politique, les VIPs sont allouées mais
+# injoignables (aucun nœud n'annonce la MAC pour l'IP virtuelle).
+#
+# externalIPs + loadBalancerIPs couvrent les deux cas d'usage.
+# Tous les nœuds sont éligibles (pas de nodeSelector) — Cilium élit un leader
+# par VIP qui répond aux ARP (failover automatique si le nœud tombe).
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: private-vpc-l2
+spec:
+  externalIPs: true
+  loadBalancerIPs: true

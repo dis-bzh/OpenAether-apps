@@ -1,0 +1,17 @@
+# OpenAether — CiliumLoadBalancerIPPool
+# ─────────────────────────────────────────────────────────────────────────────
+# Pool d'IPs virtuelles pour les Services type=LoadBalancer internes au cluster.
+# Plage choisie dans le haut du subnet VPC privé (172.16.12.0/22, Scaleway IPAM)
+# pour éviter les conflits avec les IPs auto-assignées aux nœuds (.2-.6).
+#
+# Ce pool est pour le réseau PRIVÉ (admin, observability). Le trafic public
+# arrive via le Scaleway LB externe (opentofu lb.tf → worker NodePorts).
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: private-vpc
+spec:
+  blocks:
+    - start: "172.16.12.240"
+      stop: "172.16.12.254"
