@@ -1,4 +1,4 @@
-# Groupe 14 — Istio ambient (5 HelmReleases : base, istiod, cni, ztunnel, ingressgateway)
+# Groupe 14 — Istio ambient (4 HelmReleases : base, istiod, cni, ztunnel)
 # Dépend de cert-manager (le CONTROLLER, pour CRDs/webhook) — PAS de
 # cert-manager-issuers : istiod utilise sa PROPRE CA auto-signée
 # (istio-ca-root-cert, trustDomain openaether.local), il n'a pas besoin

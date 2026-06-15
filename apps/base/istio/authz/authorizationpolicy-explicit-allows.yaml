@@ -138,7 +138,7 @@ spec:
               - "8000"
               - "9187"
 ---
-# Istio System: istiod ↔ ztunnel ↔ ingressgateway (xDS/CA/HBONE)
+# Istio System: istiod ↔ ztunnel ↔ openaether-gateway (xDS/CA/HBONE)
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -154,7 +154,7 @@ spec:
         - source:
             principals:
               - "cluster.local/ns/istio-system/sa/ztunnel"
-              - "cluster.local/ns/istio-system/sa/istio-ingressgateway"
+              - "cluster.local/ns/services-gateway/sa/openaether-gateway-istio"
       to:
         - operation:
             ports:
@@ -227,6 +227,9 @@ spec:
               - "9443"
 ---
 # Gateway: ingress externe vers services backend
+# Le openaether-gateway est LUI-MÊME le proxy d'ingress — il forward vers
+# les backends via les HTTPRoutes. Pas besoin d'autoriser un sa/istio-ingressgateway
+# puisqu'il n'existe plus.
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -241,7 +244,7 @@ spec:
     - from:
         - source:
             principals:
-              - "cluster.local/ns/istio-system/sa/istio-ingressgateway"
+              - "cluster.local/ns/services-gateway/sa/openaether-gateway-istio"
       to:
         - operation:
             ports:
