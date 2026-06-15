@@ -1,4 +1,4 @@
-# OpenAether 0.5.0 — OpenBao workload INIT (one-shot, idempotent)
+# OpenAether 0.5.0 — OpenBao INIT (one-shot, idempotent)
 # ─────────────────────────────────────────────────────────────────────────────
 # Pièce manquante de la fondation agnostique : avec un seal Shamir, OpenBao démarre
 # NON-INITIALISÉ. Quelqu'un doit faire `operator init` (génère 5 parts + root_token)
@@ -45,7 +45,7 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "update", "patch"]
-    resourceNames: ["openbao-unseal-keys", "openbao-workload-recovery"]
+    resourceNames: ["openbao-unseal-keys", "openbao-recovery"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -136,7 +136,7 @@ spec:
 
               secrets_present() {
                 kubectl get secret openbao-unseal-keys -n "$VAULT_NS" >/dev/null 2>&1 \
-                  && kubectl get secret openbao-workload-recovery -n "$VAULT_NS" >/dev/null 2>&1
+                  && kubectl get secret openbao-recovery -n "$VAULT_NS" >/dev/null 2>&1
               }
 
               if [ "$INITED" = "true" ]; then
@@ -166,11 +166,11 @@ spec:
               kubectl create secret generic openbao-unseal-keys -n "$VAULT_NS" \
                 --from-file=unseal_keys=/tmp/keys.txt \
                 --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-              kubectl create secret generic openbao-workload-recovery -n "$VAULT_NS" \
+              kubectl create secret generic openbao-recovery -n "$VAULT_NS" \
                 --from-literal=root_token="$ROOT_TOKEN" \
                 --dry-run=client -o yaml | kubectl apply -f - >/dev/null
               shred -u /tmp/keys.txt 2>/dev/null || rm -f /tmp/keys.txt
-              echo "  Secrets openbao-unseal-keys + openbao-workload-recovery écrits."
+              echo "  Secrets openbao-unseal-keys + openbao-recovery écrits."
 
               # ── 5) ESCROW (affichage one-time — copier dans Bitwarden EU) ────
               echo ""
@@ -181,7 +181,7 @@ spec:
               echo "║  PARTS SHAMIR (${KEY_SHARES}, seuil ${KEY_THRESHOLD}) :"
               echo "$KEYS_NL" | nl -ba -w2 -s'. ' | sed 's/^/║    /'
               echo "║"
-              echo "║  ROOT TOKEN (workload) :"
+              echo "║  ROOT TOKEN :"
               echo "║    ${ROOT_TOKEN}"
               echo "╚══════════════════════════════════════════════════════════════════╝"
               echo ""

@@ -98,7 +98,7 @@ openssl ca -config openssl-root.cnf \
 
 Le certificat signé `intermediate-signed.crt` est fourni au job qui fait :
 ```bash
-bao write -format=json pki/workload/intermediate/set-signed \
+bao write -format=json pki/intermediate/set-signed \
   certificate=@intermediate-signed.crt
 ```
 

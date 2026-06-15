@@ -1,4 +1,4 @@
-# OpenAether 0.5.0 — OpenBao workload StatefulSet (3 répl, Shamir seal + unsealer HA)
+# OpenAether 0.5.0 — OpenBao StatefulSet (3 répl, Shamir seal + unsealer HA)
 # - Raft cluster 3/3
 # - Seal: Shamir 5/3 (auto-unseal via unsealer HA externe)
 # - PSS privileged (PKI system-level)
@@ -15,8 +15,7 @@ metadata:
     app: openbao
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprint0"
-    openaether.io/component: openbao-workload
-    openaether.io/role: workload
+    openaether.io/component: openbao
 spec:
   serviceName: openbao
   replicas: 3
@@ -31,9 +30,9 @@ spec:
     metadata:
       labels:
         app: openbao
-        openaether.io/component: openbao-workload
+        openaether.io/component: openbao
     spec:
-      serviceAccountName: openbao-workload
+      serviceAccountName: openbao
       priorityClassName: platform-critical
       securityContext:
         runAsNonRoot: true
@@ -66,6 +65,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            # Adresse du CLI `bao` dans le pod (kubectl exec ... bao status). Le
+            # serveur écoute en clair (tls_disable=1, TLS = Wave 2) → http://, sinon
+            # le CLI tente https:// par défaut ("HTTP response to HTTPS client").
+            # N'affecte PAS `bao server` (qui utilise BAO_API_ADDR/BAO_CLUSTER_ADDR).
+            - name: BAO_ADDR
+              value: "http://127.0.0.1:8200"
           ports:
             - containerPort: 8200
               name: api
@@ -134,7 +139,7 @@ spec:
         labels:
           openaether.io/managed: "true"
           openaether.io/sprint: "0.5.0-sprint0"
-          openaether.io/component: openbao-workload
+          openaether.io/component: openbao
       spec:
         accessModes:
           - ReadWriteOnce

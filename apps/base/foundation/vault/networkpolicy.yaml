@@ -1,14 +1,14 @@
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: openbao-workload
+  name: openbao
   namespace: foundation-vault
   labels:
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprint0"
-    openaether.io/component: openbao-workload
+    openaether.io/component: openbao
 spec:
-  description: "OpenBao workload (HA 3 répl, seal Shamir): ingress depuis Cilium
+  description: "OpenBao (HA 3 répl, seal Shamir): ingress depuis Cilium
     Gateway (sprint 3), external-secrets, csi-driver, cert-manager, istiod, unsealer
     HA, init-Job, peers raft, bootstrap-roles. Egress: kube-dns, k8s API, peers raft."
   endpointSelector:
@@ -46,7 +46,7 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # 4. cert-manager (sign certs via OpenBao PKI workload)
+    # 4. cert-manager (sign certs via OpenBao PKI)
     #    Le chart cert-manager pose app.kubernetes.io/instance (pas app: nu).
     - fromEndpoints:
         - matchLabels:
@@ -151,7 +151,7 @@ spec:
               protocol: TCP
 ---
 # Politique egress pour le Job bootstrap-roles (foundation-vault).
-# Permet: DNS + kube-apiserver (kubectl) + API OpenBao workload.
+# Permet: DNS + kube-apiserver (kubectl) + API OpenBao.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -162,7 +162,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao-vault-bootstrap
 spec:
-  description: "Job bootstrap-roles egress: DNS + k8s API + OpenBao workload API."
+  description: "Job bootstrap-roles egress: DNS + k8s API + OpenBao API."
   endpointSelector:
     matchLabels:
       app: openbao-vault-bootstrap
@@ -206,7 +206,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao-unsealer
 spec:
-  description: "Unsealer HA egress: DNS + OpenBao workload API (unseal des 3 pods)."
+  description: "Unsealer HA egress: DNS + OpenBao API (unseal des 3 pods)."
   endpointSelector:
     matchLabels:
       app: openbao-unsealer
@@ -242,7 +242,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao-init
 spec:
-  description: "Init-Job egress: DNS + k8s API (kubectl) + OpenBao workload API."
+  description: "Init-Job egress: DNS + k8s API (kubectl) + OpenBao API."
   endpointSelector:
     matchLabels:
       app: openbao-init
