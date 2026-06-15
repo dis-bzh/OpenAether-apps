@@ -15,6 +15,7 @@ resources:
   - istio-ingressgateway.yaml
   - gatewayclass-istio.yaml
   - gateway-openaether.yaml
+  - certificate-openaether-tls.yaml
   - httproute-redirect.yaml
   - waypoints.yaml
 # Pas de `namespace:` global: les HelmRelease ont namespace explicite (foundation-service-mesh),

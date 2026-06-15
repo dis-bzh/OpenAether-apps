@@ -8,9 +8,9 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao-workload
 spec:
-  description: "OpenBao workload (HA 3 répl): ingress depuis Cilium Gateway
-    (sprint 3), external-secrets, csi-driver, cert-manager, istiod, root OpenBao
-    (transit wrap reverse). Egress: kube-dns, k8s API, root OpenBao (transit wrap)."
+  description: "OpenBao workload (HA 3 répl, seal Shamir): ingress depuis Cilium
+    Gateway (sprint 3), external-secrets, csi-driver, cert-manager, istiod, unsealer
+    HA, init-Job, peers raft, bootstrap-roles. Egress: kube-dns, k8s API, peers raft."
   endpointSelector:
     matchLabels:
       app: openbao
@@ -65,17 +65,7 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # 6. Root OpenBao (transit wrap callback — en pratique le workload est
-    # CLIENT du root, pas l'inverse; mais on autorise la racine à appeler
-    # le workload en cas de revoke/check)
-    - fromEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: foundation-pki-root
-            app: openbao-pki-root
-      toPorts:
-        - ports:
-            - port: "8200"
-              protocol: TCP
+    # 6. (supprimé) Root OpenBao — plus de foundation-pki-root (seal Shamir).
     # 7. Prometheus scraper
     - fromEndpoints:
         - matchLabels:
@@ -98,21 +88,30 @@ spec:
               protocol: TCP
             - port: "8201"
               protocol: TCP
-    # 9. Job bootstrap (init raft one-time, step 7) depuis foundation-pki-root.
-    - fromEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: foundation-pki-root
-            app: openbao-bootstrap
-      toPorts:
-        - ports:
-            - port: "8200"
-              protocol: TCP
-    # 10. Job bootstrap-roles (configures auth/policies/roles ESO+cert-manager
-    #     PostSync vault). Même namespace: le Job est en foundation-vault.
+    # 9. Job bootstrap-roles (configures auth/policies/roles ESO+cert-manager
+    #    PostSync vault). Même namespace: le Job est en foundation-vault.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault
             app: openbao-vault-bootstrap
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP
+    # 10. Unsealer HA (route A) → /v1/sys/unseal + /v1/sys/health sur les 3 pods.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-vault
+            app: openbao-unsealer
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP
+    # 11. Init-Job (operator init one-time, cible openbao-0).
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-vault
+            app: openbao-init
       toPorts:
         - ports:
             - port: "8200"
@@ -138,15 +137,7 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-    # Root OpenBao (transit wrap)
-    - toEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: foundation-pki-root
-            app: openbao-pki-root
-      toPorts:
-        - ports:
-            - port: "8200"
-              protocol: TCP
+    # (supprimé) egress vers foundation-pki-root — plus de root (seal Shamir).
     # Raft entre les 3 répliques: join challenge sur l'API 8200 + cluster 8201.
     - toEndpoints:
         - matchLabels:
@@ -175,6 +166,86 @@ spec:
   endpointSelector:
     matchLabels:
       app: openbao-vault-bootstrap
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-vault
+            app: openbao
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP
+---
+# Egress unsealer HA (route A) : DNS (résolution des FQDN openbao-N) + API OpenBao.
+# Pas d'API k8s (automountServiceAccountToken=false). Bitwarden 443 = Wave 3.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: openbao-unsealer
+  namespace: foundation-vault
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprint0"
+    openaether.io/component: openbao-unsealer
+spec:
+  description: "Unsealer HA egress: DNS + OpenBao workload API (unseal des 3 pods)."
+  endpointSelector:
+    matchLabels:
+      app: openbao-unsealer
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-vault
+            app: openbao
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP
+    # TODO Wave 3 (UNSEAL_SOURCE=bitwarden) : egress 443 vers Bitwarden EU (FQDN/CIDR).
+---
+# Egress init-Job (one-shot) : DNS + kube-apiserver (kubectl) + API OpenBao (init).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: openbao-init
+  namespace: foundation-vault
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprint0"
+    openaether.io/component: openbao-init
+spec:
+  description: "Init-Job egress: DNS + k8s API (kubectl) + OpenBao workload API."
+  endpointSelector:
+    matchLabels:
+      app: openbao-init
   egress:
     - toEndpoints:
         - matchLabels:

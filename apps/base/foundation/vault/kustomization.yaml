@@ -1,9 +1,8 @@
-# OpenAether 0.5.0 — OpenBao workload (3 répl raft 3, seal transit vers root)
-# Refacto de l'ancien apps/base/openbao/ qui sera supprimé en sprint 1.
-# Seal: transit (vers openbao-internal.foundation-pki-root.svc.cluster.local:8200)
-# Auto-unseal: le wrapping token est créé par le Job bootstrap
-# apps/base/foundation/pki-root/bootstrap/20-workload-seal-token-job.yaml
-# et stocké dans Secret openbao-seal-token (ns foundation-vault).
+# OpenAether 0.5.0 — OpenBao workload (3 répl raft 3, Shamir seal + unsealer HA)
+# Refacto de l'ancien apps/base/openbao/ — single OpenBao HA, pas de root.
+# Seal: Shamir 5/3 (auto-unseal via unsealer HA externe)
+# Unsealer HA: 2-3 répliques RAM-only, source configurable (file/bitwarden/manual).
+# Removed: foundation-pki-root, transit seal, openbao-seal-token, openbao-root-recovery.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -16,13 +15,20 @@ namespace: foundation-vault
 resources:
   - configmap.yaml
   - serviceaccount.yaml
-  - bootstrap-rbac.yaml
+  - unsealer-sa.yaml
   - statefulset.yaml
   - service.yaml
   - pdb.yaml
   - networkpolicy.yaml
   - httproute.yaml
+  - openbao-init.yaml
   - bootstrap-roles-job.yaml
+  - unsealer.yaml
+  - bitwarden-unseal-creds.yaml
+  # NB: le Secret openbao-unseal-keys n'est PAS géré par Flux (anti-drift) :
+  # l'init-Job (openbao-init.yaml) le crée avec les vraies parts Shamir. Le
+  # déclarer ici ferait écraser/pruner les vraies parts à chaque reconcile.
+  # bitwarden-unseal-creds.yaml reste placeholder (optionnel, source=bitwarden).
 
 labels:
   - includeSelectors: false

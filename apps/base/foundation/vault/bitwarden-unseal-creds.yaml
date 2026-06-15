@@ -1,0 +1,15 @@
+# OpenAether 0.5.0 — Bitwarden credentials for OpenBao Unsealer (OPTIONAL)
+# Only used when UNSEAL_SOURCE=bitwarden
+# Create manually or via ExternalSecret operator pointing to Bitwarden.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bitwarden-unseal-creds
+  namespace: foundation-vault
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: openbao-unsealer
+type: Opaque
+stringData:
+  token: ""         # Bitwarden API token with item:read scope
+  item-id: ""       # Item UUID containing unseal_keys in notes or custom field
