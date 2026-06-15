@@ -94,13 +94,17 @@ openssl ca -config openssl-root.cnf \
 # subjectKeyIdentifier = hash
 ```
 
-### 4. Import dans OpenBao (via bootstrap-roles-job)
+### 4. Import dans OpenBao (étape MANUELLE)
 
-Le certificat signé `intermediate-signed.crt` est fourni au job qui fait :
+Le `bootstrap-roles-job` ne fait QUE générer + afficher le CSR (non bloquant). L'import du
+certificat signé est manuel (le root reste hors-ligne). Récupérer le root_token, puis importer :
 ```bash
-bao write -format=json pki/intermediate/set-signed \
-  certificate=@intermediate-signed.crt
+RT=$(kubectl get secret openbao-recovery -n foundation-vault -o jsonpath='{.data.root_token}' | base64 -d)
+kubectl cp intermediate-signed.crt foundation-vault/openbao-0:/tmp/int.crt
+kubectl exec -n foundation-vault openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN="$RT" \
+  bao write pki/intermediate/set-signed certificate=@/tmp/int.crt
 ```
+Après import, l'issuer cert-manager `openbao` (`pki/sign/openaether`) passe Ready.
 
 ### 5. Renouvellement (tous les 1-2 ans)
 
