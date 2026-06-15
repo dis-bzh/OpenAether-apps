@@ -71,13 +71,10 @@ spec:
         reporting_enabled: false
         check_for_updates: false
     # Injecter le password DB depuis le Secret grafana-db-credentials.
+    # envFromSecret monte TOUTES les clés du secret comme env vars.
+    # La clé doit s'appeler GF_DATABASE_PASSWORD pour que grafana.ini
+    # la résolve via $__env{GF_DATABASE_PASSWORD}.
     envFromSecret: grafana-db-credentials
-    env:
-      GF_DATABASE_PASSWORD:
-        valueFrom:
-          secretKeyRef:
-            name: grafana-db-credentials
-            key: password
     # Datasources inline (Flux gère la mise à jour).
     datasources:
       datasources.yaml:
