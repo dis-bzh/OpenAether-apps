@@ -263,6 +263,18 @@ spec:
               protocol: TCP
             - port: "15010"
               protocol: TCP
+    # Explicit toServices for istiod Service IP (clusterIP) — required when
+    # client dials the Service IP instead of pod IPs directly.
+    - toServices:
+        - k8sService:
+            namespace: istio-system
+            serviceName: istiod
+      toPorts:
+        - ports:
+            - port: "15012"
+              protocol: TCP
+            - port: "15010"
+              protocol: TCP
     - toEntities:
         - kube-apiserver
     - toServices:
