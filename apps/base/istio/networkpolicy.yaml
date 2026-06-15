@@ -14,9 +14,11 @@ spec:
     matchLabels:
       app: istiod
   ingress:
-    # Proxies Envoy, ztunnel, ingressgateway → xDS + CA
-    - fromEndpoints:
-        - matchLabels: {}
+    # Proxies Envoy, ztunnel, ingressgateway, openaether-gateway → xDS + CA
+    # fromEntities: [cluster] au lieu de fromEndpoints: [matchLabels: {}]
+    # car ce dernier ne résout pas les identités cross-namespace (Cilium bug/limitation).
+    - fromEntities:
+        - cluster
       toPorts:
         - ports:
             - port: "15012"
@@ -68,9 +70,11 @@ spec:
     matchLabels:
       app: ztunnel
   ingress:
-    # HBONE tunnels depuis n'importe quel pod ambient
-    - fromEndpoints:
-        - matchLabels: {}
+    # HBONE tunnels depuis n'importe quel pod ambient (cross-node).
+    # fromEntities: [cluster] au lieu de fromEndpoints: [matchLabels: {}]
+    # car ce dernier ne résout pas les identités cross-namespace (Cilium bug/limitation).
+    - fromEntities:
+        - cluster
       toPorts:
         - ports:
             - port: "15008"
