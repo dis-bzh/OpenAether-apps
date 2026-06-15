@@ -47,6 +47,12 @@ spec:
   monitoring:
     enablePodMonitor: true
 
+  # Affinity: anti-affinité préférée pour répartir les 3 instances sur les nœuds
+  # (même config que grafana-db-cluster.yaml)
+  affinity:
+    podAntiAffinityType: preferred
+    topologyKey: kubernetes.io/hostname
+
   # Backup (sprint 4 obs: barman + S3)
   # backup:
   #   barmanObjectStore:

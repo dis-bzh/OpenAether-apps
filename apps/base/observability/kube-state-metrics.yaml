@@ -65,6 +65,7 @@ spec:
     prometheus:
       monitor:
         enabled: false
+    # podDisruptionBudget: le chart kube-state-metrics 5.25.1 attend la spec PDB brute
+    # (minAvailable/maxUnavailable), SANS champ `enabled` qui casse le schéma.
     podDisruptionBudget:
-      enabled: true
       minAvailable: 1

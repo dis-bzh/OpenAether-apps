@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao-unsealer
+  namespace: foundation-vault
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: openbao-unsealer

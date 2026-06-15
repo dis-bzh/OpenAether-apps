@@ -12,11 +12,12 @@ kind: Kustomization
 #   3. kubectl apply -k apps/base/platform/gateway-api
 #   4. kubectl apply -k apps/base/platform/priority-classes
 #   5. kubectl apply -k apps/base/platform/network-policies
-#   6. kubectl apply -k apps/base/foundation/pki-root/rbac
-#   7. kubectl apply -k apps/base/foundation/pki-root
-#   8. kubectl apply -k apps/base/foundation/vault
-#   9. kubectl apply -k apps/base/external-secrets
-#   10. kubectl apply -k apps/base/external-secrets/stores
+#   6. kubectl apply -k apps/base/foundation/vault
+#      → OpenBao HA (seal Shamir 5/3) + Job openbao-init (init + écrit le Secret
+#        openbao-unseal-keys) + unsealer HA (descelle les 3 pods). PLUS de pki-root.
+#        Escrow des parts : kubectl logs -n foundation-vault job/openbao-init
+#   7. kubectl apply -k apps/base/external-secrets
+#   8. kubectl apply -k apps/base/external-secrets/stores
 #
 # Pour vérifier l'état : task local-test (ou kubectl get kustomization -A)
 resources:

@@ -178,13 +178,58 @@ spec:
               echo "════ PKI + auth kubernetes workload ════"
               set +x
 
-              # 4a. enable pki engine (ignore 400 = déjà présent)
-              wlapi POST /v1/sys/mounts/pki '{"type":"pki"}' "$WL_TOKEN" >/dev/null || true
-              echo "  pki mount: HTTP=$(WH) (204=créé, 400=déjà)"
-
-              # 4b. mount pki/workload (chemin attendu par ClusterIssuer openbao-workload)
-              wlapi POST /v1/sys/mounts/pki/workload '{"type":"pki"}' "$WL_TOKEN" >/dev/null || true
+              # 4a. monter le PKI workload (intermediate CA) au chemin EXACT attendu
+              #     par l'issuer openbao-workload : pki/workload.
+              #     NE PAS monter `pki/` à la racine : ça occuperait le préfixe et
+              #     empêcherait le mount imbriqué pki/workload (conflit → HTTP 400,
+              #     puis 404 sur pki/workload/intermediate/...). max_lease_ttl long
+              #     pour couvrir la durée de l'intermediate (17520h).
+              wlapi POST /v1/sys/mounts/pki/workload \
+                '{"type":"pki","config":{"max_lease_ttl":"87600h"}}' "$WL_TOKEN" >/dev/null || true
               echo "  pki/workload mount: HTTP=$(WH) (204=créé, 400=déjà)"
+
+              # 4c. Intermediate CA — génère le CSR si absent, l'AFFICHE, NE BLOQUE PAS.
+              #     L'import du certificat signé est une étape MANUELLE (root offline) :
+              #     signer le CSR hors-ligne avec la ROOT CA (Bitwarden EU) puis
+              #     `bao write pki/workload/intermediate/set-signed certificate=@signed.pem`.
+              #     Voir pki-root-offline-runbook.md. Tant que set-signed n'est pas fait,
+              #     la PKI workload ne signe pas de leaf (issuers NotReady) — PAR DESIGN.
+              #     (Avant: un `read -r` bloquant faisait timeout le Job en GitOps.)
+              echo "════ Intermediate CA (génération CSR — import = étape manuelle) ════"
+              set +x
+              INT_CERT="$(wlapi GET /v1/pki/workload/cert/ca | jq -r '.data.certificate // empty' 2>/dev/null || true)"
+              if [ -n "$INT_CERT" ]; then
+                echo "  intermediate CA déjà présente (signée + importée) → no-op"
+              else
+                echo "  génération du CSR intermediate..."
+                CSR_RESP="$(wlapi POST /v1/pki/workload/intermediate/generate/internal \
+                  '{"common_name":"OpenAether Workload Intermediate CA","ttl":"17520h"}' "$WL_TOKEN")"
+                CSR="$(echo "$CSR_RESP" | jq -r '.data.csr // empty')"
+                if [ -z "$CSR" ]; then
+                  echo "  ⚠ génération CSR échouée (HTTP=$(WH)) — sera re-tentée au prochain sync"
+                  echo "$CSR_RESP"
+                else
+                  echo ""
+                  echo "  >>> ÉTAPE MANUELLE (runbook PKI root-offline) :"
+                  echo "  >>> 1. Signer ce CSR avec la ROOT CA hors-ligne (clé dans Bitwarden EU)"
+                  echo "  >>> 2. Importer le signé : bao write pki/workload/intermediate/set-signed \\"
+                  echo "  >>>      certificate=@intermediate-signed.pem"
+                  echo "  ----- BEGIN INTERMEDIATE CSR -----"
+                  echo "$CSR"
+                  echo "  ----- END INTERMEDIATE CSR -----"
+                fi
+              fi
+              set -x; set +x
+
+              # 4d. Rôle PKI leaf — utilisé par l'issuer openbao-workload pour signer
+              #     les certs via pki/workload/sign/openaether-leaf. Le rôle est de la
+              #     config (indépendant de la CA) → créable avant l'import de
+              #     l'intermediate signé ; la signature EFFECTIVE nécessitera la CA.
+              #     Domaines dérivés du Certificate openaether-tls (openaether.local + *).
+              wlapi POST /v1/pki/workload/roles/openaether-leaf \
+                '{"allowed_domains":["openaether.local"],"allow_subdomains":true,"allow_bare_domains":true,"allow_localhost":false,"max_ttl":"2160h","key_type":"rsa","key_bits":2048,"server_flag":true,"client_flag":true}' \
+                "$WL_TOKEN" >/dev/null || true
+              echo "  pki role openaether-leaf: HTTP=$(WH) (204=créé/maj)"
 
               # 4c. enable KV v2 engine (secret/) — chemin pour ESO + seeder
               wlapi POST /v1/sys/mounts/secret '{"type":"kv","options":{"version":"2"}}' "$WL_TOKEN" >/dev/null || true

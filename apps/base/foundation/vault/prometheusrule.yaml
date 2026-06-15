@@ -12,7 +12,7 @@ spec:
     - name: openbao-workload
       interval: 30s
       rules:
-        # Workload sealed > 2min = critical (transit wrap fail)
+        # Workload sealed > 2min = critical (unsealer HA fail)
         - alert: OpenBaoWorkloadSealed
           expr: openbao_core_unsealed == 0
           for: 2m
@@ -21,7 +21,7 @@ spec:
             component: openbao-workload
           annotations:
             summary: "OpenBao workload sealed > 2min"
-            description: "Le workload OpenBao (ns foundation-vault) est scellé. Transit wrap fail probable (root OpenBao down, network policy, ou secret openbao-seal-token manquant). Vérifier le statut du root + logs du workload."
+            description: "Le workload OpenBao (ns foundation-vault) est scellé. Unsealer HA inopérant (parts Shamir non chargées, network policy, ou unsealer down). Vérifier les logs de l'unsealer + statut OpenBao."
             runbook_url: "https://github.com/dis-bzh/OpenAether/blob/main/docs/runbooks/openbao-workload-unseal.md"
         # Raft no leader = critical
         - alert: OpenBaoRaftNoLeader
@@ -33,16 +33,6 @@ spec:
           annotations:
             summary: "OpenBao raft cluster has no leader"
             description: "Aucune instance raft n'est leader. Le cluster ne peut pas traiter de requêtes d'écriture."
-        # Transit unwrap failures (échecs d'auto-unseal)
-        - alert: OpenBaoTransitUnsealFailures
-          expr: increase(openbao_transit_seal_unwrap_failures_total[5m]) > 0
-          for: 1m
-          labels:
-            severity: warning
-            component: openbao-workload
-          annotations:
-            summary: "OpenBao transit seal unwrap failures"
-            description: "Échecs de transit unwrap détectés. Vérifier la connectivité au root OpenBao (svc openbao-internal.foundation-pki-root)."
         # Raft lag élevé = warning
         - alert: OpenBaoRaftLagHigh
           expr: openbao_raft_commit_index - openbao_raft_last_log_index > 100
