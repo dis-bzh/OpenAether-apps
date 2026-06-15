@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# OpenAether — Cilium LB-IPAM (LoadBalancer IP allocation + L2 announcements)
+# Fournit un pool d'IPs virtuelles sur le réseau privé VPC et une politique
+# L2 pour que Cilium réponde aux ARP sur ces VIPs. Sans ces ressources,
+# tous les Services type=LoadBalancer restent <pending>.
+resources:
+  - ip-pool.yaml
+  - l2-announcement.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      openaether.io/managed: "true"
+      openaether.io/sprint: "0.5.0-sprintB"
+      openaether.io/component: "cilium-lb-ipam"
