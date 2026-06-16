@@ -1,0 +1,46 @@
+# OpenAether 0.5.0 — Restrict Image Registries
+# Interdit les images hors des registres autorisés.
+# Empêche le pull d'images non vérifiées / compromises.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registries
+  annotations:
+    policies.kyverno.io/title: Restrict Image Registries
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Images must come from known registries. Blocks docker.io default
+      and unknown registries.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: validate-registries
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+      exclude:
+        any:
+        - resources:
+            namespaces:
+              - kube-system
+              - kyverno
+              - longhorn-system
+              - local-path-storage
+              - capi-system
+              - capi-operator-system
+      validate:
+        message: >-
+          Image registry not allowed. Allowed: ghcr.io, quay.io,
+          registry.k8s.io, docker.io/istio, docker.io/rancher,
+          docker.io/kiwigrid, gcr.io, docker.io/grafana,
+          docker.io/registry.k8s.io.
+        pattern:
+          spec:
+            containers:
+            - image: "ghcr.io/* | quay.io/* | registry.k8s.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | gcr.io/* | docker.io/grafana/* | docker.io/registry.k8s.io/*"
+            initContainers:
+            - image: "ghcr.io/* | quay.io/* | registry.k8s.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | gcr.io/* | docker.io/grafana/* | docker.io/registry.k8s.io/*"

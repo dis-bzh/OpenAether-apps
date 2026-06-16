@@ -1,0 +1,69 @@
+# OpenAether 0.5.0 — Restrict Privileged Containers
+# Interdit les pods privileged, hostNetwork, hostPID, hostIPC.
+# Exclusions: namespaces où des workloads légitimes en ont besoin
+# (longhorn, istio-cni, capi, local-path, node-exporter).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-privileged
+  annotations:
+    policies.kyverno.io/title: Restrict Privileged Containers
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Privileged containers, hostNetwork, hostPID and hostIPC are prohibited
+      except in system namespaces where they are required.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: deny-privileged
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+      exclude:
+        any:
+        - resources:
+            namespaces:
+              - kube-system
+              - kyverno
+              - longhorn-system
+              - local-path-storage
+              - capi-system
+              - capi-operator-system
+              - services-observability
+              - foundation-service-mesh
+      validate:
+        message: "Privileged containers are not allowed."
+        pattern:
+          spec:
+            containers:
+            - =(securityContext):
+                =(privileged): false
+            =(hostNetwork): false
+            =(hostPID): false
+            =(hostIPC): false
+    - name: deny-hostpath
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+      exclude:
+        any:
+        - resources:
+            namespaces:
+              - kube-system
+              - kyverno
+              - longhorn-system
+              - local-path-storage
+              - capi-system
+              - capi-operator-system
+      validate:
+        message: "HostPath volumes are not allowed."
+        pattern:
+          spec:
+            volumes:
+            - =(hostPath): null
