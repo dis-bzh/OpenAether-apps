@@ -19,7 +19,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: alloy
 spec:
-  interval: 10m
+  interval: 1h
   chart:
     spec:
       chart: alloy
@@ -28,7 +28,7 @@ spec:
         kind: HelmRepository
         name: grafana
         namespace: services-observability
-      interval: 10m
+      interval: 1h
   install:
     remediation:
       retries: 3

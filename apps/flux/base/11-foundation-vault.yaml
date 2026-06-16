@@ -7,9 +7,9 @@ metadata:
   name: foundation-vault
   namespace: flux-system
 spec:
-  interval: 2m
-  retryInterval: 30s
-  timeout: 3m
+  interval: 10m
+  retryInterval: 2m
+  timeout: 10m
   sourceRef:
     kind: GitRepository
     name: openaether

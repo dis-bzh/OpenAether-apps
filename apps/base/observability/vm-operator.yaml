@@ -18,7 +18,7 @@ metadata:
     openaether.io/component: victoriametrics-operator
 spec:
   url: https://victoriametrics.github.io/helm-charts/
-  interval: 10m
+  interval: 1h
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -30,7 +30,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: victoriametrics-operator
 spec:
-  interval: 10m
+  interval: 1h
   chart:
     spec:
       chart: victoria-metrics-operator
@@ -39,7 +39,7 @@ spec:
         kind: HelmRepository
         name: victoriametrics
         namespace: services-observability
-      interval: 10m
+      interval: 1h
   install:
     crds: CreateReplace
     remediation:
