@@ -326,7 +326,7 @@ spec:
     - toFQDNs:
         - matchName: s3.fr-par.scw.cloud     # Scaleway Object Storage
         - matchName: s3.gra.cloud.ovh.com  # OVH OBS
-        - matchName: oos.eu‑west‑2.outscale.com   # Outscale OSU
+        - matchName: oos.eu-west-2.outscale.com   # Outscale OSU
       toPorts:
         - ports:
             - port: "443"
