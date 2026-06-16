@@ -1,6 +1,18 @@
-# OpenAether 0.5.0 — Default Deny All (Ingress)
-# Ferme toutes les connexions Ingress par défaut sur le cluster.
-# Chaque pod/namespace doit avoir sa propre policy pour être joint.
+# OpenAether 0.5.0 — Default Deny All (Ingress + Egress)
+# ──────────────────────────────────────────────────────────────────────────
+# Ferme INGRESS et EGRESS par défaut sur le cluster.
+# Chaque pod doit avoir sa propre CNP egress pour être joignable ET sortir.
+#
+# Couverture egress (nécessaire pour que le deny ne casse rien) :
+#   CCNP allow-dns      → DNS :53 UDP/TCP vers CoreDNS (tous pods)
+#   CCNP allow-kube-api → kube-apiserver :443 (tous pods)
+#   CCNP allow-infra-egress-restricted → FQDNs/CIDRs par ns (Flux, CAPI, Longhorn…)
+#   CNP par composant   → flux:registries, loki:MinIO, grafana:CNPG, gateway:backends…
+#
+# En Cilium, le deny egress n'est actif sur un pod que s'il est ciblé par une
+# règle egress. SANS cette CCNP, les pods sans CNP egress dédié sortent vers
+# world (0.0.0.0/0) sans restriction.
+# ──────────────────────────────────────────────────────────────────────────
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
 metadata:
@@ -13,3 +25,20 @@ spec:
   endpointSelector: {}
   ingress:
     - {} # Empty ingress rule acts as a default deny
+---
+# Default deny all EGRESS cluster-wide.
+# Les CCNP allow-dns et allow-kube-api sont "additives" : elles rouvrent
+# ces flux essentiels sur tous les pods. Les CNP par composant rouvrent
+# le reste (MinIO, CNPG, backends…).
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: default-deny-all-egress
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: platform
+spec:
+  description: "Default deny all EGRESS traffic cluster-wide"
+  endpointSelector: {}
+  egress:
+    - {} # Empty egress rule acts as a default deny

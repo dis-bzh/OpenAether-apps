@@ -106,3 +106,35 @@ spec:
               protocol: TCP
             - port: "9502"
               protocol: TCP
+---
+# ── MinIO (namespace: foundation-storage) ────────────────────────────
+# S3-compatible backend pour Loki chunks/backups et futur VMCluster backup.
+# ingress :9000 limité à services-observability (Loki, vmagent backup).
+# ingress :9001 (console) supprimé — accès via port-forward uniquement.
+# egress : DNS (kube-dns via CCNP allow-dns), kube-api (via CCNP allow-kube-api).
+# Le default-deny-all-egress/ingress CCNP ferme le reste.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: minio
+  namespace: foundation-storage
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprintC"
+    openaether.io/component: minio
+spec:
+  description: "MinIO: ingress S3 API :9000 depuis services-observability, deny console."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: minio
+  ingress:
+    # Loki + vmbackup (S3 API :9000)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+      toPorts:
+        - ports:
+            - port: "9000"
+              protocol: TCP
+    # Pas de :9001 (console UI) — accès via port-forward uniquement.
+  # egress : DNS + kube-api couverts par les CCNP allow-dns / allow-kube-api.

@@ -64,7 +64,12 @@ spec:
     # Scraping cluster-wide: tous pods sur ports métriques courants.
     # VMAgent utilise un port dynamique par cible; autoriser les ports
     # standards de scraping pour les composants connus.
-    - toPorts:
+    # ⚠️ toPorts-SEUL = n'importe quelle destination (y compris world).
+    # on ajoute toEntities: cluster pour borner le scraping au cluster
+    # (empêche VMAgent compromis d'atteindre :8200 OpenBao hors-cluster).
+    - toEntities:
+        - cluster
+      toPorts:
         - ports:
             - port: "8080"   # kube-state-metrics, nombreux operateurs
               protocol: TCP
@@ -313,9 +318,15 @@ spec:
         - ports:
             - port: "9000"
               protocol: TCP
-    # S3 cloud (HTTPS) — pour overlay cloud
-    - toEntities:
-        - world
+    # S3 cloud (HTTPS) — pour overlay cloud.
+    # ⚠️ toEntities:world :443 = n'importe quelle IP publique → exfiltration possible.
+    # Resserré sur les FQDNs S3 cloud du provider. Les overlays cloud peuvent
+    # ajouter d'autres providers si nécessaire.
+    # En local : cette règle n'est pas atteinte (MinIO interne :9000 suffit).
+    - toFQDNs:
+        - matchName: s3.fr-par.scw.cloud     # Scaleway Object Storage
+        - matchName: s3.gra.cloud.ovh.com  # OVH OBS
+        - matchName: oos.eu‑west‑2.outscale.com   # Outscale OSU
       toPorts:
         - ports:
             - port: "443"
