@@ -135,6 +135,58 @@ spec:
             - port: "15008"
               protocol: TCP
 ---
+# ── Waypoint (foundation-service-mesh) ──────────────────────────────
+# Envoy proxy dédié (pas ambient, pas sidecar). Nécessaire pour l'authz L7.
+# Egress: istiod :15012 (xDS/CA) + :15010 (xDS plaintext) + DNS + kube-api.
+# L'ingress vers istiod est déjà couvert par la CNP istiod (fromEntities: cluster).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: istio-waypoint
+  namespace: foundation-service-mesh
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "istio"
+spec:
+  description: "istio-waypoint: egress vers istiod (xDS/CA) + DNS + kube-api."
+  endpointSelector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: istio-waypoint
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # istiod xDS/CA (15012 mTLS, 15010 plaintext)
+    - toServices:
+        - k8sService:
+            serviceName: istiod
+            namespace: istio-system
+      toPorts:
+        - ports:
+            - port: "15012"
+              protocol: TCP
+            - port: "15010"
+              protocol: TCP
+    # kube-api (auth, cert signing)
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
 # openaether-gateway-istio (Gateway API): ingress HTTP/HTTPS/status, egress istiod xDS/CA + DNS + kube-api
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
