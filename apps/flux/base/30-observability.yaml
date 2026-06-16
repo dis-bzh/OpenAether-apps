@@ -8,9 +8,9 @@ metadata:
   name: observability
   namespace: flux-system
 spec:
-  interval: 2m
-  retryInterval: 30s
-  timeout: 3m
+  interval: 10m
+  retryInterval: 2m
+  timeout: 20m
   sourceRef:
     kind: GitRepository
     name: openaether
@@ -37,9 +37,9 @@ metadata:
   name: observability-vm-customresources
   namespace: flux-system
 spec:
-  interval: 2m
-  retryInterval: 30s
-  timeout: 3m
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
   sourceRef:
     kind: GitRepository
     name: openaether

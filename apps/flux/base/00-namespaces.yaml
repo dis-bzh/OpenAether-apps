@@ -8,8 +8,8 @@ metadata:
   name: namespaces
   namespace: flux-system
 spec:
-  interval: 2m
-  retryInterval: 30s
+  interval: 10m
+  retryInterval: 2m
   timeout: 3m
   sourceRef:
     kind: GitRepository
