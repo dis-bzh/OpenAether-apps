@@ -17,7 +17,7 @@
 # ════════════════════════════════════════════════════════════════════════
 # istio-system : plan de contrôle (xDS / CA / HBONE)
 # ════════════════════════════════════════════════════════════════════════
-# istiod ↔ ztunnel ↔ gateway : xDS (15010/15012) + injection (15017)
+# istiod ↔ ztunnel ↔ gateway ↔ waypoint : xDS (15010/15012) + injection (15017)
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -34,6 +34,7 @@ spec:
             principals:
               - "cluster.local/ns/istio-system/sa/ztunnel"
               - "cluster.local/ns/services-gateway/sa/openaether-gateway-istio"
+              - "cluster.local/ns/foundation-service-mesh/sa/istio-waypoint-istio"
       to:
         - operation:
             ports:
