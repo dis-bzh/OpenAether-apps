@@ -7,9 +7,9 @@ metadata:
   name: cluster-api-providers
   namespace: flux-system
 spec:
-  interval: 10m
-  retryInterval: 2m
-  timeout: 15m
+  interval: 2m
+  retryInterval: 30s
+  timeout: 3m
   sourceRef:
     kind: GitRepository
     name: openaether
