@@ -12,6 +12,18 @@ spec:
         - resources:
             kinds:
               - Pod
+      exclude:
+        any:
+        - resources:
+            namespaces:
+              - kube-system
+              - kyverno
+              - longhorn-system
+              - local-path-storage
+              - capi-system
+              - capi-operator-system
+              - cnpg-system
+              - cert-manager
       validate:
         message: "Running as root is not allowed."
         pattern:
