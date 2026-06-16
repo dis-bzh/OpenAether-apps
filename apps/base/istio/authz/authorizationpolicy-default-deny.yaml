@@ -1,6 +1,30 @@
 # OpenAether 0.5.0 — Istio AuthorizationPolicy Default Deny (Zero Trust)
-# Appliqué dans CHAQUE namespace ambient: ferme tout le trafic L7 par défaut.
-# Chaque workload doit avoir son AuthorizationPolicy explicite pour être accessible.
+# ──────────────────────────────────────────────────────────────────────────
+# MODÈLE D'AUTORISATION (périmètres DISJOINTS, pas de duplication) :
+#
+#   • Namespaces AMBIENT (label istio.io/dataplane-mode: ambient) :
+#       autorisation L4 portée par Istio/ztunnel via identité SPIFFE.
+#       En ambient le trafic pod→pod est encapsulé en HBONE :15008 → les
+#       CiliumNetworkPolicy par port applicatif NE VOIENT PAS ce trafic.
+#       Donc l'authz in-mesh = CES policies (ici), pas Cilium.
+#
+#   • Namespaces HORS-MESH (cert-manager, kyverno, capi*, longhorn-system,
+#       flux-system, foundation-databases, foundation-vault/pki) :
+#       AUCUNE AuthorizationPolicy ici. ztunnel n'intercepte pas → elles
+#       seraient inertes (théâtre de sécurité). Leur sécurité =
+#       CiliumNetworkPolicy L3/L4 (identité SA) + OpenBao k8s-auth.
+#
+#   • mTLS STRICT mesh-wide : voir peerauthentication-strict.yaml (inchangé).
+#
+# DEFAULT-DENY CORRECT EN ISTIO : une AuthorizationPolicy avec `spec: {}`
+# (action ALLOW implicite, ZÉRO règle) = "n'autorise rien", SURCHARGEABLE par
+# les ALLOW explicites (authorizationpolicy-explicit-allows.yaml).
+# ⚠️ NE PAS utiliser `action: DENY` + `rules: [{}]` : un DENY vide matche TOUT
+# et l'emporte sur les ALLOW (ordre d'éval Istio : CUSTOM → DENY → ALLOW) →
+# tous les allows deviennent morts.
+# ──────────────────────────────────────────────────────────────────────────
+
+# Mesh root namespace — deny-all par défaut sur istio-system.
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -9,114 +33,7 @@ metadata:
   labels:
     openaether.io/managed: "true"
     openaether.io/component: "istio"
-spec:
-  action: DENY
-  rules:
-    - {}
----
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: default-deny-all
-  namespace: flux-system
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: "platform"
-spec:
-  action: DENY
-  rules:
-    - {}
----
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: default-deny-all
-  namespace: cert-manager
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: "platform"
-spec:
-  action: DENY
-  rules:
-    - {}
----
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: default-deny-all
-  namespace: capi-system
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: "platform"
-spec:
-  action: DENY
-  rules:
-    - {}
----
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: default-deny-all
-  namespace: capi-operator-system
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: "platform"
-spec:
-  action: DENY
-  rules:
-    - {}
----
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: default-deny-all
-  namespace: longhorn-system
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: "platform"
-spec:
-  action: DENY
-  rules:
-    - {}
----
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: default-deny-all
-  namespace: kyverno
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: "platform"
-spec:
-  action: DENY
-  rules:
-    - {}
----
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: default-deny-all
-  namespace: foundation-databases
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: "platform"
-spec:
-  action: DENY
-  rules:
-    - {}
----
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: default-deny-all
-  namespace: services-observability
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: "platform"
-spec:
-  action: DENY
-  rules:
-    - {}
+spec: {} # ALLOW implicite, 0 règle → deny par défaut, surchargé par les ALLOW
 ---
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
@@ -126,11 +43,45 @@ metadata:
   labels:
     openaether.io/managed: "true"
     openaether.io/component: "istio"
-spec:
-  action: DENY
-  rules:
-    - {}
+spec: {}
 ---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec: {}
+---
+# foundation-storage : ambient (MinIO). Sans policy = allow-all → trou réel.
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: foundation-storage
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec: {}
+---
+# foundation-networking : ambient (futurs Gateway-API controllers). Sans policy
+# = allow-all → trou réel. Allow intra-ns à compléter quand des workloads y
+# seront déployés (aujourd'hui le namespace est vide).
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: foundation-networking
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec: {}
+---
+# services-gateway : le ns n'est PAS ambient, MAIS le pod Gateway-API est un
+# proxy Envoy dédié (injecté par le déploiement Gateway) qui enforce lui-même
+# l'AuthZ — différent de ztunnel. On garde donc le deny-all + l'allow ingress.
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -139,7 +90,4 @@ metadata:
   labels:
     openaether.io/managed: "true"
     openaether.io/component: "platform"
-spec:
-  action: DENY
-  rules:
-    - {}
+spec: {}
