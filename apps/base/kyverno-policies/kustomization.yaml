@@ -3,3 +3,6 @@ kind: Kustomization
 
 resources:
   - block-default-ns.yaml
+  - require-security-context.yaml
+  - restrict-privileged.yaml
+  - restrict-image-registries.yaml

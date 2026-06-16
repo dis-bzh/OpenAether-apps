@@ -1,0 +1,60 @@
+# OpenAether 0.5.0 — Require SecurityContext on all containers
+# Bloque tout pod sans securityContext au niveau conteneur.
+# Exclusions: namespaces privileged (longhorn, istio-cni, capi, local-path)
+# où les workloads ont besoin de privileges légitimes.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-security-context
+  annotations:
+    policies.kyverno.io/title: Require SecurityContext
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      All containers must have a securityContext with runAsNonRoot, drop ALL caps,
+      allowPrivilegeEscalation:false, and seccompProfile RuntimeDefault.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: check-container-security-context
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+      exclude:
+        any:
+        - resources:
+            namespaces:
+              - kube-system
+              - kyverno
+              - longhorn-system
+              - local-path-storage
+              - capi-system
+              - capi-operator-system
+      validate:
+        message: >-
+          Containers must have securityContext: runAsNonRoot=true,
+          allowPrivilegeEscalation=false, capabilities.drop=["ALL"],
+          seccompProfile.type=RuntimeDefault.
+        pattern:
+          spec:
+            containers:
+            - securityContext:
+                runAsNonRoot: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                seccompProfile:
+                  type: RuntimeDefault
+            initContainers:
+            - securityContext:
+                runAsNonRoot: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                seccompProfile:
+                  type: RuntimeDefault
