@@ -45,6 +45,11 @@ spec:
       retries: 3
   values:
     defaultSettings:
+      # Chemin des données Longhorn sur chaque nœud → user volume Talos dédié et
+      # chiffré (LUKS2), monté en /var/mnt/longhorn (cf. OpenAether-infra
+      # worker_storage). Isole les réplicas du disque OS et survit à
+      # `talosctl upgrade --preserve`. Défaut amont = /var/lib/longhorn.
+      defaultDataPath: /var/mnt/longhorn
       # Nombre de répliques par défaut pour les nouveaux volumes.
       # Surchargé par StorageClass (numberOfReplicas).
       defaultReplicaCount: 2
