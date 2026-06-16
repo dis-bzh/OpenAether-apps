@@ -8,8 +8,8 @@ metadata:
   name: platform-local-path-provisioner
   namespace: flux-system
 spec:
-  interval: 10m
-  retryInterval: 2m
+  interval: 2m
+  retryInterval: 30s
   timeout: 3m
   sourceRef:
     kind: GitRepository
@@ -26,8 +26,8 @@ metadata:
   name: platform-gateway-api
   namespace: flux-system
 spec:
-  interval: 10m
-  retryInterval: 2m
+  interval: 2m
+  retryInterval: 30s
   timeout: 3m
   sourceRef:
     kind: GitRepository
@@ -44,8 +44,8 @@ metadata:
   name: platform-priority-classes
   namespace: flux-system
 spec:
-  interval: 10m
-  retryInterval: 2m
+  interval: 2m
+  retryInterval: 30s
   timeout: 3m
   sourceRef:
     kind: GitRepository
@@ -62,8 +62,8 @@ metadata:
   name: platform-cilium-lb-ipam
   namespace: flux-system
 spec:
-  interval: 10m
-  retryInterval: 2m
+  interval: 2m
+  retryInterval: 30s
   timeout: 3m
   sourceRef:
     kind: GitRepository
@@ -80,8 +80,8 @@ metadata:
   name: platform-network-policies
   namespace: flux-system
 spec:
-  interval: 10m
-  retryInterval: 2m
+  interval: 2m
+  retryInterval: 30s
   timeout: 3m
   sourceRef:
     kind: GitRepository

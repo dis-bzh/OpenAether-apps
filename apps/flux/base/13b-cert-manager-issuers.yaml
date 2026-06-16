@@ -9,9 +9,9 @@ metadata:
   name: cert-manager-issuers
   namespace: flux-system
 spec:
-  interval: 10m
-  retryInterval: 2m
-  timeout: 5m
+  interval: 2m
+  retryInterval: 30s
+  timeout: 3m
   sourceRef:
     kind: GitRepository
     name: openaether
