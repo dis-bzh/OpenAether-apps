@@ -127,12 +127,17 @@ metadata:
   name: local-path-config
   namespace: local-path-storage
 data:
+  # Cloud: writes to the dedicated, LUKS2-encrypted Talos user volume mounted at
+  # /var/mnt/local-path-provisioner (see OpenAether-infra worker_storage). This
+  # isolates local-path data from the OS disk and survives talosctl upgrade
+  # --preserve. (Local Docker uses apps/base/platform/local-path-provisioner with
+  # /opt, since /var/mnt is read-only in container mode.)
   config.json: |-
     {
             "nodePathMap":[
             {
                     "node":"DEFAULT_PATH_FOR_NON_LISTED_NODES",
-                    "paths":["/opt/local-path-provisioner"]
+                    "paths":["/var/mnt/local-path-provisioner"]
             }
             ]
     }
