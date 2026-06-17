@@ -28,6 +28,10 @@ spec:
               # runAsNonRoot:true explicitement et requièrent des privilèges réseau.
               - istio-system
               - foundation-service-mesh
+              # Gateway Istio : istiod génère AUTO le Deployment Envoy
+              # (openaether-gateway-istio) qui ne pose pas runAsNonRoot:true → bloqué
+              # → Gateway jamais Programmed (pas d'Envoy/LB), constaté Scaleway juin 2026.
+              - services-gateway
               # Observability : charts upstream Grafana/Loki/Alloy/KSM/node-exporter/
               # vm-operator. node-exporter (hostPath/hostNetwork) tourne légitimement
               # root ; les autres ne posent pas tous runAsNonRoot:true explicitement →
