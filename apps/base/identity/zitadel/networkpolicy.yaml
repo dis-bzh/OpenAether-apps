@@ -1,11 +1,11 @@
 # OpenAether — CiliumNetworkPolicy Zitadel (Zero Trust L3/L4)
 # ──────────────────────────────────────────────────────────────────────────
-# Zitadel est dans le mesh ambient, MAIS son egress vers CNPG (hors-mesh) sort
-# de HBONE → seul Cilium L4 s'applique côté DB. L'ingress north-south vient de la
-# Gateway Istio. deny-all implicite Cilium + allow explicite par flux (additif).
+# services-identity est HORS mesh (cf. namespace.yaml) → toute la sécurité réseau
+# de Zitadel repose sur CETTE CiliumNetworkPolicy L3/L4 (+ WireGuard niveau nœud
+# + l'authN native OIDC de Zitadel). Pas d'AuthorizationPolicy Istio (inerte hors-mesh).
 #
 # Flux :
-#   ingress : Gateway/waypoint → Zitadel :8080 (HTTP/gRPC h2c)
+#   ingress : probes kubelet + Gateway Istio → Zitadel :8080 ; login :3000
 #   egress  : DNS + kube-api (discovery) + CNPG zitadel-db :5432
 ---
 apiVersion: cilium.io/v2
@@ -22,12 +22,11 @@ spec:
     matchLabels:
       app.kubernetes.io/name: zitadel
   ingress:
-    # Probes kubelet/health (startup/readiness/liveness). Sur Talos+Cilium, la
-    # source des probes est l'adresse health-proxy link-local 169.254.7.127,
-    # classée `host` (nœud local) / `remote-node` (autre nœud) — PAS une identité
-    # pod. Sans cette règle, les SYN kubelet→:8080 sont DROPPÉS ("Policy denied
-    # world->...:8080 tcp SYN", source 169.254.7.127) → startupProbe timeout →
-    # CrashLoopBackOff (constaté Scaleway juin 2026). Cf. [[cilium-ambient-debug]].
+    # Probes kubelet/health (startup/readiness/liveness). Hors mesh, la probe vient
+    # directement du nœud (entité Cilium `host` / `remote-node` cross-node), PAS via
+    # ztunnel. On l'autorise explicitement car la CNP active le default-deny ingress.
+    # (En ambient, ztunnel redirigeait la probe via 169.254.7.127/HBONE → DROP L4 →
+    # CrashLoopBackOff : c'est la raison du passage hors mesh. Cf. namespace.yaml.)
     # Port 3000 = pod login (http-server), 8080 = zitadel (http2-server).
     - fromEntities:
         - host
@@ -38,7 +37,7 @@ spec:
               protocol: TCP
             - port: "3000"
               protocol: TCP
-    # Gateway Istio (services-gateway) — ingress north-south.
+    # Gateway Istio (services-gateway) — ingress north-south (UI + API OIDC).
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-gateway
@@ -46,13 +45,15 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
-    # Waypoint éventuel (foundation-service-mesh) — trafic in-mesh.
+    # Intra-namespace : le pod login (wait-for-zitadel + runtime) appelle zitadel:8080.
     - fromEndpoints:
         - matchLabels:
-            io.kubernetes.pod.namespace: foundation-service-mesh
+            io.kubernetes.pod.namespace: services-identity
       toPorts:
         - ports:
             - port: "8080"
+              protocol: TCP
+            - port: "3000"
               protocol: TCP
   egress:
     # DNS

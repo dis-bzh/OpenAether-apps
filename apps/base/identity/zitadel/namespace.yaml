@@ -1,10 +1,24 @@
 # OpenAether — Namespace identité (Zitadel)
 # ──────────────────────────────────────────────────────────────────────────
-# services-identity est une APP (couche 5) que le cluster SERT → DANS le mesh
-# ambient (label istio.io/dataplane-mode: ambient), contrairement à la fondation
-# (OpenBao/PKI/DB) qui reste HORS mesh. Cf. principe foundation-namespaces-hors-mesh.
-# Sécurité in-mesh = AuthorizationPolicy (authorizationpolicy.yaml) + mTLS STRICT ;
-# l'egress vers CNPG (hors-mesh) sort de HBONE → contrôlé par CiliumNetworkPolicy.
+# services-identity reste HORS du mesh ambient (PAS de label
+# istio.io/dataplane-mode: ambient), comme la fondation (OpenBao/PKI/DB).
+#
+# POURQUOI un IdP ne va PAS dans le mesh (cf. [[foundation-namespaces-hors-mesh]]) :
+# Zitadel est une RACINE DE CONFIANCE, pas une app métier ordinaire. Un composant
+# racine de confiance ne doit pas dépendre du mesh qu'il contribue à sécuriser :
+#   - dépendance circulaire au bootstrap (ztunnel doit tourner pour que l'IdP démarre) ;
+#   - ztunnel intercepte les probes kubelet (169.254.7.127 → :8080) et les redirige
+#     en HBONE → DROP par la CiliumNetworkPolicy L4 → startupProbe timeout →
+#     CrashLoopBackOff (constaté Scaleway juin 2026, identique au piège fondation) ;
+#   - un rollout/upgrade de ztunnel pourrait faire tomber l'auth → panne globale.
+#
+# Le zero-trust reste tenu SANS le mesh :
+#   - chiffrement est-ouest : Cilium WireGuard (niveau nœud) ;
+#   - segmentation moindre privilège : CiliumNetworkPolicy L3/L4 (networkpolicy.yaml) ;
+#   - authN/authZ : Zitadel lui-même (OIDC/OAuth, tokens validés offline via JWKS) ;
+#   - secrets : ESO + OpenBao ; durcissement pod : PSS + Kyverno.
+# Le mesh n'apporterait que du mTLS/SPIFFE est-ouest SUR l'IdP — gain marginal ici
+# (le nord-sud est terminé TLS à la Gateway ; les consommateurs valident des JWT).
 #
 # baseline: Zitadel tourne non-root mais le chart peut demander quelques tolérances
 # (pas restricted strict d'emblée) ; à resserrer en restricted une fois validé.
@@ -13,7 +27,6 @@ kind: Namespace
 metadata:
   name: services-identity
   labels:
-    istio.io/dataplane-mode: ambient
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
