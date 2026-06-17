@@ -77,15 +77,29 @@ spec:
               protocol: TCP
             - port: "8428"   # VMSingle (si présent)
               protocol: TCP
+            - port: "8429"   # vmagent self-metrics (scrape des pairs)
+              protocol: TCP
             - port: "8480"   # vminsert
               protocol: TCP
             - port: "8481"   # vmselect
+              protocol: TCP
+            - port: "8482"   # vmstorage self-metrics
               protocol: TCP
             - port: "9090"   # Prometheus compat
               protocol: TCP
             - port: "9100"   # node-exporter
               protocol: TCP
             - port: "9187"   # postgres-exporter
+              protocol: TCP
+    # Scrape kubelet/cadvisor sur les nœuds (:10250) — cible host, pas pod.
+    # En ambient ce trafic partait en HBONE ; hors mesh il faut l'autoriser
+    # explicitement vers les entités host + remote-node.
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10250"  # kubelet metrics + cadvisor
               protocol: TCP
 
 # ── VMCluster (vminsert + vmstorage + vmselect) ────────────────────
