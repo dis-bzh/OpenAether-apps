@@ -42,6 +42,22 @@ spec:
               protocol: TCP
             - port: "9502"
               protocol: TCP
+    # Gateway Istio (services-gateway) → UI longhorn-frontend:80 (north-south).
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-gateway
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # Probes kubelet sur la UI (longhorn-system est hors mesh → source nœud).
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
   egress:
     # Intra-namespace: allow all (Longhorn pods don't always have ns label)
     - toEndpoints:

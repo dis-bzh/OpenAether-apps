@@ -15,7 +15,7 @@ spec:
     matchLabels:
       app: openbao
   ingress:
-    # 1. Cilium Gateway (sprint 3) — vault.openaether.eu
+    # 1. Cilium Gateway (sprint 3) — vault.openaether.local
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-gateway

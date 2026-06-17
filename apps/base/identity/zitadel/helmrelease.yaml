@@ -113,7 +113,7 @@ spec:
 
       # Config NON secrète (ConfigMap). Les keys suivent l'arbre de config Zitadel.
       configmapConfig:
-        ExternalDomain: zitadel.openaether.eu
+        ExternalDomain: zitadel.openaether.local
         ExternalPort: 443
         ExternalSecure: true
         TLS:
