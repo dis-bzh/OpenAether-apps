@@ -11,13 +11,14 @@ This repository is read by Flux controllers bootstrapped via
 ├── base/          # Provider-agnostic Kubernetes manifests
 │   ├── namespaces/
 │   ├── platform/          # Gateway API CRDs
-│   ├── foundation/        # OpenBao PKI (root + workload), bootstrap Jobs
+│   ├── foundation/        # OpenBao (HA Shamir + unsealer), bootstrap Jobs
 │   ├── external-secrets/  # ESO install + ClusterSecretStore
 │   ├── cert-manager/      # cert-manager + ClusterIssuers (OpenBao-backed)
 │   ├── istio/             # Istio ambient mesh + Gateway
 │   ├── kyverno/           # Kyverno + policies
 │   ├── observability/     # VictoriaMetrics + Grafana
-│   ├── cnpg/              # CloudNative-PG operator
+│   ├── cnpg/              # CloudNative-PG operator + zitadel-db
+│   ├── identity/          # Zitadel (IAM souverain, backend CNPG)
 │   ├── storage/           # local-path-provisioner (local/Docker only)
 │   └── ...
 └── flux/          # Flux Kustomization DAG

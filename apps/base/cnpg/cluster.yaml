@@ -1,16 +1,16 @@
-# OpenAether 0.5.0 fix P0 sync: ns databases -> foundation-databases
-# + storageClass openebs-hostpath (inexistant) -> local-path (provisioner actif).
-# NB: Keycloak 26.0 sera remplacé par Zitadel POC sprint 2; ce Cluster CNPG
-# reste pour valider la chaîne BDD HA + sera réutilisé pour Zitadel (PG).
+# OpenAether — Cluster CNPG PostgreSQL pour Zitadel (identité).
+# Remplace l'ancien keycloak-db : décision actée = Zitadel (Go, multi-tenant
+# natif) plutôt que Keycloak. Le Cluster CNPG (3 instances HA) sert de backend
+# Postgres à Zitadel (apps/base/identity/zitadel/).
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: keycloak-db
+  name: zitadel-db
   namespace: foundation-databases
   labels:
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprint0"
-    openaether.io/component: cnpg-keycloak-db
+    openaether.io/component: cnpg-zitadel-db
 spec:
   instances: 3
   imageName: ghcr.io/cloudnative-pg/postgresql:16.1
@@ -33,15 +33,13 @@ spec:
   # Bootstrap from SQL (create DB/User if needed)
   bootstrap:
     initdb:
-      database: keycloak
-      owner: keycloak
-      # References the secret created by ExternalSecret (apps/base/keycloak/secrets.yaml)
-      # Note: ce Secret est dans services-identity (où Keycloak tourne), le Cluster
-      # CNPG doit le référencer en cross-ns via la clé `secret` (Keycloak Operator
-      # supporte cela via le paramètre `enabled` + bootstrap.secret.name; en cas de
-      # non-fonctionnement, créer un mirror ExternalSecret dans foundation-databases).
+      database: zitadel
+      owner: zitadel
+      # CNPG exige que le Secret bootstrap soit dans le MÊME namespace que le
+      # Cluster → ExternalSecret zitadel-db-app dans foundation-databases
+      # (apps/base/cnpg/secret.yaml), miroir de secret/zitadel/db dans OpenBao.
       secret:
-        name: keycloak-db-app
+        name: zitadel-db-app
 
   # Monitoring
   monitoring:

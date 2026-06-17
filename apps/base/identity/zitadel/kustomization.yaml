@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# OpenAether — Zitadel (identité). Le namespace services-identity est déclaré ICI
+# (et non dans apps/base/namespaces/) car aucune couche précoce ne le cible avant
+# la Kustomization Flux `identity` (étape 35). Le backend Postgres CNPG zitadel-db
+# vit dans apps/base/cnpg/ (foundation-databases).
+resources:
+  - namespace.yaml
+  - externalsecrets.yaml
+  - helmrelease.yaml
+  - httproute.yaml
+  - networkpolicy.yaml
+  - authorizationpolicy.yaml

@@ -19,39 +19,19 @@ metadata:
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
 ---
-# foundation-pki-root et foundation-vault sont ici (et non dans leurs services respectifs)
-# car le RBAC cross-namespace (foundation-pki-root-rbac Kustomization) a besoin que ces
-# deux namespaces existent AVANT que pki-root et vault soient déployés.
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: foundation-pki-root
-  labels:
-    # PAS de istio.io/dataplane-mode: ambient — couche fondation HORS mesh.
-    # Raison: la PKI/secrets vit SOUS le mesh (cycle de dépendance sinon:
-    # istio→cert-manager-issuers→cert-manager→openbao→ztunnel→istio). En ambient,
-    # ztunnel encapsule le trafic dans HBONE/15008, bloqué par les
-    # CiliumNetworkPolicy L4 (allow-list 8200/8201 only) + default-deny → reset.
-    # Sécurité assurée par CiliumNetworkPolicy L3/L4 (identité SA) + OpenBao k8s-auth.
-    # restricted: OpenBao tourne runAsNonRoot uid=100, drop ALL caps, readOnlyRootFS.
-    # Aucune raison de privileged pour un secret store.
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/warn: restricted
-    pod-security.kubernetes.io/audit: restricted
-    openaether.io/managed: "true"
-    openaether.io/sprint: "0.5.0-sprint0"
-    openaether.io/component: "openbao-pki-root"
----
+# foundation-vault est ici (et non dans son service respectif) car le RBAC
+# cross-namespace a besoin que ce namespace existe AVANT que vault soit déployé.
 apiVersion: v1
 kind: Namespace
 metadata:
   name: foundation-vault
   labels:
     # PAS de istio.io/dataplane-mode: ambient — couche fondation HORS mesh.
-    # Même raison que foundation-pki-root: cycle de dépendance + HBONE/15008
+    # Raison: la PKI/secrets vit SOUS le mesh (cycle de dépendance sinon:
+    # istio→cert-manager-issuers→cert-manager→openbao→ztunnel→istio) + HBONE/15008
     # bloqué par CiliumNetworkPolicy. Bonus: le raft inter-pod (8201) repasse
     # en direct (en ambient il partait aussi en HBONE → join cassé silencieusement).
-    # restricted: OpenBao même profil que root (runAsNonRoot, drop ALL).
+    # restricted: OpenBao tourne runAsNonRoot uid=100, drop ALL caps, readOnlyRootFS.
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted

@@ -1,0 +1,70 @@
+# OpenAether — CiliumNetworkPolicy Zitadel (Zero Trust L3/L4)
+# ──────────────────────────────────────────────────────────────────────────
+# Zitadel est dans le mesh ambient, MAIS son egress vers CNPG (hors-mesh) sort
+# de HBONE → seul Cilium L4 s'applique côté DB. L'ingress north-south vient de la
+# Gateway Istio. deny-all implicite Cilium + allow explicite par flux (additif).
+#
+# Flux :
+#   ingress : Gateway/waypoint → Zitadel :8080 (HTTP/gRPC h2c)
+#   egress  : DNS + kube-api (discovery) + CNPG zitadel-db :5432
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: zitadel
+  namespace: services-identity
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: zitadel
+spec:
+  description: "Zitadel: ingress gateway :8080, egress CNPG :5432 + DNS + kube-api."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: zitadel
+  ingress:
+    # Gateway Istio (services-gateway) — ingress north-south.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-gateway
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Waypoint éventuel (foundation-service-mesh) — trafic in-mesh.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-service-mesh
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Kubernetes API (le chart/jobs peuvent watcher l'API)
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # CNPG PostgreSQL (zitadel-db) — hors mesh, donc Cilium L4 côté DB.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-databases
+            cnpg.io/cluster: zitadel-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP

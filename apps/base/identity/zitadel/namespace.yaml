@@ -1,0 +1,21 @@
+# OpenAether — Namespace identité (Zitadel)
+# ──────────────────────────────────────────────────────────────────────────
+# services-identity est une APP (couche 5) que le cluster SERT → DANS le mesh
+# ambient (label istio.io/dataplane-mode: ambient), contrairement à la fondation
+# (OpenBao/PKI/DB) qui reste HORS mesh. Cf. principe foundation-namespaces-hors-mesh.
+# Sécurité in-mesh = AuthorizationPolicy (authorizationpolicy.yaml) + mTLS STRICT ;
+# l'egress vers CNPG (hors-mesh) sort de HBONE → contrôlé par CiliumNetworkPolicy.
+#
+# baseline: Zitadel tourne non-root mais le chart peut demander quelques tolérances
+# (pas restricted strict d'emblée) ; à resserrer en restricted une fois validé.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: services-identity
+  labels:
+    istio.io/dataplane-mode: ambient
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+    openaether.io/managed: "true"
+    openaether.io/component: zitadel

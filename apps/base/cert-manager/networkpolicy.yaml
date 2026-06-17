@@ -71,16 +71,8 @@ spec:
               protocol: TCP
             - port: "10250"
               protocol: TCP
-    # OpenBao root PKI (signer pki/root/sign/*)
-    - toEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: foundation-pki-root
-            app: openbao-pki-root
-      toPorts:
-        - ports:
-            - port: "8200"
-              protocol: TCP
-    # OpenBao workload PKI (signer pki/workload/sign/*)
+    # OpenBao PKI (signer pki/sign/openaether) — un seul OpenBao (seal Shamir).
+    # L'ancien foundation-pki-root (root OpenBao) a été supprimé.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault

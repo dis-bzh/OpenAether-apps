@@ -1,0 +1,113 @@
+# OpenAether — Zitadel (identité / IAM souverain)
+# ──────────────────────────────────────────────────────────────────────────
+# Chart officiel Zitadel. Backend Postgres = CNPG zitadel-db (foundation-databases,
+# 3 instances HA). TLS terminé en amont par la Gateway Istio → Zitadel sert h2c
+# (TLS.Enabled=false, ExternalSecure=true). Masterkey + password DB via ESO/OpenBao.
+#
+# Secrets (apps/base/identity/zitadel/externalsecrets.yaml) :
+#   zitadel-masterkey      → masterkeySecretName (clé masterkey, 32 octets)
+#   zitadel-secret-config  → configSecretName (clé config-yaml, password DB)
+#
+# Init/Setup jobs (Helm hooks) : créent le schéma + les clés. L'utilisateur et
+# l'admin DB pointent tous deux sur le rôle CNPG `zitadel` (pas de superuser séparé).
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: zitadel
+  namespace: services-identity
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: zitadel
+spec:
+  url: https://charts.zitadel.com
+  interval: 1h
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: zitadel
+  namespace: services-identity
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: zitadel
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: zitadel
+      version: "10.0.2"
+      sourceRef:
+        kind: HelmRepository
+        name: zitadel
+        namespace: services-identity
+      interval: 1h
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    replicaCount: 2
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: zitadel
+              topologyKey: kubernetes.io/hostname
+
+    zitadel:
+      # Masterkey (32 octets) depuis le Secret ESO — pas en clair dans le chart.
+      masterkeySecretName: zitadel-masterkey
+      # Config secrète (password DB) fusionnée par-dessus configmapConfig.
+      configSecretName: zitadel-secret-config
+      configSecretKey: config-yaml
+
+      # Config NON secrète (ConfigMap). Les keys suivent l'arbre de config Zitadel.
+      configmapConfig:
+        ExternalDomain: zitadel.openaether.eu
+        ExternalPort: 443
+        ExternalSecure: true
+        TLS:
+          # TLS terminé par la Gateway Istio en amont → Zitadel sert en clair (h2c).
+          Enabled: false
+        Database:
+          Postgres:
+            Host: zitadel-db-rw.foundation-databases.svc.cluster.local
+            Port: 5432
+            Database: zitadel
+            MaxOpenConns: 20
+            MaxIdleConns: 10
+            User:
+              Username: zitadel
+              SSL:
+                Mode: disable
+            Admin:
+              Username: zitadel
+              SSL:
+                Mode: disable
+
+    # Jobs d'init/setup (création schéma + clés). Activés par défaut.
+    initJob:
+      enabled: true
+    setupJob:
+      enabled: true
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+    metrics:
+      enabled: true
+
+    pdb:
+      enabled: true
+      minAvailable: 1

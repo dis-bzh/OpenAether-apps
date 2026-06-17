@@ -1,0 +1,46 @@
+# OpenAether — Istio AuthorizationPolicy Zitadel (Zero Trust, in-mesh)
+# ──────────────────────────────────────────────────────────────────────────
+# services-identity est ambient → l'authz in-mesh est portée par ztunnel (ici),
+# pas par Cilium (HBONE :15008 invisible aux CNP par port applicatif).
+# Modèle identique à services-observability : default-deny (spec:{}) + ALLOW.
+# Ordre d'éval Istio : DENY → ALLOW ; `spec: {}` = n'autorise rien (surchargeable).
+#
+# L'egress Zitadel→CNPG (hors-mesh) sort de HBONE → contrôlé par CiliumNetworkPolicy
+# (networkpolicy.yaml), pas ici.
+
+# ── Default-deny du namespace ──────────────────────────────────────────────
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: services-identity
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: zitadel
+spec: {}  # ALLOW implicite, 0 règle → deny par défaut, surchargé par l'ALLOW ci-dessous
+
+# ── Ingress north-south : Gateway (Envoy dédié) → Zitadel :8080 ─────────────
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-gateway-to-zitadel
+  namespace: services-identity
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: zitadel
+spec:
+  action: ALLOW
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zitadel
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/services-gateway/sa/openaether-gateway-istio"
+      to:
+        - operation:
+            ports:
+              - "8080"
