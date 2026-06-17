@@ -123,6 +123,17 @@ spec:
     # Pas de MinIO intégré (on utilise notre propre instance).
     minio:
       enabled: false
+    # Caches memcached désactivés : le chart Loki les dimensionne pour la prod
+    # (chunksCache ~9.6Gi + resultsCache ~1.2Gi de requests mémoire). Le
+    # chunksCache (8Gi alloc) ne rentre sur AUCUN worker DEV-S (~3.3Gi
+    # allouables) → Pending permanent, et la pression mémoire bloque aussi
+    # le scheduling de vminsert. En SingleBinary dev (faible volume de logs),
+    # le cache n'apporte rien d'essentiel. À ré-activer + dimensionner si les
+    # workers grossissent (cf. sizing nodes / overlay cloud).
+    chunksCache:
+      enabled: false
+    resultsCache:
+      enabled: false
     # Pas de gateway/ingress (accès interne seulement via service ClusterIP).
     gateway:
       enabled: false
