@@ -4,10 +4,12 @@ kind: Kustomization
 # (et non dans apps/base/namespaces/) car aucune couche précoce ne le cible avant
 # la Kustomization Flux `identity` (étape 35). Le backend Postgres CNPG zitadel-db
 # vit dans apps/base/cnpg/ (foundation-databases).
+# NB: PAS d'AuthorizationPolicy Istio — services-identity est HORS mesh (ztunnel
+# n'intercepte pas → une AuthorizationPolicy y serait inerte, théâtre de sécurité).
+# La sécurité réseau vient de la CiliumNetworkPolicy L3/L4 (networkpolicy.yaml).
 resources:
   - namespace.yaml
   - externalsecrets.yaml
   - helmrelease.yaml
   - httproute.yaml
   - networkpolicy.yaml
-  - authorizationpolicy.yaml
