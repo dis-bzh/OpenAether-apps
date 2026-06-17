@@ -18,7 +18,7 @@ spec:
       name: openaether-gateway
       namespace: services-gateway
   hostnames:
-    - "grafana.openaether.eu"
+    - "grafana.openaether.local"
   rules:
     - matches:
         - path:

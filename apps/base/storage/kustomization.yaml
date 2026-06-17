@@ -10,6 +10,7 @@ resources:
   - networkpolicy.yaml
   - install.yaml
   - longhorn.yaml
+  - httproute-longhorn.yaml
   - storageclasses.yaml
   - longhorn-encryption-secret.yaml
 

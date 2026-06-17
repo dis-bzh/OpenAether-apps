@@ -17,7 +17,7 @@ spec:
       name: openaether-gateway
       namespace: services-gateway
   hostnames:
-    - "zitadel.openaether.eu"
+    - "zitadel.openaether.local"
   rules:
     - matches:
         - path:
