@@ -49,7 +49,8 @@ spec:
     remediation:
       retries: 3
   values:
-    replicaCount: 2
+    # 1 réplique: 2 répliques se disputent le leader lease → crash loop.
+    replicaCount: 1
     resources:
       requests:
         cpu: 50m
