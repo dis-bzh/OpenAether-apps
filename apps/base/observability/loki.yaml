@@ -63,6 +63,11 @@ spec:
     deploymentMode: SingleBinary
     singleBinary:
       replicas: 2
+      securityContext:
+        fsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
