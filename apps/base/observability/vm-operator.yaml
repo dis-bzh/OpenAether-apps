@@ -53,11 +53,20 @@ spec:
     replicaCount: 1
     resources:
       requests:
-        cpu: 50m
-        memory: 64Mi
+        cpu: 100m
+        memory: 128Mi
       limits:
-        cpu: 200m
-        memory: 256Mi
+        cpu: 500m
+        memory: 512Mi
+    # Plus de timeout sur les probes pour laisser le temps au reconcile
+    # initial (VMCluster 6 StatefulSets).
+    probePath: /health
+    livenessProbe:
+      failureThreshold: 10
+      periodSeconds: 15
+    readinessProbe:
+      failureThreshold: 10
+      periodSeconds: 15
     affinity:
       podAntiAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:

@@ -1,0 +1,56 @@
+# OpenAether — Metrics Server
+# ──────────────────────────────────────────────────────────────────
+# Active l'API de métriques pour kubectl top nodes/pods.
+# Sur Talos, --kubelet-preferred-address-types=InternalIP
+# et --kubelet-insecure-tls sont nécessaires car Talos n'utilise
+# pas de certificats kubelet signés par l'apiserver.
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: metrics-server
+  namespace: kube-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: metrics-server
+spec:
+  url: https://kubernetes-sigs.github.io/metrics-server/
+  interval: 1h
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: metrics-server
+  namespace: kube-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: metrics-server
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: metrics-server
+      version: "3.12.2"
+      sourceRef:
+        kind: HelmRepository
+        name: metrics-server
+        namespace: kube-system
+      interval: 1h
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    args:
+      - --kubelet-preferred-address-types=InternalIP
+      - --kubelet-insecure-tls
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
