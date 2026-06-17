@@ -1,0 +1,45 @@
+# OpenAether — CoreDNS egress vers le résolveur HÔTE (Talos hostDNS)
+# ──────────────────────────────────────────────────────────────────────────
+# PIÈGE (1er full-stack reconcile cloud, juin 2026) : la CCNP `allow-dns`
+# (allow-dns.yaml) a `endpointSelector: {}` → elle sélectionne AUSSI les pods
+# CoreDNS. Dès qu'une CNP/CCNP egress matche un endpoint, Cilium active le
+# default-deny EGRESS sur cet endpoint. CoreDNS se retrouve donc autorisé à
+# sortir UNIQUEMENT vers les pods kube-dns (la règle d'allow-dns) — or, avec
+# Talos `forwardKubeDNSToHost: true`, CoreDNS forwarde les requêtes externes
+# vers le résolveur de l'HÔTE (link-local 169.254.x.x:53, entité Cilium `host`).
+# Ce trafic CoreDNS→host était DROPPÉ ("Policy denied ... ->host: ...:53 udp")
+# → toute résolution externe en i/o timeout → les HelmRepository (jetstack,
+# longhorn, zitadel, grafana…) ne tiraient plus leur index → cert-manager,
+# istio, identity, storage bloqués en cascade.
+#
+# Les image pulls (containerd, hors réseau pod) n'étaient pas affectés → seul
+# le source-controller Flux (fetch d'index Helm depuis un pod) tombait.
+#
+# Fix : autoriser explicitement l'egress CoreDNS → entité `host` (+ remote-node
+# en HA multi-nœuds) sur :53. La résolution externe réelle est faite par l'hôte
+# Talos hors du réseau pod (non soumise aux policies Cilium). Cf. [[cilium-ambient-debug]].
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: coredns-egress-hostdns
+  namespace: kube-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: platform
+spec:
+  description: "CoreDNS egress vers le résolveur hôte (Talos hostDNS) sur :53."
+  endpointSelector:
+    matchLabels:
+      k8s-app: kube-dns
+  egress:
+    # Résolveur de l'hôte local (Talos forwardKubeDNSToHost → 169.254.x.x:53).
+    # remote-node couvre le cas HA où le forward viserait un autre nœud.
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

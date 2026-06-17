@@ -24,6 +24,10 @@ spec:
               - capi-operator-system
               - cnpg-system
               - cert-manager
+              # Mesh Istio : charts upstream (istiod, ztunnel) qui ne posent pas
+              # runAsNonRoot:true explicitement et requièrent des privilèges réseau.
+              - istio-system
+              - foundation-service-mesh
       validate:
         message: "Running as root is not allowed."
         pattern:

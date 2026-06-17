@@ -41,6 +41,22 @@ spec:
       secret:
         name: zitadel-db-app
 
+  # Managed roles : le `zitadel init` (admin==user==zitadel, pas de superuser CNPG)
+  # exécute un `CREATE DATABASE` même si la DB existe déjà (créée par initdb) →
+  # échec `permission denied to create database (SQLSTATE 42501)` si le rôle n'a
+  # pas CREATEDB. On accorde CREATEDB de façon déclarative (idempotent : la DB
+  # existant déjà, l'init la détecte et passe au bootstrap de schéma, owner-only).
+  # Survit au DR/rebuild (vs un ALTER ROLE manuel). enableSuperuserAccess reste
+  # false : on n'accorde que le strict nécessaire (pas superuser, pas createrole).
+  managed:
+    roles:
+      - name: zitadel
+        ensure: present
+        login: true
+        createdb: true
+        passwordSecret:
+          name: zitadel-db-app
+
   # Monitoring
   monitoring:
     enablePodMonitor: true

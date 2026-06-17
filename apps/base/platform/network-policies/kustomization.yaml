@@ -9,4 +9,5 @@ resources:
   - allow-kube-api.yaml
   - allow-infra-egress-restricted.yaml
   - coredns-ingress-restricted.yaml
+  - coredns-egress-hostdns.yaml
   - default-deny-all.yaml
