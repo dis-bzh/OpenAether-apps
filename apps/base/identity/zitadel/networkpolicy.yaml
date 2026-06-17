@@ -3,10 +3,6 @@
 # services-identity est HORS mesh (cf. namespace.yaml) → toute la sécurité réseau
 # de Zitadel repose sur CETTE CiliumNetworkPolicy L3/L4 (+ WireGuard niveau nœud
 # + l'authN native OIDC de Zitadel). Pas d'AuthorizationPolicy Istio (inerte hors-mesh).
-#
-# Flux :
-#   ingress : probes kubelet + Gateway Istio → Zitadel :8080 ; login :3000
-#   egress  : DNS + kube-api (discovery) + CNPG zitadel-db :5432
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -22,12 +18,6 @@ spec:
     matchLabels:
       app.kubernetes.io/name: zitadel
   ingress:
-    # Probes kubelet/health (startup/readiness/liveness). Hors mesh, la probe vient
-    # directement du nœud (entité Cilium `host` / `remote-node` cross-node), PAS via
-    # ztunnel. On l'autorise explicitement car la CNP active le default-deny ingress.
-    # (En ambient, ztunnel redirigeait la probe via 169.254.7.127/HBONE → DROP L4 →
-    # CrashLoopBackOff : c'est la raison du passage hors mesh. Cf. namespace.yaml.)
-    # Port 3000 = pod login (http-server), 8080 = zitadel (http2-server).
     - fromEntities:
         - host
         - remote-node
@@ -37,7 +27,6 @@ spec:
               protocol: TCP
             - port: "3000"
               protocol: TCP
-    # Gateway Istio (services-gateway) — ingress north-south (UI + API OIDC).
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-gateway
@@ -45,7 +34,7 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
-    # Intra-namespace : le pod login (wait-for-zitadel + runtime) appelle zitadel:8080.
+    # Intra-namespace : le pod login appelle zitadel:8080 (ingress côté serveur).
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-identity
@@ -53,10 +42,7 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
-            - port: "3000"
-              protocol: TCP
   egress:
-    # DNS
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -67,7 +53,6 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # Kubernetes API (le chart/jobs peuvent watcher l'API)
     - toServices:
         - k8sService:
             serviceName: kubernetes
@@ -76,7 +61,6 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-    # CNPG PostgreSQL (zitadel-db) — hors mesh, donc Cilium L4 côté DB.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-databases
@@ -84,4 +68,72 @@ spec:
       toPorts:
         - ports:
             - port: "5432"
+              protocol: TCP
+---
+# ──────────────────────────────────────────────────────────────────────────
+# Pod login (Next.js, app.kubernetes.io/name: zitadel-login). Sélecteur SÉPARÉ
+# car son label diffère de `zitadel`. Sans cette CNP, son egress (DNS + zitadel:8080)
+# est bloqué → l'initContainer wait-for-zitadel timeout (exit 124).
+#   ingress : probes kubelet :3000 + Gateway Istio :3000 (UI login)
+#   egress  : DNS + zitadel:8080 (wait4x /debug/ready + appels API) + kube-api
+# ──────────────────────────────────────────────────────────────────────────
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: zitadel-login
+  namespace: services-identity
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: zitadel
+spec:
+  description: "Zitadel-login: ingress gateway :3000, egress zitadel :8080 + DNS + kube-api."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: zitadel-login
+  ingress:
+    # Probes kubelet (liveness/readiness :3000) — entité host/remote-node hors mesh.
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    # Gateway Istio — UI login north-south.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-gateway
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+  egress:
+    # DNS — indispensable pour résoudre le service "zitadel".
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Vers le serveur Zitadel — wait4x /debug/ready (initContainer) + appels API runtime.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-identity
+            app.kubernetes.io/name: zitadel
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # kube-api (service account / projected token).
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP
