@@ -22,6 +22,22 @@ spec:
     matchLabels:
       app.kubernetes.io/name: zitadel
   ingress:
+    # Probes kubelet/health (startup/readiness/liveness). Sur Talos+Cilium, la
+    # source des probes est l'adresse health-proxy link-local 169.254.7.127,
+    # classée `host` (nœud local) / `remote-node` (autre nœud) — PAS une identité
+    # pod. Sans cette règle, les SYN kubelet→:8080 sont DROPPÉS ("Policy denied
+    # world->...:8080 tcp SYN", source 169.254.7.127) → startupProbe timeout →
+    # CrashLoopBackOff (constaté Scaleway juin 2026). Cf. [[cilium-ambient-debug]].
+    # Port 3000 = pod login (http-server), 8080 = zitadel (http2-server).
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+            - port: "3000"
+              protocol: TCP
     # Gateway Istio (services-gateway) — ingress north-south.
     - fromEndpoints:
         - matchLabels:

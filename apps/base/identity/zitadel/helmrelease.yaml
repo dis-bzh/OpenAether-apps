@@ -97,25 +97,12 @@ spec:
     setupJob:
       enabled: true
 
-    # Probes — ZITADEL sert en h2c (HTTP/2 cleartext) sur :8080 (REST + gRPC
-    # multiplexés). Le prober kubelet parle HTTP/1.1 ; avec le timeout par défaut
-    # du chart (1s), le handshake h2c ne se termine pas → "context deadline
-    # exceeded" → startupProbe échoue → CrashLoopBackOff (constaté Scaleway, juin
-    # 2026 ; `curl --http1.1 -m1 /debug/ready` = 000/timeout, --http2 = 200).
-    # Fix : élargir les timeouts/period pour absorber le handshake h2c + le cold
-    # start (migrations DB). scheme HTTP car TLS terminé à la Gateway (TLS.Enabled=false).
+    # Startup probe : laisser de la marge pour le cold start (migrations DB) sur
+    # le 1er démarrage. Le drop des probes kubelet est traité par la CNP
+    # (networkpolicy.yaml, ingress fromEntities host/remote-node) — voir là-bas.
     startupProbe:
-      failureThreshold: 30
       periodSeconds: 10
-      timeoutSeconds: 5
-    readinessProbe:
-      periodSeconds: 30
-      timeoutSeconds: 5
-      failureThreshold: 3
-    livenessProbe:
-      periodSeconds: 30
-      timeoutSeconds: 5
-      failureThreshold: 3
+      failureThreshold: 30
 
     resources:
       requests:
