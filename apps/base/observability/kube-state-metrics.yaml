@@ -59,8 +59,8 @@ spec:
         cpu: 10m
         memory: 64Mi
       limits:
-        cpu: 100m
-        memory: 128Mi
+        cpu: 200m
+        memory: 512Mi
     # Pas de ServiceMonitor (on utilise VMServiceScrape dans vmscapes.yaml).
     prometheus:
       monitor:
