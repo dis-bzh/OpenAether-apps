@@ -78,10 +78,14 @@ spec:
   serviceAccountName: vmagent
   remoteWrite:
     - url: "http://vminsert-victoria-metrics.services-observability:8480/insert/0/prometheus"
+  # request mémoire abaissée 256Mi→128Mi : vmagent est un scraper/forwarder léger
+  # (usage réel < 128Mi sur ce cluster). 4 pods (replicaCount=2 × shardCount=2)
+  # → libère 256Mi sur worker-1 pour que loki-1 (256Mi, PV local-path épinglé)
+  # puisse scheduler. La LIMITE reste 512Mi (pas de risque OOM, burst préservé).
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 128Mi
     limits:
       cpu: 500m
       memory: 512Mi
