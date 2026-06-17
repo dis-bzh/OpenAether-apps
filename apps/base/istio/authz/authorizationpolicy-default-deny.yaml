@@ -44,16 +44,10 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "istio"
 spec: {}
----
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: default-deny-all
-  namespace: services-observability
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: "platform"
-spec: {}
+# NOTE: services-observability n'est PLUS ambient (probes kubelet droppées par
+# HBONE → CrashLoop ; cf. namespaces.yaml). ztunnel n'y intercepte plus rien →
+# une AuthorizationPolicy y serait inerte ("théâtre de sécurité"). Sa sécurité
+# = CiliumNetworkPolicy L3/L4 (apps/base/observability/networkpolicy.yaml).
 ---
 # foundation-storage : ambient (MinIO). Sans policy = allow-all → trou réel.
 apiVersion: security.istio.io/v1beta1

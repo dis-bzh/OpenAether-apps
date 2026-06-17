@@ -44,7 +44,17 @@ metadata:
 # créent une policy default-deny DANS ce namespace AVANT que la Kustomization
 # observability (étape 30) ne tourne. Sans déclaration précoce → 14b échoue
 # "namespaces services-observability not found". Règle: tout namespace ciblé
-# par une couche précoce doit exister tôt. Ambient conservé: c'est une app (mesh).
+# par une couche précoce doit exister tôt.
+#
+# PAS de istio.io/dataplane-mode: ambient — observability HORS mesh.
+# Raison: l'ambient redirige les probes kubelet (livez/readyz/health) via
+# ztunnel HBONE :15008, bloqué par les CiliumNetworkPolicy + default-deny.
+# Résultat: vm-operator/kube-state-metrics/grafana démarrent sains puis sont
+# tués sur échec de liveness (i/o timeout) → CrashLoop, et vmagent→vminsert
+# part en HBONE cassé. L'observability est de l'infra (scrape tout le cluster,
+# parle au kubelet :10250) → même logique que la fondation hors mesh
+# (voir foundation-vault ci-dessus). Sécurité L3/L4 = CiliumNetworkPolicy.
+# Les AuthorizationPolicy Istio (étape 14b) deviennent inertes ici → à nettoyer.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -53,7 +63,6 @@ metadata:
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
-    istio.io/dataplane-mode: ambient
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: "observability"
