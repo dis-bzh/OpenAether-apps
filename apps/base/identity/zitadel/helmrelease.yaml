@@ -44,19 +44,19 @@ spec:
   values:
     replicaCount: 2
 
-    # ── FIX 1 : registry interdit (docker.io/wait4x) ────────────────────────
-    # Le chart compose l'image wait4x comme {imageRegistry}/wait4x/wait4x:3.6.
-    # imageRegistry vide → docker.io (refusé par restrict-image-registries).
-    # On force ghcr.io (registry autorisé). NB : zitadel/zitadel reste tiré
-    # depuis ghcr.io par défaut, ce qui est cohérent.
-    imageRegistry: ghcr.io
-    tools:
-      wait4x:
-        image:
-          repository: wait4x/wait4x
-          tag: "3.6"
+    # ── Images : on garde les défauts du chart (PAS de imageRegistry global) ──
+    # PIÈGE (Scaleway juin 2026) : `imageRegistry: ghcr.io` est GLOBAL → il préfixe
+    # TOUTES les images, dont le helper kubectl `alpine/k8s` → `ghcr.io/alpine/k8s`
+    # qui N'EXISTE PAS sur ghcr.io → 403 Forbidden → setupJob (machinekey/pat) en
+    # ImagePullBackOff → install Helm bloquée. Les défauts du chart tirent :
+    #   ghcr.io/zitadel/zitadel(-login)  (OK), docker.io/alpine/k8s (helper kubectl),
+    #   docker.io/wait4x/wait4x:3.6      (initContainer wait-for-zitadel).
+    # Kyverno restrict-image-registries est en Audit (non bloquant) → docker.io/*
+    # est seulement signalé, pas refusé — exactement comme openbao-init/bootstrap
+    # (docker.io/alpine/k8s) qui tournent déjà. Si Kyverno passe en Enforce un jour,
+    # miroir ces 2 images sur un registre autorisé via tools.{kubectl,wait4x}.image.
 
-    # ── FIX 2 : securityContext conforme Kyverno (global / fallback) ─────────
+    # ── securityContext conforme Kyverno (global / fallback) ─────────────────
     # Utilisé tel quel par les containers des initJob/setupJob (référence
     # directe à .Values.securityContext dans les templates du chart).
     securityContext:
@@ -136,7 +136,7 @@ spec:
                 Mode: disable
 
     # Jobs d'init/setup (création schéma + clés). Activés par défaut.
-    # Le container wait4x (initContainer) hérite de imageRegistry=ghcr.io + tools.wait4x.
+    # Images aux défauts du chart (cf. bloc Images en tête des values).
     initJob:
       enabled: true
       securityContext:
