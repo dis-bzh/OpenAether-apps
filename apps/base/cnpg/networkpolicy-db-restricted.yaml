@@ -44,6 +44,15 @@ spec:
         - ports:
             - port: "9187"
               protocol: TCP  # PG exporter metrics
+    # 2b. Zitadel (identité) → backend Postgres zitadel-db, depuis services-identity.
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": services-identity
+            "app.kubernetes.io/name": zitadel
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
     # 3+4. Trafic INTERNE foundation-databases : réplication streaming entre
     # instances, pods "join" (pg_basebackup d'un nouveau replica), instance-manager
     # peer (:8000), backup jobs. Selector NAMESPACE-ONLY volontaire.

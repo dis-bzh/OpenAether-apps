@@ -242,7 +242,7 @@ spec:
                 "$(jq -nc --arg p "$ESO_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
               echo "  policy external-secrets-read: HTTP=$(WH)"
 
-              SEEDER_POLICY="$(printf 'path "secret/data/grafana/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/minio/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/longhorn/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/keycloak/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/metadata/*" {\n  capabilities = ["read","list"]\n}\n')"
+              SEEDER_POLICY="$(printf 'path "secret/data/grafana/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/minio/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/longhorn/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/zitadel/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/metadata/*" {\n  capabilities = ["read","list"]\n}\n')"
               wlapi PUT /v1/sys/policies/acl/secret-seeder \
                 "$(jq -nc --arg p "$SEEDER_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
               echo "  policy secret-seeder: HTTP=$(WH)"
@@ -300,7 +300,7 @@ spec:
               # Utilise le root_token déjà chargé (WL_TOKEN).
               # set +x déjà actif depuis le début de ce bloc secret.
               echo ""
-              echo "════ 10) Seed secrets Sprint C (grafana/admin, minio/root, longhorn/encryption, keycloak/db) ════"
+              echo "════ 10) Seed secrets (grafana, minio, longhorn, zitadel/db, zitadel/masterkey) ════"
 
               kv_seed() {
                 local path="$1"
@@ -328,7 +328,9 @@ spec:
               GRAFANA_DB_PASS="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
               MINIO_SECRET="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
               LONGHORN_PASS="$(dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 | tr -d '/+=')"
-              KEYCLOAK_DB_PASS="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
+              ZITADEL_DB_PASS="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
+              # Masterkey Zitadel: DOIT faire EXACTEMENT 32 octets (chiffrement interne).
+              ZITADEL_MASTERKEY="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
 
               kv_seed "grafana/admin" \
                 "$(jq -nc --arg p "$GRAFANA_PASS" '{username:"admin",password:$p}')"
@@ -338,8 +340,10 @@ spec:
                 "$(jq -nc --arg s "$MINIO_SECRET" '{accessKey:"minio",secretKey:$s}')"
               kv_seed "longhorn/encryption" \
                 "$(jq -nc --arg p "$LONGHORN_PASS" '{passphrase:$p}')"
-              kv_seed "keycloak/db" \
-                "$(jq -nc --arg p "$KEYCLOAK_DB_PASS" '{username:"keycloak",password:$p}')"
+              kv_seed "zitadel/db" \
+                "$(jq -nc --arg p "$ZITADEL_DB_PASS" '{username:"zitadel",password:$p}')"
+              kv_seed "zitadel/masterkey" \
+                "$(jq -nc --arg k "$ZITADEL_MASTERKEY" '{masterkey:$k}')"
 
               echo "  ✅ Secrets Sprint C seedés (idempotents)"
               set -x; set +x

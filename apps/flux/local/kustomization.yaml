@@ -19,6 +19,10 @@ kind: Kustomization
 #   7. kubectl apply -k apps/base/external-secrets
 #   8. kubectl apply -k apps/base/external-secrets/stores
 #
+# NB Zitadel (apps/base/identity/zitadel) = CLOUD-ONLY pour l'instant : dépend de
+# la Gateway TLS (cert OpenBao, intermediate signé hors-ligne) absente en local.
+# La Kustomization `identity` est de toute façon suspendue par le patch global.
+#
 # Pour vérifier l'état : task local-test (ou kubectl get kustomization -A)
 resources:
   - ../base
