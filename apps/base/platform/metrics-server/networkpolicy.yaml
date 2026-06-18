@@ -1,0 +1,67 @@
+# OpenAether — CiliumNetworkPolicy Metrics Server
+# ──────────────────────────────────────────────────────────────────
+# metrics-server (kube-system) n'était couvert par AUCUNE CNP, donc régi
+# uniquement par les CCNP cluster-wide à sélecteur vide :
+#   default-deny-all-ingress {}  → ingress deny par défaut
+#   allow-dns {} + allow-kube-api {} → egress deny sauf DNS + kube-apiserver
+#
+# Conséquence (sans cette policy) :
+#   • EGRESS scrape kubelet :10250 autorisé SEULEMENT vers les IP portant
+#     l'identité kube-apiserver = les nœuds control-plane (apiserver hostNetwork).
+#     Les kubelets des WORKERS (identité host/remote-node) sont injoignables
+#     → "Failed to scrape node ... 10250: i/o timeout".
+#   • INGRESS apiserver → metrics-server bloqué → APIService metrics.k8s.io
+#     en FailedDiscoveryCheck → `kubectl top` échoue ("Metrics API not available").
+#   • La readiness probe locale (host → pod local) passe quand même → le pod
+#     est Ready mais inutile (faux positif classique en ambient/CNP).
+#
+# Fix = même motif que la CNP vmagent (observability/networkpolicy.yaml) :
+# autoriser explicitement host + remote-node sur :10250.
+# Les CCNP allow-dns/allow-kube-api restent additives (Cilium OR les policies).
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: metrics-server
+  namespace: kube-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: metrics-server
+spec:
+  description: "metrics-server: ingress apiserver + egress scrape kubelet :10250 (host+remote-node)."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: metrics-server
+  ingress:
+    # apiserver → metrics-server (API agrégée : discovery + requêtes kubectl top).
+    # L'apiserver tourne en hostNetwork sur les CP → source host/remote-node ;
+    # kube-apiserver couvre l'identité réservée dédiée (Cilium ≥1.14).
+    - fromEntities:
+        - host
+        - remote-node
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+  egress:
+    # DNS (déjà couvert par allow-dns ; explicite par robustesse, cf. CNP vmagent).
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Scrape kubelet/cadvisor :10250 sur TOUS les nœuds (host = nœud local,
+    # remote-node = les autres). Sans remote-node, seuls les CP répondent.
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
