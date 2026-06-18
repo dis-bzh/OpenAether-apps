@@ -60,7 +60,18 @@ kind: Namespace
 metadata:
   name: services-observability
   labels:
-    pod-security.kubernetes.io/enforce: baseline
+    # enforce: privileged — REQUIS par prometheus-node-exporter (DaemonSet) qui
+    # monte hostPath /proc /sys /host + hostNetwork/hostPID/hostPort 9100 pour
+    # exposer les métriques système. Ces besoins violent baseline SANS contournement
+    # possible (le hostPath est intrinsèque à sa fonction). PSA n'ayant pas de
+    # granularité par-pod, le namespace entier doit passer privileged.
+    # Cohérent avec la désignation "observability = infra de confiance" :
+    #   - hors mesh ambient (cf. bloc ci-dessus)
+    #   - exclu de Kyverno disallow-root-user (node-exporter/loki uid spécifiques)
+    #   - sécurité réelle = CiliumNetworkPolicy L3/L4 (observability/networkpolicy.yaml)
+    # warn/audit restent restricted → drift des autres pods (grafana/loki/vm-*)
+    # toujours visible dans les logs apiserver sans bloquer node-exporter.
+    pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
     openaether.io/managed: "true"
