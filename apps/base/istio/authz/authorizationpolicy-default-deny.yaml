@@ -75,7 +75,10 @@ spec: {}
 ---
 # services-gateway : le ns n'est PAS ambient, MAIS le pod Gateway-API est un
 # proxy Envoy dédié (injecté par le déploiement Gateway) qui enforce lui-même
-# l'AuthZ — différent de ztunnel. On garde donc le deny-all + l'allow ingress.
+# l'AuthZ — différent de ztunnel. On garde donc le deny-all ; il est surchargé
+# par `allow-gateway-ingress` (targetRefs Gateway, action ALLOW ouverte) dans
+# authorizationpolicy-explicit-allows.yaml. ⚠️ NE PAS gater l'entrée sur un
+# `source.principals` mTLS : l'ingress externe n'a pas d'identité SPIFFE → 403.
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:

@@ -97,27 +97,33 @@ spec:
               - "9000"
 ---
 # ════════════════════════════════════════════════════════════════════════
-# services-gateway : ingress externe → backends (proxy Envoy dédié)
+# services-gateway : POINT D'ENTRÉE ingress externe (Envoy Gateway-API dédié)
 # ════════════════════════════════════════════════════════════════════════
-apiVersion: security.istio.io/v1beta1
+# L'Envoy Gateway reçoit le trafic EXTERNE non-authentifié (navigateurs) → il
+# n'a AUCUNE identité SPIFFE source. Gater l'entrée sur `principals` (mTLS) la
+# bloquait (403 sur toutes les UIs : le seul principal autorisé était la Gateway
+# elle-même, jamais le client externe). On AUTORISE donc l'ingress ; la
+# protection périmétrique = ACL de l'app-LB Scaleway (admin_ip, voir
+# modules/providers/scw/lb.tf). Le zero-trust reste appliqué EN AVAL : les
+# backends meshés n'acceptent que le principal SPIFFE de la Gateway (leurs
+# propres AuthorizationPolicy / CiliumNetworkPolicy, dans leurs namespaces).
+#
+# targetRefs (Gateway API, Istio ≥1.22) cible le proxy Gateway précisément, sans
+# toucher d'autres workloads éventuels du ns. action ALLOW + `rules: [{}]` =
+# « autorise toute requête entrante vers ce proxy » (surcharge le default-deny).
+apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
-  name: allow-gateway-to-backends
+  name: allow-gateway-ingress
   namespace: services-gateway
   labels:
     openaether.io/managed: "true"
     openaether.io/component: "platform"
 spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: openaether-gateway
   action: ALLOW
   rules:
-    - from:
-        - source:
-            principals:
-              - "cluster.local/ns/services-gateway/sa/openaether-gateway-istio"
-      to:
-        - operation:
-            ports:
-              - "80"
-              - "443"
-              - "8080"
-              - "8443"
+    - {} # autorise tout ingress vers l'Envoy Gateway (périmètre = ACL LB admin_ip)
