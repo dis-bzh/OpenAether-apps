@@ -15,11 +15,15 @@ spec:
     matchLabels:
       app: openbao
   ingress:
-    # 1. Cilium Gateway (sprint 3) — vault.openaether.local
+    # 1. Istio Gateway (Gateway API) — vault.openaether.local
+    #    ⚠️ Le pod Envoy Gateway-API porte `service.istio.io/canonical-name:
+    #    openaether-gateway-istio`, PAS `k8s-app: cilium-gateway` (label legacy
+    #    Cilium Gateway, jamais posé ici) → l'ancien selector ne matchait jamais
+    #    → vault UI en timeout. On cible le label Istio réel.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-gateway
-            k8s-app: cilium-gateway
+            service.istio.io/canonical-name: openaether-gateway-istio
       toPorts:
         - ports:
             - port: "8200"
