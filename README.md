@@ -62,7 +62,7 @@ Flux overlays select which Kustomizations are active per cluster:
 
 | Overlay | Target | Active components |
 |---------|--------|-------------------|
-| `flux/management/` | Management hub | Full stack: OpenBao, Keycloak, Grafana, Istio, ... |
+| `flux/management/` | Management hub | Full stack: OpenBao, Zitadel, Grafana, Istio, ... |
 | `flux/workload/` | Spoke clusters | ESO, cert-manager, Kyverno, KEDA, Istio, ... |
 | `flux/local/` | Local Docker | Same as management, heavy components suspended |
 
