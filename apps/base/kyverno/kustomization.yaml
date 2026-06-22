@@ -3,7 +3,11 @@ kind: Kustomization
 
 resources:
   - networkpolicy.yaml
-  - https://github.com/kyverno/kyverno/releases/download/v1.12.0/install.yaml
+  # v1.12.1: fix upstream du panic reports-controller backReconcile
+  # "index out of range [0] with length 0" (kyverno#10123, PR #10148).
+  # v1.12.0 → CrashLoop du reports-controller (agrégation cpolr seulement,
+  # admission/enforce non impacté, mais bruit + reports cluster manquants).
+  - https://github.com/kyverno/kyverno/releases/download/v1.12.1/install.yaml
   - policies.yaml
 
 patches:
