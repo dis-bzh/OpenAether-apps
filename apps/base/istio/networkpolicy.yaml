@@ -263,16 +263,43 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-    # Trafic applicatif vers les services backend
+    # Trafic applicatif vers les backends d'UI exposés par le Gateway.
+    # ⚠️ NE PAS utiliser `toEndpoints: [{matchLabels: {}}]` : un selector vide en
+    # egress est scopé au namespace de la policy (services-gateway) → ne matche
+    # AUCUN backend cross-ns → l'Envoy timeout vers grafana/zitadel/vault/longhorn.
+    # Même piège que l'ingress (cf. L18/L74, contourné par fromEntities: cluster).
+    # On cible donc chaque backend par ns+app sur son targetPort RÉEL (le port du
+    # pod, pas du Service — Cilium enforce sur le targetPort). Moindre privilège :
+    # l'Envoy ne joint QUE les 4 backends d'UI.
     - toEndpoints:
-        - matchLabels: {}
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: grafana
       toPorts:
         - ports:
-            - port: "80"
+            - port: "3000"
               protocol: TCP
-            - port: "443"
-              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-identity
+            app.kubernetes.io/name: zitadel
+      toPorts:
+        - ports:
             - port: "8080"
               protocol: TCP
-            - port: "8443"
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-vault
+            app: openbao
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: longhorn-system
+            app: longhorn-ui
+      toPorts:
+        - ports:
+            - port: "8000"
               protocol: TCP

@@ -42,13 +42,15 @@ spec:
               protocol: TCP
             - port: "9502"
               protocol: TCP
-    # Gateway Istio (services-gateway) → UI longhorn-frontend:80 (north-south).
+    # Gateway Istio (services-gateway) → UI longhorn-ui:8000 (north-south).
+    # ⚠️ Le svc longhorn-frontend mappe 80→8000 ; Cilium enforce le targetPort
+    # RÉEL du pod (8000), pas le port du Service → autoriser 8000, pas 80.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-gateway
       toPorts:
         - ports:
-            - port: "80"
+            - port: "8000"
               protocol: TCP
     # Probes kubelet sur la UI (longhorn-system est hors mesh → source nœud).
     - fromEntities:
