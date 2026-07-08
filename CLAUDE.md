@@ -4,6 +4,20 @@ Manifests **communs / plateforme** (OpenBao, ESO, cert-manager, istio gateway,
 CNPG, storage, observability…) + **wiring Flux** qui référence les repos applicatifs.
 Réconcilié par Flux depuis `apps/flux/*` (voir `apps/flux/base/gitrepository.yaml`).
 
+## Objectif — socle figé + pioche modulaire
+
+**Seul socle figé : CNI (Cilium) + Flux.** Tout le reste (mesh Istio, Zitadel,
+OpenBao, Harbor, CNPG, observability…) est **optionnel et composable** : un cluster
+pioche dans ces bases selon ses dépendances (mesh ou non, Zitadel sans OpenBao,
+Harbor + OpenBao, etc.). Le DAG Flux (`apps/flux/base/*.yaml`, numéroté + `dependsOn`)
+doit rester **décomposable** — activer un sous-ensemble sans casser les dépendances.
+
+- `apps/flux/base` = socle commun ; `management/` = surcouche CAPI (cluster de
+  management, **optionnelle**) ; `workload/` = ce qu'un cluster client/workload embarque.
+- **CAPI n'est pas dans le socle** : un cluster ne devient « management » qu'une fois
+  `cluster-api-operator` + `cluster-api-providers` activés. Sans eux, c'est un cluster
+  autonome standard. Cf. `OpenAether-infra/CLAUDE.md`.
+
 ## Règle de découpage
 
 - Les manifests **métier** vivent dans **chaque repo applicatif** (`deploy/k8s/`),
