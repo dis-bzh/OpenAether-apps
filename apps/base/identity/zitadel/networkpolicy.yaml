@@ -53,14 +53,13 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    - toServices:
-        - k8sService:
-            serviceName: kubernetes
-            namespace: default
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
+    # kube-apiserver via toEntities (PAS toServices:kubernetes). Le Service
+    # `kubernetes` DNAT 443→6443 : toServices n'ouvre que 443, mais Cilium
+    # applique l'egress sur le port post-DNAT (6443) → droppé. Casse les
+    # sidecars setup zitadel-machinekey/machine-pat (kubectl create secret) →
+    # Job setup jamais Complete → HelmRelease bloqué en install.
+    - toEntities:
+        - kube-apiserver
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-databases
@@ -129,11 +128,10 @@ spec:
             - port: "8080"
               protocol: TCP
     # kube-api (service account / projected token).
-    - toServices:
-        - k8sService:
-            serviceName: kubernetes
-            namespace: default
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
+    # kube-apiserver via toEntities (PAS toServices:kubernetes). Le Service
+    # `kubernetes` DNAT 443→6443 : toServices n'ouvre que 443, mais Cilium
+    # applique l'egress sur le port post-DNAT (6443) → droppé. Casse les
+    # sidecars setup zitadel-machinekey/machine-pat (kubectl create secret) →
+    # Job setup jamais Complete → HelmRelease bloqué en install.
+    - toEntities:
+        - kube-apiserver

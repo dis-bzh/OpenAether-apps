@@ -44,14 +44,12 @@ spec:
             - port: "53"
               protocol: TCP
     # Kubernetes API (SD discovery + auth)
-    - toServices:
-        - k8sService:
-            serviceName: kubernetes
-            namespace: default
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
+    # kube-apiserver via toEntities (PAS toServices:kubernetes). Le Service
+    # `kubernetes` DNAT 443→6443 : toServices n'ouvre que 443, mais Cilium
+    # applique l'egress sur le port post-DNAT (6443) → droppé. Ici pas de
+    # toEntities de secours → la SD k8s (Alloy/vmagent/sidecar Grafana) casse.
+    - toEntities:
+        - kube-apiserver
     # remote_write vers vminsert
     - toEndpoints:
         - matchLabels:
@@ -375,14 +373,12 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    - toServices:
-        - k8sService:
-            serviceName: kubernetes
-            namespace: default
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
+    # kube-apiserver via toEntities (PAS toServices:kubernetes). Le Service
+    # `kubernetes` DNAT 443→6443 : toServices n'ouvre que 443, mais Cilium
+    # applique l'egress sur le port post-DNAT (6443) → droppé. Ici pas de
+    # toEntities de secours → la SD k8s (Alloy/vmagent/sidecar Grafana) casse.
+    - toEntities:
+        - kube-apiserver
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability
@@ -437,14 +433,12 @@ spec:
             - port: "53"
               protocol: TCP
     # k8s API (sidecar dashboard discovery + ServiceAccountToken)
-    - toServices:
-        - k8sService:
-            serviceName: kubernetes
-            namespace: default
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
+    # kube-apiserver via toEntities (PAS toServices:kubernetes). Le Service
+    # `kubernetes` DNAT 443→6443 : toServices n'ouvre que 443, mais Cilium
+    # applique l'egress sur le port post-DNAT (6443) → droppé. Ici pas de
+    # toEntities de secours → la SD k8s (Alloy/vmagent/sidecar Grafana) casse.
+    - toEntities:
+        - kube-apiserver
     # vmselect (datasource VictoriaMetrics)
     - toEndpoints:
         - matchLabels:
