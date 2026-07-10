@@ -132,15 +132,14 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # Kubernetes API (auth kubernetes + health)
-    - toServices:
-        - k8sService:
-            serviceName: kubernetes
-            namespace: default
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
+    # Kubernetes API (auth kubernetes login → TokenReview + health).
+    # ⚠️ toEntities:kube-apiserver, PAS toServices:kubernetes. Le Service
+    # `kubernetes` DNAT 443→6443 : `toServices` n'ouvre QUE le port 443, mais
+    # Cilium applique l'egress sur le port post-DNAT (6443) → paquet droppé.
+    # Résultat : OpenBao ne peut pas faire le TokenReview du login k8s-auth
+    # (ESO/cert-manager) → ClusterSecretStore InvalidProviderConfig.
+    - toEntities:
+        - kube-apiserver
     # (supprimé) egress vers foundation-pki-root — plus de root (seal Shamir).
     # Raft entre les 3 répliques: join challenge sur l'API 8200 + cluster 8201.
     - toEndpoints:
@@ -181,14 +180,12 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    - toServices:
-        - k8sService:
-            serviceName: kubernetes
-            namespace: default
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
+    # kube-apiserver via toEntities (PAS toServices:kubernetes) : le Service
+    # `kubernetes` DNAT 443→6443, et `toServices` n'ouvre que 443 → le paquet
+    # post-DNAT vers 6443 est droppé. Casse le `kubectl apply` du Job (écriture
+    # des Secrets de seal) → deadlock unsealer. Voir le bloc openbao ci-dessus.
+    - toEntities:
+        - kube-apiserver
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault
@@ -261,14 +258,12 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    - toServices:
-        - k8sService:
-            serviceName: kubernetes
-            namespace: default
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
+    # kube-apiserver via toEntities (PAS toServices:kubernetes) : le Service
+    # `kubernetes` DNAT 443→6443, et `toServices` n'ouvre que 443 → le paquet
+    # post-DNAT vers 6443 est droppé. Casse le `kubectl apply` du Job (écriture
+    # des Secrets de seal) → deadlock unsealer. Voir le bloc openbao ci-dessus.
+    - toEntities:
+        - kube-apiserver
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault
