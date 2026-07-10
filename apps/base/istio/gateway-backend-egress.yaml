@@ -1,0 +1,31 @@
+# Egress générique du Gateway nord-sud vers des backends applicatifs.
+# CiliumClusterwideNetworkPolicy (pas CiliumNetworkPolicy namespacée) car un
+# matchLabels dans une CNP namespacée est implicitement scopé au namespace de
+# la policy (cf. commentaires networkpolicy.yaml L18-19/L74-76) — inutilisable
+# ici puisque les apps backend vivent dans d'autres namespaces.
+# Ce fichier ne connaît aucun nom d'app métier : toute app qui veut être
+# joignable depuis le Gateway s'auto-labellise
+# `networking.openaether.io/gateway-backend: "true"` sur son pod et écoute
+# sur le port 8080 (convention plateforme) — l'opt-in est porté par l'app
+# elle-même dans son propre repo/deploy.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: openaether-gateway-backend-egress
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "istio"
+spec:
+  description: "Egress du Gateway (services-gateway) vers tout pod labellisé networking.openaether.io/gateway-backend, port 8080."
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: services-gateway
+      service.istio.io/canonical-name: openaether-gateway-istio
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            networking.openaether.io/gateway-backend: "true"
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

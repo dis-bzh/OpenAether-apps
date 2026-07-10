@@ -8,6 +8,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - networkpolicy.yaml
+  - gateway-backend-egress.yaml
   - istio-base.yaml
   - istiod.yaml
   - istio-cni.yaml
