@@ -12,12 +12,16 @@ kind: Kustomization
 #   3. kubectl apply -k apps/base/platform/gateway-api
 #   4. kubectl apply -k apps/base/platform/priority-classes
 #   5. kubectl apply -k apps/base/platform/network-policies
-#   6. kubectl apply -k apps/base/foundation/vault
+#   6. kubectl apply -k apps/base/platform/cilium-lb-ipam-local
+#      → pool LB-IPAM patché sur le bridge Docker (10.5.0.240-254). Sans ça,
+#        le Service LoadBalancer du Gateway (services-gateway) reste <pending>
+#        indéfiniment (le pool base cible le VPC privé Scaleway, injoignable ici).
+#   7. kubectl apply -k apps/base/foundation/vault
 #      → OpenBao HA (seal Shamir 5/3) + Job openbao-init (init + écrit le Secret
 #        openbao-unseal-keys) + unsealer HA (descelle les 3 pods). PLUS de pki-root.
 #        Escrow des parts : kubectl logs -n foundation-vault job/openbao-init
-#   7. kubectl apply -k apps/base/external-secrets
-#   8. kubectl apply -k apps/base/external-secrets/stores
+#   8. kubectl apply -k apps/base/external-secrets
+#   9. kubectl apply -k apps/base/external-secrets/stores
 #
 # NB Zitadel (apps/base/identity/zitadel) = CLOUD-ONLY pour l'instant : dépend de
 # la Gateway TLS (cert OpenBao, intermediate signé hors-ligne) absente en local.
@@ -43,3 +47,12 @@ patches:
       name: storage
     patch: |-
       - { op: replace, path: /spec/path, value: ./apps/base/storage/local }
+  # Pool LB-IPAM repointé sur l'overlay local (range Docker bridge 10.5.0.0/24
+  # au lieu du VPC privé Scaleway 172.16.12.0/22) — sinon tout Service
+  # LoadBalancer (dont le Gateway openaether) reste <pending> en local.
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: platform-cilium-lb-ipam
+    patch: |-
+      - { op: replace, path: /spec/path, value: ./apps/base/platform/cilium-lb-ipam-local }
