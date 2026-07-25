@@ -1,0 +1,129 @@
+# Cluster enfant edge-3 — Outscale (eu-west-2), 3e provider de la flotte.
+#
+# ⚠️ ACTIVATION : ce fichier n'est ajouté à kustomization.yaml qu'une fois l'OMI
+# Talos publiée (variante **aws** — cf. modules/talos-image/outscale) et son ID
+# renseigné dans OSC_IMAGE_ID ci-dessous.
+#
+# Prérequis kubectl (jamais en git) :
+#   Secret capi-clusters/outscale-capi-credentials — clés MINUSCULES
+#     access_key / secret_key / region (≠ convention SCW_* de Scaleway)
+#   keypair Outscale `openaether-capi` (node.vm.keypairName requis + immuable)
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: edge-3-cluster
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef: { kind: GitRepository, name: openaether, namespace: flux-system }
+  path: ./apps/base/cluster-api-clusters/templates/cluster-talos-outscale
+  prune: true
+  wait: false
+  dependsOn:
+    - name: capi-clusters
+  postBuild:
+    substitute:
+      CLUSTER_NAME: edge-3
+      CP_REPLICAS: "1"
+      WORKER_REPLICAS: "1"
+      K8S_VERSION: v1.35.3
+      TALOS_CONTRACT: v1.13
+      POD_CIDR: 10.244.0.0/16
+      SVC_CIDR: 10.96.0.0/12
+      # Réseau Outscale — CIDR distinct des autres clusters de la flotte
+      # (management SCW 172.16.12/22, edge-2 OVH 10.20.0/24).
+      OSC_SUBREGION: eu-west-2a
+      OSC_NET_CIDR: 10.30.0.0/16
+      OSC_SUBNET_PUBLIC: 10.30.2.0/24
+      OSC_SUBNET_WORKER: 10.30.3.0/24
+      OSC_SUBNET_CP: 10.30.4.0/24
+      OSC_VM_TYPE: tinav6.c4r8p1     # 4 vCPU / 8 Go — au-dessus du seuil OOM Talos
+      OSC_KEYPAIR_NAME: openaether-capi
+      OSC_IMAGE_NAME: talos-outscale-amd64-v1.13.4
+      OSC_IMAGE_ACCOUNT_ID: "REDACTED-ACCOUNT-ID"
+      OSC_IMAGE_ID: "REMPLACER_PAR_OMI"   # ami-… (sortie du build talos-image)
+      WORKER_DATA_DISK_GB: "50"
+      # Le port Talos 50000 ne peut pas passer par la LBU (un seul listener) :
+      # accès direct aux IP publiques des CP, restreint à l'egress du management
+      # (public gateway Scaleway) et à l'admin.
+      MGMT_EGRESS_CIDR: REDACTED-MGMT-EGRESS-IP/32
+      ADMIN_CIDR: REDACTED-ADMIN-IP/32
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: edge-3-cilium
+  namespace: capi-clusters
+spec:
+  interval: 10m
+  timeout: 10m
+  kubeConfig:
+    secretRef:
+      name: edge-3-kubeconfig
+  targetNamespace: kube-system
+  storageNamespace: kube-system
+  releaseName: cilium
+  install:
+    remediation: { retries: -1 }
+  chart:
+    spec:
+      chart: cilium
+      version: "1.19.2"
+      sourceRef: { kind: HelmRepository, name: cilium, namespace: capi-clusters }
+  values:
+    kubeProxyReplacement: true
+    socketLB: { enabled: true, hostNamespaceOnly: false }
+    bpf: { hostLegacyRouting: false, masquerade: true }
+    cgroup: { autoMount: { enabled: false }, hostRoot: /sys/fs/cgroup }
+    k8sServiceHost: localhost
+    k8sServicePort: 7445
+    hubble: { enabled: false }
+    operator: { replicas: 1 }
+    encryption: { enabled: true, type: wireguard }
+    securityContext:
+      capabilities:
+        ciliumAgent: [CHOWN, KILL, NET_ADMIN, NET_RAW, IPC_LOCK, SYS_ADMIN, SYS_RESOURCE, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+        cleanCiliumState: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE]
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: edge-3-flux
+  namespace: capi-clusters
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef: { kind: GitRepository, name: openaether, namespace: flux-system }
+  path: ./apps/base/cluster-api-clusters/flux-gotk
+  prune: true
+  wait: false
+  kubeConfig:
+    secretRef:
+      name: edge-3-kubeconfig
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: edge-3-gitops
+  namespace: capi-clusters
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef: { kind: GitRepository, name: openaether, namespace: flux-system }
+  path: ./apps/base/cluster-api-clusters/child-gitops
+  prune: true
+  wait: false
+  dependsOn:
+    - name: edge-3-flux
+  kubeConfig:
+    secretRef:
+      name: edge-3-kubeconfig
+  postBuild:
+    substitute:
+      CHILD_PROFILE: workload
+      CHILD_BRANCH: feat/pioche-backup-gitception
