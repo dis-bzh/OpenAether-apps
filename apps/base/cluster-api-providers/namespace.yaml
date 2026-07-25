@@ -1,0 +1,14 @@
+# Namespace dédié au provider Outscale (CAPOSC) — isolation des collisions
+# de noms upstream avec CAPS/CAPO (Secret webhook-server-cert + lease
+# controller-leader-election-capo). Voir l'en-tête d'infra-providers.yaml.
+# PSA aligné sur capi-system.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: capi-outscale-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cluster-api-providers
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
