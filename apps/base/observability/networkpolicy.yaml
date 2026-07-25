@@ -322,7 +322,13 @@ spec:
             - port: "53"
               protocol: TCP
     # MinIO S3 (local) ou S3 cloud :443 (overlay)
+    # ⚠️ le chart minio 5.2.0 pose le label legacy `app: minio` (PAS
+    # app.kubernetes.io/name) — découvert au test e2e de la brique backup :
+    # le selector canonique seul ne matche RIEN → egress S3 local droppé.
     - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-storage
+            app: minio
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-storage
             app.kubernetes.io/name: minio
