@@ -33,7 +33,7 @@ spec:
       OS_NODE_CIDR: 10.20.0.0/24 # distinct du management OVH
       # FIP pré-allouée des CP : doit figurer dans les certSANs Talos (l'IMDS
       # OpenStack ne la révèle pas). Une IP par réplique de control plane.
-      OS_CP_FLOATING_IPS: 57.130.21.113
+      OS_CP_FLOATING_IPS: 57.130.54.208
 ---
 # CNI de l'enfant, appliqué À DISTANCE (kubeConfig CAPI), values alignées sur
 # le socle parent (render-bootstrap-manifests.sh).
