@@ -92,7 +92,7 @@ spec:
     kind: OpenStackMachineTemplate
     # ⚠️ spec IMMUABLE : pour modifier le template (flavor, image, FIP…), créer
     # un NOUVEAU nom et le référencer ici — CAPI roule alors les control planes.
-    name: ${CLUSTER_NAME}-cp-fip
+    name: ${CLUSTER_NAME}-cp-fip2
     namespace: capi-clusters
   controlPlaneConfig:
     controlplane:
@@ -102,6 +102,14 @@ spec:
       # les machine configs multi-documents (Talos ≥ 1.13).
       strategicPatches:
         - |
+          machine:
+            # ⚠️ L'IMDS OpenStack n'expose PAS la floating IP (NAT côté Neutron) :
+            # sans ce SAN, le certificat apid n'est valide que pour l'IP privée
+            # et CACPPT échoue en TLS sur <FIP>:50000 ("certificate is valid for
+            # 10.x, not <FIP>") → control plane bloqué. Les IP sont donc
+            # PRÉ-ALLOUÉES (pool preAllocatedFloatingIPs) et listées ici.
+            certSANs:
+              - ${OS_CP_FLOATING_IPS}
           cluster:
             network:
               cni:
@@ -158,7 +166,7 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
 kind: OpenStackFloatingIPPool
 metadata:
-  name: ${CLUSTER_NAME}-cp-fip
+  name: ${CLUSTER_NAME}-cp-fip2
   namespace: capi-clusters
 spec:
   identityRef:
@@ -167,12 +175,16 @@ spec:
   floatingIPNetwork:
     filter:
       name: ${OS_EXTERNAL_NETWORK:=Ext-Net}
-  reclaimPolicy: Delete
+  # IP pré-allouées : elles doivent être connues AVANT le boot pour entrer dans
+  # les certSANs (cf. TalosControlPlane). Retain = on garde l'ancrage stable.
+  preAllocatedFloatingIPs:
+    - ${OS_CP_FLOATING_IPS}
+  reclaimPolicy: Retain
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: OpenStackMachineTemplate
 metadata:
-  name: ${CLUSTER_NAME}-cp-fip
+  name: ${CLUSTER_NAME}-cp-fip2
   namespace: capi-clusters
 spec:
   template:
@@ -188,7 +200,7 @@ spec:
       floatingIPPoolRef:
         apiGroup: infrastructure.cluster.x-k8s.io
         kind: OpenStackFloatingIPPool
-        name: ${CLUSTER_NAME}-cp-fip
+        name: ${CLUSTER_NAME}-cp-fip2
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: OpenStackMachineTemplate
