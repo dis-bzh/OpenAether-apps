@@ -42,8 +42,12 @@ spec:
               - matchPattern: "*"
     - toFQDNs:
         - matchName: api.scaleway.com
-        - matchName: auth.cloud.ovh.net        # OpenStack Keystone (CAPO)
-        - matchName: api.eu-west-2.outscale.com  # Outscale API (CAPOSC)
+        # OVH/OpenStack : Keystone n'est que le point d'entrée — le catalogue
+        # renvoie ensuite compute./network./image./lb.<region>.cloud.ovh.net.
+        - matchPattern: "*.cloud.ovh.net"
+        - matchName: auth.cloud.ovh.net
+        # Outscale (CAPOSC) : API + endpoints régionaux.
+        - matchPattern: "*.outscale.com"
       toPorts:
         - ports:
             - port: "443"
