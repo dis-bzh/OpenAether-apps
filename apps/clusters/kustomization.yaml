@@ -5,6 +5,3 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - namespace.yaml
-  - edge-1.yaml
-  - edge-2.yaml   # OVH
-  - edge-3.yaml   # Outscale   # session test 2026-07-25 — retirer au cleanup
