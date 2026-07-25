@@ -14,7 +14,7 @@ spec:
   interval: 10m
   retryInterval: 2m
   timeout: 5m
-  sourceRef: { kind: GitRepository, name: openaether }
+  sourceRef: { kind: GitRepository, name: openaether, namespace: flux-system }
   path: ./apps/base/cluster-api-clusters/templates/cluster-talos-scaleway
   prune: true
   wait: false
@@ -38,7 +38,7 @@ apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata:
   name: cilium
-  namespace: flux-system
+  namespace: capi-clusters
 spec:
   interval: 24h
   url: https://helm.cilium.io
@@ -49,7 +49,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: edge-1-cilium
-  namespace: flux-system
+  namespace: capi-clusters
 spec:
   interval: 10m
   timeout: 10m
@@ -85,12 +85,12 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: edge-1-flux
-  namespace: flux-system
+  namespace: capi-clusters
 spec:
   interval: 10m
   retryInterval: 2m
   timeout: 5m
-  sourceRef: { kind: GitRepository, name: openaether }
+  sourceRef: { kind: GitRepository, name: openaether, namespace: flux-system }
   path: ./apps/base/cluster-api-clusters/flux-gotk
   prune: true
   wait: false
@@ -102,12 +102,12 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: edge-1-gitops
-  namespace: flux-system
+  namespace: capi-clusters
 spec:
   interval: 10m
   retryInterval: 2m
   timeout: 5m
-  sourceRef: { kind: GitRepository, name: openaether }
+  sourceRef: { kind: GitRepository, name: openaether, namespace: flux-system }
   path: ./apps/base/cluster-api-clusters/child-gitops
   prune: true
   wait: false
