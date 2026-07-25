@@ -1,0 +1,146 @@
+# ⚠️ SCAFFOLD NON INSTANCIÉ — cluster client Talos sur Scaleway via CAPI.
+# apiVersions validées contre les providers épinglés (2026-07-25) :
+#   - CAPS v0.2.1  → infrastructure.cluster.x-k8s.io/v1alpha2 (v1alpha1 déprécié)
+#   - CACPPT v0.5.13 → controlplane.cluster.x-k8s.io/v1alpha3
+#   - CABPT  v0.6.12 → bootstrap.cluster.x-k8s.io/v1alpha3
+# Reste à exercer sur un management réel (première instanciation).
+#
+# Prérequis : Secret `scaleway-capi-credentials` dans capi-clusters
+# (SCW_ACCESS_KEY/SCW_SECRET_KEY/SCW_DEFAULT_PROJECT_ID — via ESO, clé
+# OpenBao secret/capi/scaleway, à seeder par l'opérateur).
+#
+# Variables (postBuild.substitute, cf. apps/clusters/README.md) :
+#   ${CLUSTER_NAME}      — nom du cluster enfant (ex: edge-1)
+#   ${K8S_VERSION:=v1.31.4}  ${TALOS_VERSION:=v1.9}
+#   ${CP_REPLICAS:=1}    ${WORKER_REPLICAS:=1}
+#   ${SCW_PROJECT_ID}    ${SCW_REGION:=fr-par}
+#   ${SCW_INSTANCE_TYPE:=DEV1-L}
+#   ${SCW_IMAGE_NAME}    — nom de l'image Talos (talos-image/ côté infra, même schematic)
+#
+# Même philosophie que le parent : Talos partout, socle Cilium+Flux injecté
+# ensuite par le management (cf. apps/clusters/README.md).
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: ${CLUSTER_NAME}
+  namespace: capi-clusters
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: capi-clusters
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks: ["10.244.0.0/16"]
+    services:
+      cidrBlocks: ["10.96.0.0/12"]
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1alpha3
+    kind: TalosControlPlane
+    name: ${CLUSTER_NAME}-cp
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+    kind: ScalewayCluster
+    name: ${CLUSTER_NAME}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+kind: ScalewayCluster
+metadata:
+  name: ${CLUSTER_NAME}
+  namespace: capi-clusters
+spec:
+  projectID: ${SCW_PROJECT_ID}
+  region: ${SCW_REGION:=fr-par}
+  # Secret des creds Scaleway (client parameters) — cf. en-tête.
+  scalewaySecretName: scaleway-capi-credentials
+  # Optionnel : network.privateNetwork / controlPlaneLoadBalancer /
+  # publicGateways — reprendre les choix de modules/providers/scw côté infra
+  # au moment de la première instanciation réelle.
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1alpha3
+kind: TalosControlPlane
+metadata:
+  name: ${CLUSTER_NAME}-cp
+  namespace: capi-clusters
+spec:
+  replicas: ${CP_REPLICAS:=1}
+  version: ${K8S_VERSION:=v1.31.4}
+  infrastructureTemplate:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+    kind: ScalewayMachineTemplate
+    name: ${CLUSTER_NAME}-cp
+  controlPlaneConfig:
+    controlplane:
+      generateType: controlplane
+      talosVersion: ${TALOS_VERSION:=v1.9}
+      # Le CNI n'est PAS posé ici (pas d'inlineManifests ~MB dans un CR) :
+      # Cilium + Flux sont injectés à distance par le management (kubeConfig).
+      configPatches:
+        - op: replace
+          path: /cluster/network/cni
+          value:
+            name: none
+        - op: replace
+          path: /cluster/proxy
+          value:
+            disabled: true
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+kind: TalosConfigTemplate
+metadata:
+  name: ${CLUSTER_NAME}-workers
+  namespace: capi-clusters
+spec:
+  template:
+    spec:
+      generateType: join
+      talosVersion: ${TALOS_VERSION:=v1.9}
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: ${CLUSTER_NAME}-workers
+  namespace: capi-clusters
+spec:
+  clusterName: ${CLUSTER_NAME}
+  replicas: ${WORKER_REPLICAS:=1}
+  selector:
+    matchLabels: {}
+  template:
+    spec:
+      clusterName: ${CLUSTER_NAME}
+      version: ${K8S_VERSION:=v1.31.4}
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+          kind: TalosConfigTemplate
+          name: ${CLUSTER_NAME}-workers
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        kind: ScalewayMachineTemplate
+        name: ${CLUSTER_NAME}-workers
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+kind: ScalewayMachineTemplate
+metadata:
+  name: ${CLUSTER_NAME}-cp
+  namespace: capi-clusters
+spec:
+  template:
+    spec:
+      commercialType: ${SCW_INSTANCE_TYPE:=DEV1-L}
+      # Exactement UN de id|name|label (CAPS v1alpha2, champs immuables).
+      image:
+        name: ${SCW_IMAGE_NAME}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+kind: ScalewayMachineTemplate
+metadata:
+  name: ${CLUSTER_NAME}-workers
+  namespace: capi-clusters
+spec:
+  template:
+    spec:
+      commercialType: ${SCW_INSTANCE_TYPE:=DEV1-L}
+      image:
+        name: ${SCW_IMAGE_NAME}

@@ -1,0 +1,109 @@
+# ⚠️ EXEMPLE NON APPLIQUÉ (extension .example, non listé dans kustomization.yaml).
+# Pour activer : copier en <nom>.yaml, ajuster les substitute, l'ajouter aux
+# resources de apps/clusters/kustomization.yaml. Flux (management) fait le reste.
+#
+# Cycle de vie d'un cluster enfant "edge-1" (kubeception/gitception) :
+#   1. `edge-1-cluster`  : applique les CRs CAPI (template talos-scaleway) → CAPI
+#      provisionne les VMs Talos et écrit le Secret edge-1-kubeconfig.
+#   2. `edge-1-cilium`   : HelmRelease AVEC spec.kubeConfig → installe le CNI
+#      DANS l'enfant (retry jusqu'à ce que le kubeconfig existe — convergence).
+#   3. `edge-1-flux`     : applique gotk-components (Flux épinglé) dans l'enfant.
+#   4. `edge-1-gitops`   : pose GitRepository+Kustomization racine dans l'enfant
+#      → son propre Flux réconcilie apps/flux/${CHILD_PROFILE} depuis git.
+#      L'enfant est ensuite AUTONOME (le management peut tomber, il réconcilie).
+#   Profil : générer avec scripts/pick.py (ex: -o apps/flux/workload-edge-1).
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: edge-1-cluster
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef: { kind: GitRepository, name: openaether }
+  path: ./apps/base/cluster-api-clusters/templates/cluster-talos-scaleway
+  prune: true
+  wait: false
+  dependsOn:
+    - name: capi-clusters
+  postBuild:
+    substitute:
+      CLUSTER_NAME: edge-1
+      CP_REPLICAS: "1"
+      WORKER_REPLICAS: "1"
+      SCW_PROJECT_ID: "<project Scaleway>"
+      SCW_IMAGE_NAME: "<nom de l'image Talos du schematic talos-image>"
+---
+apiVersion: source.toolkit.fluxcd.io/v2
+kind: HelmRepository
+metadata:
+  name: cilium
+  namespace: flux-system
+spec:
+  interval: 24h
+  url: https://helm.cilium.io
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: edge-1-cilium
+  namespace: flux-system
+spec:
+  interval: 10m
+  # Applique DANS l'enfant via le kubeconfig généré par CAPI (clé `value`).
+  kubeConfig:
+    secretRef:
+      name: edge-1-kubeconfig
+  targetNamespace: kube-system
+  storageNamespace: kube-system
+  chart:
+    spec:
+      chart: cilium
+      version: "1.16.x"   # aligner sur la version socle côté infra
+      sourceRef: { kind: HelmRepository, name: cilium }
+  values:
+    # Aligner sur bootstrap-manifests/cilium.yaml côté infra (kubeProxyReplacement,
+    # Talos: securityContext capabilities + cgroup, ipam kubernetes…).
+    kubeProxyReplacement: true
+    ipam: { mode: kubernetes }
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: edge-1-flux
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef: { kind: GitRepository, name: openaether }
+  path: ./apps/base/cluster-api-clusters/flux-gotk
+  prune: true
+  wait: false
+  kubeConfig:
+    secretRef:
+      name: edge-1-kubeconfig
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: edge-1-gitops
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef: { kind: GitRepository, name: openaether }
+  path: ./apps/base/cluster-api-clusters/child-gitops
+  prune: true
+  wait: false
+  dependsOn:
+    - name: edge-1-flux
+  kubeConfig:
+    secretRef:
+      name: edge-1-kubeconfig
+  postBuild:
+    substitute:
+      CHILD_PROFILE: workload   # ou un profil pick.py dédié (workload-edge-1)
