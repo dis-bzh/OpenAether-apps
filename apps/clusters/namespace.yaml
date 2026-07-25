@@ -1,0 +1,23 @@
+# Namespace des définitions de clusters clients (CRs CAPI) côté management.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: capi-clusters
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: capi-clusters
+    pod-security.kubernetes.io/enforce: restricted
+---
+# Marqueur inerte : garantit un build kustomize non-vide tant qu'aucun
+# cluster client n'est défini.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: capi-clusters-readme
+  namespace: capi-clusters
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: capi-clusters
+data:
+  readme: "Instancier un cluster client: cf. apps/clusters/README.md"

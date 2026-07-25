@@ -1,0 +1,7 @@
+# Clusters clients CAPI — un fichier par cluster enfant, listé EXPLICITEMENT ici.
+# example-scaleway.yaml.example n'est PAS appliqué (renommer + lister pour activer).
+# Le marqueur namespace+configmap garde ce build non-vide (Flux refuse un build vide).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
