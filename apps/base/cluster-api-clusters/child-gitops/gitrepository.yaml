@@ -6,6 +6,8 @@
 # Variables (postBuild.substitute de la Kustomization management) :
 #   ${CHILD_PROFILE} — profil Flux de l'enfant, ex: workload (défaut) ou un
 #                      profil généré par scripts/pick.py (apps/flux/<profil>)
+#   ${CHILD_BRANCH}  — branche git suivie par l'enfant (défaut main ;
+#                      utile pour tester une branche de bout en bout)
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
@@ -16,7 +18,7 @@ spec:
   interval: 1m
   url: https://github.com/dis-bzh/OpenAether-apps.git
   ref:
-    branch: main
+    branch: ${CHILD_BRANCH:=main}
   timeout: 60s
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
