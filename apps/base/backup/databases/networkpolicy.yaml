@@ -42,7 +42,7 @@ spec:
     # S3 cloud (HTTPS) — resserré FQDNs providers (pas de toEntities:world).
     - toFQDNs:
         - matchName: s3.fr-par.scw.cloud          # Scaleway Object Storage
-        - matchName: s3.gra.cloud.ovh.com         # OVH OBS
+        - matchName: s3.eu-west-par.io.cloud.ovh.net  # OVH (aligné tfvars eu-west-par)
         - matchName: oos.eu-west-2.outscale.com   # Outscale OSU
       toPorts:
         - ports:

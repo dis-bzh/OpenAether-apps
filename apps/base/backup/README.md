@@ -34,7 +34,7 @@ de clair —, déduplication, rétention (14 j / 8 sem / 12 mois) et `restic che
      bucket="s3-openaether-scw-backups" \
      access_key="…" secret_key="…"
    bao kv put secret/backup/s3-replica \
-     endpoint="https://s3.gra.cloud.ovh.com" \
+     endpoint="https://s3.eu-west-par.io.cloud.ovh.net" \
      bucket="s3-openaether-ovh-backups" \
      access_key="…" secret_key="…"
    # Local (test) : endpoint="http://minio.foundation-storage.svc.cluster.local:9000"
