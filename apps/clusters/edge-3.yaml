@@ -44,7 +44,7 @@ spec:
       OSC_KEYPAIR_NAME: openaether-capi
       OSC_IMAGE_NAME: talos-outscale-amd64-v1.13.4
       OSC_IMAGE_ACCOUNT_ID: "185209522342"
-      OSC_IMAGE_ID: "REMPLACER_PAR_OMI"   # ami-… (sortie du build talos-image)
+      OSC_IMAGE_ID: "ami-6711ec55"       # talos-outscale-amd64-v1.13.4 (variante aws)
       WORKER_DATA_DISK_GB: "50"
       # Le port Talos 50000 ne peut pas passer par la LBU (un seul listener) :
       # accès direct aux IP publiques des CP, restreint à l'egress du management
