@@ -29,6 +29,18 @@ Pas d'ordre strict requis : chaque étape retry jusqu'à ce que sa condition
 
 Voir `example-scaleway.yaml.example` pour le cycle complet commenté.
 
+## Prérequis hors git (une fois par management)
+
+```bash
+kubectl create secret generic scaleway-capi-credentials -n capi-clusters \
+  --from-literal=SCW_ACCESS_KEY=… --from-literal=SCW_SECRET_KEY=…   # docs CAPS : seules ces 2 clés sont lues
+kubectl create secret generic <enfant>-substitutes -n flux-system \
+  --from-literal=SCW_PROJECT_ID=…                                    # consommé par postBuild.substituteFrom
+```
+
+Kubeconfig de l'enfant : Secret `<enfant>-kubeconfig` (ns `capi-clusters`,
+clé `value`). Parcours jour-1 complet : `OpenAether-infra/docs/admin-access.md`.
+
 ## Décommissionner
 
 Retirer le fichier du kustomization → `prune: true` supprime les CRs CAPI →
