@@ -1,0 +1,471 @@
+# Cluster client Talos sur Outscale via CAPOSC v1.5.0 — namespace capi-clusters.
+#
+# apiVersions vérifiées sur les CRDs installées : osc*.infrastructure.cluster.x-k8s.io
+# en v1beta1 (unique version servie) ; CAPI v1.13.2 → refs v1beta2 {apiGroup,kind,name} ;
+# CACPPT/CABPT v1alpha3 (infrastructureTemplate = ObjectReference pleine).
+#
+# PRÉREQUIS hors git :
+#   - Secret capi-clusters/outscale-capi-credentials, clés **minuscules**
+#     `access_key`, `secret_key`, `region` (≠ convention SCW_* de Scaleway) ;
+#   - keypair Outscale `openaether-capi` (node.vm.keypairName est requis ET
+#     immuable, même si Talos n'a pas de SSH) ;
+#   - OMI Talos construite en variante **aws** (cf. modules/talos-image/outscale) :
+#     seule elle lit l'IMDS EC2, donc ingère le user-data CAPI et fait entrer
+#     l'IP publique (NAT 1:1) dans les SAN du certificat apid — sans quoi CACPPT
+#     ne peut ni bootstrapper etcd ni récupérer le kubeconfig.
+#
+# ⚠️ La LBU CAPOSC ne crée QU'UN listener (6443) : le port Talos 50000 ne peut
+# pas passer par le load balancer → les control planes portent une IP publique
+# (`publicIp: true`) et une règle SG dédiée.
+
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OscCluster
+metadata:
+  name: ${CLUSTER_NAME}
+  namespace: capi-clusters
+  labels:
+    cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+    openaether.io/component: capi-clusters
+    openaether.io/managed: "true"
+spec:
+  credentials:
+    fromSecret: outscale-capi-credentials
+  network:
+    # PIEGE #2 — CIDR. Le defaut CAPOSC est 10.0.0.0/16 … qui est EXACTEMENT le
+    # net du management Outscale (modules/providers/outscale/network.tf:
+    # outscale_net.this.ip_range = 10.0.0.0/16, private 10.0.0.0/24, public
+    # 10.0.1.0/24). Laisser le defaut interdirait tout netPeering futur et
+    # rendrait le diagnostic ambigu => on force un /16 libre.
+    net:
+      name: ${CLUSTER_NAME}-net
+      ipRange: ${OSC_NET_CIDR}
+
+    # LBU mono-subnet (CreateLoadBalancer ne prend qu'UN subnetId) => mono-AZ.
+    subregions:
+      - ${OSC_SUBREGION}
+
+    # PIEGE #3 — layout des subnets.
+    # Si subnets est vide, CAPOSC en genere 3 par AZ a partir du net :
+    # x.y.2.0/24 (loadbalancer+bastion+nat), x.y.3.0/24 (worker),
+    # x.y.4.0/24 (controlplane) — cf. ClusterScope.GetSubnets().
+    # On les declare explicitement pour maitriser les plages ET les roles :
+    # SubnetIsPublic() == "a le role bastion, loadbalancer ou nat".
+    # NE PAS ajouter loadbalancer/bastion/nat au subnet controlplane pour le
+    # rendre "public" : getAutomaticSecurityGroups() fait `continue` sur les
+    # subnets publics AVANT de remplir allSNCP => les regles LB->CP:6443,
+    # worker<-CP:1024-65535 et etcd 2378-2380 se retrouveraient avec une liste
+    # d'ipRanges VIDE. Le subnet CP reste "prive" au sens des roles ; c'est la
+    # ROUTE TABLE qui le rend joignable (piege #4).
+    subnets:
+      - name: ${CLUSTER_NAME}-public
+        ipSubnetRange: ${OSC_SUBNET_PUBLIC}
+        subregionName: ${OSC_SUBREGION}
+        roles: [loadbalancer, bastion, nat]
+      - name: ${CLUSTER_NAME}-worker
+        ipSubnetRange: ${OSC_SUBNET_WORKER}
+        subregionName: ${OSC_SUBREGION}
+        roles: [worker]
+      - name: ${CLUSTER_NAME}-cp
+        ipSubnetRange: ${OSC_SUBNET_CP}
+        subregionName: ${OSC_SUBREGION}
+        roles: [controlplane]
+
+    # PIEGE #4 — le control plane doit etre joignable en 50000 (API Talos).
+    # La LBU CAPOSC ne cree qu'UN SEUL listener (load_balancer.go :
+    # `Listeners: []osc.ListenerForCreation{first_listener}`) => 6443 OU 50000,
+    # jamais les deux. Et l'endpoint du cluster est le DnsName de cette LBU
+    # (osccluster_loadbalancer.go: SetControlPlaneEndpoint{Host: DnsName,
+    # Port: listener.loadbalancerport}).
+    # CACPPT, lui, ne passe PAS par l'endpoint : il ouvre une session Talos sur
+    # machine.Status.Addresses (ExternalIP *ou* InternalIP), port 50000
+    # (controllers/configs.go::talosconfigFromMachines). Le management etant sur
+    # un AUTRE cloud, l'InternalIP 10.30.x est injoignable => les CP DOIVENT
+    # avoir une IP publique (node.vm.publicIp, cf. OscMachineTemplate).
+    # Or sur Outscale (modele VPC/AWS) une IP publique ne fonctionne QUE si la
+    # route table du subnet pointe 0.0.0.0/0 vers l'Internet Service. Les route
+    # tables auto-generees envoient tout subnet non-public vers le NAT
+    # (GetRouteTables()) => on les declare a la main pour router le subnet CP
+    # vers la gateway. GetRouteTables() retourne spec.network.routeTables des
+    # qu'il est non vide : declarer une seule table les remplace TOUTES.
+    routeTables:
+      - name: ${CLUSTER_NAME}-public-rt
+        role: loadbalancer
+        subregionName: ${OSC_SUBREGION}
+        subnets:
+          - ${CLUSTER_NAME}-public
+
+        routes:
+          - name: ${CLUSTER_NAME}-public-default
+            destination: 0.0.0.0/0
+            targetType: gateway
+      - name: ${CLUSTER_NAME}-cp-rt
+        role: controlplane
+        subregionName: ${OSC_SUBREGION}
+        subnets:
+          - ${CLUSTER_NAME}-cp
+
+        routes:
+          # gateway (et pas nat) : sans cela l'IP publique du CP est inerte
+          # (trafic retour asymetrique) et CACPPT ne joint jamais :50000.
+          - name: ${CLUSTER_NAME}-cp-default
+            destination: 0.0.0.0/0
+            targetType: gateway
+      - name: ${CLUSTER_NAME}-worker-rt
+        role: worker
+        subregionName: ${OSC_SUBREGION}
+        subnets:
+          - ${CLUSTER_NAME}-worker
+
+        routes:
+          # workers sans IP publique => egress par le NAT service. targetName
+          # vide = le NAT service unique du cluster (GetNatService("", az)).
+          - name: ${CLUSTER_NAME}-worker-default
+            destination: 0.0.0.0/0
+            targetType: nat
+
+    # natServices volontairement OMIS : GetNatServices() derive automatiquement
+    # un NAT service par subnet portant le role "nat" (ici ${CLUSTER_NAME}-public).
+
+    loadBalancer:
+      # <=32 car., [0-9A-Za-z espace -] uniquement. Immuable apres creation
+      # (osccluster_webhook.go ValidateUpdate).
+      loadbalancername: ${CLUSTER_NAME}-k8s
+      loadbalancertype: internet-facing
+      # Valeurs = defauts explicites (APIPort=6443, protocole TCP).
+      listener:
+        loadbalancerport: 6443
+        loadbalancerprotocol: TCP
+        backendport: 6443
+        backendprotocol: TCP
+      healthCheck:
+        port: 6443
+        protocol: TCP
+        checkinterval: 10
+        timeout: 5
+        healthythreshold: 2
+        unhealthythreshold: 3
+      # securitygroupname / subnetname sont DEPRECIES : la LBU est placee via
+      # les roles (subnet role=loadbalancer, SG role=loadbalancer).
+
+    # PIEGE #5 — les security groups automatiques n'ouvrent NI 50000 NI 50001.
+    # getAutomaticSecurityGroups() ne connait que 6443 / 2378-2380 / 10250-10252
+    # / 179 / 4240 / 4244 / 8472 / 51820-51821 / 51871 / 30000-32767. Talos a
+    # besoin de apid:50000 (management -> CP, et node -> node) et trustd:50001
+    # (join des workers). On les ajoute via additionalSecurityRules.
+    # ATTENTION : getAdditionalRules() matche avec slices.Equal(roles, ar.Roles)
+    # => la liste `roles` doit etre IDENTIQUE ET DANS LE MEME ORDRE que celle du
+    # SG cible : [controlplane] pour le SG "-controlplane", [worker] pour le SG
+    # "-worker", [controlplane, worker] (cet ordre) pour le SG "-node",
+    # [loadbalancer] pour le SG "-lb", [bastion] pour le SG "-bastion".
+    # Une liste [worker, controlplane] ne matcherait RIEN, silencieusement.
+    additionalSecurityRules:
+      - roles: [controlplane]
+        rules:
+          - name: talos-api-from-management
+            flow: Inbound
+            ipProtocol: tcp
+            fromPortRange: 50000
+            toPortRange: 50000
+            ipRanges:
+              - ${MGMT_EGRESS_CIDR}
+              - ${ADMIN_CIDR}
+      - roles: [controlplane, worker]
+        rules:
+          # apid (50000) + trustd (50001) intra-cluster : join des workers et
+          # routage des appels Talos entre noeuds.
+          - name: talos-apid-trustd-intra
+            flow: Inbound
+            ipProtocol: tcp
+            fromPortRange: 50000
+            toPortRange: 50001
+            ipRanges:
+              - ${OSC_NET_CIDR}
+          # KubePrism (7445) est en loopback -> rien a ouvrir. Cilium WireGuard
+          # 51871/udp et health 4240 sont deja dans le SG "-node" par defaut.
+
+    # allowFromIPRanges volontairement NON positionne : il restreint l'inbound
+    # 6443 du SG "-lb" (et 22 du bastion) et vaut 0.0.0.0/0 par defaut. Le
+    # restreindre casserait l'acces des noeuds eux-memes a l'endpoint public
+    # (ils sortent par l'IP - inconnue a l'avance - du NAT service). Le
+    # durcissement se fait sur 50000 (ci-dessus), pas sur 6443 (mTLS/authn k8s).
+
+    bastion:
+      enable: false
+
+---
+# -----------------------------------------------------------------------------
+# Cluster — cluster.x-k8s.io/v1beta2 (CAPI v1.13.2).
+# PIEGE #7 — en v1beta2 les refs sont {apiGroup, kind, name} : PAS d'apiVersion,
+# PAS de namespace (l'objet doit vivre dans le meme namespace que le Cluster).
+# C'est l'inverse de TalosControlPlane.spec.infrastructureTemplate (v1alpha3)
+# qui est un ObjectReference PLEIN (apiVersion + kind + name + namespace).
+# spec.controlPlaneEndpoint est volontairement absent : CAPOSC le remplit avec
+# le DnsName de la LBU une fois celle-ci creee, et CAPI le recopie.
+# -----------------------------------------------------------------------------
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: Cluster
+metadata:
+  name: ${CLUSTER_NAME}
+  namespace: capi-clusters
+  labels:
+    openaether.io/component: capi-clusters
+    openaether.io/managed: "true"
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+        - ${POD_CIDR}
+
+    services:
+      cidrBlocks:
+        - ${SVC_CIDR}
+
+  controlPlaneRef:
+    apiGroup: controlplane.cluster.x-k8s.io
+    kind: TalosControlPlane
+    name: ${CLUSTER_NAME}-cp
+  infrastructureRef:
+    apiGroup: infrastructure.cluster.x-k8s.io
+    kind: OscCluster
+    name: ${CLUSTER_NAME}
+
+---
+# -----------------------------------------------------------------------------
+# OscMachineTemplate (control plane).
+# Champs reellement obligatoires (webhook voscmachinetemplate.kb.io ->
+# ValidateOscMachineSpec) : node.vm.keypairName (Required) et node.vm.vmType
+# (Required : ValidateVmType renvoie Required sur chaine vide — le "defaut
+# tinav7.c4r8p1" du commentaire de CRD n'est applique qu'APRES admission, cote
+# reconcile). Le schema CRD, lui, ne marque required que template et
+# template.spec (+ volumes[].device si un volume est declare).
+# spec.template.spec est IMMUABLE (ValidateUpdate) => toute modif = nouveau
+# template + nouveau nom (versionner le nom si CP_REPLICAS/vmType/image bougent).
+# -----------------------------------------------------------------------------
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OscMachineTemplate
+metadata:
+  name: ${CLUSTER_NAME}-cp
+  namespace: capi-clusters
+  labels:
+    cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+    openaether.io/component: capi-clusters
+    openaether.io/managed: "true"
+spec:
+  template:
+    spec:
+      node:
+        vm:
+          # role: worker par defaut (OscVm.GetRole()). Sans "controlplane" :
+          # mauvais subnet, mauvais SG, et surtout AUCUN enregistrement en
+          # backend de la LBU (oscmachine_vm.go n'appelle
+          # LinkLoadBalancerBackendMachines que si role==controlplane).
+          role: controlplane
+          # PIEGE #8 — l'image. node.vm.imageId (ami-…) OU node.image.name.
+          # getImageId() donne la PRIORITE a node.image.name : si les deux sont
+          # renseignes, imageId est ignore. On utilise l'ID (deterministe).
+          # Alternative par nom (necessite accountId, sinon CAPOSC logue
+          # "[security] It is recommended to set the image account") :
+          #   image:
+          #     name: ${OSC_IMAGE_NAME}
+          #     accountId: ${OSC_IMAGE_ACCOUNT_ID}
+          imageId: ${OSC_IMAGE_ID}
+          # PIEGE #9 — keypairName est OBLIGATOIRE et doit EXISTER cote Outscale
+          # (CreateVm echoue sinon), alors que Talos n'a pas de SSH. Aucun
+          # outscale_keypair n'est cree par le socle tofu => a provisionner une
+          # fois, hors CAPI. Champ IMMUABLE sur OscMachine.
+          keypairName: ${OSC_KEYPAIR_NAME}
+          # tinavX.cVCPUrRAMpPERF — regexp
+          # ^tinav([3-9]|[1-9][0-9]).c[1-9][0-9]*r[1-9][0-9]*p[1-3]$
+          # tinav6.c4r8p2 = 4 vCPU / 8 GiB (equivalent DEV1-L / b3-8).
+          # < 8 GiB => OOMController Talos qui SIGKILL les cgroups (cf. la
+          # cascade observee sur DEV1-M 4 GB cote Scaleway).
+          vmType: ${OSC_VM_TYPE}
+          # PIEGE #6 — IP publique + certSANs.
+          # publicIp:true fait allouer une EIP et la fait attacher via un tag
+          # userdata (section "-----BEGIN OUTSCALE SECTION-----" prependee au
+          # bootstrap data, avec filter_private_section=true : Outscale la
+          # retire avant de l'exposer a l'instance, la machine config Talos
+          # reste donc intacte — cf. cloud/utils/utils.go + cloud/services/
+          # compute/vm.go).
+          # publicIpPool = pool d'IP PRE-ALLOUEES : indispensable ici, parce que
+          # l'IP publique est du NAT 1:1 (la NIC ne voit que la 10.30.x) et que
+          # l'image Talos est un build "nocloud" -> apid ne mettra JAMAIS l'IP
+          # publique dans les SAN de son certificat. Il faut donc connaitre les
+          # IPs A L'AVANCE pour les injecter en machine.certSANs (voir le patch
+          # du TalosControlPlane). Sans cela : x509 "certificate is valid for
+          # 10.30.3.x, not <IP publique>" et CACPPT ne bootstrappe pas etcd.
+          publicIp: true
+          rootDisk:
+            rootDiskType: io1
+            rootDiskSize: 60
+            rootDiskIops: 1500
+          subregionNames:
+            - ${OSC_SUBREGION}
+          tags:
+            openaether.io/cluster: ${CLUSTER_NAME}
+            openaether.io/role: controlplane
+
+---
+# -----------------------------------------------------------------------------
+# TalosControlPlane — controlplane.cluster.x-k8s.io/v1alpha3 (CACPPT v0.5.13).
+# -----------------------------------------------------------------------------
+apiVersion: controlplane.cluster.x-k8s.io/v1alpha3
+kind: TalosControlPlane
+metadata:
+  name: ${CLUSTER_NAME}-cp
+  namespace: capi-clusters
+  labels:
+    cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+    openaether.io/component: capi-clusters
+    openaether.io/managed: "true"
+spec:
+  version: ${K8S_VERSION}
+  replicas: ${CP_REPLICAS}
+  # ObjectReference PLEIN (v1alpha3) : apiVersion ET namespace obligatoires ici,
+  # contrairement aux refs du Cluster v1beta2.
+  infrastructureTemplate:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: OscMachineTemplate
+    name: ${CLUSTER_NAME}-cp
+    namespace: capi-clusters
+  rolloutStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+  controlPlaneConfig:
+    # spec.controlPlaneConfig.init est volontairement ABSENT : deprecie depuis
+    # cacppt v0.4.0, et s'il est present son sous-champ generateType devient
+    # required (le laisser vide fait echouer la validation du CRD).
+    controlplane:
+      generateType: controlplane
+      # contrat Talos majeur.mineur ("v1.13"), PAS la version patch.
+      talosVersion: ${TALOS_CONTRACT}
+      # PIEGE #10 — CABPT >= 0.6 / Talos v1.13 : strategicPatches (YAML) et
+      # SURTOUT PAS configPatches (JSON6902) qui echoue avec
+      # "not supported for multi-document machine configuration".
+      strategicPatches:
+        - |
+          cluster:
+            network:
+              cni:
+                name: none
+            proxy:
+              disabled: true
+
+---
+# -----------------------------------------------------------------------------
+# OscMachineTemplate (workers).
+# -----------------------------------------------------------------------------
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OscMachineTemplate
+metadata:
+  name: ${CLUSTER_NAME}-workers
+  namespace: capi-clusters
+  labels:
+    cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+    openaether.io/component: capi-clusters
+    openaether.io/managed: "true"
+spec:
+  template:
+    spec:
+      node:
+        vm:
+          role: worker
+          imageId: ${OSC_IMAGE_ID}
+          keypairName: ${OSC_KEYPAIR_NAME}
+          vmType: ${OSC_VM_TYPE}
+          # Pas d'IP publique : egress par le NAT service du subnet public.
+          publicIp: false
+          rootDisk:
+            rootDiskType: io1
+            rootDiskSize: 60
+            rootDiskIops: 1500
+          subregionNames:
+            - ${OSC_SUBREGION}
+          # repulseServer est deja positionne par defaut au nom du
+          # MachineDeployment (anti-affinite serveur best-effort).
+          tags:
+            openaether.io/cluster: ${CLUSTER_NAME}
+            openaether.io/role: worker
+        # Disque de donnees dedie (equivalent worker_storage des tfvars) :
+        # partitionne ensuite en user volumes Talos chiffres (local-path +
+        # longhorn). device DOIT matcher ^(/dev/sda1|/dev/sd[a-z]|/dev/xvd[a-z])$
+        # et iops/size doit rester <= 300.
+        volumes:
+          - name: ${CLUSTER_NAME}-data
+            device: /dev/xvdb
+            size: ${WORKER_DATA_DISK_GB}
+            volumeType: gp2
+
+---
+# -----------------------------------------------------------------------------
+# TalosConfigTemplate (workers) — bootstrap.cluster.x-k8s.io/v1alpha3.
+# -----------------------------------------------------------------------------
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+kind: TalosConfigTemplate
+metadata:
+  name: ${CLUSTER_NAME}-workers
+  namespace: capi-clusters
+  labels:
+    cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+    openaether.io/component: capi-clusters
+    openaether.io/managed: "true"
+spec:
+  template:
+    spec:
+      generateType: join
+      talosVersion: ${TALOS_CONTRACT}
+      strategicPatches:
+        - |
+          cluster:
+            network:
+              cni:
+                name: none
+            proxy:
+              disabled: true
+
+---
+# -----------------------------------------------------------------------------
+# MachineDeployment — cluster.x-k8s.io/v1beta2.
+# Refs {apiGroup, kind, name} ; en v1beta2 la strategie de rollout est sous
+# spec.rollout.strategy (et non plus spec.strategy).
+# -----------------------------------------------------------------------------
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: MachineDeployment
+metadata:
+  name: ${CLUSTER_NAME}-workers
+  namespace: capi-clusters
+  labels:
+    cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+    openaether.io/component: capi-clusters
+    openaether.io/managed: "true"
+spec:
+  clusterName: ${CLUSTER_NAME}
+  replicas: ${WORKER_REPLICAS}
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+      cluster.x-k8s.io/deployment-name: ${CLUSTER_NAME}-workers
+  rollout:
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+        cluster.x-k8s.io/deployment-name: ${CLUSTER_NAME}-workers
+    spec:
+      clusterName: ${CLUSTER_NAME}
+      version: ${K8S_VERSION}
+      bootstrap:
+        configRef:
+          apiGroup: bootstrap.cluster.x-k8s.io
+          kind: TalosConfigTemplate
+          name: ${CLUSTER_NAME}-workers
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: OscMachineTemplate
+        name: ${CLUSTER_NAME}-workers
