@@ -3,7 +3,7 @@ kind: Kustomization
 # OpenAether — Overlay CLOUD management (cluster_role=management).
 # Lue par la Kustomization racine (flux-bootstrap.yaml.tftpl → path: apps/flux/management).
 #
-# DAG complet hérité de ../base — tout actif sauf kyverno (suspend dans base).
+# DAG complet hérité de ../base — tout actif (kyverno compris).
 # Ordre de déploiement (via dependsOn) :
 #   00 namespaces
 #   └─ 01 platform

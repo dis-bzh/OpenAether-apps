@@ -24,3 +24,4 @@ spec:
     - name: istio                 # GatewayClass `istio` + ns services-gateway
     - name: cert-manager-issuers  # ClusterIssuer openbao
     - name: foundation-vault      # PKI pki/sign/openaether
+    - name: platform-cilium-lb-ipam  # pool LB-IPAM : sans lui le Service LoadBalancer du Gateway reste <pending>
