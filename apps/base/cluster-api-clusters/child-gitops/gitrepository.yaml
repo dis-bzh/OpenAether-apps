@@ -36,3 +36,10 @@ spec:
   path: ./apps/flux/${CHILD_PROFILE:=workload}
   prune: true
   wait: false
+  # Gitception niveau 2 : le profil de l'enfant ré-applique son propre
+  # GitRepository (${GIT_BRANCH:=main} dans la base). Sans ce postBuild,
+  # l'enfant retomberait sur main au premier reconcile. ${CHILD_BRANCH} est
+  # substitué CÔTÉ MANAGEMENT à l'injection → valeur littérale ici.
+  postBuild:
+    substitute:
+      GIT_BRANCH: ${CHILD_BRANCH:=main}
