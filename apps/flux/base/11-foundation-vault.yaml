@@ -18,4 +18,6 @@ spec:
   wait: false
   dependsOn:
     - name: platform-gateway-api
+    - name: platform-local-path-provisioner  # PVC raft storageClassName local-path-retain
+    - name: platform-priority-classes        # priorityClassName platform-critical (pod rejeté à l'admission si absente)
     # - name: foundation-pki-root  # SUPPRIMÉ: plus de root OpenBao, unsealer HA gère le Shamir

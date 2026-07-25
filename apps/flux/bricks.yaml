@@ -1,0 +1,80 @@
+# Catalogue de pioche OpenAether — consommé par scripts/pick.py
+#
+# IMPORTANT : les dépendances NE SONT PAS déclarées ici. La source de vérité
+# reste `spec.dependsOn` des Kustomizations Flux (apps/flux/base/*.yaml).
+# Ce fichier ne porte que des métadonnées UX : alias, briques socle,
+# compagnons et descriptions. pick.py refuse tout nom inconnu du DAG.
+
+# Toujours inclus dans un profil (posture sécurité par défaut).
+# Désactivable via --no-baseline (déconseillé).
+baseline:
+  - namespaces                 # PSA labels + découpage foundation-*/services-*
+  - platform-network-policies  # default-deny + allow-dns/kube-api (tout le reste suppose cette posture)
+  - flux-egress                # verrouillage egress de flux-system
+
+# Ajoutés automatiquement dès que TOUTES leurs dépendances (dependsOn) sont
+# déjà sélectionnées — jamais moteurs d'inclusion de nouvelles dépendances.
+companions:
+  - external-secrets-stores          # ClusterSecretStore openbao (si ESO + OpenBao piochés)
+  - cert-manager-issuers             # ClusterIssuer openbao (si cert-manager + OpenBao piochés)
+  - istio-authorizationpolicies      # AuthorizationPolicies du mesh (si istio pioché)
+  - kyverno-policies                 # policies (si kyverno pioché)
+  - observability-vm-customresources # VMCluster/VMAgent (si observability pioché)
+  - backup-openbao                   # backup par défaut dès que OpenBao + ESO piochés
+  - backup-databases                 # backup par défaut dès que CNPG + ESO piochés
+  - capi-clusters                    # instanciation clusters clients (si CAPI pioché)
+
+# Alias conviviaux → nom de Kustomization Flux.
+aliases:
+  vault: foundation-vault
+  openbao: foundation-vault
+  eso: external-secrets
+  certs: cert-manager
+  pki: cert-manager
+  mesh: istio
+  ambient: istio
+  gateway: services-gateway
+  ingress: services-gateway
+  db: cnpg
+  postgres: cnpg
+  longhorn: storage
+  obs: observability
+  monitoring: observability
+  iam: identity
+  sso: identity
+  zitadel: identity
+  policies: kyverno
+  capi: cluster-api-providers
+  management: cluster-api-providers
+  metrics: platform-metrics-server
+
+# Descriptions affichées par --list (facultatif, une ligne).
+descriptions:
+  namespaces: Namespaces foundation-*/services-* (PSA, découpage mesh/hors-mesh)
+  platform-local-path-provisioner: StorageClasses local-path / local-path-retain
+  platform-gateway-api: CRDs Gateway API
+  platform-priority-classes: PriorityClasses platform-critical/medium/low/batch
+  platform-cilium-lb-ipam: Pool LB-IPAM Cilium (Service LoadBalancer)
+  platform-network-policies: Default-deny + allow-dns/kube-api (CiliumNetworkPolicy)
+  platform-metrics-server: metrics-server (kubectl top, HPA)
+  foundation-vault: OpenBao HA raft 3 (seal Shamir 5/3, unsealer, PKI intermediate)
+  external-secrets: External Secrets Operator
+  external-secrets-stores: ClusterSecretStore openbao partagé
+  cert-manager: cert-manager (webhooks TLS, certs internes)
+  cert-manager-issuers: ClusterIssuer openbao (PKI OpenBao)
+  istio: Istio ambient (istiod, CNI, ztunnel)
+  istio-authorizationpolicies: AuthorizationPolicies du mesh
+  services-gateway: Gateway nord-sud + cert TLS openaether
+  cnpg: CloudNativePG (operator + clusters zitadel-db/grafana-db)
+  storage: Longhorn (volumes répliqués, LUKS via OpenBao)
+  backup-openbao: Snapshot raft OpenBao → restic (chiffré client, 2 dépôts S3)
+  backup-databases: pg_dump CNPG → restic (chiffré client, 2 dépôts S3)
+  observability: VictoriaMetrics + Loki + Grafana + Alloy
+  observability-vm-customresources: VMCluster/VMAgent/VM*Scrape
+  identity: Zitadel (IAM/SSO, backend CNPG)
+  kyverno: Kyverno (policy engine)
+  kyverno-policies: Policies Kyverno OpenAether
+  cluster-api-operator: CAPI operator (surcouche management)
+  cluster-api-providers: Providers CAPI (Talos, Scaleway, OpenStack, Outscale)
+  capi-clusters: Clusters clients CAPI (apps/clusters, kubeception/gitception)
+  flux-egress: NetworkPolicy egress-restricted flux-system
