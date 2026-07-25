@@ -12,8 +12,20 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: cluster-api-providers
 spec:
-  description: "Managers CAPI: egress DNS + API Scaleway (+ kubeconfig enfants :6443)"
+  description: "Managers CAPI: webhooks 9443 + egress DNS + API Scaleway (+ enfants :6443)"
   endpointSelector: {}
+  ingress:
+    # kube-apiserver → webhooks des providers (core/CABPT/CACPPT/CAPS…, :9443).
+    # remote-node : sur Talos le kube-apiserver statique est vu comme nœud.
+    # Sans ça : "failed calling webhook … context deadline exceeded" à la
+    # création des CRs enfants (constaté en cloud réel).
+    - fromEntities:
+        - kube-apiserver
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:
