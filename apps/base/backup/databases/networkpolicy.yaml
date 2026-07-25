@@ -15,7 +15,8 @@ spec:
     matchLabels:
       app: cnpg-dump
   egress:
-    # DNS
+    # DNS — rules.dns OBLIGATOIRE pour que les toFQDNs matchent (proxy DNS),
+    # cf. backup/openbao/networkpolicy.yaml.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -26,6 +27,9 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
     # Instances Postgres (même namespace)
     - toEndpoints:
         - matchExpressions:
