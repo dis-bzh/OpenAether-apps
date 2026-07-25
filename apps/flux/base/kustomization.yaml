@@ -22,5 +22,6 @@ resources:
   - 40-kyverno.yaml
   - 50-cluster-api-operator.yaml
   - 51-cluster-api-providers.yaml
+  - 52-orc.yaml
   - 55-flux-egress.yaml
   - 60-capi-clusters.yaml
