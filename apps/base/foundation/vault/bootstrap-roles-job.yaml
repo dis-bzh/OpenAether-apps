@@ -252,6 +252,12 @@ spec:
                 "$(jq -nc --arg p "$CM_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
               echo "  policy cert-manager-pki: HTTP=$(WH)"
 
+              # Backup: snapshot raft read-only (CronJob openbao-snapshot).
+              BACKUP_POLICY="$(printf 'path "sys/storage/raft/snapshot" {\n  capabilities = ["read"]\n}\n')"
+              wlapi PUT /v1/sys/policies/acl/backup-snapshot \
+                "$(jq -nc --arg p "$BACKUP_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
+              echo "  policy backup-snapshot: HTTP=$(WH)"
+
               # ── 6) Auth Kubernetes sur ────────────────────────────
               # Doit être activé + configuré AVANT de créer les rôles : les rôles
               # vivent sous /v1/auth/kubernetes/role/* → 404 si le backend n'est pas monté.
@@ -293,6 +299,18 @@ spec:
               echo "  role cert-manager-issuer: HTTP=$CODE"
               case "$CODE" in 200|204) : ;; *)
                 echo "ERREUR: role cert-manager-issuer échoué (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
+
+              wlapi POST /v1/auth/kubernetes/role/backup-snapshot \
+                "$(jq -nc '{
+                    bound_service_account_names:"openbao-snapshot",
+                    bound_service_account_namespaces:"foundation-vault",
+                    token_policies:"backup-snapshot",
+                    token_ttl:"30m",
+                    token_max_ttl:"1h"}')" "$WL_TOKEN" >/dev/null
+              CODE="$(WH)"
+              echo "  role backup-snapshot: HTTP=$CODE"
+              case "$CODE" in 200|204) : ;; *)
+                echo "ERREUR: role backup-snapshot échoué (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
               set -x; set +x
 
               # ── 10) Seed secrets Sprint C (grafana, minio, longhorn) ────────
@@ -344,6 +362,28 @@ spec:
                 "$(jq -nc --arg p "$ZITADEL_DB_PASS" '{username:"zitadel",password:$p}')"
               kv_seed "zitadel/masterkey" \
                 "$(jq -nc --arg k "$ZITADEL_MASTERKEY" '{masterkey:$k}')"
+
+              # backup/restic : password des dépôts restic (brique backup).
+              # Affiché UNE FOIS à la génération pour ESCROW OFFLINE (Bitwarden
+              # EU) : sans lui, les backups sont indéchiffrables le jour où
+              # OpenBao est perdu — le scénario DR que la brique couvre.
+              # (backup/s3-primary et s3-replica = seed opérateur, cf.
+              # apps/base/backup/README.md.)
+              wlapi GET "/v1/secret/data/backup/restic" '' "$WL_TOKEN" >/dev/null 2>&1
+              if [ "$(WH)" != "200" ]; then
+                RESTIC_PASS="$(dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 48)"
+                kv_seed "backup/restic" \
+                  "$(jq -nc --arg p "$RESTIC_PASS" '{password:$p}')"
+                echo ""
+                echo "  >>> ESCROW OBLIGATOIRE (une seule fois — Bitwarden EU) :"
+                echo "  >>> password restic des backups (backup/restic) :"
+                echo "  ----- BEGIN RESTIC PASSWORD -----"
+                echo "  ${RESTIC_PASS}"
+                echo "  ----- END RESTIC PASSWORD -----"
+                echo ""
+              else
+                echo "  secret/backup/restic: déjà présent → no-op"
+              fi
 
               echo "  ✅ Secrets Sprint C seedés (idempotents)"
               set -x; set +x

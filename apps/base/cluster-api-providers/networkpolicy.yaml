@@ -1,0 +1,59 @@
+# Egress des managers providers CAPI (capi-system, posture default-deny).
+# - APIs cloud pour provisionner les clusters clients (Scaleway aujourd'hui ;
+#   ajouter les endpoints OpenStack/Outscale au moment de leur premier usage).
+# - kube-apiserver : couvert par le CCNP allow-kube-api.
+# - rules.dns : requis pour les toFQDNs (proxy DNS Cilium).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: capi-providers-egress
+  namespace: capi-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cluster-api-providers
+spec:
+  description: "Managers CAPI: webhooks 9443 + egress DNS + API Scaleway (+ enfants :6443)"
+  endpointSelector: {}
+  ingress:
+    # kube-apiserver → webhooks des providers (core/CABPT/CACPPT/CAPS…, :9443).
+    # remote-node : sur Talos le kube-apiserver statique est vu comme nœud.
+    # Sans ça : "failed calling webhook … context deadline exceeded" à la
+    # création des CRs enfants (constaté en cloud réel).
+    - fromEntities:
+        - kube-apiserver
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: api.scaleway.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # CABPT/CACPPT parlent à l'apiserver des ENFANTS (LB public :6443) et le
+    # bootstrap Talos aux nœuds :50000. Cibles inconnues d'avance (IP des LB
+    # enfants) → world sur ces DEUX ports précis uniquement.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+            - port: "50000"
+              protocol: TCP

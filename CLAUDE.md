@@ -14,9 +14,23 @@ doit rester **décomposable** — activer un sous-ensemble sans casser les dépe
 
 - `apps/flux/base` = socle commun ; `management/` = surcouche CAPI (cluster de
   management, **optionnelle**) ; `workload/` = ce qu'un cluster client/workload embarque.
+- **Pioche** : `scripts/pick.py` (cf. `apps/flux/README.md`) génère un profil
+  (fermeture transitive des `dependsOn` + socle + compagnons). Invariant :
+  `dependsOn` = dépendances **réelles** (StorageClass, PriorityClass, LB pool…).
+- **Backups** : brique `apps/base/backup` (restic, chiffré client, 2 dépôts S3,
+  compagnons auto) — cf. son README (seed s3-primary/replica + escrow password).
+- **Clusters clients CAPI** : `apps/clusters/` (kubeception/gitception, scaffold
+  non testé) — Cilium+Flux injectés à distance via `spec.kubeConfig`, puis
+  l'enfant réconcilie son profil `apps/flux/<profil>` en autonome.
 - **CAPI n'est pas dans le socle** : un cluster ne devient « management » qu'une fois
   `cluster-api-operator` + `cluster-api-providers` activés. Sans eux, c'est un cluster
   autonome standard. Cf. `OpenAether-infra/CLAUDE.md`.
+
+## Backlog
+
+Les améliorations identifiées (SSO Zitadel↔Grafana, tokens OpenBao nominatifs,
+alerting backups, fix namespaces CAPI…) vivent dans
+**`OpenAether-infra/docs/backlog.md`** — le consulter avant d'ouvrir un chantier.
 
 ## Règle de découpage
 
@@ -26,19 +40,3 @@ doit rester **décomposable** — activer un sous-ensemble sans casser les dépe
   (cf. minio/zitadel/grafana ici pour le modèle) ; ce repo fournit le
   `ClusterSecretStore openbao` partagé.
 
-## Wiring seestar-fits (à ajouter)
-
-seestar est déployé depuis son repo `seestar-fits-back` (manifests kustomize sous
-`deploy/k8s/base` + `overlays/{test,prod}`, images épinglées par digest, patchées
-par sa CI). À câbler côté plateforme :
-
-- `GitRepository` seestar → `dis-bzh/seestar-fits-back`, branche `main`.
-- `Kustomization` Flux `path: ./deploy/k8s/overlays/<env>`, `prune: true`,
-  `dependsOn` : storage (StorageClass `local-path` pour le PVC Valkey), external-secrets,
-  gateway.
-- Écrire le secret S3 dans **OpenBao** à `secret/seestar/s3` (clés
-  `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_URL`, `S3_BUCKET_NAME`) — consommé
-  par l'`ExternalSecret` du repo seestar via le `ClusterSecretStore openbao`.
-- `HTTPRoute` / gateway istio → Service `front` (namespace `seestar-fits`).
-
-Cluster cible : Talos 1 CP + 1 worker sur Proxmox (SYS-1) — cf. `OpenAether-infra`.

@@ -1,0 +1,42 @@
+# Groupe 22 — Backups chiffrés multi-destinations (restic, cf. apps/base/backup/README.md)
+# Compagnons dans la pioche : activés automatiquement dès que leurs dépendances
+# sont sélectionnées — un cluster qui a du critique le sauvegarde par défaut.
+# wait: false : les ExternalSecrets restent NotReady tant que l'opérateur n'a
+# pas seedé backup/s3-{primary,replica} (creds provider) — by design.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: backup-openbao
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/backup/openbao
+  prune: true
+  wait: false
+  dependsOn:
+    - name: external-secrets-stores  # implique foundation-vault + external-secrets
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: backup-databases
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/backup/databases
+  prune: true
+  wait: false
+  dependsOn:
+    - name: external-secrets-stores
+    - name: cnpg                     # Secrets <cluster>-app + instances à dumper

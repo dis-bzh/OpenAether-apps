@@ -76,12 +76,20 @@ spec:
       limits:
         cpu: 500m
         memory: 512Mi
-    # Buckets créés automatiquement au démarrage.
+    # Buckets créés automatiquement au démarrage (post-job mc).
+    # ⚠️ restic ne crée PAS les buckets : ceux de la brique backup doivent
+    # préexister (ici en local ; en cloud = opérateur/ensure-buckets).
     buckets:
       - name: loki
         policy: none
         purge: false
       - name: vmbackup
+        policy: none
+        purge: false
+      - name: backups-primary
+        policy: none
+        purge: false
+      - name: backups-replica
         policy: none
         purge: false
     # Désactiver les features non nécessaires en local.

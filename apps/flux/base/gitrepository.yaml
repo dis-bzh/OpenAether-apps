@@ -1,6 +1,12 @@
 # OpenAether — GitRepository source commun à toutes les Kustomizations Flux.
-# Pointe sur la branche main du repo OpenAether.
 # Flux reconcilie depuis ce point d'entrée.
+#
+# PIÈGE GITCEPTION : ce fichier ré-applique la source de Flux depuis git.
+# Une branche en dur ici ÉCRASE le GitRepository posé au bootstrap (inline
+# manifest infra) au premier reconcile → impossible de tester une branche.
+# D'où ${GIT_BRANCH:=main} : la Kustomization racine (openaether-platform,
+# côté infra flux-bootstrap.yaml.tftpl) injecte GIT_BRANCH via
+# postBuild.substitute — prod reste sur main par défaut.
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
@@ -11,5 +17,5 @@ spec:
   interval: 1m
   url: https://github.com/dis-bzh/OpenAether-apps.git
   ref:
-    branch: main
+    branch: ${GIT_BRANCH:=main}
   timeout: 60s

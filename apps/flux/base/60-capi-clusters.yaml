@@ -1,0 +1,21 @@
+# Groupe 60 — Instanciation des clusters clients CAPI (kubeception/gitception).
+# Réconcilie apps/clusters/ (un fichier par cluster enfant, cf. son README).
+# Compagnon de la pioche : activé automatiquement avec cluster-api-providers.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: capi-clusters
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/clusters
+  prune: true
+  wait: false
+  dependsOn:
+    - name: cluster-api-providers

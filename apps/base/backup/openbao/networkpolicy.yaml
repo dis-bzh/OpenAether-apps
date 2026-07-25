@@ -1,0 +1,70 @@
+# Egress du pod de backup OpenBao (posture default-deny).
+# - DNS (kube-dns)
+# - OpenBao :8200 (sys/leader, login k8s, snapshot — le leader est atteint
+#   pod-à-pod via leader_address)
+# - S3 :443 resserré sur les FQDNs des providers (pattern observability) ;
+#   MinIO local :9000 pour les tests.
+# L'ingress correspondant côté OpenBao est la règle 9 de
+# foundation/vault/networkpolicy.yaml.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: openbao-snapshot
+  namespace: foundation-vault
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "Backup OpenBao: egress DNS + OpenBao 8200 + S3 providers/MinIO"
+  endpointSelector:
+    matchLabels:
+      app: openbao-snapshot
+  egress:
+    # DNS — rules.dns OBLIGATOIRE : sans lui le proxy DNS Cilium ne voit pas
+    # les résolutions et les toFQDNs ci-dessous ne matchent JAMAIS (le CCNP
+    # allow-dns est L4-only). Pattern requis pour tout pod à egress toFQDNs.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # OpenBao (même namespace)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-vault
+            app: openbao
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP
+    # S3 cloud (HTTPS) — resserré FQDNs providers (pas de toEntities:world).
+    - toFQDNs:
+        - matchName: s3.fr-par.scw.cloud          # Scaleway Object Storage
+        - matchName: s3.eu-west-par.io.cloud.ovh.net  # OVH (aligné tfvars eu-west-par)
+        - matchName: oos.eu-west-2.outscale.com   # Outscale OSU
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # MinIO S3 (local uniquement). ⚠️ le chart minio 5.2.0 pose le label
+    # legacy `app: minio` (PAS app.kubernetes.io/name) — vérifié en e2e local :
+    # le selector canonique seul ne matche rien → restic hang. Les deux formes.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-storage
+            app: minio
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-storage
+            app.kubernetes.io/name: minio
+      toPorts:
+        - ports:
+            - port: "9000"
+              protocol: TCP

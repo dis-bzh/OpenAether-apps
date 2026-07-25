@@ -1,7 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# DAG management complet — source de vérité pour tous les overlays.
-# Tout actif sauf kyverno (suspend:true dans 40-kyverno.yaml).
+# DAG complet — source de vérité pour tous les overlays et profils.
+# Tout actif. La sélection par cluster se fait via un profil généré par
+# scripts/pick.py (fermeture transitive des dependsOn), cf. apps/flux/README.md.
 resources:
   - gitrepository.yaml
   - 00-namespaces.yaml
@@ -15,9 +16,11 @@ resources:
   - 14c-services-gateway.yaml
   - 20-cnpg.yaml
   - 21-storage.yaml
+  - 22-backup.yaml
   - 30-observability.yaml
   - 35-identity.yaml
   - 40-kyverno.yaml
   - 50-cluster-api-operator.yaml
   - 51-cluster-api-providers.yaml
   - 55-flux-egress.yaml
+  - 60-capi-clusters.yaml

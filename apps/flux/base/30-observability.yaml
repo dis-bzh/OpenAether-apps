@@ -23,6 +23,7 @@ spec:
     - name: istio
     - name: cnpg
     - name: external-secrets
+    - name: platform-local-path-provisioner  # Loki + VMCluster en storageClass local-path
 ---
 # Groupe 30b — VictoriaMetrics Custom Resources (VMCluster/VMAgent/VM*Scrape)
 # Séparé de 'observability' pour casser le chicken-and-egg CRD→CR : ces kinds

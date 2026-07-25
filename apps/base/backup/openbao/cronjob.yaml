@@ -1,0 +1,138 @@
+# Backup quotidien OpenBao : snapshot raft → restic → 2 dépôts S3.
+#
+# Chiffrement CLIENT fort : restic chiffre AVANT upload (AES-256-CTR +
+# Poly1305-AES, clé dérivée de RESTIC_PASSWORD par scrypt). Les buckets ne
+# voient jamais de données en clair. Le password vit dans OpenBao
+# (backup/restic) ET DOIT être escrowé offline (Bitwarden EU) : c'est lui
+# qui rend les backups restaurables quand OpenBao lui-même est perdu.
+#
+# Multi-destination : le même snapshot est poussé vers 2 dépôts restic
+# indépendants (s3-primary / s3-replica — providers différents en prod).
+# L'échec de l'UN OU L'AUTRE fait échouer le Job (contrat = 2 copies).
+#
+# Rétention (par dépôt) : 14 quotidiens, 8 hebdos, 12 mensuels + `restic check`
+# (intégrité metadata) à chaque run.
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openbao-snapshot
+  namespace: foundation-vault
+  labels:
+    app: openbao-snapshot
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  schedule: "17 2 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: openbao-snapshot
+            openaether.io/component: backup
+        spec:
+          serviceAccountName: openbao-snapshot
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: backup
+              emptyDir: {}
+            - name: tmp
+              emptyDir: {}
+          initContainers:
+            # 1) Snapshot raft — login auth/kubernetes (rôle backup-snapshot),
+            #    résolution du leader (le snapshot doit viser le nœud actif),
+            #    sauvegarde dans l'emptyDir partagé.
+            - name: snapshot
+              image: openbao/openbao:2.5.4
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  export BAO_ADDR="http://openbao.foundation-vault.svc.cluster.local:8200"
+                  export VAULT_ADDR="$BAO_ADDR"
+                  LEADER="$(bao read -field=leader_address sys/leader)"
+                  [ -n "$LEADER" ] || { echo "ERREUR: leader raft introuvable"; exit 1; }
+                  export BAO_ADDR="${LEADER%/}" VAULT_ADDR="${LEADER%/}"
+                  echo "leader raft: $BAO_ADDR"
+                  # Pas de set -x : le token ne doit jamais être loggé.
+                  BAO_TOKEN="$(bao write -field=token auth/kubernetes/login \
+                    role=backup-snapshot \
+                    jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token)"
+                  export BAO_TOKEN VAULT_TOKEN="$BAO_TOKEN"
+                  bao operator raft snapshot save /backup/openbao-raft.snap
+                  ls -l /backup/openbao-raft.snap
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+              volumeMounts:
+                - { name: backup, mountPath: /backup }
+                - { name: tmp, mountPath: /tmp }
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { cpu: 500m, memory: 256Mi }
+          containers:
+            # 2) Push restic vers les 2 dépôts (chiffrement client + rétention).
+            - name: restic-push
+              image: restic/restic:0.18.0
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  export RESTIC_CACHE_DIR=/tmp/restic-cache
+                  push() {
+                    ep="$1"; bucket="$2"; label="$3"
+                    export RESTIC_REPOSITORY="s3:${ep}/${bucket}/openbao"
+                    echo "── dépôt ${label}: ${ep}/${bucket}/openbao"
+                    # ⚠️ restic ne crée PAS le bucket (il DOIT préexister —
+                    # ensure-buckets côté infra, chart minio en local) et retry
+                    # un NoSuchBucket ~15 min en silence → probe borné.
+                    if ! timeout 60 restic cat config >/dev/null 2>&1; then
+                      restic init || { echo "ERREUR: init dépôt ${label} — le bucket ${bucket} existe-t-il ?"; exit 1; }
+                    fi
+                    restic unlock >/dev/null 2>&1 || true
+                    restic backup /backup --host openbao --tag openbao-raft
+                    restic forget --host openbao \
+                      --keep-daily 14 --keep-weekly 8 --keep-monthly 12 --prune
+                    restic check
+                  }
+                  AWS_ACCESS_KEY_ID="$PRIMARY_ACCESS_KEY" \
+                    AWS_SECRET_ACCESS_KEY="$PRIMARY_SECRET_KEY" \
+                    push "$PRIMARY_ENDPOINT" "$PRIMARY_BUCKET" primary
+                  AWS_ACCESS_KEY_ID="$REPLICA_ACCESS_KEY" \
+                    AWS_SECRET_ACCESS_KEY="$REPLICA_SECRET_KEY" \
+                    push "$REPLICA_ENDPOINT" "$REPLICA_BUCKET" replica
+                  echo "✅ snapshot OpenBao poussé vers 2 destinations"
+              envFrom:
+                - secretRef:
+                    name: backup-restic-env
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+              volumeMounts:
+                - { name: backup, mountPath: /backup, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: "1", memory: 512Mi }

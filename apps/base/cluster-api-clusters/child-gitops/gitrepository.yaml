@@ -1,0 +1,45 @@
+# Wiring GitOps du cluster ENFANT (gitception) — appliqué à distance via
+# kubeConfig par le management, puis le Flux de l'enfant devient autonome.
+# Mêmes noms que le bootstrap parent (flux-bootstrap.yaml.tftpl côté infra) :
+# GitRepository `openaether`, Kustomization racine `openaether-platform`.
+#
+# Variables (postBuild.substitute de la Kustomization management) :
+#   ${CHILD_PROFILE} — profil Flux de l'enfant, ex: workload (défaut) ou un
+#                      profil généré par scripts/pick.py (apps/flux/<profil>)
+#   ${CHILD_BRANCH}  — branche git suivie par l'enfant (défaut main ;
+#                      utile pour tester une branche de bout en bout)
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: openaether
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/dis-bzh/OpenAether-apps.git
+  ref:
+    branch: ${CHILD_BRANCH:=main}
+  timeout: 60s
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: openaether-platform
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/flux/${CHILD_PROFILE:=workload}
+  prune: true
+  wait: false
+  # Gitception niveau 2 : le profil de l'enfant ré-applique son propre
+  # GitRepository (${GIT_BRANCH:=main} dans la base). Sans ce postBuild,
+  # l'enfant retomberait sur main au premier reconcile. ${CHILD_BRANCH} est
+  # substitué CÔTÉ MANAGEMENT à l'injection → valeur littérale ici.
+  postBuild:
+    substitute:
+      GIT_BRANCH: ${CHILD_BRANCH:=main}

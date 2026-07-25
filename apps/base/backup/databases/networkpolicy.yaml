@@ -1,0 +1,63 @@
+# Egress du pod de dump CNPG (posture default-deny).
+# L'ingress DB :5432 est déjà couvert par la règle intra-namespace de
+# cnpg/networkpolicy-db-restricted.yaml (selector namespace-only).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg-dump
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "Backup CNPG: egress DNS + Postgres 5432 + S3 providers/MinIO"
+  endpointSelector:
+    matchLabels:
+      app: cnpg-dump
+  egress:
+    # DNS — rules.dns OBLIGATOIRE pour que les toFQDNs matchent (proxy DNS),
+    # cf. backup/openbao/networkpolicy.yaml.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Instances Postgres (même namespace)
+    - toEndpoints:
+        - matchExpressions:
+            - key: "cnpg.io/cluster"
+              operator: Exists
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # S3 cloud (HTTPS) — resserré FQDNs providers (pas de toEntities:world).
+    - toFQDNs:
+        - matchName: s3.fr-par.scw.cloud          # Scaleway Object Storage
+        - matchName: s3.eu-west-par.io.cloud.ovh.net  # OVH (aligné tfvars eu-west-par)
+        - matchName: oos.eu-west-2.outscale.com   # Outscale OSU
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # MinIO S3 (local uniquement). ⚠️ chart minio 5.2.0 = label legacy
+    # `app: minio` (cf. backup/openbao/networkpolicy.yaml) — les deux formes.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-storage
+            app: minio
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-storage
+            app.kubernetes.io/name: minio
+      toPorts:
+        - ports:
+            - port: "9000"
+              protocol: TCP
