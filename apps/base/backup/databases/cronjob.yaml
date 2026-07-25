@@ -1,0 +1,143 @@
+# Backup quotidien des bases CNPG : pg_dump -Fc (zitadel-db, grafana-db)
+# → restic → 2 dépôts S3 (chiffrement client, cf. backup/openbao/cronjob.yaml).
+#
+# Dumps LOGIQUES (cohérents, restaurables cross-version via pg_restore),
+# provider-agnostiques — pas de PITR. Le PITR barmanObjectStore reste
+# l'upgrade cloud documenté (apps/base/cnpg/cluster.yaml, bloc commenté).
+#
+# Creds DB : les Secrets de bootstrap ESO (zitadel-db-app,
+# grafana-db-credentials) ne portent QUE username/password (vérifié e2e local
+# — PAS host/port/dbname comme les secrets auto-générés CNPG). Host/db sont
+# fixés ici : services `<cluster>-rw` et dbnames définis dans la même brique
+# (apps/base/cnpg/*.yaml). L'owner suffit pour dumper sa base.
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cnpg-dump
+  namespace: foundation-databases
+  labels:
+    app: cnpg-dump
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  schedule: "47 2 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: cnpg-dump
+            openaether.io/component: backup
+        spec:
+          serviceAccountName: cnpg-dump
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: backup
+              emptyDir: {}
+            - name: tmp
+              emptyDir: {}
+            - name: zitadel-db-creds
+              secret:
+                secretName: zitadel-db-app
+            - name: grafana-db-creds
+              secret:
+                secretName: grafana-db-credentials
+          initContainers:
+            # 1) Dumps logiques — image alignée sur la plus récente des deux
+            #    Clusters (pg_dump 16.x dumpe les serveurs 16.x plus anciens).
+            - name: pg-dump
+              image: ghcr.io/cloudnative-pg/postgresql:16.3
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  dump() { # <nom> <host> <dbname> <credsdir>
+                    name="$1"; PGHOST="$2"; PGDATABASE="$3"; creds="$4"
+                    PGPORT=5432
+                    PGUSER="$(cat "$creds/username")"
+                    PGPASSWORD="$(cat "$creds/password")"
+                    export PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD
+                    echo "── dump ${name} (${PGHOST}/${PGDATABASE})"
+                    pg_dump -Fc -f "/backup/${name}.dump"
+                  }
+                  dump zitadel-db zitadel-db-rw.foundation-databases.svc.cluster.local zitadel /creds/zitadel
+                  dump grafana-db grafana-db-rw.foundation-databases.svc.cluster.local grafana /creds/grafana
+                  ls -l /backup/
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+              volumeMounts:
+                - { name: backup, mountPath: /backup }
+                - { name: tmp, mountPath: /tmp }
+                - { name: zitadel-db-creds, mountPath: /creds/zitadel, readOnly: true }
+                - { name: grafana-db-creds, mountPath: /creds/grafana, readOnly: true }
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: "1", memory: 512Mi }
+          containers:
+            # 2) Push restic vers les 2 dépôts.
+            - name: restic-push
+              image: restic/restic:0.18.0
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  export RESTIC_CACHE_DIR=/tmp/restic-cache
+                  push() {
+                    ep="$1"; bucket="$2"; label="$3"
+                    export RESTIC_REPOSITORY="s3:${ep}/${bucket}/cnpg"
+                    echo "── dépôt ${label}: ${ep}/${bucket}/cnpg"
+                    # ⚠️ restic ne crée PAS le bucket (il DOIT préexister —
+                    # ensure-buckets côté infra, chart minio en local) et retry
+                    # un NoSuchBucket ~15 min en silence → probe borné.
+                    if ! timeout 60 restic cat config >/dev/null 2>&1; then
+                      restic init || { echo "ERREUR: init dépôt ${label} — le bucket ${bucket} existe-t-il ?"; exit 1; }
+                    fi
+                    restic unlock >/dev/null 2>&1 || true
+                    restic backup /backup --host cnpg --tag cnpg-dump
+                    restic forget --host cnpg \
+                      --keep-daily 14 --keep-weekly 8 --keep-monthly 12 --prune
+                    restic check
+                  }
+                  AWS_ACCESS_KEY_ID="$PRIMARY_ACCESS_KEY" \
+                    AWS_SECRET_ACCESS_KEY="$PRIMARY_SECRET_KEY" \
+                    push "$PRIMARY_ENDPOINT" "$PRIMARY_BUCKET" primary
+                  AWS_ACCESS_KEY_ID="$REPLICA_ACCESS_KEY" \
+                    AWS_SECRET_ACCESS_KEY="$REPLICA_SECRET_KEY" \
+                    push "$REPLICA_ENDPOINT" "$REPLICA_BUCKET" replica
+                  echo "✅ dumps CNPG poussés vers 2 destinations"
+              envFrom:
+                - secretRef:
+                    name: backup-restic-env
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+              volumeMounts:
+                - { name: backup, mountPath: /backup, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: "1", memory: 512Mi }

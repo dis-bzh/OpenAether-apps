@@ -70,6 +70,17 @@ spec:
             - port: "8200"
               protocol: TCP
     # 6. (supprimé) Root OpenBao — plus de foundation-pki-root (seal Shamir).
+    # 6b. Backup (CronJob openbao-snapshot, même ns) : sys/leader, login
+    #     auth/kubernetes, snapshot raft. Egress miroir dans
+    #     apps/base/backup/openbao/networkpolicy.yaml.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-vault
+            app: openbao-snapshot
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP
     # 7. Prometheus scraper
     - fromEndpoints:
         - matchLabels:

@@ -1,0 +1,81 @@
+# MinIO (local) — ingress S3 :9000 sous default-deny-all-ingress (CCNP).
+# Vit DANS la brique minio (et pas dans storage/networkpolicy.yaml) pour être
+# appliquée partout où minio l'est — découvert au test e2e backup.
+# ⚠️ le chart minio 5.2.0 pose le label legacy `app: minio` (PAS
+# app.kubernetes.io/name) — selector sur les deux formes.
+# egress : DNS + kube-api couverts par les CCNP allow-dns / allow-kube-api.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: minio
+  namespace: foundation-storage
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: minio
+spec:
+  description: "MinIO: ingress S3 :9000 (observability, jobs backup, mc intra-ns), deny console"
+  endpointSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: ["minio"]
+  ingress:
+    # Loki + vmbackup (S3 API :9000)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+      toPorts:
+        - ports:
+            - port: "9000"
+              protocol: TCP
+    # Jobs backup (restic → dépôts locaux) + mc post-job du chart (intra-ns)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-vault
+            app: openbao-snapshot
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-databases
+            app: cnpg-dump
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-storage
+      toPorts:
+        - ports:
+            - port: "9000"
+              protocol: TCP
+    # Pas de :9001 (console UI) — accès via port-forward uniquement.
+---
+# Post-job mc du chart (création des buckets) : son EGRESS vers minio:9000
+# était droppé par le default-deny egress → buckets jamais créés en local
+# (découvert au test e2e backup : restic ne crée PAS les buckets).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: minio-post-job
+  namespace: foundation-storage
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: minio
+spec:
+  description: "mc post-job: egress DNS + minio:9000 (création buckets)"
+  endpointSelector:
+    matchLabels:
+      app: minio-job
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-storage
+            app: minio
+      toPorts:
+        - ports:
+            - port: "9000"
+              protocol: TCP
