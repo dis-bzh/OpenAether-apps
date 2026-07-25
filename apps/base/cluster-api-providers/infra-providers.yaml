@@ -41,11 +41,25 @@ spec:
 ---
 # InfrastructureProvider — Outscale / Numspot (CAPOSC)
 # https://github.com/outscale/cluster-api-provider-outscale
+#
+# ⚠️ NAMESPACE DÉDIÉ (constaté en cloud réel 2026-07-25) : les manifests upstream
+# de CAPOSC utilisent des noms NON PRÉFIXÉS qui entrent en collision avec les
+# autres providers quand ils cohabitent dans capi-system :
+#   1. Secret `webhook-server-cert` — partagé avec CAPS (Scaleway). Le dernier
+#      Certificate appliqué gagne ; cert-manager refuse alors d'injecter le
+#      caBundle du perdant ("secret not owned by certificate") → webhook de
+#      CONVERSION des CRDs du perdant mort (~16 rejets TLS/s côté apiservers),
+#      reconcile figé et suppressions bloquées sur finalizers.
+#   2. Lease `controller-leader-election-capo` — MÊME identifiant que CAPO
+#      (OpenStack) : celui qui l'obtient bloque l'autre en "attempting to
+#      acquire leader lease", donc un provider entier ne réconcilie plus rien.
+# Le namespace de déploiement = metadata.namespace du CR (il n'existe pas de
+# spec.deployment.namespace) → on isole Outscale ici.
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
 kind: InfrastructureProvider
 metadata:
   name: outscale
-  namespace: capi-system
+  namespace: capi-outscale-system
 spec:
   version: v1.5.0
   deployment:
