@@ -16,6 +16,11 @@ spec:
   path: ./apps/base/foundation/vault
   prune: true
   wait: false
+  # force: le Job openbao-vault-bootstrap est IMMUABLE ; sans force, toute
+  # évolution de son spec fait échouer le dry-run → TOUT le bundle vault est
+  # rejeté (vu en cloud réel). force recrée le Job (delete+create), ce qui est
+  # exactement son contrat (« supprimé + recréé à chaque sync », idempotent).
+  force: true
   dependsOn:
     - name: platform-gateway-api
     - name: platform-local-path-provisioner  # PVC raft storageClassName local-path-retain
