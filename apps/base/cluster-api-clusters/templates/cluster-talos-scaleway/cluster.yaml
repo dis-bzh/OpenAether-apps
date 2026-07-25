@@ -81,15 +81,17 @@ spec:
       talosVersion: ${TALOS_VERSION:=v1.9}
       # Le CNI n'est PAS posé ici (pas d'inlineManifests ~MB dans un CR) :
       # Cilium + Flux sont injectés à distance par le management (kubeConfig).
-      configPatches:
-        - op: replace
-          path: /cluster/network/cni
-          value:
-            name: none
-        - op: replace
-          path: /cluster/proxy
-          value:
-            disabled: true
+      # strategicPatches et PAS configPatches (JSON6902) : "JSON6902 patches
+      # are not supported for multi-document machine configuration" avec les
+      # configs Talos récentes (constaté en réel, CABPT v0.6.12 / Talos v1.13).
+      strategicPatches:
+        - |
+          cluster:
+            network:
+              cni:
+                name: none
+            proxy:
+              disabled: true
 ---
 apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
 kind: TalosConfigTemplate
