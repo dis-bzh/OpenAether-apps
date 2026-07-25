@@ -38,7 +38,7 @@ spec:
             - port: "9443"
               protocol: TCP
   egress:
-    # DNS
+    # DNS — rules.dns requis pour que les toFQDNs matchent (proxy DNS Cilium).
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -49,6 +49,9 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
     # Kubernetes API
     - toServices:
         - k8sService:
@@ -60,3 +63,18 @@ spec:
               protocol: TCP
     - toEntities:
         - kube-apiserver
+    # Releases GitHub — l'operator TÉLÉCHARGE les manifests des providers
+    # (CoreProvider/InfrastructureProvider…) depuis les releases GitHub.
+    # Sans cet egress : "ComponentsFetchError … context deadline exceeded"
+    # et AUCUN provider ne s'installe (constaté en cloud réel).
+    - toFQDNs:
+        - matchName: github.com
+        - matchName: api.github.com
+        - matchName: codeload.github.com
+        - matchName: raw.githubusercontent.com
+        - matchName: objects.githubusercontent.com
+        - matchName: release-assets.githubusercontent.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
