@@ -26,6 +26,12 @@ doit rester **décomposable** — activer un sous-ensemble sans casser les dépe
   `cluster-api-operator` + `cluster-api-providers` activés. Sans eux, c'est un cluster
   autonome standard. Cf. `OpenAether-infra/CLAUDE.md`.
 
+## Backlog
+
+Les améliorations identifiées (SSO Zitadel↔Grafana, tokens OpenBao nominatifs,
+alerting backups, fix namespaces CAPI…) vivent dans
+**`OpenAether-infra/docs/backlog.md`** — le consulter avant d'ouvrir un chantier.
+
 ## Règle de découpage
 
 - Les manifests **métier** vivent dans **chaque repo applicatif** (`deploy/k8s/`),
