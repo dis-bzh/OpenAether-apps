@@ -44,10 +44,16 @@ spec:
         - matchName: api.scaleway.com
         # OVH/OpenStack : Keystone n'est que le point d'entrée — le catalogue
         # renvoie ensuite compute./network./image./lb.<region>.cloud.ovh.net.
-        - matchPattern: "*.cloud.ovh.net"
+        # ⚠️ le `*` de Cilium ne matche QU'UN SEUL label : il faut un pattern
+        # par profondeur. Vu en réel : network.compute.eu-west-par.cloud.ovh.net
+        # (3 niveaux) était droppé par le seul "*.cloud.ovh.net".
         - matchName: auth.cloud.ovh.net
+        - matchPattern: "*.cloud.ovh.net"
+        - matchPattern: "*.*.cloud.ovh.net"
+        - matchPattern: "*.*.*.cloud.ovh.net"
         # Outscale (CAPOSC) : API + endpoints régionaux.
         - matchPattern: "*.outscale.com"
+        - matchPattern: "*.*.outscale.com"
       toPorts:
         - ports:
             - port: "443"
