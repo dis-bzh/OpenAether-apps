@@ -6,4 +6,5 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - edge-1.yaml
-  - edge-2.yaml   # OVH   # session test 2026-07-25 — retirer au cleanup
+  - edge-2.yaml   # OVH
+  - edge-3.yaml   # Outscale   # session test 2026-07-25 — retirer au cleanup
