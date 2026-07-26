@@ -100,7 +100,7 @@ spec:
           containers:
             # 2) Push restic vers les 2 dépôts.
             - name: restic-push
-              image: restic/restic:0.18.0
+              image: docker.io/restic/restic:0.18.0
               command:
                 - /bin/sh
                 - -c
