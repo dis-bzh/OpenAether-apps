@@ -20,6 +20,14 @@ spec:
       interval: 1h
   dependsOn:
     - name: cilium
+  # Filet d'idempotence : sans remediation, une install Helm qui échoue une
+  # fois reste bloquée définitivement (Flux ne la retente jamais).
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
   values:
     image:
       repository: scaleway/cloud-controller-manager
