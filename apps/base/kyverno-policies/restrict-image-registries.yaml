@@ -38,10 +38,11 @@ spec:
           Image registry not allowed. Allowed: ghcr.io, quay.io,
           registry.k8s.io, docker.io/istio, docker.io/rancher,
           docker.io/kiwigrid, gcr.io, docker.io/grafana,
-          docker.io/registry.k8s.io, docker.io/victoriametrics.
+          docker.io/registry.k8s.io, docker.io/victoriametrics,
+          docker.io/restic, docker.io/openbao.
         pattern:
           spec:
             containers:
-            - image: "ghcr.io/* | quay.io/* | registry.k8s.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | gcr.io/* | docker.io/grafana/* | docker.io/registry.k8s.io/* | docker.io/victoriametrics/*"
+            - image: "ghcr.io/* | quay.io/* | registry.k8s.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | gcr.io/* | docker.io/grafana/* | docker.io/registry.k8s.io/* | docker.io/victoriametrics/* | docker.io/restic/* | docker.io/openbao/*"
             initContainers:
-            - image: "ghcr.io/* | quay.io/* | registry.k8s.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | gcr.io/* | docker.io/grafana/* | docker.io/registry.k8s.io/* | docker.io/victoriametrics/*"
+            - image: "ghcr.io/* | quay.io/* | registry.k8s.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | gcr.io/* | docker.io/grafana/* | docker.io/registry.k8s.io/* | docker.io/victoriametrics/* | docker.io/restic/* | docker.io/openbao/*"
