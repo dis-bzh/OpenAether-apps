@@ -60,7 +60,17 @@ spec:
       sourceRef: { kind: HelmRepository, name: cilium, namespace: capi-clusters }
   values:
     kubeProxyReplacement: true
-    socketLB: { enabled: true, hostNamespaceOnly: false }
+    # ⚠️ Ces deux réglages sont EXIGÉS dès que le profil de l'enfant embarque
+    # Istio ambient (apps/base/istio) — ils doivent rester alignés sur le socle
+    # parent (render-bootstrap-manifests.sh) :
+    #  - cni.exclusive=false : sinon Cilium réécrit 05-cilium.conflist en boucle
+    #    et en retire le plugin chaîné istio-cni (« conflicting component
+    #    constantly reverting our work ») → /readyz 503 → Helm install timeout
+    #    → ztunnel, services-gateway et istio-authorizationpolicies bloqués ;
+    #  - socketLB.hostNamespaceOnly=true : sinon le socket-LB court-circuite la
+    #    redirection ambient pour les process host-network.
+    socketLB: { enabled: true, hostNamespaceOnly: true }
+    cni: { exclusive: false }
     bpf: { hostLegacyRouting: false, masquerade: true }
     cgroup: { autoMount: { enabled: false }, hostRoot: /sys/fs/cgroup }
     k8sServiceHost: localhost      # KubePrism Talos
