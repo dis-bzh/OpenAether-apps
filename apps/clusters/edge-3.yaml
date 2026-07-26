@@ -48,8 +48,8 @@ spec:
       WORKER_DATA_DISK_GB: "50"
       # Le port Talos 50000 ne peut pas passer par la LBU (un seul listener) :
       # accès direct aux IP publiques des CP, restreint à l'egress du management
-      # (router SNAT OVH — le management tourne maintenant chez OVH) et à l'admin.
-      MGMT_EGRESS_CIDR: REDACTED-MGMT-EGRESS-IP/32  # SNAT du router OVH (management)
+      # (NAT Outscale — le management tourne maintenant chez Outscale) et à l'admin.
+      MGMT_EGRESS_CIDR: REDACTED-MGMT-EGRESS-IP/32  # NAT service Outscale (management)
       ADMIN_CIDR: REDACTED-ADMIN-IP/32
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
