@@ -41,8 +41,25 @@ kubectl create secret generic <enfant>-substitutes -n flux-system \
 Kubeconfig de l'enfant : Secret `<enfant>-kubeconfig` (ns `capi-clusters`,
 clé `value`). Parcours jour-1 complet : `OpenAether-infra/docs/admin-access.md`.
 
-## Décommissionner
+## Décommissionner — `task edge-down` D'ABORD
 
-Retirer le fichier du kustomization → `prune: true` supprime les CRs CAPI →
-CAPI détruit les machines. Les backups de l'enfant (brique backup, si piochée)
-restent dans les buckets S3.
+⚠️ **Ne PAS se contenter de retirer le fichier du kustomization.** Flux prune
+tous les objets d'un coup, sans ordre : si l'`<Infra>Cluster` part avant les
+machines, le provider perd le client cloud nécessaire pour les détruire et
+boucle sur « … is not available yet » — machines bloquées sur finalizers et
+**VMs orphelines facturées** (constaté deux fois sur Scaleway).
+
+Ordre correct, idempotent :
+
+```bash
+export KUBECONFIG=<management>
+task edge-down CLUSTER=edge-1 -- --yes     # cascade CAPI propre, attend la fin
+# puis seulement : retirer edge-1.yaml de apps/clusters/kustomization.yaml
+git commit && git push                     # le prune Flux n'a plus rien à faire
+```
+
+`task edge-down` supprime le `Cluster` (CAPI cascade via ownerReferences),
+attend la disparition complète, et en cas de blocage du provider lève les
+finalizers **en signalant explicitement les VMs à vérifier côté console**.
+
+Les backups de l'enfant (brique backup, si piochée) restent dans les buckets S3.
