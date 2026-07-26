@@ -25,15 +25,15 @@ spec:
       WORKER_REPLICAS: "1"
       K8S_VERSION: v1.35.3
       TALOS_VERSION: v1.13
-      # Image Glance existante (plateforme openstack). Le passage à v1.13.4
-      # attend le fix du module talos-image (renommage in-place) — cf. backlog.
-      OS_IMAGE_NAME: talos-ovh-amd64-v1.13.3
+      # Image Glance (plateforme openstack) reconstruite en v1.13.4 avec le
+      # schematic courant — le renommage in-place du module est corrigé.
+      OS_IMAGE_NAME: talos-ovh-amd64-v1.13.4
       OS_FLAVOR: b3-8            # 8 Go — au-dessus du seuil OOM Talos
       OS_EXTERNAL_NETWORK: Ext-Net
       OS_NODE_CIDR: 10.20.0.0/24 # distinct du management OVH
       # FIP pré-allouée des CP : doit figurer dans les certSANs Talos (l'IMDS
       # OpenStack ne la révèle pas). Une IP par réplique de control plane.
-      OS_CP_FLOATING_IPS: 57.130.54.208
+      OS_CP_FLOATING_IPS: 57.130.70.41
 ---
 # CNI de l'enfant, appliqué À DISTANCE (kubeConfig CAPI), values alignées sur
 # le socle parent (render-bootstrap-manifests.sh).

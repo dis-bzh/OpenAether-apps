@@ -44,12 +44,12 @@ spec:
       OSC_KEYPAIR_NAME: openaether-capi
       OSC_IMAGE_NAME: talos-outscale-amd64-v1.13.4
       OSC_IMAGE_ACCOUNT_ID: "185209522342"
-      OSC_IMAGE_ID: "ami-6711ec55"       # talos-outscale-amd64-v1.13.4 (variante aws)
+      OSC_IMAGE_ID: "ami-16d2bedd"       # talos-outscale-amd64-v1.13.4 (variante aws)
       WORKER_DATA_DISK_GB: "50"
       # Le port Talos 50000 ne peut pas passer par la LBU (un seul listener) :
       # accès direct aux IP publiques des CP, restreint à l'egress du management
-      # (public gateway Scaleway) et à l'admin.
-      MGMT_EGRESS_CIDR: 51.15.131.56/32
+      # (router SNAT OVH — le management tourne maintenant chez OVH) et à l'admin.
+      MGMT_EGRESS_CIDR: 57.130.19.139/32  # SNAT du router OVH (management)
       ADMIN_CIDR: 80.14.185.25/32
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
