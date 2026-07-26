@@ -91,6 +91,13 @@ patches:
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
       metadata:
+        name: orc
+        namespace: flux-system
+      $patch: delete
+  - patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
         name: capi-clusters
         namespace: flux-system
       $patch: delete
