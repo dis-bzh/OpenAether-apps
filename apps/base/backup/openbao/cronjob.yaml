@@ -57,7 +57,7 @@ spec:
             #    résolution du leader (le snapshot doit viser le nœud actif),
             #    sauvegarde dans l'emptyDir partagé.
             - name: snapshot
-              image: openbao/openbao:2.5.4
+              image: docker.io/openbao/openbao:2.5.4
               command:
                 - /bin/sh
                 - -c
@@ -95,7 +95,7 @@ spec:
           containers:
             # 2) Push restic vers les 2 dépôts (chiffrement client + rétention).
             - name: restic-push
-              image: restic/restic:0.18.0
+              image: docker.io/restic/restic:0.18.0
               command:
                 - /bin/sh
                 - -c
