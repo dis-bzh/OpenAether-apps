@@ -21,9 +21,13 @@ automatiquement.
 ```bash
 python3 scripts/pick.py --list                  # briques, alias, dépendances
 python3 scripts/pick.py --validate              # santé du DAG + catalogue
+python3 scripts/pick.py --check                 # profils générés à jour ? (CI)
 python3 scripts/pick.py vault gateway           # plan (dry-run)
 python3 scripts/pick.py zitadel -o apps/flux/edge   # génère le profil `edge`
 ```
+
+`--validate` + `--check` sont regroupés dans `task apps-validate` (Taskfile de
+`OpenAether-infra`) — à lancer après toute modification du DAG.
 
 Résolution automatique : la **fermeture transitive** des `dependsOn` est
 incluse (piocher `zitadel` tire cnpg, istio, services-gateway, OpenBao, ESO,
@@ -54,3 +58,12 @@ Toute nouvelle brique doit déclarer *tout* ce qu'elle exige : StorageClass
 (`platform-cilium-lb-ipam`), etc. C'est ce qui rend la pioche sûre.
 `scripts/pick.py --validate` vérifie l'intégrité (cycles, cibles inconnues,
 chemins morts, fichiers non câblés).
+
+**Un profil généré fige la liste des Kustomizations EXCLUES** : ajouter une
+brique au DAG périme donc tous les profils déjà générés — la nouvelle brique est
+héritée de `../base` sans avoir été pioché, et reste bloquée si ses dépendances,
+elles, sont exclues. C'est arrivé en réel avec `orc` (dépendante de
+`cluster-api-providers`, absente des clusters workload) : elle a bloqué les deux
+clusters edge. `scripts/pick.py --check` rejoue la génération en mémoire depuis
+l'en-tête `# Pioche :` de chaque profil et sort 1 si l'un a divergé —
+**régénérer les profils fait partie de toute modification du DAG**.
