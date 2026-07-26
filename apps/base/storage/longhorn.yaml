@@ -26,6 +26,14 @@ metadata:
   namespace: longhorn-system
 spec:
   interval: 1h
+  # Le timeout Helm par défaut (5 min) ne suffit pas à Longhorn en cloud : le
+  # DaemonSet longhorn-manager et les engine images sont lourds à tirer, l'install
+  # reste « InProgress » et expire. Elle est alors remédiée par un uninstall — si
+  # celui-ci est lui-même interrompu (reboot de nœud), la release Helm reste en
+  # statut `uninstalling` et Flux se bloque sur « unable to determine state »
+  # alors que tous les pods tournent (vécu le 2026-07-26, management Outscale).
+  # Déblocage manuel : supprimer le Secret sh.helm.release.v1.longhorn.v1.
+  timeout: 15m
   chart:
     spec:
       chart: longhorn
