@@ -1,0 +1,216 @@
+# Cluster client Talos sur OVH (OpenStack) via CAPO — namespace capi-clusters.
+#
+# apiVersions alignées sur les CRDs RÉELLEMENT installées (vérifiées 2026-07-25) :
+#   CAPI   v1.13.2 → cluster.x-k8s.io/v1beta2 : les refs sont {apiGroup, kind,
+#                    name} — plus d'apiVersion ni de namespace.
+#   CAPO   v0.14.4 → infrastructure.cluster.x-k8s.io/v1beta1 (seule version servie)
+#   CACPPT v0.5.13 → controlplane…/v1alpha3 : infrastructureTemplate reste une
+#                    ObjectReference PLEINE (apiVersion + namespace).
+#   CABPT  v0.6.12 → bootstrap…/v1alpha3
+#
+# PRÉREQUIS hors git — Secret Opaque dans capi-clusters (MÊME ns que le cluster),
+# clé `clouds.yaml` ; la RÉGION vit dans clouds.yaml (region_name), surtout PAS
+# dans identityRef (cf. piège ci-dessous) :
+#   kubectl -n capi-clusters create secret generic ovh-capi-credentials \
+#     --from-file=clouds.yaml=./clouds.yaml
+#
+# Variables (postBuild.substitute) :
+#   ${CLUSTER_NAME} ${CP_REPLICAS:=1} ${WORKER_REPLICAS:=1}
+#   ${K8S_VERSION:=v1.35.3} ${TALOS_VERSION:=v1.13}
+#   ${OS_CREDENTIALS_SECRET:=ovh-capi-credentials} ${OS_CLOUD_NAME:=ovh}
+#   ${OS_EXTERNAL_NETWORK:=Ext-Net} ${OS_NODE_CIDR:=10.20.0.0/24}
+#   ${OS_FLAVOR:=b3-8} ${OS_IMAGE_NAME}
+---
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: Cluster
+metadata:
+  name: ${CLUSTER_NAME}
+  namespace: capi-clusters
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: capi-clusters
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks: ["10.244.0.0/16"]
+    services:
+      cidrBlocks: ["10.96.0.0/12"]
+  # Pas de controlPlaneEndpoint : CAPO le renseigne depuis la FIP de l'Octavia LB.
+  controlPlaneRef:
+    apiGroup: controlplane.cluster.x-k8s.io
+    kind: TalosControlPlane
+    name: ${CLUSTER_NAME}-cp
+  infrastructureRef:
+    apiGroup: infrastructure.cluster.x-k8s.io
+    kind: OpenStackCluster
+    name: ${CLUSTER_NAME}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackCluster
+metadata:
+  name: ${CLUSTER_NAME}
+  namespace: capi-clusters
+spec:
+  # Seul champ requis du spec (cloudName/name requis dans identityRef).
+  identityRef:
+    type: Secret
+    name: ${OS_CREDENTIALS_SECRET:=ovh-capi-credentials}
+    cloudName: ${OS_CLOUD_NAME:=ovh}
+    # ⚠️ NE PAS mettre `region` ici : CAPO fabriquerait un providerID
+    # openstack://<REGION>/<uuid> alors que Talos écrit openstack:///<uuid>
+    # → le nodeRef ne serait JAMAIS résolu (machines bloquées en Provisioned).
+    # La région se déclare dans clouds.yaml (region_name).
+  externalNetwork:
+    filter:
+      name: ${OS_EXTERNAL_NETWORK:=Ext-Net}
+  # CAPO crée network + subnet + router (gw = externalNetwork) — équivalent de
+  # modules/providers/ovh/network.tf. CIDR distinct du management.
+  managedSubnets:
+    - cidr: ${OS_NODE_CIDR:=10.20.0.0/24}
+      dnsNameservers: ["1.1.1.1", "8.8.8.8"]
+  apiServerLoadBalancer:
+    enabled: true
+    # ⚠️ OBLIGATOIRE avec Talos : CACPPT bootstrappe etcd et récupère le
+    # kubeconfig via l'API Talos (50000). Les nœuds n'ont pas de FIP (subnet
+    # privé) → sans ce listener, le control plane reste bloqué indéfiniment.
+    # CAPO ouvre aussi la règle de security group correspondante.
+    additionalPorts: [50000]
+  managedSecurityGroups:
+    allowAllInClusterTraffic: true   # requis dès qu'on déclare le bloc
+  tags: ["openaether", "${CLUSTER_NAME}"]
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1alpha3
+kind: TalosControlPlane
+metadata:
+  name: ${CLUSTER_NAME}-cp
+  namespace: capi-clusters
+spec:
+  replicas: ${CP_REPLICAS:=1}
+  version: ${K8S_VERSION:=v1.35.3}
+  infrastructureTemplate:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: OpenStackMachineTemplate
+    # ⚠️ spec IMMUABLE : pour modifier le template (flavor, image, FIP…), créer
+    # un NOUVEAU nom et le référencer ici — CAPI roule alors les control planes.
+    name: ${CLUSTER_NAME}-cp-fip3
+    namespace: capi-clusters
+  controlPlaneConfig:
+    controlplane:
+      generateType: controlplane
+      talosVersion: ${TALOS_VERSION:=v1.13}
+      # strategicPatches (YAML) et PAS configPatches : JSON6902 est rejeté sur
+      # les machine configs multi-documents (Talos ≥ 1.13).
+      strategicPatches:
+        - |
+          machine:
+            # ⚠️ L'IMDS OpenStack n'expose PAS la floating IP (NAT côté Neutron) :
+            # sans ce SAN, le certificat apid n'est valide que pour l'IP privée
+            # et CACPPT échoue en TLS sur <FIP>:50000 ("certificate is valid for
+            # 10.x, not <FIP>") → control plane bloqué. Les IP sont donc
+            # PRÉ-ALLOUÉES (pool preAllocatedFloatingIPs) et listées ici.
+            certSANs:
+              - ${OS_CP_FLOATING_IPS}
+          cluster:
+            network:
+              cni:
+                name: none
+            proxy:
+              disabled: true
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+kind: TalosConfigTemplate
+metadata:
+  name: ${CLUSTER_NAME}-workers
+  namespace: capi-clusters
+spec:
+  template:
+    spec:
+      generateType: join
+      talosVersion: ${TALOS_VERSION:=v1.13}
+---
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: MachineDeployment
+metadata:
+  name: ${CLUSTER_NAME}-workers
+  namespace: capi-clusters
+  labels:
+    cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+spec:
+  clusterName: ${CLUSTER_NAME}
+  replicas: ${WORKER_REPLICAS:=1}
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+  template:
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+    spec:
+      clusterName: ${CLUSTER_NAME}
+      version: ${K8S_VERSION:=v1.35.3}
+      bootstrap:
+        configRef:
+          apiGroup: bootstrap.cluster.x-k8s.io
+          kind: TalosConfigTemplate
+          name: ${CLUSTER_NAME}-workers
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: OpenStackMachineTemplate
+        name: ${CLUSTER_NAME}-workers
+---
+# ⚠️ CACPPT (bootstrap etcd + récupération du kubeconfig) se connecte à l'API
+# Talos sur les ADRESSES DE LA MACHINE (machine.Status.Addresses), PAS sur le
+# controlPlaneEndpoint : le listener 50000 du LB ne lui suffit donc pas. Sur un
+# subnet privé, les CP doivent porter une IP flottante, sinon le control plane
+# reste bloqué en WaitingForTalosBoot (constaté en réel sur edge-2).
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: OpenStackFloatingIPPool
+metadata:
+  name: ${CLUSTER_NAME}-cp-fip3
+  namespace: capi-clusters
+spec:
+  identityRef:
+    name: ${OS_CREDENTIALS_SECRET:=ovh-capi-credentials}
+    cloudName: ${OS_CLOUD_NAME:=ovh}
+  floatingIPNetwork:
+    filter:
+      name: ${OS_EXTERNAL_NETWORK:=Ext-Net}
+  # IP pré-allouées : elles doivent être connues AVANT le boot pour entrer dans
+  # les certSANs (cf. TalosControlPlane). Retain = on garde l'ancrage stable.
+  preAllocatedFloatingIPs:
+    - ${OS_CP_FLOATING_IPS}
+  reclaimPolicy: Retain
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: ${CLUSTER_NAME}-cp-fip3
+  namespace: capi-clusters
+spec:
+  template:
+    spec:
+      # `image` est le SEUL champ requis. Image plateforme **openstack**
+      # (CAPO livre la machine config Talos en user_data Nova), pas nocloud.
+      image:
+        filter:
+          name: ${OS_IMAGE_NAME}
+      flavor: ${OS_FLAVOR:=b3-8}
+      # IP flottante = ExternalIP dans machine.Status.Addresses → CACPPT peut
+      # joindre l'API Talos :50000 (cf. commentaire du pool ci-dessus).
+      floatingIPPoolRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: OpenStackFloatingIPPool
+        name: ${CLUSTER_NAME}-cp-fip3
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: ${CLUSTER_NAME}-workers
+  namespace: capi-clusters
+spec:
+  template:
+    spec:
+      image:
+        filter:
+          name: ${OS_IMAGE_NAME}
+      flavor: ${OS_FLAVOR:=b3-8}

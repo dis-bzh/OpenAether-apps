@@ -1,0 +1,23 @@
+# Groupe 52 — ORC (openstack-resource-controller), dépendance de CAPO.
+# Sans ces CRDs, capi-openstack-controller ne démarre pas ses watchers et aucun
+# OpenStackCluster ne provisionne (constaté en cloud réel sur edge-2).
+# Compagnon de la pioche : tiré automatiquement avec cluster-api-providers.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: orc
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/orc
+  prune: true
+  wait: true
+  force: true
+  dependsOn:
+    - name: cluster-api-providers

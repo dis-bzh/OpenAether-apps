@@ -31,6 +31,7 @@ spec:
               - longhorn-system
               - local-path-storage
               - capi-system
+              - orc-system
               - capi-operator-system
       validate:
         message: >-

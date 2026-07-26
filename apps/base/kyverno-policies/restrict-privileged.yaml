@@ -32,6 +32,7 @@ spec:
               - longhorn-system
               - local-path-storage
               - capi-system
+              - orc-system
               - capi-operator-system
               - services-observability
               - foundation-service-mesh
@@ -60,6 +61,7 @@ spec:
               - longhorn-system
               - local-path-storage
               - capi-system
+              - orc-system
               - capi-operator-system
       validate:
         message: "HostPath volumes are not allowed."

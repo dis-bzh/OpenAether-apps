@@ -1,4 +1,4 @@
-# Egress des managers providers CAPI (capi-system, posture default-deny).
+# Idem pour le namespace dédié Outscale (cf. namespace.yaml).
 # - APIs cloud pour provisionner les clusters clients (Scaleway aujourd'hui ;
 #   ajouter les endpoints OpenStack/Outscale au moment de leur premier usage).
 # - kube-apiserver : couvert par le CCNP allow-kube-api.
@@ -7,12 +7,12 @@ apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: capi-providers-egress
-  namespace: capi-system
+  namespace: capi-outscale-system
   labels:
     openaether.io/managed: "true"
     openaether.io/component: cluster-api-providers
 spec:
-  description: "Managers CAPI: webhooks 9443 + egress DNS + API Scaleway (+ enfants :6443)"
+  description: "Manager CAPOSC: webhooks 9443 + egress DNS + API Outscale (+ enfants :6443)"
   endpointSelector: {}
   ingress:
     # kube-apiserver → webhooks des providers (core/CABPT/CACPPT/CAPS…, :9443).

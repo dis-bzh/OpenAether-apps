@@ -21,6 +21,8 @@ spec:
               - longhorn-system
               - local-path-storage
               - capi-system
+              - orc-system
+              - capi-outscale-system  # provider CAPOSC isolé (collisions upstream)
               - capi-operator-system
               - cnpg-system
               - cert-manager

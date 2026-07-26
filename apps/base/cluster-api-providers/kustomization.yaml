@@ -5,7 +5,9 @@ kind: Kustomization
 # CoreProvider + CABPT + CACPPT + CAPS + CAPO + CAPOSC.
 # Flux Kustomization 51-cluster-api-providers.yaml dépend de 50-cluster-api-operator.
 resources:
+  - namespace.yaml
   - networkpolicy.yaml
+  - networkpolicy-outscale.yaml
   - core-providers.yaml
   - infra-providers.yaml
 
