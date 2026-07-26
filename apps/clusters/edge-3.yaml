@@ -40,7 +40,11 @@ spec:
       OSC_SUBNET_PUBLIC: 10.30.2.0/24
       OSC_SUBNET_WORKER: 10.30.3.0/24
       OSC_SUBNET_CP: 10.30.4.0/24
-      OSC_VM_TYPE: tinav6.c4r8p1     # 4 vCPU / 8 Go — au-dessus du seuil OOM Talos
+      # 2 vCPU / 8 Go : la RAM reste au-dessus du seuil OOM Talos, mais les
+      # cœurs sont comptés par le quota Outscale `core_limit` (20 sur ce
+      # compte). Un management HA en consomme déjà 14 → des workers en c4
+      # feraient dépasser (CreateVms → 10042 TooManyResources/QuotaExceeded).
+      OSC_VM_TYPE: tinav6.c2r8p1
       OSC_KEYPAIR_NAME: openaether-capi
       OSC_IMAGE_NAME: talos-outscale-amd64-v1.13.4
       OSC_IMAGE_ACCOUNT_ID: "185209522342"
