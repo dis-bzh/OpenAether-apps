@@ -22,6 +22,7 @@ Usage :
 Dépendance : PyYAML (python3-yaml).
 """
 
+import re
 import argparse
 import difflib
 import os
@@ -206,11 +207,8 @@ def print_plan(selected, reasons, bricks, cat):
     print()
 
 
-def emit_profile(outdir, selected, requested_cli, bricks):
-    outdir = Path(outdir)
-    if not outdir.is_absolute():
-        outdir = (Path.cwd() / outdir).resolve()
-    outdir.mkdir(parents=True, exist_ok=True)
+def render_profile(outdir, selected, requested_cli, bricks):
+    """Texte du kustomization.yaml d'un profil (sans écrire) — sert aussi à --check."""
     rel_base = os.path.relpath(BASE, outdir)
 
     excluded = sorted((n for n in bricks if n not in selected),
@@ -240,8 +238,59 @@ def emit_profile(outdir, selected, requested_cli, bricks):
                 "        namespace: flux-system",
                 "      $patch: delete",
             ]
-    (outdir / "kustomization.yaml").write_text("\n".join(lines) + "\n")
+    return "\n".join(lines) + "\n"
+
+
+def emit_profile(outdir, selected, requested_cli, bricks):
+    outdir = Path(outdir)
+    if not outdir.is_absolute():
+        outdir = (Path.cwd() / outdir).resolve()
+    outdir.mkdir(parents=True, exist_ok=True)
+    (outdir / "kustomization.yaml").write_text(
+        render_profile(outdir, selected, requested_cli, bricks))
     return outdir
+
+
+PIOCHE_RE = re.compile(r"^# Pioche : (.*)$", re.M)
+
+
+def cmd_check(bricks, cat):
+    """Vérifie que les profils générés sur disque sont à jour vis-à-vis du DAG.
+
+    Un profil fige la liste des Kustomizations EXCLUES : ajouter une brique au
+    DAG (ou changer un dependsOn) rend périmés tous les profils déjà générés —
+    la nouvelle brique est alors héritée de ../base sans avoir été pioché, et
+    reste bloquée si ses dépendances, elles, sont bien exclues (cas vécu : orc
+    hérité par les clusters edge alors que cluster-api-providers était exclu).
+    Ce contrôle rejoue la génération en mémoire et compare, sans rien écrire.
+    """
+    stale, checked = [], 0
+    for kfile in sorted(BASE.parent.glob("*/kustomization.yaml")):
+        text = kfile.read_text()
+        if "GÉNÉRÉ par scripts/pick.py" not in text:
+            continue          # profil écrit à la main (ex. local/) — hors périmètre
+        checked += 1
+        m = PIOCHE_RE.search(text)
+        if not m:
+            stale.append((kfile, "en-tête « # Pioche : » absent — régénérer"))
+            continue
+        requested_cli = m.group(1).split()
+        try:
+            requested = resolve_names(requested_cli, bricks, cat.get("aliases") or {})
+        except SystemExit as e:
+            stale.append((kfile, f"pioche invalide ({e})"))
+            continue
+        selected, _ = pick(requested, bricks, cat)
+        if render_profile(kfile.parent, selected, requested_cli, bricks) != text:
+            stale.append((kfile, "périmé vis-à-vis du DAG — régénérer : "
+                          f"python3 scripts/pick.py {' '.join(requested_cli)} "
+                          f"-o apps/flux/{kfile.parent.name}"))
+    if stale:
+        print("Profils à régénérer :", file=sys.stderr)
+        for f, why in stale:
+            print(f"  - {f.parent.name} : {why}", file=sys.stderr)
+        sys.exit(1)
+    print(f"OK — {checked} profil(s) généré(s) à jour vis-à-vis du DAG.")
 
 
 def cmd_list(bricks, cat):
@@ -271,6 +320,8 @@ def main():
                    help="génère le profil dans DIR (ex : apps/flux/edge)")
     p.add_argument("--list", action="store_true", help="liste les briques")
     p.add_argument("--validate", action="store_true", help="valide DAG + catalogue")
+    p.add_argument("--check", action="store_true",
+                   help="vérifie que les profils générés sont à jour (CI ; sort 1 si drift)")
     p.add_argument("--no-baseline", action="store_true",
                    help="n'ajoute pas le socle sécurité (déconseillé)")
     p.add_argument("--no-companions", action="store_true",
@@ -288,6 +339,9 @@ def main():
 
     if args.validate:
         print(f"OK — DAG sain : {len(bricks)} Kustomizations, catalogue cohérent.")
+        return
+    if args.check:
+        cmd_check(bricks, cat)
         return
     if args.list or not args.bricks:
         cmd_list(bricks, cat)
