@@ -20,7 +20,7 @@
 # Même philosophie que le parent : Talos partout, socle Cilium+Flux injecté
 # ensuite par le management (cf. apps/clusters/README.md).
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster
 metadata:
   name: ${CLUSTER_NAME}
@@ -28,18 +28,20 @@ metadata:
   labels:
     openaether.io/managed: "true"
     openaether.io/component: capi-clusters
+    cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
 spec:
   clusterNetwork:
     pods:
       cidrBlocks: ["10.244.0.0/16"]
     services:
       cidrBlocks: ["10.96.0.0/12"]
+  # CAPI v1.13 → v1beta2 : refs {apiGroup, kind, name} (plus d'apiVersion/namespace).
   controlPlaneRef:
-    apiVersion: controlplane.cluster.x-k8s.io/v1alpha3
+    apiGroup: controlplane.cluster.x-k8s.io
     kind: TalosControlPlane
     name: ${CLUSTER_NAME}-cp
   infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+    apiGroup: infrastructure.cluster.x-k8s.io
     kind: ScalewayCluster
     name: ${CLUSTER_NAME}
 ---
@@ -104,7 +106,7 @@ spec:
       generateType: join
       talosVersion: ${TALOS_VERSION:=v1.9}
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: MachineDeployment
 metadata:
   name: ${CLUSTER_NAME}-workers
@@ -113,18 +115,22 @@ spec:
   clusterName: ${CLUSTER_NAME}
   replicas: ${WORKER_REPLICAS:=1}
   selector:
-    matchLabels: {}
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
   template:
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
     spec:
       clusterName: ${CLUSTER_NAME}
-      version: ${K8S_VERSION:=v1.31.4}
+      version: ${K8S_VERSION:=v1.35.3}
       bootstrap:
         configRef:
-          apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+          apiGroup: bootstrap.cluster.x-k8s.io
           kind: TalosConfigTemplate
           name: ${CLUSTER_NAME}-workers
       infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        apiGroup: infrastructure.cluster.x-k8s.io
         kind: ScalewayMachineTemplate
         name: ${CLUSTER_NAME}-workers
 ---
