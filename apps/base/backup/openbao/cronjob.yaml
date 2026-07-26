@@ -110,7 +110,25 @@ spec:
                     # ensure-buckets côté infra, chart minio en local) et retry
                     # un NoSuchBucket ~15 min en silence → probe borné.
                     if ! timeout 60 restic cat config >/dev/null 2>&1; then
-                      restic init || { echo "ERREUR: init dépôt ${label} — le bucket ${bucket} existe-t-il ?"; exit 1; }
+                      # Deux échecs très différents se cachent ici :
+                      #  • dépôt ABSENT           → init légitime ;
+                      #  • dépôt EXISTANT mais illisible (mot de passe d'un
+                      #    AUTRE cluster : les dépôts survivent aux clusters,
+                      #    pas leur RESTIC_PASSWORD) → init échoue avec
+                      #    "already initialized" et il faut trancher : purger
+                      #    le préfixe, ou pointer un bucket/chemin distinct.
+                      init_err="$(restic init 2>&1)" || {
+                        case "$init_err" in
+                          *"already initialized"*)
+                            echo "ERREUR: le dépôt ${label} existe déjà mais n'est PAS lisible avec ce RESTIC_PASSWORD."
+                            echo "  → il appartient à un autre cluster. Soit purger s3://${bucket}/<préfixe>,"
+                            echo "    soit donner à ce cluster un bucket (ou un chemin) qui lui est propre." ;;
+                          *)
+                            echo "ERREUR: init du dépôt ${label} impossible — le bucket ${bucket} existe-t-il ?"
+                            echo "  $init_err" ;;
+                        esac
+                        exit 1
+                      }
                     fi
                     restic unlock >/dev/null 2>&1 || true
                     restic backup /backup --host openbao --tag openbao-raft
