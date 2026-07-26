@@ -45,6 +45,9 @@ spec:
       # compte). Un management HA en consomme déjà 14 → des workers en c4
       # feraient dépasser (CreateVms → 10042 TooManyResources/QuotaExceeded).
       OSC_VM_TYPE: tinav6.c2r8p1
+      # Incrémenter à chaque changement de gabarit/image : le spec des
+      # OscMachineTemplate est immuable, un nouveau nom fait rouler les machines.
+      MACHINE_REV: v2
       OSC_KEYPAIR_NAME: openaether-capi
       OSC_IMAGE_NAME: talos-outscale-amd64-v1.13.4
       OSC_IMAGE_ACCOUNT_ID: "REDACTED-ACCOUNT-ID"

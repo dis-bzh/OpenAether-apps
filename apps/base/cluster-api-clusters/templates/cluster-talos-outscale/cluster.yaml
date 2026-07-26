@@ -14,6 +14,10 @@
 #     l'IP publique (NAT 1:1) dans les SAN du certificat apid — sans quoi CACPPT
 #     ne peut ni bootstrapper etcd ni récupérer le kubeconfig.
 #
+# ⚠️ spec.template.spec d'un OscMachineTemplate est IMMUABLE (webhook
+# voscmachinetemplate) : changer vmType/image/disque exige un NOUVEAU nom, d'où
+# ${MACHINE_REV} — l'incrémenter (v2, v3…) fait rouler les machines par CAPI.
+#
 # ⚠️ La LBU CAPOSC ne crée QU'UN listener (6443) : le port Talos 50000 ne peut
 # pas passer par le load balancer → les control planes portent une IP publique
 # (`publicIp: true`) et une règle SG dédiée.
@@ -244,7 +248,7 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: OscMachineTemplate
 metadata:
-  name: ${CLUSTER_NAME}-cp
+  name: ${CLUSTER_NAME}-cp-${MACHINE_REV:=v1}
   namespace: capi-clusters
   labels:
     cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
@@ -326,7 +330,7 @@ spec:
   infrastructureTemplate:
     apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
     kind: OscMachineTemplate
-    name: ${CLUSTER_NAME}-cp
+    name: ${CLUSTER_NAME}-cp-${MACHINE_REV:=v1}
     namespace: capi-clusters
   rolloutStrategy:
     type: RollingUpdate
@@ -359,7 +363,7 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: OscMachineTemplate
 metadata:
-  name: ${CLUSTER_NAME}-workers
+  name: ${CLUSTER_NAME}-workers-${MACHINE_REV:=v1}
   namespace: capi-clusters
   labels:
     cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
@@ -468,4 +472,4 @@ spec:
       infrastructureRef:
         apiGroup: infrastructure.cluster.x-k8s.io
         kind: OscMachineTemplate
-        name: ${CLUSTER_NAME}-workers
+        name: ${CLUSTER_NAME}-workers-${MACHINE_REV:=v1}
