@@ -7,4 +7,5 @@ resources:
   - namespace.yaml
   - edge-1.yaml   # Scaleway
   - edge-2.yaml   # OVH
-  - edge-3.yaml   # Outscale
+  # - edge-3.yaml   # Outscale — DÉSACTIVÉ : quota RAM du compte (40 Go) déjà
+  #   dépassé par le management HA (44 Go). Cf. docs/backlog.md.
