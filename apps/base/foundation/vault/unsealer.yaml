@@ -52,7 +52,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: unsealer
-          image: openbao/openbao:2.5.4
+          image: docker.io/openbao/openbao:2.5.4
           env:
             - name: UNSEAL_KEYS_FILE
               value: "/unseal/keys.txt"

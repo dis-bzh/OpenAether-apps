@@ -56,7 +56,7 @@ spec:
               app: openbao
       containers:
         - name: openbao
-          image: openbao/openbao:2.5.4
+          image: docker.io/openbao/openbao:2.5.4
           # Wrapper: Shamir seal — pas de transit token. L'unsealer HA gère l'unseal.
           # api_addr/cluster_addr via DNS stable (POD FQDN).
           command: ["/bin/sh", "/bao/config/entrypoint.sh"]
