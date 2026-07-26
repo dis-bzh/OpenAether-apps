@@ -17,6 +17,18 @@ spec:
       interval: 1h
   dependsOn:
     - name: istio-base
+  # Filet d'idempotence — cas vécu (2026-07-26) : Cilium et istio-cni se
+  # disputaient 05-cilium.conflist, istio-cni n'est jamais devenu Ready et
+  # l'install a expiré ; SANS remediation Flux ne l'a plus jamais retentée et
+  # le mesh est resté bloqué 3 h alors que la cause était corrigée. Avec
+  # retries, un changement de source (ou une nouvelle tentative) suffit à
+  # repartir sans intervention manuelle.
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
   values:
     # CNI chaîné APRÈS Cilium (Cilium = 05-cilium.conflist, Istio = ZZ-istio-cni.conflist)
     # Cilium doit avoir: cni.exclusive=false, socketLB.hostNamespaceOnly=true

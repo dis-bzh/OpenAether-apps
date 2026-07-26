@@ -27,8 +27,16 @@ spec:
         name: istio
         namespace: foundation-service-mesh
       interval: 1h
+  # Filet d'idempotence : sans remediation, une install Helm qui échoue une
+  # fois reste bloquée définitivement (Flux ne la retente jamais).
   install:
     crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
   values:
     defaultRevision: default
 ---
