@@ -3,15 +3,29 @@ kind: Kustomization
 
 resources:
   - networkpolicy.yaml
-  # v1.12.1: fix upstream du panic reports-controller backReconcile
+  # VENDORÉ depuis https://github.com/kyverno/kyverno/releases/download/v1.12.1/install.yaml
+  #   sha256 888e26a13fa34b72d6fc321e4b29af4857539f46f89b606f624fddb518db4ebf
+  #
+  # Cette ressource était une URL distante jusqu'au 2026-07-27 : la
+  # réconciliation Flux dépendait alors de la disponibilité de GitHub, le rendu
+  # n'était pas reproductible hors ligne, et rien ne vérifiait l'intégrité de
+  # l'artefact téléchargé. Même raison — et même forme — que le vendoring de
+  # `cnpg-1.23.1.yaml` (« évite fetch remote (DNS/IPv6) »), de `cilium.yaml` et
+  # de `flux-install.yaml` côté infra. Le rendu a été vérifié IDENTIQUE avant et
+  # après bascule.
+  #
+  # v1.12.1 : fix upstream du panic reports-controller backReconcile
   # "index out of range [0] with length 0" (kyverno#10123, PR #10148).
   # v1.12.0 → CrashLoop du reports-controller (agrégation cpolr seulement,
   # admission/enforce non impacté, mais bruit + reports cluster manquants).
-  - https://github.com/kyverno/kyverno/releases/download/v1.12.1/install.yaml
+  #
+  # Pour monter de version : télécharger le nouvel install.yaml, remplacer ce
+  # fichier, mettre à jour le sha256 ci-dessus, et rejouer le diff de rendu.
+  - kyverno-1.12.1.yaml
   - policies.yaml
 
 patches:
-  # Le Namespace kyverno est DÉJÀ déclaré par install.yaml (base distante).
+  # Le Namespace kyverno est DÉJÀ déclaré par install.yaml (fichier vendoré).
   # Le re-déclarer dans resources: provoque "may not add resource with an
   # already registered id: Namespace/kyverno". On applique donc nos labels
   # (Istio ambient + PSS + openaether.io/*) via un strategic-merge patch sur
