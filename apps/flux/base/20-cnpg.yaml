@@ -16,6 +16,17 @@ spec:
     name: openaether
   path: ./apps/base/cnpg
   prune: true
+  # Injecte la destination S3 du PITR (${BACKUP_S3_BUCKET}/${BACKUP_S3_ENDPOINT})
+  # depuis le ConfigMap `cluster-identity` posé au bootstrap.
+  #
+  # ⚠️ Sûr ICI, contrairement aux briques backup/storage : le manifeste vendoré
+  # de l'opérateur contient bien des `$(VAR_NAME)`, mais VÉRIFIÉ le 2026-07-27 —
+  # les 13 occurrences sont toutes dans des champs `description` de CRD, aucune
+  # dans un conteneur. Aucune variable shell fonctionnelle à vider.
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-identity
   wait: true
   dependsOn:
     - name: external-secrets
