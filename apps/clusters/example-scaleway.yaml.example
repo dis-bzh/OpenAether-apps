@@ -72,8 +72,12 @@ spec:
     # sans cni.exclusive=false, Cilium réécrit 05-cilium.conflist en boucle et en
     # retire le plugin chaîné istio-cni → istio-cni jamais Ready → ztunnel,
     # services-gateway et istio-authorizationpolicies bloqués en cascade.
+    # hostNamespaceOnly=true est l'autre moitié du couple ambient : le socket-LB
+    # ne doit pas court-circuiter la redirection in-pod. Il ne désactive le
+    # socket-LB que pour les netns NON-root, les process host-network gardent la
+    # traduction ClusterIP.
     # Cf. apps/clusters/edge-1.yaml pour le jeu de values complet.
-    socketLB: { enabled: true, hostNamespaceOnly: false }
+    socketLB: { enabled: true, hostNamespaceOnly: true }
     cni: { exclusive: false }
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
