@@ -258,6 +258,38 @@ spec:
                 "$(jq -nc --arg p "$BACKUP_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
               echo "  policy backup-snapshot: HTTP=$(WH)"
 
+              # ── 5bis) Policies HUMAINES — pour bannir le root token du quotidien ──
+              #
+              # Le root token vit dans le Secret `openbao-recovery` et doit rester
+              # un moyen de DERNIER RECOURS (bootstrap, rekey, réparation) : il
+              # n'expire pas, ne se révoque pas utilement, et n'apparaît dans aucun
+              # audit sous un nom d'humain. Ces deux policies permettent des tokens
+              # NOMINATIFS et courts :
+              #   bao token create -policy=openaether-admin  -ttl=8h -display-name=prenom
+              #   bao token create -policy=openaether-reader -ttl=8h -display-name=prenom
+              #
+              # ⚠️ Écrites en `printf` une-ligne comme les policies ci-dessus : un
+              # heredoc s'indenterait à la colonne 0 et sortirait du scalaire YAML
+              # de ce script (constaté).
+              #
+              # `openaether-admin` couvre l'exploitation courante mais REFUSE
+              # explicitement sceller / rekey / rotation — ces gestes restent au
+              # root token escrowé hors ligne, donc délibérés et traçables. Écrits
+              # en `deny` plutôt qu'omis : l'intention est lisible dans la policy,
+              # et un élargissement futur de `sys/*` ne les rouvrirait pas par
+              # accident.
+              ADMIN_POLICY="$(printf 'path \"secret/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]\n}\npath \"pki/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]\n}\npath \"sys/policies/acl/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]\n}\npath \"auth/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\", \"sudo\"]\n}\npath \"sys/auth/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"sudo\"]\n}\npath \"sys/mounts/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"sudo\"]\n}\npath \"sys/mounts\" {\n  capabilities = [\"read\"]\n}\npath \"sys/leases/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\", \"sudo\"]\n}\npath \"sys/health\" {\n  capabilities = [\"read\"]\n}\npath \"sys/capabilities-self\" {\n  capabilities = [\"update\"]\n}\npath \"auth/token/lookup-self\" {\n  capabilities = [\"read\"]\n}\npath \"auth/token/renew-self\" {\n  capabilities = [\"update\"]\n}\npath \"auth/token/create\" {\n  capabilities = [\"create\", \"update\"]\n}\npath \"sys/seal\" {\n  capabilities = [\"deny\"]\n}\npath \"sys/step-down\" {\n  capabilities = [\"deny\"]\n}\npath \"sys/rekey/*\" {\n  capabilities = [\"deny\"]\n}\npath \"sys/rekey-recovery-key/*\" {\n  capabilities = [\"deny\"]\n}\npath \"sys/rotate\" {\n  capabilities = [\"deny\"]\n}\n')"
+              wlapi PUT /v1/sys/policies/acl/openaether-admin \\
+                "$(jq -nc --arg p "$ADMIN_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
+              echo "  policy openaether-admin: HTTP=$(WH)"
+
+              # Lecture seule — audit, astreinte, vérifier un secret sans pouvoir
+              # le modifier.
+              READER_POLICY="$(printf 'path \"secret/data/*\" {\n  capabilities = [\"read\"]\n}\npath \"secret/metadata/*\" {\n  capabilities = [\"read\", \"list\"]\n}\npath \"pki/cert/*\" {\n  capabilities = [\"read\", \"list\"]\n}\npath \"sys/mounts\" {\n  capabilities = [\"read\"]\n}\npath \"sys/policies/acl\" {\n  capabilities = [\"list\"]\n}\npath \"sys/health\" {\n  capabilities = [\"read\"]\n}\npath \"auth/token/lookup-self\" {\n  capabilities = [\"read\"]\n}\n')"
+              wlapi PUT /v1/sys/policies/acl/openaether-reader \\
+                "$(jq -nc --arg p "$READER_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
+              echo "  policy openaether-reader: HTTP=$(WH)"
+
               # ── 6) Auth Kubernetes sur ────────────────────────────
               # Doit être activé + configuré AVANT de créer les rôles : les rôles
               # vivent sous /v1/auth/kubernetes/role/* → 404 si le backend n'est pas monté.

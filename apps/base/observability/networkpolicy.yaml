@@ -408,7 +408,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: grafana
 spec:
-  description: "Grafana: ingress Istio gateway, egress datasources + CNPG."
+  description: "Grafana: ingress Istio gateway, egress datasources + CNPG + OIDC Zitadel."
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: grafana
@@ -471,4 +471,19 @@ spec:
       toPorts:
         - ports:
             - port: "5432"
+              protocol: TCP
+    # OIDC Zitadel — SSO. Le navigateur parle à Zitadel de son côté, mais
+    # Grafana l'appelle AUSSI côté serveur (échange du code contre un token,
+    # puis /oidc/v1/userinfo). Sans cette règle, la connexion échoue en
+    # « operation not permitted » côté Cilium, sans rien dans les logs Grafana
+    # d'autre qu'un timeout.
+    # Ciblé par namespace + app + port RÉEL : un `toEndpoints: {}` serait scopé
+    # au namespace local et ne matcherait jamais cross-ns.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-identity
+            app.kubernetes.io/name: zitadel
+      toPorts:
+        - ports:
+            - port: "8080"
               protocol: TCP
