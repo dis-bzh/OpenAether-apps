@@ -1,0 +1,53 @@
+# TLS entre la gateway et OpenBao (accès à l'UI).
+#
+# Depuis que le listener d'OpenBao est en TLS, la gateway Istio doit parler
+# HTTPS à son backend — l'HTTPRoute, elle, ne décrit que le routage L7 et
+# enverrait du clair, ce qui donne un « TLS handshake error: client sent an
+# HTTP request to an HTTPS server » côté OpenBao et une UI inaccessible.
+#
+# ── Pourquoi un DestinationRule et pas un BackendTLSPolicy ───────────────────
+# `BackendTLSPolicy` serait la façon Gateway-API-native, mais sa CRD appartient
+# au canal EXPÉRIMENTAL de Gateway API, que ce socle n'installe pas (vérifié :
+# la CRD est absente du cluster). Le DestinationRule est l'équivalent Istio et
+# fonctionne ici même si `foundation-vault` est HORS du mesh : il configure le
+# CLIENT (l'Envoy de la gateway), pas la destination.
+#
+# ⚠️ NON VALIDÉ en local : Istio n'est pas déployé sur le cluster Docker de test.
+# Le reste de la chaîne TLS l'a été (raft, init, bootstrap, unsealer, ESO). À
+# vérifier au premier déploiement cloud — repli disponible en attendant :
+# `scripts/ops/local-admin-portforward.sh`, qui court-circuite la gateway.
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: openbao-tls
+  namespace: foundation-vault
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vault
+spec:
+  host: openbao-ui.foundation-vault.svc.cluster.local
+  trafficPolicy:
+    tls:
+      # SIMPLE et non MUTUAL : OpenBao n'exige pas de certificat client
+      # (`tls_client_ca_file` n'est pas posé) — l'authentification se fait par
+      # token ou auth/kubernetes, TLS n'authentifie que le serveur.
+      mode: SIMPLE
+      sni: openbao-ui.foundation-vault.svc.cluster.local
+      # ⚠️ ÉTAT INTERMÉDIAIRE ASSUMÉ, à durcir.
+      #
+      # `caCertificates` exigerait que la CA soit un FICHIER dans le conteneur
+      # Envoy de la gateway — or celui-ci est généré par Istio, on n'y monte
+      # rien facilement. Pointer un chemin inexistant casserait l'UI : ce serait
+      # pire que l'état d'avant.
+      #
+      # Ce réglage CHIFFRE le trafic gateway → OpenBao (il ne restait plus en
+      # clair) mais ne fait pas authentifier le serveur par la gateway. C'est
+      # strictement meilleur que le HTTP d'avant, et sans régression
+      # fonctionnelle. Les deux extrémités sont in-cluster ; le risque résiduel
+      # est un attaquant capable de se faire passer pour OpenBao DANS le
+      # cluster — qui aurait déjà bien d'autres moyens.
+      #
+      # Durcissement propre, au choix : installer le canal expérimental de
+      # Gateway API pour un `BackendTLSPolicy` (qui, lui, référence un
+      # ConfigMap de CA), ou distribuer la CA aux proxies via trust-manager.
+      insecureSkipVerify: true
