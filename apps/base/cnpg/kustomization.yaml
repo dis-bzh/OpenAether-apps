@@ -15,3 +15,5 @@ resources:
   - secret.yaml
   - grafana-db-cluster.yaml
   - grafana-db-externalsecret.yaml
+  - backup-externalsecret.yaml
+  - scheduledbackups.yaml

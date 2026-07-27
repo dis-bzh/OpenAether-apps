@@ -4,9 +4,13 @@
 # Backend: S3 (MinIO en local, S3 natif en cloud via overlay).
 # replication_factor=2: chaque chunk est répliqué sur les 2 instances.
 #
-# Credentials S3: ExternalSecret loki-s3-credentials (externalsecret-loki.yaml)
-# → en local: MinIO (secret/minio/root)
-# → en cloud: patch ExternalSecret via overlay (secret/s3/loki)
+# Destination S3 : ExternalSecret loki-s3-credentials (externalsecret-loki.yaml),
+# alimenté par `secret/observability/loki-s3` dans OpenBao. Credentials ET
+# emplacement (endpoint + bucket) transitent par ce Secret, injectés en
+# `valuesFrom` : passer du MinIO interne au S3 du provider ne demande donc
+# AUCUN changement de code, seulement un reseed. Destination volontairement
+# distincte de `backup/s3-primary` — Loki n'a pas à pouvoir écrire dans le
+# bucket des sauvegardes.
 #
 # schemaConfig v13 (tsdb): schéma recommandé depuis Loki 2.8+.
 # auth_enabled=false: pas d'auth multi-tenant (cluster privé).
@@ -59,6 +63,27 @@ spec:
       name: loki-s3-credentials
       valuesKey: secretKey
       targetPath: loki.storage.s3.secretAccessKey
+    # endpoint et bucket viennent du MÊME Secret : le chart n'accepte que des
+    # chaînes littérales, et cette brique ne peut pas être substituée par Flux
+    # (les dashboards Grafana contiennent des ${datasource} qui seraient vidés).
+    # Résultat : passer du MinIO interne au S3 du provider ne demande QUE de
+    # reseeder `secret/observability/loki-s3` — aucun changement de code.
+    - kind: Secret
+      name: loki-s3-credentials
+      valuesKey: endpoint
+      targetPath: loki.storage.s3.endpoint
+    - kind: Secret
+      name: loki-s3-credentials
+      valuesKey: bucket
+      targetPath: loki.storage.bucketNames.chunks
+    - kind: Secret
+      name: loki-s3-credentials
+      valuesKey: bucket
+      targetPath: loki.storage.bucketNames.ruler
+    - kind: Secret
+      name: loki-s3-credentials
+      valuesKey: bucket
+      targetPath: loki.storage.bucketNames.admin
   values:
     deploymentMode: SingleBinary
     singleBinary:
@@ -95,12 +120,14 @@ spec:
         replication_factor: 2
       storage:
         type: s3
+        # bucketNames et endpoint sont ÉCRASÉS par les `valuesFrom` ci-dessus,
+        # depuis le Secret loki-s3-credentials. Ces valeurs ne servent que de
+        # documentation du format attendu.
         bucketNames:
           chunks: loki
           ruler: loki
           admin: loki
         s3:
-          # endpoint surchargé par overlay cloud (S3 natif provider).
           endpoint: http://minio.foundation-storage:9000
           region: us-east-1
           s3ForcePathStyle: true
