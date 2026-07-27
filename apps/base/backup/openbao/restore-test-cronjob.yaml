@@ -1,0 +1,111 @@
+# Test de RESTAURATION mensuel — la seule preuve qu'un backup est exploitable.
+#
+# `restic check` (lancé à chaque sauvegarde) ne lit que les MÉTADONNÉES : il dit
+# que l'index est cohérent, pas que les données sont lisibles ni déchiffrables.
+# Un dépôt peut passer `check` au vert et être irrécupérable (bit-rot sur les
+# packs, mauvais RESTIC_PASSWORD, objets S3 tronqués).
+#
+# Ce Job, sur CHACUNE des 2 destinations :
+#   1. `restic check --read-data-subset` — relit et déchiffre réellement une
+#      fraction des données (5 %, rotation naturelle d'un mois sur l'autre) ;
+#   2. `restic restore latest` vers un volume jetable, puis vérifie que le
+#      résultat est NON VIDE — c'est le test de bout en bout.
+# Un échec ici est aussi grave qu'un backup manquant : il se voit via l'alerte
+# BackupJobFailed (apps/base/observability/vm-customresources/vmrule-backup.yaml).
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openbao-snapshot-restore-test
+  namespace: foundation-vault
+  labels:
+    app: openbao-snapshot-restore-test
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  schedule: "23 4 1 * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            # ⚠️ Porte AUSSI `app: openbao-snapshot` : c'est ce label que sélectionne la
+            # CiliumNetworkPolicy qui ouvre l'egress S3 (networkpolicy.yaml).
+            # Sans lui, le pod n'a aucun egress et le test échoue en timeout.
+            app: openbao-snapshot
+            component: restore-test
+            openaether.io/component: backup
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: restore-test
+              image: docker.io/restic/restic:0.18.0
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  if [ -z "${CLUSTER_NAME:-}" ]; then
+                    echo "ERREUR: CLUSTER_NAME vide — ConfigMap cluster-identity absent."
+                    exit 1
+                  fi
+                  export RESTIC_CACHE_DIR=/tmp/restic-cache
+                  verify() {
+                    ep="$1"; bucket="$2"; label="$3"
+                    export RESTIC_REPOSITORY="s3:${ep}/${bucket}/${CLUSTER_NAME}/openbao"
+                    echo "── dépôt ${label}: ${RESTIC_REPOSITORY}"
+                    # Relecture réelle d'une fraction des données (déchiffrement inclus).
+                    restic check --read-data-subset=5%
+                    target="/tmp/restore-${label}"
+                    rm -rf "$target"; mkdir -p "$target"
+                    restic restore latest --host openbao --target "$target"
+                    # Un restore "réussi" mais vide = dépôt inexploitable.
+                    if [ -z "$(find "$target" -type f -print -quit)" ]; then
+                      echo "ERREUR: restauration VIDE depuis le dépôt ${label} —"
+                      echo "        le backup n'est PAS exploitable."
+                      exit 1
+                    fi
+                    echo "   ✓ ${label} : $(find "$target" -type f | wc -l) fichier(s) restauré(s)"
+                    rm -rf "$target"
+                  }
+                  AWS_ACCESS_KEY_ID="$PRIMARY_ACCESS_KEY" \
+                    AWS_SECRET_ACCESS_KEY="$PRIMARY_SECRET_KEY" \
+                    verify "$PRIMARY_ENDPOINT" "$PRIMARY_BUCKET" primary
+                  AWS_ACCESS_KEY_ID="$REPLICA_ACCESS_KEY" \
+                    AWS_SECRET_ACCESS_KEY="$REPLICA_SECRET_KEY" \
+                    verify "$REPLICA_ENDPOINT" "$REPLICA_BUCKET" replica
+                  echo "✅ le snapshot raft OpenBao : restauration vérifiée sur les 2 destinations"
+              envFrom:
+                - secretRef:
+                    name: backup-restic-env
+                - configMapRef:
+                    name: cluster-identity
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                # Exigé PAR CONTENEUR par la policy require-security-context.
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: tmp, mountPath: /tmp }
+              resources:
+                requests: { cpu: 100m, memory: 256Mi }
+                limits: { cpu: "1", memory: 1Gi }
+          volumes:
+            # Jetable : la restauration ne doit RIEN laisser derrière elle.
+            - name: tmp
+              emptyDir: { sizeLimit: 2Gi }
