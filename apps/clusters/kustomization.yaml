@@ -5,7 +5,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - namespace.yaml
-  - edge-1.yaml   # Scaleway
+  # - edge-1.yaml   # Scaleway — désactivé le 2026-07-27 : run ciblé sur edge-2
+  #   (OVH), le seul qui exerce à la fois la validation « enfant neuf 17/17 » et
+  #   le symptôme apiserver → kubelet:10250.
   - edge-2.yaml   # OVH
   # - edge-3.yaml   # Outscale — DÉSACTIVÉ : quota RAM du compte (40 Go) déjà
   #   dépassé par le management HA (44 Go). Cf. docs/backlog.md.
