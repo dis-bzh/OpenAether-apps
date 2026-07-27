@@ -7,6 +7,7 @@ kind: Kustomization
 resources:
   - allow-dns.yaml
   - allow-kube-api.yaml
+  - allow-cilium-health.yaml
   - allow-infra-egress-restricted.yaml
   - coredns-ingress-restricted.yaml
   - coredns-egress-hostdns.yaml
