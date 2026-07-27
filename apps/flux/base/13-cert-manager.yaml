@@ -17,5 +17,14 @@ spec:
   prune: true
   wait: true
   dependsOn:
-    - name: foundation-vault
+    # ⚠️ PLUS de dépendance à `foundation-vault` (retirée le 2026-07-27).
+    # Elle était superflue : cette brique installe l'OPÉRATEUR cert-manager et
+    # un RBAC qui vit dans son propre namespace — rien n'y appelle OpenBao. Ce
+    # sont les ISSUERS (13b) qui en dépendent, et ils sont déjà une brique à part.
+    #
+    # Ce qu'elle coûtait : cert-manager attendait OpenBao, et istio,
+    # observability et cluster-api-operator attendaient cert-manager — OpenBao
+    # se retrouvait sur le chemin critique de la moitié du DAG.
+    # Ce qu'elle bloquait : donner un certificat cert-manager au listener
+    # d'OpenBao (TLS interne) était impossible, cert-manager arrivant après lui.
     - name: external-secrets
