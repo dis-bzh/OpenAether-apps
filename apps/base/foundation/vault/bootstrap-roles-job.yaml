@@ -95,6 +95,11 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        # CA interne d'OpenBao — tous les appels curl de ce Job passent en TLS.
+        - name: tls
+          secret:
+            secretName: openbao-server-tls
+            defaultMode: 0444
       containers:
         - name: bootstrap-roles
           image: alpine/k8s:1.31.1
@@ -107,13 +112,15 @@ spec:
             - |
               set -euo pipefail
 
-              WL_ADDR="http://openbao.${VAULT_NS}.svc.cluster.local:8200"
+              WL_ADDR="https://openbao.${VAULT_NS}.svc.cluster.local:8200"
+              # CA interne : tous les appels curl de ce script en dépendent.
+              CACERT="--cacert /bao/tls/ca.crt"
 
               # ── helper API ─────────────────────────────────────────
               # Résultat dans /tmp/wlbody; code HTTP dans /tmp/wlhttp.
               wlapi() {
                 local m="$1" p="$2" d="${3:-}" t="${4:-}"
-                local a=(-s -o /tmp/wlbody -w '%{http_code}' -X "$m")
+                local a=(-s --cacert /bao/tls/ca.crt -o /tmp/wlbody -w '%{http_code}' -X "$m")
                 [ -n "$t" ] && a+=(-H "X-Vault-Token: $t")
                 [ -n "$d" ] && a+=(-d "$d")
                 curl "${a[@]}" "${WL_ADDR}${p}" > /tmp/wlhttp
@@ -141,7 +148,7 @@ spec:
               # ── 2) Attente API ─────────────────────────────────────
               echo "════ Attente API ($WL_ADDR) ════"
               for i in $(seq 1 60); do
-                c="$(curl -s -o /dev/null -w '%{http_code}' \
+                c="$(curl -s $CACERT -o /dev/null -w '%{http_code}' \
                   "${WL_ADDR}/v1/sys/health?uninitcode=200&sealedcode=200&standbyok=true" || true)"
                 [ "$c" != "000" ] && [ -n "$c" ] && { echo "  API up (health=$c)"; break; }
                 echo "  waiting API... ${i}/60 (code=$c)"; sleep 5
@@ -155,7 +162,7 @@ spec:
               set +x
               LEADER_URL=""
               for i in $(seq 1 24); do
-                LEADER_JSON="$(curl -s "${WL_ADDR}/v1/sys/leader" || true)"
+                LEADER_JSON="$(curl -s $CACERT "${WL_ADDR}/v1/sys/leader" || true)"
                 LEADER_URL="$(echo "$LEADER_JSON" | jq -r '.leader_address // empty' 2>/dev/null || true)"
                 IS_SELF="$(echo "$LEADER_JSON" | jq -r '.is_self // "false"' 2>/dev/null || echo "false")"
                 if [ -n "$LEADER_URL" ] && [ "$LEADER_URL" != "null" ]; then
@@ -432,6 +439,9 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: tls
+              mountPath: /bao/tls
+              readOnly: true
           resources:
             requests:
               cpu: 50m

@@ -70,7 +70,12 @@ spec:
             # le CLI tente https:// par défaut ("HTTP response to HTTPS client").
             # N'affecte PAS `bao server` (qui utilise BAO_API_ADDR/BAO_CLUSTER_ADDR).
             - name: BAO_ADDR
-              value: "http://127.0.0.1:8200"
+              value: "https://127.0.0.1:8200"
+            # Les scripts du conteneur (`bao` CLI) doivent faire confiance à la
+            # CA interne : sans ça, tout appel local échoue en « x509: certificate
+            # signed by unknown authority ».
+            - name: BAO_CACERT
+              value: "/bao/tls/ca.crt"
           ports:
             - containerPort: 8200
               name: api
@@ -93,7 +98,7 @@ spec:
             httpGet:
               path: /v1/sys/health?standbyok=true&uninitcode=200&sealedcode=200
               port: 8200
-              scheme: HTTP
+              scheme: HTTPS
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 60  # 10min: boot + attente unsealer + raft join
@@ -101,7 +106,7 @@ spec:
             httpGet:
               path: /v1/sys/health?standbyok=true&uninitcode=200&sealedcode=200
               port: 8200
-              scheme: HTTP
+              scheme: HTTPS
             initialDelaySeconds: 60
             periodSeconds: 30
             failureThreshold: 5
@@ -109,7 +114,7 @@ spec:
             httpGet:
               path: /v1/sys/health?standbyok=true
               port: 8200
-              scheme: HTTP
+              scheme: HTTPS
             initialDelaySeconds: 15
             periodSeconds: 10
             failureThreshold: 3
@@ -125,12 +130,20 @@ spec:
               mountPath: /bao/data
             - name: config
               mountPath: /bao/config
+            - name: tls
+              mountPath: /bao/tls
+              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: config
           configMap:
             name: openbao-config
+        # Certificat serveur + CA, émis par cert-manager (tls.yaml).
+        - name: tls
+          secret:
+            secretName: openbao-server-tls
+            defaultMode: 0444
         - name: tmp
           emptyDir: {}
   volumeClaimTemplates:

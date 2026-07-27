@@ -13,6 +13,8 @@ kind: Kustomization
 namespace: foundation-vault
 
 resources:
+  - tls.yaml
+  - destinationrule-tls.yaml
   - configmap.yaml
   - serviceaccount.yaml
   - unsealer-sa.yaml

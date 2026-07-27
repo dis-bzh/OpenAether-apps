@@ -22,6 +22,10 @@ spec:
   # exactement son contrat (« supprimé + recréé à chaque sync », idempotent).
   force: true
   dependsOn:
+    # cert-manager émet le certificat du listener OpenBao (TLS interne). C'est
+    # possible depuis que la dépendance INVERSE — cert-manager → foundation-vault
+    # — a été retirée : elle était fausse (seuls les ISSUERS dépendent d'OpenBao).
+    - name: cert-manager
     - name: platform-gateway-api
     - name: platform-local-path-provisioner  # PVC raft storageClassName local-path-retain
     - name: platform-priority-classes        # priorityClassName platform-critical (pod rejeté à l'admission si absente)

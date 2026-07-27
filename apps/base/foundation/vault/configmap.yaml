@@ -3,7 +3,9 @@
 # - Les 5 parts Shamir sont gérées par l'unsealer HA (apps/base/foundation/vault/unsealer.yaml)
 # - L'unsealer charge les 3 parts nécessaires en RAM-only et appelle /v1/sys/unseal
 # - Raft 3 répl: retry_join sur les 3 pods via svc headless openbao.
-# - TODO sprint 1: TLS sur listener + cluster_addr.
+# - TLS du listener : certificat cert-manager (tls.yaml), CA DÉDIÉE en selfSigned.
+#   Surtout pas la PKI d'OpenBao — il devrait être joignable pour émettre le
+#   certificat qui le rend joignable.
 #
 # NB OpenBao 2.x:
 #  - `disable_mlock` retiré (obsolète, cf. pki-root/configmap.yaml).
@@ -22,22 +24,32 @@ data:
     ui = true
 
     listener "tcp" {
-      tls_disable = 1  # TODO sprint 1: cert-manager + openbao-server-tls
       address = "[::]:8200"
       cluster_address = "[::]:8201"
+      tls_cert_file = "/bao/tls/tls.crt"
+      tls_key_file  = "/bao/tls/tls.key"
+      # ⚠️ `tls_client_ca_file` n'est PAS posé : on ne fait pas de mTLS ici. Les
+      # clients s'authentifient par token ou via auth/kubernetes ; TLS ne sert
+      # qu'à chiffrer le transport et à authentifier le SERVEUR.
     }
 
     storage "raft" {
       path = "/bao/data"
 
+      # ⚠️ https:// ET leader_ca_cert_file : sans la CA, chaque réplica refuse
+      # le certificat de ses pairs et le cluster raft ne se forme jamais — les
+      # pods restent 0/1 sans erreur explicite côté Kubernetes.
       retry_join {
-        leader_api_addr = "http://openbao-0.openbao.foundation-vault.svc.cluster.local:8200"
+        leader_api_addr = "https://openbao-0.openbao.foundation-vault.svc.cluster.local:8200"
+        leader_ca_cert_file = "/bao/tls/ca.crt"
       }
       retry_join {
-        leader_api_addr = "http://openbao-1.openbao.foundation-vault.svc.cluster.local:8200"
+        leader_api_addr = "https://openbao-1.openbao.foundation-vault.svc.cluster.local:8200"
+        leader_ca_cert_file = "/bao/tls/ca.crt"
       }
       retry_join {
-        leader_api_addr = "http://openbao-2.openbao.foundation-vault.svc.cluster.local:8200"
+        leader_api_addr = "https://openbao-2.openbao.foundation-vault.svc.cluster.local:8200"
+        leader_ca_cert_file = "/bao/tls/ca.crt"
       }
     }
 
@@ -49,7 +61,7 @@ data:
     # api_addr/cluster_addr via DNS stable (POD FQDN).
     set -e
     POD_FQDN="${HOSTNAME}.openbao.${POD_NAMESPACE}.svc.cluster.local"
-    export BAO_API_ADDR="http://${POD_FQDN}:8200"
-    export BAO_CLUSTER_ADDR="http://${POD_FQDN}:8201"
+    export BAO_API_ADDR="https://${POD_FQDN}:8200"
+    export BAO_CLUSTER_ADDR="https://${POD_FQDN}:8201"
     echo "raft addr: ${POD_FQDN}"
     exec bao server -config=/bao/config/config.hcl

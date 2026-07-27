@@ -48,6 +48,12 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           volumes:
+            # CA interne d'OpenBao — le snapshot passe par son API en TLS.
+            - name: openbao-tls
+              secret:
+                secretName: openbao-server-tls
+                items:
+                  - { key: ca.crt, path: ca.crt }
             - name: backup
               emptyDir: {}
             - name: tmp
@@ -63,7 +69,10 @@ spec:
                 - -c
                 - |
                   set -eu
-                  export BAO_ADDR="http://openbao.foundation-vault.svc.cluster.local:8200"
+                  export BAO_ADDR="https://openbao.foundation-vault.svc.cluster.local:8200"
+                  # CA interne du listener OpenBao (cf. foundation/vault/tls.yaml).
+                  export BAO_CACERT="/bao/tls/ca.crt"
+                  export VAULT_CACERT="$BAO_CACERT"
                   export VAULT_ADDR="$BAO_ADDR"
                   LEADER="$(bao read -field=leader_address sys/leader)"
                   [ -n "$LEADER" ] || { echo "ERREUR: leader raft introuvable"; exit 1; }
@@ -88,6 +97,7 @@ spec:
                 seccompProfile: { type: RuntimeDefault }
               volumeMounts:
                 - { name: backup, mountPath: /backup }
+                - { name: openbao-tls, mountPath: /bao/tls, readOnly: true }
                 - { name: tmp, mountPath: /tmp }
               resources:
                 requests: { cpu: 50m, memory: 64Mi }
