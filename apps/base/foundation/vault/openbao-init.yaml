@@ -101,6 +101,10 @@ spec:
         - name: tmp
           emptyDir:
             medium: Memory
+        - name: tls
+          secret:
+            secretName: openbao-server-tls
+            defaultMode: 0444
       containers:
         - name: init
           image: alpine/k8s:1.31.1
@@ -116,12 +120,15 @@ spec:
             - -c
             - |
               set -euo pipefail
-              ADDR="http://openbao-0.openbao.${VAULT_NS}.svc.cluster.local:8200"
+              ADDR="https://openbao-0.openbao.${VAULT_NS}.svc.cluster.local:8200"
+              # `curl` doit faire confiance à la CA interne — sinon chaque appel
+              # échoue en erreur 60 (certificat non vérifiable) et le Job boucle.
+              CACERT="--cacert /bao/tls/ca.crt"
 
               # ── 1) Attente API openbao-0 ───────────────────────────────────
               echo "════ Attente API openbao-0 ($ADDR) ════"
               for i in $(seq 1 60); do
-                c="$(curl -s -o /dev/null -w '%{http_code}' \
+                c="$(curl -s $CACERT -o /dev/null -w '%{http_code}' \
                   "${ADDR}/v1/sys/health?uninitcode=200&sealedcode=200&standbyok=true" || true)"
                 if [ -n "$c" ] && [ "$c" != "000" ]; then
                   echo "  API up (health=$c)"; break
@@ -131,7 +138,7 @@ spec:
               done
 
               # ── 2) État d'initialisation ────────────────────────────────────
-              INITED="$(curl -s "${ADDR}/v1/sys/init" | jq -r '.initialized // false')"
+              INITED="$(curl -s $CACERT "${ADDR}/v1/sys/init" | jq -r '.initialized // false')"
               echo "════ sys/init: initialized=${INITED} ════"
 
               secrets_present() {
@@ -153,7 +160,7 @@ spec:
               # ── 3) Init (génère parts + root_token) — secrets, pas de trace ──
               set +x
               echo "════ operator init (${KEY_SHARES} parts, seuil ${KEY_THRESHOLD}) ════"
-              RESP="$(curl -s -X POST "${ADDR}/v1/sys/init" \
+              RESP="$(curl -s $CACERT -X POST "${ADDR}/v1/sys/init" \
                 -d "{\"secret_shares\":${KEY_SHARES},\"secret_threshold\":${KEY_THRESHOLD}}")"
               if ! echo "$RESP" | jq -e '.keys_base64 and .root_token' >/dev/null 2>&1; then
                 echo "ERREUR: init a échoué"; echo "$RESP"; exit 1
@@ -196,6 +203,9 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: tls
+              mountPath: /bao/tls
+              readOnly: true
           resources:
             requests:
               cpu: 50m

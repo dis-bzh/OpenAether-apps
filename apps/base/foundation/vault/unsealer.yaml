@@ -87,6 +87,11 @@ spec:
               unseal_pod() {
                 addr="$1"
                 export BAO_ADDR="$addr"
+                # CA interne d'OpenBao : sans elle, `bao status` échoue en
+                # « x509: certificate signed by unknown authority » et l'unsealer
+                # considère à tort le pod comme injoignable — il ne le descelle
+                # jamais et le cluster reste bloqué.
+                export BAO_CACERT="/bao/tls/ca.crt"
                 # exit 0 = unsealed, 2 = sealed, autre = injoignable/erreur
                 bao status >/dev/null 2>&1
                 rc=$?
@@ -114,7 +119,7 @@ spec:
               echo "[unsealer] démarrage — surveillance toutes les ${INTERVAL}s"
               while true; do
                 for p in $PODS; do
-                  unseal_pod "http://${p}.openbao.${NS}.svc.cluster.local:8200"
+                  unseal_pod "https://${p}.openbao.${NS}.svc.cluster.local:8200"
                 done
                 sleep "$INTERVAL"
               done
@@ -138,7 +143,15 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            # CA interne d'OpenBao (TLS du listener).
+            - name: tls
+              mountPath: /bao/tls
+              readOnly: true
       volumes:
+        - name: tls
+          secret:
+            secretName: openbao-server-tls
+            defaultMode: 0444
         - name: unseal-keys
           secret:
             secretName: openbao-unseal-keys
