@@ -53,3 +53,33 @@ spec:
     topologyKey: kubernetes.io/hostname
   monitoring:
     enablePodMonitor: false
+
+  # ── PITR (Point-In-Time Recovery) ───────────────────────────────────────────
+  # Avant : le seul filet était le `pg_dump` quotidien de la brique backup, soit
+  # un RPO de 24 h. barmanObjectStore archive les WAL en continu → RPO de
+  # quelques minutes, et restauration à un instant précis.
+  #
+  # `${BACKUP_S3_*}` vient du ConfigMap `cluster-identity` posé au bootstrap
+  # (substitution portée par la Kustomization `cnpg`). Si le cluster ne les
+  # publie pas, la destination est vide et le backup reste inactif — pas de
+  # régression silencieuse.
+  #
+  # Le chemin inclut le nom de la base : les deux clusters partagent le bucket
+  # sans se marcher dessus, comme les dépôts restic.
+  backup:
+    retentionPolicy: "30d"
+    barmanObjectStore:
+      destinationPath: "s3://${BACKUP_S3_BUCKET:=}/cnpg/grafana-db"
+      endpointURL: "${BACKUP_S3_ENDPOINT:=}"
+      s3Credentials:
+        accessKeyId:
+          name: cnpg-backup-s3
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: cnpg-backup-s3
+          key: ACCESS_SECRET_KEY
+      wal:
+        # Les WAL sont volumineux et le stockage S3 se paie au volume.
+        compression: gzip
+      data:
+        compression: gzip

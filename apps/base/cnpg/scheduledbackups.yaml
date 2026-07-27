@@ -1,0 +1,40 @@
+# Backups de BASE, complément indispensable de l'archivage WAL.
+#
+# `barmanObjectStore` archive les WAL en continu, mais un WAL ne se rejoue qu'à
+# partir d'un backup de base : sans ces ScheduledBackup, la destination se
+# remplit d'archives inexploitables. C'est le couple qui donne le PITR.
+#
+# ⚠️ Le `schedule` de CNPG N'EST PAS un cron Kubernetes : il porte un champ
+# SECONDES en tête (format robfig/cron, 6 champs). Vérifié dans le CRD vendoré
+# (cnpg-1.23.1.yaml). Écrit à 5 champs, il serait décalé d'un cran — l'heure lue
+# comme des minutes.
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: zitadel-db-daily
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg
+spec:
+  # 03:10, décalé des CronJobs restic (02:17 / 02:47) pour ne pas empiler les
+  # écritures S3 ni la charge disque au même moment.
+  schedule: "0 10 3 * * *"
+  backupOwnerReference: self
+  cluster:
+    name: zitadel-db
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: grafana-db-daily
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg
+spec:
+  schedule: "0 25 3 * * *"
+  backupOwnerReference: self
+  cluster:
+    name: grafana-db
