@@ -17,6 +17,7 @@ resources:
   - vmcluster.yaml
   - vmagent.yaml
   - vmscapes.yaml
+  - vmrule-backup.yaml
 
 labels:
   - includeSelectors: false
