@@ -21,6 +21,8 @@ companions:
   - istio-authorizationpolicies-storage # policies foundation-storage (si istio ET storage piochés)
   - kyverno-policies                 # policies (si kyverno pioché)
   - observability-vm-customresources # VMCluster/VMAgent (si observability pioché)
+  - backup-openbao-identity          # ConfigMap CLUSTER_NAME (préfixe des dépôts restic)
+  - backup-databases-identity        # idem, côté CNPG
   - backup-openbao                   # backup par défaut dès que OpenBao + ESO piochés
   - backup-databases                 # backup par défaut dès que CNPG + ESO piochés
   - capi-clusters                    # instanciation clusters clients (si CAPI pioché)
@@ -69,6 +71,8 @@ descriptions:
   services-gateway: Gateway nord-sud + cert TLS openaether
   cnpg: CloudNativePG (operator + clusters zitadel-db/grafana-db)
   storage: Longhorn (volumes répliqués, LUKS via OpenBao)
+  backup-openbao-identity: ConfigMap CLUSTER_NAME (préfixe des dépôts restic, ns foundation-vault)
+  backup-databases-identity: ConfigMap CLUSTER_NAME (préfixe des dépôts restic, ns foundation-databases)
   backup-openbao: Snapshot raft OpenBao → restic (chiffré client, 2 dépôts S3)
   backup-databases: pg_dump CNPG → restic (chiffré client, 2 dépôts S3)
   observability: VictoriaMetrics + Loki + Grafana + Alloy

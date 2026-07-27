@@ -138,4 +138,5 @@ spec:
   postBuild:
     substitute:
       CHILD_PROFILE: workload
+      CHILD_NAME: edge-2   # préfixe des dépôts restic de cet enfant
       # CHILD_BRANCH volontairement absent → défaut `main` (cf. child-gitops).

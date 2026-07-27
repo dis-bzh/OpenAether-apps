@@ -3,6 +3,21 @@
 # sont sélectionnées — un cluster qui a du critique le sauvegarde par défaut.
 # wait: false : les ExternalSecrets restent NotReady tant que l'opérateur n'a
 # pas seedé backup/s3-{primary,replica} (creds provider) — by design.
+#
+# ⚠️ Le CHEMIN des dépôts restic est préfixé par le nom du cluster
+# (`$CLUSTER_NAME`, injecté dans le conteneur par le ConfigMap `cluster-identity`
+# de leur namespace — cf. 22a-backup-identity.yaml). Sans ce préfixe, deux
+# clusters partageant un bucket écrivent au même endroit ; or un dépôt restic
+# n'est lisible qu'avec le RESTIC_PASSWORD de celui qui l'a créé, régénéré à
+# chaque bootstrap d'OpenBao. Le second ne peut alors ni lire ni initialiser
+# (« already initialized ») : backups en échec permanent. Vécu au déploiement
+# Outscale sur le bucket replica Scaleway laissé par le management OVH.
+#
+# ⚠️ NE PAS ajouter de `postBuild.substituteFrom` ICI : ces manifests contiennent
+# des scripts shell aux variables NUES (`$PRIMARY_ENDPOINT`, `$LEADER`,
+# `$init_err`…) que la substitution Flux viderait toutes. La substitution est
+# volontairement isolée dans 22a-backup-identity.yaml, qui ne rend que des
+# ConfigMaps.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -21,6 +36,7 @@ spec:
   wait: false
   dependsOn:
     - name: external-secrets-stores  # implique foundation-vault + external-secrets
+    - name: backup-openbao-identity  # ConfigMap CLUSTER_NAME (préfixe du dépôt)
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -40,3 +56,4 @@ spec:
   dependsOn:
     - name: external-secrets-stores
     - name: cnpg                     # Secrets <cluster>-app + instances à dumper
+    - name: backup-databases-identity # ConfigMap CLUSTER_NAME (préfixe du dépôt)
