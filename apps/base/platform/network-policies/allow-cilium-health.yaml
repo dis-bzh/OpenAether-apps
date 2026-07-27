@@ -1,0 +1,47 @@
+# OpenAether — Sondes cilium-health (rend `cilium-dbg status` exploitable)
+# ──────────────────────────────────────────────────────────────────────────
+# `default-deny-all-ingress` porte `endpointSelector: {}` : il couvre donc AUSSI
+# les endpoints spéciaux `cilium-health`, un par nœud, que les agents se sondent
+# mutuellement (ICMP + TCP 4240). Sans allow explicite, ces sondes sont droppées
+# et « Cluster health » affiche en permanence 1/N reachable — chaque nœud ne
+# voyant que le sien — sur un cluster pourtant parfaitement sain.
+#
+# Ce n'est pas cosmétique : ce faux signal a fait conclure à tort, le
+# 2026-07-26, que le datapath inter-nœuds d'un cluster enfant était
+# « définitivement cassé », et a motivé sa mise au rebut. Vérifié le
+# 2026-07-27 : le management (32 briques vertes, 6 nœuds Ready) affichait
+# exactement le même 1/6, pendant que le trafic pod-à-pod inter-nœuds
+# fonctionnait (DNS résolu depuis un worker vers les CoreDNS du control plane).
+#
+# Le trafic autorisé ici est strictement celui des endpoints de santé entre eux
+# et depuis les nœuds : il n'ouvre rien vers les charges applicatives.
+# ──────────────────────────────────────────────────────────────────────────
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: allow-cilium-health
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: platform
+spec:
+  description: "Autorise les sondes cilium-health (ICMP + TCP 4240) entre nœuds"
+  endpointSelector:
+    matchLabels:
+      "reserved:health": ""
+  ingress:
+    - fromEntities:
+        - health
+        - remote-node
+        - host
+      toPorts:
+        - ports:
+            - port: "4240"
+              protocol: TCP
+    - fromEntities:
+        - health
+        - remote-node
+        - host
+      icmps:
+        - fields:
+            - type: 8
+              family: IPv4
