@@ -5,6 +5,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - namespace.yaml
+  - helmrepository-cilium.yaml   # source de chart partagée par TOUS les enfants
   # - edge-1.yaml   # Scaleway — désactivé le 2026-07-27 : run ciblé sur edge-2
   #   (OVH), le seul qui exerce à la fois la validation « enfant neuf 17/17 » et
   #   le symptôme apiserver → kubelet:10250.
