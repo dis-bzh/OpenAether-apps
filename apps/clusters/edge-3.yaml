@@ -146,4 +146,4 @@ spec:
   postBuild:
     substitute:
       CHILD_PROFILE: workload
-      CHILD_BRANCH: feat/pioche-backup-gitception
+      # CHILD_BRANCH volontairement absent → défaut `main` (cf. child-gitops).
