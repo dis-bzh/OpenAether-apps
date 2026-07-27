@@ -1,0 +1,17 @@
+# Source du chart Cilium PARTAGÉE par tous les clusters enfants.
+#
+# ⚠️ Elle vivait dans edge-1.yaml jusqu'au 2026-07-27 : tout enfant autre
+# qu'edge-1 dépendait donc silencieusement de l'activation d'edge-1 dans
+# kustomization.yaml. Constaté en réel — edge-2 déployé seul est resté bloqué
+# sur « HelmRepository "cilium" not found », son CNI jamais installé, nœuds
+# NotReady. Une ressource partagée par N enfants n'a rien à faire dans le
+# fichier de l'un d'eux.
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: cilium
+  namespace: capi-clusters
+spec:
+  interval: 24h
+  url: https://helm.cilium.io
