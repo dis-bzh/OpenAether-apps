@@ -33,6 +33,10 @@ spec:
       OS_NODE_CIDR: 10.20.0.0/24 # distinct du management OVH
       # FIP pré-allouée des CP : doit figurer dans les certSANs Talos (l'IMDS
       # OpenStack ne la révèle pas). Une IP par réplique de control plane.
+      # Seule ressource d'un enfant créée hors OpenTofu ET hors CAPI : elle ne
+      # survit donc pas à un teardown complet. La ré-allouer (idempotent) avec
+      #   source .env.sh && python3 scripts/ops/ensure-capo-fip.py edge-2
+      # (dépôt infra) puis reporter l'adresse ici.
       OS_CP_FLOATING_IPS: REDACTED-FIP
 ---
 # CNI de l'enfant, appliqué À DISTANCE (kubeConfig CAPI), values alignées sur
