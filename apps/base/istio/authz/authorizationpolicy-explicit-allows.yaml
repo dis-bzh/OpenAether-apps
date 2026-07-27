@@ -71,31 +71,6 @@ spec:
 # intercepte plus rien → toute AuthorizationPolicy y serait inerte.
 # Flux intra-stack + ingress Gateway→Grafana :3000 = CiliumNetworkPolicy L3/L4
 # (apps/base/observability/networkpolicy.yaml, CNP grafana ← services-gateway).
----
-# ════════════════════════════════════════════════════════════════════════
-# foundation-storage : MinIO (AMBIENT)
-# ════════════════════════════════════════════════════════════════════════
-# MinIO ← Loki/vmbackup (chunks + backups S3, :9000). Source = ns observability.
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: allow-observability-to-minio
-  namespace: foundation-storage
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: "platform"
-spec:
-  action: ALLOW
-  rules:
-    - from:
-        - source:
-            namespaces:
-              - "services-observability"
-      to:
-        - operation:
-            ports:
-              - "9000"
----
 # ════════════════════════════════════════════════════════════════════════
 # services-gateway : POINT D'ENTRÉE ingress externe (Envoy Gateway-API dédié)
 # ════════════════════════════════════════════════════════════════════════

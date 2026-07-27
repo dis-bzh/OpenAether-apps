@@ -49,17 +49,6 @@ spec: {}
 # une AuthorizationPolicy y serait inerte ("théâtre de sécurité"). Sa sécurité
 # = CiliumNetworkPolicy L3/L4 (apps/base/observability/networkpolicy.yaml).
 ---
-# foundation-storage : ambient (MinIO). Sans policy = allow-all → trou réel.
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: default-deny-all
-  namespace: foundation-storage
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: "platform"
-spec: {}
----
 # foundation-networking : ambient (futurs Gateway-API controllers). Sans policy
 # = allow-all → trou réel. Allow intra-ns à compléter quand des workloads y
 # seront déployés (aujourd'hui le namespace est vide).
