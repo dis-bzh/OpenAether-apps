@@ -1,0 +1,47 @@
+# AuthorizationPolicies du namespace foundation-storage (MinIO).
+#
+# ⚠️ Elles vivaient dans apps/base/istio/authz jusqu'au 2026-07-27. Or ce
+# dossier est appliqué dès qu'Istio est pioché, alors que foundation-storage
+# n'existe que si la brique `storage` l'est aussi : un profil « istio sans
+# storage » (cas du profil workload des enfants) bloquait la Kustomization
+# istio-authorizationpolicies sur « namespaces "foundation-storage" not
+# found » — constaté en réel sur edge-2 le 2026-07-27.
+#
+# Elles forment donc une brique COMPAGNON à part, dependsOn [istio, storage] :
+# pioché uniquement quand les deux le sont. Règle générale — une policy qui
+# protège une brique optionnelle doit suivre le sort de cette brique.
+---
+# foundation-storage : ambient (MinIO). Sans policy = allow-all → trou réel.
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: foundation-storage
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec: {}
+---
+# ════════════════════════════════════════════════════════════════════════
+# foundation-storage : MinIO (AMBIENT)
+# ════════════════════════════════════════════════════════════════════════
+# MinIO ← Loki/vmbackup (chunks + backups S3, :9000). Source = ns observability.
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-observability-to-minio
+  namespace: foundation-storage
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "platform"
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces:
+              - "services-observability"
+      to:
+        - operation:
+            ports:
+              - "9000"
