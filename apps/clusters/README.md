@@ -1,9 +1,10 @@
 # apps/clusters — clusters clients CAPI (kubeception / gitception)
 
-⚠️ **Surcouche scaffoldée, non instanciée end-to-end.** Les apiVersions des
-templates sont validées contre les providers épinglés (CAPS v0.2.1 →
-`v1alpha2`, CACPPT v0.5.13 / CABPT v0.6.12 → `v1alpha3`) ; reste à exercer
-sur un cluster de management réel.
+Surcouche **exercée en cloud réel** : edge-1 (Scaleway) et edge-2 (OVH) ont été
+provisionnés de bout en bout depuis un management réel (2026-07-25/26), Cilium
+et Flux injectés à distance, gitception incluse. Les apiVersions des templates
+sont validées contre les providers épinglés (CAPS v0.2.1 → `v1alpha2`,
+CACPPT v0.5.13 / CABPT v0.6.12 → `v1alpha3`).
 
 Un cluster de management (briques `cluster-api-operator` + `cluster-api-providers`
 piochées) pilote ici ses clusters clients : **un fichier par cluster**, listé
@@ -31,11 +32,35 @@ Voir `example-scaleway.yaml.example` pour le cycle complet commenté.
 
 ## Prérequis hors git (une fois par management)
 
+Scaleway :
 ```bash
 kubectl create secret generic scaleway-capi-credentials -n capi-clusters \
   --from-literal=SCW_ACCESS_KEY=… --from-literal=SCW_SECRET_KEY=…   # docs CAPS : seules ces 2 clés sont lues
 kubectl create secret generic <enfant>-substitutes -n flux-system \
   --from-literal=SCW_PROJECT_ID=…                                    # consommé par postBuild.substituteFrom
+```
+
+OpenStack / OVH — un seul Secret, la région vit DANS `clouds.yaml`
+(surtout pas dans `identityRef`, cf. en-tête du template) :
+```bash
+kubectl -n capi-clusters create secret generic ovh-capi-credentials \
+  --from-file=clouds.yaml=./clouds.yaml
+```
+
+Outscale : Secret `outscale-capi-credentials` (clés **minuscules**
+`access_key`/`secret_key`/`region`) + keypair `openaether-capi` côté compte.
+
+### Floating IP d'un enfant OpenStack (à re-créer après chaque teardown)
+
+L'IMDS OpenStack n'expose pas la FIP : elle doit être connue **avant** le boot
+pour entrer dans les `certSANs` Talos, donc écrite en git. C'est la seule
+ressource d'un enfant créée hors OpenTofu **et** hors CAPI — elle ne survit pas
+à un `task fleet-down`. Ré-allocation idempotente (dépôt infra) :
+
+```bash
+source .env.sh
+python3 scripts/ops/ensure-capo-fip.py edge-2      # une FIP par réplique de CP
+# → reporter l'adresse dans OS_CP_FLOATING_IPS de apps/clusters/edge-2.yaml
 ```
 
 Kubeconfig de l'enfant : Secret `<enfant>-kubeconfig` (ns `capi-clusters`,
