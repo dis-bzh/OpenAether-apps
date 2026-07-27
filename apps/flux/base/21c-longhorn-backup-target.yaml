@@ -1,0 +1,40 @@
+# Groupe 21c — Cible de sauvegarde des volumes Longhorn.
+#
+# POURQUOI SÉPARÉE DE LA BRIQUE `storage`
+#   Cette Kustomization porte un `postBuild.substituteFrom` pour injecter
+#   ${BACKUP_TARGET_URL}. Or la substitution Flux s'applique à TOUT le rendu
+#   d'une Kustomization : fusionnée avec `apps/base/storage`, elle viderait les
+#   variables shell de son `install.yaml` (`$VOL_DIR`). Même raison, et même
+#   forme, que les briques `backup-*-identity` (22a).
+#
+#   ⚠️ Ne jamais fusionner ces ressources dans `apps/base/storage`.
+#
+# CE QUE ÇA DÉBLOQUE
+#   Jusqu'ici `backupTarget` était vide et renvoyait à un « overlay cloud » qui
+#   n'a jamais existé : les volumes Longhorn n'avaient AUCUNE destination de
+#   sauvegarde, alors que le projet vise à sauvegarder tout ce qui est critique.
+#   Les credentials viennent d'OpenBao (même destination que les dépôts restic),
+#   l'URL du ConfigMap `cluster-identity` posé au bootstrap par OpenTofu.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: storage-backup-target
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/storage/backup-target
+  prune: true
+  wait: false
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-identity
+  dependsOn:
+    - name: storage                  # CRD Setting + namespace longhorn-system
+    - name: external-secrets-stores  # ClusterSecretStore openbao

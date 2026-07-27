@@ -65,7 +65,12 @@ spec:
       storageMinimalAvailablePercentage: 15
       # Supprimer automatiquement les volumes orphelins (sans PVC).
       orphanAutoDeletion: true
-      # backupTarget: configuré par overlay cloud (S3 cross-cloud).
+      # backupTarget : laissé vide ICI volontairement. `defaultSettings` n'est lu
+      # qu'au PREMIER déploiement ; la vérité vit ensuite dans les Setting CR,
+      # posées par la brique `storage-backup-target`
+      # (apps/base/storage/backup-target) qui reçoit l'URL du ConfigMap
+      # `cluster-identity` et les credentials d'OpenBao. Y mettre une valeur ici
+      # ne servirait qu'à l'installation initiale et divergerait ensuite.
       backupTarget: ""
       # kubelet path Talos
       kubernetesClusterAutoscalerEnabled: false
