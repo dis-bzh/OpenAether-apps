@@ -1,0 +1,62 @@
+# Point d'entrée PUBLIC du Gateway — NodePorts FIGÉS.
+#
+# ── Pourquoi un Service en plus ───────────────────────────────────────────────
+# Istio crée lui-même un Service `openaether-gateway-istio` de type LoadBalancer
+# pour ce Gateway. Cilium LB-IPAM lui attribue une VIP **privée** du pool
+# (172.16.12.240-254) : c'est le chemin d'ADMINISTRATION, joint par tunnel SSH
+# depuis le bastion. Il reste inchangé.
+#
+# Le chemin PUBLIC, lui, passe par un load balancer cloud créé par OpenTofu
+# (`modules/providers/*/lb.tf`, ressource `app`). Ce LB est provisionné en
+# PHASE 1, avant que le cluster n'existe : il ne peut donc pas découvrir un port
+# alloué dynamiquement. Les nodePorts que Kubernetes attribue par défaut sont
+# aléatoires (30000-32767) — d'où ce Service dédié, aux ports FIGÉS.
+#
+# ⚠️ CES NUMÉROS SONT UN CONTRAT ENTRE LES DEUX DÉPÔTS. Les changer ici impose
+# de changer `app_lb_node_ports` dans OpenAether-infra
+# (`infrastructure/opentofu/modules/providers/*/variables.tf`), sinon le LB
+# public pointe dans le vide — exactement la panne d'origine, où il ciblait
+# worker:80/443 alors que rien n'y écoutait.
+#
+# ── Pourquoi ne pas figer les ports du Service d'Istio ────────────────────────
+# Il est généré par istiod, pas par nous : ni Kustomize ni le champ
+# `spec.infrastructure` de l'API Gateway ne permettent d'y imposer un nodePort.
+# Un Service additionnel qui sélectionne les mêmes pods est la façon la plus
+# simple de ne pas entrer en conflit avec son contrôleur.
+#
+# ── Pourquoi pas le CCM ───────────────────────────────────────────────────────
+# Le CCM ferait remonter des annotations spécifiques au provider dans cette
+# couche partagée, alors que tout le reste de l'architecture les confine dans
+# `modules/providers/`. Et il n'existe pas sur Proxmox, qui est dans le périmètre.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openaether-gateway-nodeport
+  namespace: services-gateway
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "gateway"
+spec:
+  type: NodePort
+  # `Cluster` (le défaut) et pas `Local` : le LB cloud cible TOUS les workers,
+  # y compris ceux qui n'hébergent pas de pod gateway. En `Local` ils
+  # répondraient KO au health check et le trafic se concentrerait sur un nœud.
+  # Contrepartie assumée : l'IP source est masquée par le SNAT du nœud — d'où
+  # les entités `host`/`remote-node` ajoutées à la CNP `openaether-gateway`.
+  externalTrafficPolicy: Cluster
+  # Sélecteur repris de la CNP `openaether-gateway` (apps/base/istio/networkpolicy.yaml),
+  # qui fonctionne en production sur ce Gateway précis — donc label vérifié.
+  selector:
+    service.istio.io/canonical-name: openaether-gateway-istio
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30080
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 443
+      nodePort: 30443
