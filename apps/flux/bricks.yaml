@@ -18,6 +18,7 @@ companions:
   - external-secrets-stores          # ClusterSecretStore openbao (si ESO + OpenBao piochés)
   - cert-manager-issuers             # ClusterIssuer openbao (si cert-manager + OpenBao piochés)
   - istio-authorizationpolicies      # AuthorizationPolicies du mesh (si istio pioché)
+  - istio-authorizationpolicies-storage # policies foundation-storage (si istio ET storage piochés)
   - kyverno-policies                 # policies (si kyverno pioché)
   - observability-vm-customresources # VMCluster/VMAgent (si observability pioché)
   - backup-openbao                   # backup par défaut dès que OpenBao + ESO piochés

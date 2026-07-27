@@ -16,6 +16,7 @@ resources:
   - 14c-services-gateway.yaml
   - 20-cnpg.yaml
   - 21-storage.yaml
+  - 21b-istio-authz-storage.yaml
   - 22-backup.yaml
   - 30-observability.yaml
   - 35-identity.yaml
