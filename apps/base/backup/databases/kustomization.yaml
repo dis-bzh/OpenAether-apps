@@ -4,4 +4,5 @@ resources:
   - serviceaccount.yaml
   - externalsecret.yaml
   - cronjob.yaml
+  - restore-test-cronjob.yaml
   - networkpolicy.yaml
