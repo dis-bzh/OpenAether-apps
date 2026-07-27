@@ -1,0 +1,18 @@
+# Identité du cluster, recopiée dans foundation-databases pour que le CronJob de backup
+# préfixe ses dépôts restic ($CLUSTER_NAME).
+#
+# ⚠️ Ce fichier vit dans une Kustomization SÉPARÉE (22a-backup-identity.yaml) et
+# c'est délibéré : elle porte un `postBuild.substituteFrom`, et la substitution
+# Flux s'applique à TOUT le rendu d'une Kustomization. Fusionné avec la brique
+# backup, il viderait les variables shell nues de ses CronJobs
+# ($PRIMARY_ENDPOINT, $LEADER, $init_err…). Ici il n'y a aucun script.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-identity
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+data:
+  CLUSTER_NAME: ${CLUSTER_NAME}
