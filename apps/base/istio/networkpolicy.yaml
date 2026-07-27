@@ -197,14 +197,22 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "gateway"
 spec:
-  description: "openaether-gateway: ingress 80/443/15021 depuis world+lb, egress istiod xDS/CA + DNS + kube-api."
+  description: "openaether-gateway: ingress 80/443/15021 depuis world+lb+nœuds, egress istiod xDS/CA + DNS + kube-api."
   endpointSelector:
     matchLabels:
       service.istio.io/canonical-name: openaether-gateway-istio
   ingress:
+    # ⚠️ `host` et `remote-node` sont REQUIS par le chemin public : le LB cloud
+    # tape les NodePorts figés (30080/30443, cf.
+    # apps/base/services-gateway/service-nodeport.yaml), et en
+    # externalTrafficPolicy: Cluster le nœud SNAT le paquet vers sa propre IP.
+    # L'entité vue par Cilium n'est donc plus `world` mais le nœud lui-même —
+    # sans ces deux entités, tout l'ingress public est droppé.
     - fromEntities:
         - world
         - cluster
+        - host
+        - remote-node
       toPorts:
         - ports:
             - port: "80"
