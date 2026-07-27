@@ -12,6 +12,7 @@ kind: Kustomization
 # GatewayClass `istio` sont fournis par la Kustomization istio.
 resources:
   - gateway-openaether.yaml
+  - service-nodeport.yaml
   - certificate-openaether-tls.yaml
   - httproute-redirect.yaml
 
