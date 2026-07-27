@@ -34,15 +34,9 @@ spec:
       - kind: Secret
         name: edge-1-substitutes   # SCW_PROJECT_ID
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
-  name: cilium
-  namespace: capi-clusters
-spec:
-  interval: 24h
-  url: https://helm.cilium.io
----
+# (La HelmRepository `cilium` est partagée par tous les enfants et vit
+# désormais dans helmrepository-cilium.yaml — elle ne doit pas dépendre de
+# l'activation d'edge-1.)
 # CNI de l'enfant, appliqué À DISTANCE (kubeConfig CAPI). Values alignées sur
 # le socle parent (render-bootstrap-manifests.sh) : KPR + KubePrism + WireGuard.
 apiVersion: helm.toolkit.fluxcd.io/v2
