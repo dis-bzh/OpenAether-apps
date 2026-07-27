@@ -38,6 +38,7 @@ resources:
   # Grafana HA (CNPG DB dans apps/base/cnpg/)
   - grafana.yaml
   - externalsecrets-grafana.yaml
+  - externalsecret-grafana-oidc.yaml
   - httproute-grafana.yaml
   # Network
   - networkpolicy.yaml

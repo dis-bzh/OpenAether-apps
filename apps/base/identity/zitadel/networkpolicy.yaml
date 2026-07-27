@@ -34,6 +34,16 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
+    # Grafana (SSO OIDC) : échange du code + /oidc/v1/userinfo, appels
+    # SERVEUR-à-serveur — le flux navigateur passe, lui, par la gateway.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: grafana
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
     # Intra-namespace : le pod login appelle zitadel:8080 (ingress côté serveur).
     - fromEndpoints:
         - matchLabels:
