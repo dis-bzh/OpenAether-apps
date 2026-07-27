@@ -1,0 +1,37 @@
+# Cible de sauvegarde des volumes Longhorn.
+#
+# ── Pourquoi des Setting CR et pas les values du HelmRelease ──────────────────
+# `defaultSettings` du chart n'est lu qu'au PREMIER déploiement : Longhorn
+# initialise ses réglages depuis là, puis la vérité vit dans ces CR. Les poser
+# ici les rend idempotents et survivants aux upgrades du chart.
+#
+# ── Pourquoi une Kustomization séparée ───────────────────────────────────────
+# Ce dossier est substitué par Flux (${BACKUP_TARGET_URL} vient du ConfigMap
+# `cluster-identity` posé au bootstrap). La substitution s'applique à TOUT le
+# rendu d'une Kustomization : fusionnée avec `apps/base/storage`, elle viderait
+# les variables shell de `install.yaml` (`$VOL_DIR`). D'où l'isolement — même
+# raison que les briques `backup-*-identity`.
+#
+# Défaut VIDE : un cluster qui ne publie pas l'URL (enfant CAPI, qui ne pioche
+# pas `storage` aujourd'hui) garde Longhorn sans sauvegarde de volumes —
+# exactement le comportement d'avant, pas une régression silencieuse.
+---
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: backup-target
+  namespace: longhorn-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+value: "${BACKUP_TARGET_URL:=}"
+---
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: backup-target-credential-secret
+  namespace: longhorn-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+value: longhorn-backup-credentials
