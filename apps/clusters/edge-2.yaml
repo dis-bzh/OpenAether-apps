@@ -60,20 +60,30 @@ spec:
       sourceRef: { kind: HelmRepository, name: cilium, namespace: capi-clusters }
   values:
     kubeProxyReplacement: true
+    # ⚠️ ipam.mode=kubernetes — NE PAS RETIRER. Le défaut du chart est
+    # `cluster-pool`, qui IGNORE le `clusterNetwork.pods` déclaré par CAPI
+    # (10.244.0.0/16) et taille les CIDR de pods dans 10.0.0.0/8. Or les nœuds
+    # vivent dans ce même /8 : 10.20.0.0/24 côté OpenStack, 10.0.0.0/24 pour les
+    # sous-réseaux du socle (OVH, Outscale, Proxmox). Le mode `kubernetes`
+    # reprend le podCIDR alloué par kube-controller-manager, comme le parent —
+    # qui pose ce réglage pour exactement la même raison.
+    ipam: { mode: kubernetes }
     # ⚠️ cni.exclusive=false est EXIGÉ dès que le profil de l'enfant embarque
     # Istio ambient (apps/base/istio) : sinon Cilium réécrit 05-cilium.conflist
     # en boucle et en retire le plugin chaîné istio-cni (« conflicting component
     # constantly reverting our work ») → /readyz 503 → install Helm expirée →
     # ztunnel, services-gateway et istio-authorizationpolicies bloqués.
     #
-    # hostNamespaceOnly reste à FALSE ici, contrairement au socle parent : le
-    # socket-LB doit couvrir les process host-network pour que kube-apiserver
-    # joigne les ClusterIP des webhooks (cert-manager, ESO). Le passer à true
-    # sur un enfant fait échouer les dry-run Flux en « failed calling webhook »
-    # (constaté sur edge-1 et edge-2 le 2026-07-26). Seul cni.exclusive était
-    # en cause dans le blocage istio-cni.
-    socketLB: { enabled: true, hostNamespaceOnly: false }
+    # hostNamespaceOnly=true : aligné sur le socle parent et exigé par Istio
+    # ambient. Le flag ne coupe le socket-LB que pour les netns NON-root (doc du
+    # chart : « Disable socket lb for non-root ns ») ; les process host-network,
+    # dont kube-apiserver → ClusterIP des webhooks, gardent la traduction. Le
+    # « failed calling webhook » du 2026-07-26 lui avait été imputé à tort : il a
+    # été observé pendant un rollout de CNI à chaud qui avait déjà cassé le
+    # datapath des enfants.
+    socketLB: { enabled: true, hostNamespaceOnly: true }
     cni: { exclusive: false }
+    nodeSelectorLabels: true
     bpf: { hostLegacyRouting: false, masquerade: true }
     cgroup: { autoMount: { enabled: false }, hostRoot: /sys/fs/cgroup }
     k8sServiceHost: localhost      # KubePrism Talos
