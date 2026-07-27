@@ -136,6 +136,7 @@ spec:
   postBuild:
     substitute:
       CHILD_PROFILE: workload
+      CHILD_NAME: edge-1   # préfixe des dépôts restic de cet enfant
       # CHILD_BRANCH volontairement absent → défaut `main` (cf. child-gitops).
       # Ne le surcharger que pour tester une branche de bout en bout, et penser
       # à le retirer ensuite : une branche supprimée laisse l'enfant sur une

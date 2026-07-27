@@ -1,0 +1,61 @@
+# Groupe 22a — Identité du cluster, recopiée dans les namespaces de backup.
+#
+# POURQUOI DEUX KUSTOMIZATIONS SÉPARÉES DE LA BRIQUE BACKUP
+#   `postBuild.substituteFrom` s'applique à TOUT le rendu d'une Kustomization.
+#   Or les CronJobs de backup embarquent des scripts shell aux variables NUES
+#   (`$PRIMARY_ENDPOINT`, `$LEADER`, `$init_err`…) : la substitution Flux les
+#   remplacerait toutes par du vide, cassant silencieusement les sauvegardes.
+#   La substitution est donc confinée ici, à des manifests qui ne contiennent
+#   qu'un ConfigMap. Les CronJobs le lisent ensuite comme une variable
+#   d'environnement ordinaire, au runtime.
+#
+#   ⚠️ Ne jamais fusionner ces ressources dans `apps/base/backup/*`.
+#
+# Le ConfigMap source `cluster-identity` (ns flux-system) est posé au bootstrap :
+# `flux-bootstrap.yaml.tftpl` côté infra pour le parent, `child-gitops` pour les
+# enfants CAPI. Son absence fait échouer ces deux Kustomizations — voulu : mieux
+# vaut un échec bruyant qu'un préfixe vide et une collision entre clusters.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: backup-openbao-identity
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/backup/openbao-identity
+  prune: true
+  wait: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-identity
+  dependsOn:
+    - name: foundation-vault   # propriétaire du namespace foundation-vault
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: backup-databases-identity
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/backup/databases-identity
+  prune: true
+  wait: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-identity
+  dependsOn:
+    - name: cnpg               # propriétaire du namespace foundation-databases

@@ -8,6 +8,27 @@
 #                      profil généré par scripts/pick.py (apps/flux/<profil>)
 #   ${CHILD_BRANCH}  — branche git suivie par l'enfant (défaut main ;
 #                      utile pour tester une branche de bout en bout)
+#   ${CHILD_NAME}    — identité UNIQUE de l'enfant (ex: edge-2), qui sert de
+#                      préfixe à ses dépôts restic
+---
+# Identité du cluster enfant — pendant exact du ConfigMap posé par le bootstrap
+# du parent (flux-bootstrap.yaml.tftpl côté infra). Les briques qui doivent se
+# distinguer d'un AUTRE cluster le consomment via `postBuild.substituteFrom`,
+# aujourd'hui le chemin des dépôts restic : plusieurs clusters partagent des
+# buckets, et un dépôt n'est lisible qu'avec le RESTIC_PASSWORD de celui qui
+# l'a créé — même chemin = blocage mutuel (« already initialized »).
+#
+# Le nom CAPI de l'enfant est déjà unique dans la flotte : pas besoin d'y
+# ajouter le provider, contrairement au parent (« openaether-dev » partout).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-identity
+  namespace: flux-system
+  labels:
+    openaether.io/managed: "true"
+data:
+  CLUSTER_NAME: ${CHILD_NAME}
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository

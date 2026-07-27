@@ -49,6 +49,13 @@ patches:
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
       metadata:
+        name: backup-databases-identity
+        namespace: flux-system
+      $patch: delete
+  - patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
         name: observability
         namespace: flux-system
       $patch: delete
