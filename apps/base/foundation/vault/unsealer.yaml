@@ -1,25 +1,18 @@
-# OpenAether 0.5.0 — OpenBao Unsealer HA (route A : image officielle, RAM-only)
-# ─────────────────────────────────────────────────────────────────────────────
-# Remplace l'ancien sidecar transit + le Secret openbao-seal-token.
+# OpenBao HA unsealer — official image, RAM-only.
 #
-# Architecture choice: we REUSE the official openbao/openbao:2.5.4 image
-# (already on every node, pulled by the StatefulSet). NO custom binary, no
-# registry, no digest to pin, no new dependency — aligned with the
-# principe « fondation agnostique ».
+# Reuses the official openbao/openbao image already pulled by the StatefulSet:
+# no custom binary, no registry, no digest to pin — the foundation stays
+# agnostic. Uses `bao status` (exit code 2 = sealed) and `bao operator unseal`,
+# so no curl/wget is needed.
 #
-# Security (answering the "shell + root" objection):
-#   - Runs as uid 100 (openbao), runAsNonRoot, NEVER root.
-#   - readOnlyRootFilesystem, drop ALL caps, allowPrivilegeEscalation=false,
-#     seccomp RuntimeDefault.
-#   - automountServiceAccountToken: false → no API token mounted (the unsealer
-#     does NOT talk to the k8s API; it reads the shares from an RO volume).
-#   - Surface = busybox sh + the official `bao` binary. No curl/wget: we use
-#     `bao status` (code de sortie 2 = sealed) et `bao operator unseal`.
+# Hardened against the "shell + root" objection: uid 100, runAsNonRoot,
+# readOnlyRootFilesystem, all caps dropped, seccomp RuntimeDefault, and
+# automountServiceAccountToken: false — it never talks to the k8s API, it reads
+# the shares from a read-only volume.
 #
-# RAM-only: the shares are NEVER written to disk by the unsealer; they come from
-# a tmpfs (a mounted Secret is an in-memory tmpfs on the kubelet side) and stay
-# in the process environment. Long-term target: human injection (stdin) instead
-# of the file — see UNSEAL_SOURCE in the TODO block below.
+# RAM-only: the shares never touch disk here. A mounted Secret is a kubelet-side
+# tmpfs, and they stay in the process environment. Long-term target: human
+# injection on stdin instead of the file (see UNSEAL_SOURCE below).
 ---
 apiVersion: apps/v1
 kind: Deployment

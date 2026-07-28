@@ -22,7 +22,6 @@ resources:
   # To upgrade: download the new install.yaml, replace this file, update the
   # sha256 above, and replay the render diff.
   - kyverno-1.12.1.yaml
-  - policies.yaml
 
 patches:
   # The kyverno Namespace is ALREADY declared by install.yaml (vendored file).
