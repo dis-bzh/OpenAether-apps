@@ -1,8 +1,8 @@
 # Egress des managers providers CAPI (capi-system, posture default-deny).
-# - APIs cloud pour provisionner les clusters clients (Scaleway aujourd'hui ;
-#   ajouter les endpoints OpenStack/Outscale au moment de leur premier usage).
+# - Cloud APIs to provision the client clusters (Scaleway today; add the
+#   OpenStack/Outscale endpoints when they are first used).
 # - kube-apiserver : couvert par le CCNP allow-kube-api.
-# - rules.dns : requis pour les toFQDNs (proxy DNS Cilium).
+# - rules.dns: required for toFQDNs (the Cilium DNS proxy).
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -16,9 +16,9 @@ spec:
   endpointSelector: {}
   ingress:
     # kube-apiserver → webhooks des providers (core/CABPT/CACPPT/CAPS…, :9443).
-    # remote-node : sur Talos le kube-apiserver statique est vu comme nœud.
-    # Sans ça : "failed calling webhook … context deadline exceeded" à la
-    # création des CRs enfants (constaté en cloud réel).
+    # remote-node: on Talos the static kube-apiserver is seen as a node.
+    # Without it: "failed calling webhook … context deadline exceeded" when
+    # creating the child CRs (observed on real cloud).
     - fromEntities:
         - kube-apiserver
         - remote-node
@@ -42,25 +42,25 @@ spec:
               - matchPattern: "*"
     - toFQDNs:
         - matchName: api.scaleway.com
-        # OVH/OpenStack : Keystone n'est que le point d'entrée — le catalogue
+        # OVH/OpenStack: Keystone is only the entry point — the catalogue
         # renvoie ensuite compute./network./image./lb.<region>.cloud.ovh.net.
-        # ⚠️ le `*` de Cilium ne matche QU'UN SEUL label : il faut un pattern
-        # par profondeur. Vu en réel : network.compute.eu-west-par.cloud.ovh.net
-        # (3 niveaux) était droppé par le seul "*.cloud.ovh.net".
+        # ⚠️ Cilium's `*` matches ONLY ONE label: one pattern per depth is
+        # needed. Seen for real: network.compute.eu-west-par.cloud.ovh.net
+        # (3 levels) was dropped by "*.cloud.ovh.net" alone.
         - matchName: auth.cloud.ovh.net
         - matchPattern: "*.cloud.ovh.net"
         - matchPattern: "*.*.cloud.ovh.net"
         - matchPattern: "*.*.*.cloud.ovh.net"
-        # Outscale (CAPOSC) : API + endpoints régionaux.
+        # Outscale (CAPOSC): API + regional endpoints.
         - matchPattern: "*.outscale.com"
         - matchPattern: "*.*.outscale.com"
       toPorts:
         - ports:
             - port: "443"
               protocol: TCP
-    # CABPT/CACPPT parlent à l'apiserver des ENFANTS (LB public :6443) et le
-    # bootstrap Talos aux nœuds :50000. Cibles inconnues d'avance (IP des LB
-    # enfants) → world sur ces DEUX ports précis uniquement.
+    # CABPT/CACPPT talk to the CHILDREN's apiserver (public LB :6443) and the
+    # Talos bootstrap to the nodes :50000. Targets unknown in advance (the
+    # children's LB IPs) → world on those TWO specific ports only.
     - toEntities:
         - world
       toPorts:

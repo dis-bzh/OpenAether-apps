@@ -1,29 +1,29 @@
-# Providers CAPI — versions ÉPINGLÉES ; l'operator va chercher les manifests de
+# CAPI providers — PINNED versions; the operator fetches each provider's
 # release correspondants sur GitHub.
 #
-# ⚠️ RATE-LIMIT GITHUB — le fetch est ANONYME, donc soumis à 60 requêtes/h/IP
-# partagées par tout ce qui sort de la même IP publique. Avec 6 providers et des
-# reconciles répétés (crashloop, upgrade, réinstallation), on peut l'atteindre :
-# les providers restent alors en échec de fetch, sans rapport apparent avec la
-# configuration. Deux parades, l'API a été vérifiée contre le schéma de la CRD
+# ⚠️ GITHUB RATE LIMIT — the fetch is ANONYMOUS, hence subject to 60 requests/h/IP
+# shared by everything egressing from the same public IP. With 6 providers and
+# repeated reconciles (crashloop, upgrade, reinstall) you can hit it: the
+# providers then stay stuck failing to fetch, with no apparent link to the
+# configuration. Two remedies; the API was checked against the CRD schema
 # `operator.cluster.x-k8s.io/v1alpha2` (champs `configSecret` et `fetchConfig`) :
 #
-#   1. Token GitHub (le plus simple) — le Secret NE VA PAS EN GIT :
+#   1. A GitHub token (the simplest) — the Secret DOES NOT GO IN GIT:
 #        kubectl -n capi-system create secret generic capi-github-token \
 #          --from-literal=GITHUB_TOKEN=ghp_xxx
-#      puis, sur CHAQUE provider :
+#      then, on EVERY provider:
 #        spec:
 #          configSecret:
 #            name: capi-github-token
 #            namespace: capi-system
-#      (le slot `configSecret` est libre : aucun provider ne l'utilise ici.)
+#      (the `configSecret` slot is free: no provider uses it here.)
 #
-#   2. Miroir OCI — `spec.fetchConfig.oci: <ref>` : plus robuste (pas de
-#      dépendance à GitHub au reconcile) mais suppose de pousser et maintenir
+#   2. An OCI mirror — `spec.fetchConfig.oci: <ref>`: more robust (no
+#      dependency on GitHub at reconcile time) but requires pushing and maintaining
 #      les artefacts.
 #
-# Volontairement NON activé par défaut : le token est un secret propre à
-# l'opérateur, et un `configSecret` pointant un Secret absent CASSE le provider.
+# Deliberately NOT enabled by default: the token is the operator's own secret,
+# and a `configSecret` pointing at a missing Secret BREAKS the provider.
 ---
 # CoreProvider — Cluster API core controllers
 # https://github.com/kubernetes-sigs/cluster-api

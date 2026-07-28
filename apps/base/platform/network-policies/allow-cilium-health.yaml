@@ -1,20 +1,20 @@
 # OpenAether — Sondes cilium-health (rend `cilium-dbg status` exploitable)
 # ──────────────────────────────────────────────────────────────────────────
-# `default-deny-all-ingress` porte `endpointSelector: {}` : il couvre donc AUSSI
-# les endpoints spéciaux `cilium-health`, un par nœud, que les agents se sondent
-# mutuellement (ICMP + TCP 4240). Sans allow explicite, ces sondes sont droppées
-# et « Cluster health » affiche en permanence 1/N reachable — chaque nœud ne
-# voyant que le sien — sur un cluster pourtant parfaitement sain.
+# `default-deny-all-ingress` carries `endpointSelector: {}`, so it ALSO covers
+# the special `cilium-health` endpoints, one per node, which the agents probe
+# between each other (ICMP + TCP 4240). Without an explicit allow those probes
+# are dropped and "Cluster health" permanently shows 1/N reachable — each node
+# only seeing its own — on a perfectly healthy cluster.
 #
-# Ce n'est pas cosmétique : ce faux signal a fait conclure à tort, le
-# 2026-07-26, que le datapath inter-nœuds d'un cluster enfant était
-# « définitivement cassé », et a motivé sa mise au rebut. Vérifié le
-# 2026-07-27 : le management (32 briques vertes, 6 nœuds Ready) affichait
-# exactement le même 1/6, pendant que le trafic pod-à-pod inter-nœuds
-# fonctionnait (DNS résolu depuis un worker vers les CoreDNS du control plane).
+# This is not cosmetic: on 2026-07-26 that false signal led to the wrong
+# conclusion that a child cluster's inter-node datapath was "permanently
+# broken", and motivated scrapping it. Verified on 2026-07-27: the management
+# (32 green bricks, 6 nodes Ready) showed exactly the same 1/6 while inter-node
+# pod-to-pod traffic worked (DNS resolved from a worker to the control plane's
+# CoreDNS).
 #
-# Le trafic autorisé ici est strictement celui des endpoints de santé entre eux
-# et depuis les nœuds : il n'ouvre rien vers les charges applicatives.
+# The traffic allowed here is strictly that of the health endpoints between
+# themselves and from the nodes: it opens nothing towards application workloads.
 # ──────────────────────────────────────────────────────────────────────────
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy

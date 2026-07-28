@@ -1,13 +1,13 @@
 # OpenAether 0.5.0 Sprint C — Alloy (collecte logs Kubernetes → Loki)
 # ──────────────────────────────────────────────────────────────────
-# Alloy remplace Promtail comme collecteur de logs. DaemonSet (1/nœud).
-# Utilise l'API Kubernetes (loki.source.kubernetes) pour récupérer les logs
-# des pods sans accès direct aux fichiers /var/log → compatible Docker-in-Docker
-# ET nœuds Talos (containerd rootfs non exposé en hostPath).
+# Alloy replaces Promtail as the log collector. DaemonSet (1 per node).
+# Uses the Kubernetes API (loki.source.kubernetes) to collect pod logs without
+# direct access to /var/log files → compatible with Docker-in-Docker AND Talos
+# nodes (the containerd rootfs is not exposed as a hostPath).
 #
 # Config HCL inline: discovery → relabeling → loki.write.
-# Extensible: ajouter des composants Alloy (métriques, traces, OTEL) sans
-# redéploiement — éditer le configMap et Alloy recharge à chaud.
+# Extensible: add Alloy components (metrics, traces, OTEL) without a
+# redeployment — edit the configMap and Alloy hot-reloads.
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -41,12 +41,12 @@ spec:
     alloy:
       configMap:
         content: |
-          // ── Découverte des pods Kubernetes ─────────────────────────────
+          // ── Kubernetes pod discovery ───────────────────────────────────
           discovery.kubernetes "pods" {
             role = "pod"
           }
 
-          // ── Relabeling: enrichir les logs avec les métadonnées k8s ─────
+          // ── Relabeling: enrich the logs with k8s metadata ──────────────
           discovery.relabel "pods" {
             targets = discovery.kubernetes.pods.targets
 
@@ -85,7 +85,7 @@ spec:
               target_label  = "component"
             }
 
-            // Exclure les pods Alloy eux-mêmes (évite la boucle de logs).
+            // Exclude Alloy's own pods (avoids a log loop).
             rule {
               source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
               regex         = "alloy"
@@ -94,8 +94,8 @@ spec:
           }
 
           // ── Collecte logs via API k8s ───────────────────────────────────
-          // loki.source.kubernetes: stream logs via kube API (pas de hostPath).
-          // Compatible Talos (containerd rootfs non exposé) et Docker-in-Docker.
+          // loki.source.kubernetes: stream logs through the kube API (no hostPath).
+          // Works on Talos (containerd rootfs not exposed) and Docker-in-Docker.
           loki.source.kubernetes "pods" {
             targets    = discovery.relabel.pods.output
             forward_to = [loki.write.default.receiver]
@@ -106,7 +106,7 @@ spec:
             endpoint {
               url = "http://loki.services-observability.svc.cluster.local:3100/loki/api/v1/push"
             }
-            // Labels externes communs à tous les logs de ce cluster.
+            // External labels common to every log of this cluster.
             external_labels = {
               cluster = "management",
             }
@@ -122,7 +122,7 @@ spec:
       create: true
     serviceAccount:
       create: true
-    # Tolerations pour être déployé sur les nœuds control-plane.
+    # Tolerations so it is deployed on the control-plane nodes too.
     tolerations:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
