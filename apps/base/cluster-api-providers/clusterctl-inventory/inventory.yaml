@@ -1,25 +1,25 @@
-# Inventaire clusterctl — indispensable pour `clusterctl move`.
+# clusterctl inventory — required for `clusterctl move`.
 #
-# POURQUOI CE FICHIER EXISTE
-# cluster-api-operator et clusterctl tiennent DEUX inventaires différents :
-#   - l'opérateur déclare ses providers en operator.cluster.x-k8s.io
-#     (CoreProvider/BootstrapProvider/…, cf. core-providers.yaml) ;
-#   - clusterctl, lui, ne lit QUE clusterctl.cluster.x-k8s.io/Provider, qu'il
-#     crée normalement lui-même au `clusterctl init`.
-# Un cluster équipé par l'opérateur a donc la CRD mais AUCUNE entrée, et
-# `clusterctl move` le refuse comme cible :
+# WHY THIS FILE EXISTS
+# cluster-api-operator and clusterctl keep TWO different inventories:
+#   - the operator declares its providers under operator.cluster.x-k8s.io
+#     (CoreProvider/BootstrapProvider/…, see core-providers.yaml);
+#   - clusterctl only ever reads clusterctl.cluster.x-k8s.io/Provider, which it
+#     normally creates itself during `clusterctl init`.
+# A cluster equipped by the operator therefore has the CRD but NO entries, and
+# `clusterctl move` rejects it as a target:
 #   Error: failed to check providers in target cluster: [provider
 #   bootstrap-talos not found in the target cluster, …]
-# alors que les contrôleurs tournent parfaitement. Le `--dry-run` ne fait PAS
-# cette vérification : il passe, et l'échec ne surgit qu'au move réel
-# (constaté le 2026-07-28 en pivotant un management amorcé par CAPI).
+# even though every controller is running. Aggravating factor: `--dry-run` does
+# NOT perform this check — it passes, and the failure only surfaces on the real
+# move (observed 2026-07-28 while pivoting a CAPI-bootstrapped management).
 #
-# ⚠️ Les versions DOIVENT rester alignées sur core-providers.yaml et
-# infra-providers.yaml — clusterctl compare source et cible. Toute montée de
-# version d'un provider se répercute ici.
+# ⚠️ Versions MUST stay aligned with core-providers.yaml and infra-providers.yaml
+# — clusterctl compares source and target. Any provider version bump has to be
+# mirrored here.
 #
-# Namespaces = ceux où l'opérateur installe réellement les composants
-# (capi-system pour tous, sauf Outscale qui a le sien).
+# Namespaces = where the operator actually installs the components (capi-system
+# for all of them, except Outscale which has its own).
 ---
 apiVersion: clusterctl.cluster.x-k8s.io/v1alpha3
 kind: Provider
