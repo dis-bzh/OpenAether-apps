@@ -1,17 +1,17 @@
-# Backup quotidien OpenBao : snapshot raft → restic → 2 dépôts S3.
+# Daily OpenBao backup: raft snapshot → restic → 2 S3 repositories.
 #
 # Chiffrement CLIENT fort : restic chiffre AVANT upload (AES-256-CTR +
-# Poly1305-AES, clé dérivée de RESTIC_PASSWORD par scrypt). Les buckets ne
-# voient jamais de données en clair. Le password vit dans OpenBao
-# (backup/restic) ET DOIT être escrowé offline (Bitwarden EU) : c'est lui
-# qui rend les backups restaurables quand OpenBao lui-même est perdu.
+# Poly1305-AES, key derived from RESTIC_PASSWORD by scrypt). The buckets never
+# see plaintext data. The password lives in OpenBao (backup/restic) AND MUST
+# be escrowed offline (Bitwarden EU): it is what makes the backups restorable
+# when OpenBao itself is lost.
 #
-# Multi-destination : le même snapshot est poussé vers 2 dépôts restic
-# indépendants (s3-primary / s3-replica — providers différents en prod).
-# L'échec de l'UN OU L'AUTRE fait échouer le Job (contrat = 2 copies).
+# Multi-destination: the same snapshot is pushed to 2 independent restic
+# repositories (s3-primary / s3-replica — different providers in production).
+# A failure of EITHER fails the Job (the contract is 2 copies).
 #
-# Rétention (par dépôt) : 14 quotidiens, 8 hebdos, 12 mensuels + `restic check`
-# (intégrité metadata) à chaque run.
+# Retention (per repository): 14 daily, 8 weekly, 12 monthly + `restic check`
+# (metadata integrity) on every run.
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -48,7 +48,7 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           volumes:
-            # CA interne d'OpenBao — le snapshot passe par son API en TLS.
+            # OpenBao's internal CA — the snapshot goes through its API over TLS.
             - name: openbao-tls
               secret:
                 secretName: openbao-server-tls
@@ -59,9 +59,9 @@ spec:
             - name: tmp
               emptyDir: {}
           initContainers:
-            # 1) Snapshot raft — login auth/kubernetes (rôle backup-snapshot),
-            #    résolution du leader (le snapshot doit viser le nœud actif),
-            #    sauvegarde dans l'emptyDir partagé.
+            # 1) Raft snapshot — auth/kubernetes login (backup-snapshot role),
+            #    leader resolution (the snapshot must target the active node),
+            #    saved into the shared emptyDir.
             - name: snapshot
               image: docker.io/openbao/openbao:2.5.4
               command:
@@ -70,7 +70,7 @@ spec:
                 - |
                   set -eu
                   export BAO_ADDR="https://openbao.foundation-vault.svc.cluster.local:8200"
-                  # CA interne du listener OpenBao (cf. foundation/vault/tls.yaml).
+                  # The OpenBao listener's internal CA (see foundation/vault/tls.yaml).
                   export BAO_CACERT="/bao/tls/ca.crt"
                   export VAULT_CACERT="$BAO_CACERT"
                   export VAULT_ADDR="$BAO_ADDR"
@@ -78,7 +78,7 @@ spec:
                   [ -n "$LEADER" ] || { echo "ERREUR: leader raft introuvable"; exit 1; }
                   export BAO_ADDR="${LEADER%/}" VAULT_ADDR="${LEADER%/}"
                   echo "leader raft: $BAO_ADDR"
-                  # Pas de set -x : le token ne doit jamais être loggé.
+                  # No set -x: the token must never be logged.
                   BAO_TOKEN="$(bao write -field=token auth/kubernetes/login \
                     role=backup-snapshot \
                     jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token)"
@@ -103,7 +103,7 @@ spec:
                 requests: { cpu: 50m, memory: 64Mi }
                 limits: { cpu: 500m, memory: 256Mi }
           containers:
-            # 2) Push restic vers les 2 dépôts (chiffrement client + rétention).
+            # 2) restic push to both repositories (client encryption + retention).
             - name: restic-push
               image: docker.io/restic/restic:0.18.0
               command:
@@ -111,10 +111,10 @@ spec:
                 - -c
                 - |
                   set -eu
-                  # Préfixe de dépôt : sans lui, deux clusters partageant un
+                  # Repository prefix: without it, two clusters sharing a
                   # bucket se bloquent mutuellement (« already initialized »,
-                  # le RESTIC_PASSWORD n'étant pas partagé). `set -u` suffirait
-                  # à échouer, mais pas à expliquer pourquoi.
+                  # since RESTIC_PASSWORD is not shared). `set -u` would be
+                  # enough to fail, but not to explain why.
                   if [ -z "${CLUSTER_NAME:-}" ]; then
                     echo "ERREUR: CLUSTER_NAME vide — le ConfigMap cluster-identity"
                     echo "        du namespace est absent ou non substitué"
@@ -126,17 +126,17 @@ spec:
                     ep="$1"; bucket="$2"; label="$3"
                     export RESTIC_REPOSITORY="s3:${ep}/${bucket}/${CLUSTER_NAME}/openbao"
                     echo "── dépôt ${label}: ${ep}/${bucket}/${CLUSTER_NAME}/openbao"
-                    # ⚠️ restic ne crée PAS le bucket (il DOIT préexister —
-                    # ensure-buckets côté infra, chart minio en local) et retry
-                    # un NoSuchBucket ~15 min en silence → probe borné.
+                    # ⚠️ restic does NOT create the bucket (it MUST pre-exist —
+                    # ensure-buckets on the infra side, the minio chart locally)
+                    # and retries a NoSuchBucket for ~15 min silently → bounded probe.
                     if ! timeout 60 restic cat config >/dev/null 2>&1; then
-                      # Deux échecs très différents se cachent ici :
-                      #  • dépôt ABSENT           → init légitime ;
-                      #  • dépôt EXISTANT mais illisible (mot de passe d'un
-                      #    AUTRE cluster : les dépôts survivent aux clusters,
-                      #    pas leur RESTIC_PASSWORD) → init échoue avec
-                      #    "already initialized" et il faut trancher : purger
-                      #    le préfixe, ou pointer un bucket/chemin distinct.
+                      # Two very different failures hide here:
+                      #  • repository MISSING     → a legitimate init;
+                      #  • repository PRESENT but unreadable (another cluster's
+                      #    password: repositories outlive clusters, their
+                      #    RESTIC_PASSWORD does not) → init fails with
+                      #    "already initialized" and a decision is needed: purge
+                      #    the prefix, or point at a distinct bucket/path.
                       init_err="$(restic init 2>&1)" || {
                         case "$init_err" in
                           *"already initialized"*)
@@ -166,10 +166,10 @@ spec:
               envFrom:
                 - secretRef:
                     name: backup-restic-env
-                # CLUSTER_NAME — préfixe des dépôts restic, pour que plusieurs
-                # clusters puissent partager un bucket sans se bloquer.
-                # Posé par la Kustomization backup-*-identity (22a) ; lu ici au
-                # RUNTIME, donc aucune substitution Flux ne touche ce fichier.
+                # CLUSTER_NAME — restic repository prefix, so several clusters
+                # can share a bucket without blocking each other.
+                # Laid down by the backup-*-identity Kustomization (22a); read
+                # here at RUNTIME, so no Flux substitution touches this file.
                 - configMapRef:
                     name: cluster-identity
               securityContext:
