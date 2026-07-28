@@ -1,8 +1,8 @@
 # OpenAether — CiliumNetworkPolicy Zitadel (Zero Trust L3/L4)
 # ──────────────────────────────────────────────────────────────────────────
-# services-identity est HORS mesh (cf. namespace.yaml) → toute la sécurité réseau
-# de Zitadel repose sur CETTE CiliumNetworkPolicy L3/L4 (+ WireGuard niveau nœud
-# + l'authN native OIDC de Zitadel). Pas d'AuthorizationPolicy Istio (inerte hors-mesh).
+# services-identity is OUTSIDE the mesh (see namespace.yaml) → all of Zitadel's
+# network security rests on THIS L3/L4 CiliumNetworkPolicy (+ node-level
+# WireGuard + Zitadel's native OIDC authN). No Istio AuthorizationPolicy (inert outside the mesh).
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -34,8 +34,8 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
-    # Grafana (SSO OIDC) : échange du code + /oidc/v1/userinfo, appels
-    # SERVEUR-à-serveur — le flux navigateur passe, lui, par la gateway.
+    # Grafana (OIDC SSO): code exchange + /oidc/v1/userinfo, SERVER-to-server
+    # calls — the browser flow goes through the gateway instead.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability
@@ -44,7 +44,7 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
-    # Intra-namespace : le pod login appelle zitadel:8080 (ingress côté serveur).
+    # Intra-namespace: the login pod calls zitadel:8080 (server-side ingress).
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-identity
@@ -63,11 +63,11 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # kube-apiserver via toEntities (PAS toServices:kubernetes). Le Service
-    # `kubernetes` DNAT 443→6443 : toServices n'ouvre que 443, mais Cilium
-    # applique l'egress sur le port post-DNAT (6443) → droppé. Casse les
+    # kube-apiserver through toEntities (NOT toServices:kubernetes). The
+    # `kubernetes` Service DNATs 443→6443: toServices only opens 443, but Cilium
+    # applies egress on the post-DNAT port (6443) → dropped. Breaks the
     # sidecars setup zitadel-machinekey/machine-pat (kubectl create secret) →
-    # Job setup jamais Complete → HelmRelease bloqué en install.
+    # setup Job, which never Completes → the HelmRelease hangs on install.
     - toEntities:
         - kube-apiserver
     - toEndpoints:
@@ -80,9 +80,9 @@ spec:
               protocol: TCP
 ---
 # ──────────────────────────────────────────────────────────────────────────
-# Pod login (Next.js, app.kubernetes.io/name: zitadel-login). Sélecteur SÉPARÉ
-# car son label diffère de `zitadel`. Sans cette CNP, son egress (DNS + zitadel:8080)
-# est bloqué → l'initContainer wait-for-zitadel timeout (exit 124).
+# The login pod (Next.js, app.kubernetes.io/name: zitadel-login). A SEPARATE
+# selector because its label differs from `zitadel`. Without this CNP its egress
+# (DNS + zitadel:8080) is blocked → the wait-for-zitadel initContainer times out (exit 124).
 #   ingress : probes kubelet :3000 + Gateway Istio :3000 (UI login)
 #   egress  : DNS + zitadel:8080 (wait4x /debug/ready + appels API) + kube-api
 # ──────────────────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ spec:
     matchLabels:
       app.kubernetes.io/name: zitadel-login
   ingress:
-    # Probes kubelet (liveness/readiness :3000) — entité host/remote-node hors mesh.
+    # kubelet probes (liveness/readiness :3000) — host/remote-node entity, outside the mesh.
     - fromEntities:
         - host
         - remote-node
@@ -117,7 +117,7 @@ spec:
             - port: "3000"
               protocol: TCP
   egress:
-    # DNS — indispensable pour résoudre le service "zitadel".
+    # DNS — essential to resolve the "zitadel" service.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -128,7 +128,7 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # Vers le serveur Zitadel — wait4x /debug/ready (initContainer) + appels API runtime.
+    # To the Zitadel server — wait4x /debug/ready (initContainer) + runtime API calls.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-identity
@@ -138,10 +138,10 @@ spec:
             - port: "8080"
               protocol: TCP
     # kube-api (service account / projected token).
-    # kube-apiserver via toEntities (PAS toServices:kubernetes). Le Service
-    # `kubernetes` DNAT 443→6443 : toServices n'ouvre que 443, mais Cilium
-    # applique l'egress sur le port post-DNAT (6443) → droppé. Casse les
+    # kube-apiserver through toEntities (NOT toServices:kubernetes). The
+    # `kubernetes` Service DNATs 443→6443: toServices only opens 443, but Cilium
+    # applies egress on the post-DNAT port (6443) → dropped. Breaks the
     # sidecars setup zitadel-machinekey/machine-pat (kubectl create secret) →
-    # Job setup jamais Complete → HelmRelease bloqué en install.
+    # setup Job, which never Completes → the HelmRelease hangs on install.
     - toEntities:
         - kube-apiserver

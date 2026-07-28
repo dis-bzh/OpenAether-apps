@@ -1,5 +1,5 @@
 ---
-# istiod: accepte connexions des proxies/ztunnel/webhooks, émet vers kube-api
+# istiod: accepts connections from proxies/ztunnel/webhooks, emits to kube-api
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -15,8 +15,8 @@ spec:
       app: istiod
   ingress:
     # Proxies Envoy, ztunnel, ingressgateway, openaether-gateway → xDS + CA
-    # fromEntities: [cluster] au lieu de fromEndpoints: [matchLabels: {}]
-    # car ce dernier ne résout pas les identités cross-namespace (Cilium bug/limitation).
+    # fromEntities: [cluster] instead of fromEndpoints: [matchLabels: {}]
+    # because the latter does not resolve cross-namespace identities (Cilium limitation).
     - fromEntities:
         - cluster
       toPorts:
@@ -71,8 +71,8 @@ spec:
       app: ztunnel
   ingress:
     # HBONE tunnels depuis n'importe quel pod ambient (cross-node).
-    # fromEntities: [cluster] au lieu de fromEndpoints: [matchLabels: {}]
-    # car ce dernier ne résout pas les identités cross-namespace (Cilium bug/limitation).
+    # fromEntities: [cluster] instead of fromEndpoints: [matchLabels: {}]
+    # because the latter does not resolve cross-namespace identities (Cilium limitation).
     - fromEntities:
         - cluster
       toPorts:
@@ -120,7 +120,7 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-    # Trafic ambient HBONE vers autres pods/noeuds
+    # Ambient HBONE traffic to other pods/nodes
     - toEndpoints:
         - matchLabels: {}
       toPorts:
@@ -136,9 +136,9 @@ spec:
               protocol: TCP
 ---
 # ── Waypoint (foundation-service-mesh) ──────────────────────────────
-# Envoy proxy dédié (pas ambient, pas sidecar). Nécessaire pour l'authz L7.
+# Dedicated Envoy proxy (not ambient, not sidecar). Required for L7 authz.
 # Egress: istiod :15012 (xDS/CA) + :15010 (xDS plaintext) + DNS + kube-api.
-# L'ingress vers istiod est déjà couvert par la CNP istiod (fromEntities: cluster).
+# Ingress to istiod is already covered by the istiod CNP (fromEntities: cluster).
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -202,12 +202,12 @@ spec:
     matchLabels:
       service.istio.io/canonical-name: openaether-gateway-istio
   ingress:
-    # ⚠️ `host` et `remote-node` sont REQUIS par le chemin public : le LB cloud
-    # tape les NodePorts figés (30080/30443, cf.
+    # ⚠️ `host` and `remote-node` are REQUIRED by the public path: the cloud LB
+    # hits the fixed NodePorts (30080/30443, see
     # apps/base/services-gateway/service-nodeport.yaml), et en
-    # externalTrafficPolicy: Cluster le nœud SNAT le paquet vers sa propre IP.
-    # L'entité vue par Cilium n'est donc plus `world` mais le nœud lui-même —
-    # sans ces deux entités, tout l'ingress public est droppé.
+    # with externalTrafficPolicy: Cluster the node SNATs the packet to its own IP.
+    # The entity Cilium sees is therefore no longer `world` but the node itself —
+    # without those two entities, all public ingress is dropped.
     - fromEntities:
         - world
         - cluster
@@ -271,14 +271,14 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-    # Trafic applicatif vers les backends d'UI exposés par le Gateway.
-    # ⚠️ NE PAS utiliser `toEndpoints: [{matchLabels: {}}]` : un selector vide en
-    # egress est scopé au namespace de la policy (services-gateway) → ne matche
-    # AUCUN backend cross-ns → l'Envoy timeout vers grafana/zitadel/vault/longhorn.
-    # Même piège que l'ingress (cf. L18/L74, contourné par fromEntities: cluster).
-    # On cible donc chaque backend par ns+app sur son targetPort RÉEL (le port du
-    # pod, pas du Service — Cilium enforce sur le targetPort). Moindre privilège :
-    # l'Envoy ne joint QUE les 4 backends d'UI.
+    # Application traffic to the UI backends exposed by the Gateway.
+    # ⚠️ DO NOT use `toEndpoints: [{matchLabels: {}}]`: an empty selector in
+    # egress is scoped to the policy's namespace (services-gateway) → it matches
+    # NO cross-ns backend → Envoy times out to grafana/zitadel/vault/longhorn.
+    # Same trap as the ingress side (worked around with fromEntities: cluster).
+    # So we target each backend by ns+app on its REAL targetPort (the pod's port,
+    # not the Service's — Cilium enforces on the targetPort). Least privilege:
+    # Envoy can only reach the 4 UI backends.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability
