@@ -1,8 +1,8 @@
-# OpenAether 0.5.0 Sprint C — node-exporter (métriques nœuds)
+# OpenAether 0.5.0 Sprint C — node-exporter (node metrics)
 # ──────────────────────────────────────────────────────────────────
-# DaemonSet: 1 pod par nœud → HA by nature (5 pods sur 5 nœuds).
-# Expose CPU, mémoire, disque, réseau, système de fichiers du nœud.
-# Nécessite hostPID + hostNetwork pour accéder aux métriques système.
+# DaemonSet: 1 pod per node → HA by nature (5 pods on 5 nodes).
+# Exposes the node's CPU, memory, disk, network and filesystem.
+# Requires hostPID + hostNetwork to reach the system metrics.
 # Scraping: VMServiceScrape node-exporter (vmscapes.yaml).
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
@@ -39,15 +39,15 @@ spec:
       limits:
         cpu: 100m
         memory: 128Mi
-    # Talos: /host monté depuis hostPath pour accéder aux métriques FS.
+    # Talos: /host mounted from hostPath to reach the FS metrics.
     hostRootFsMount:
       enabled: true
       mountPropagation: HostToContainer
-    # Pas de ServiceMonitor (VMServiceScrape dans vmscapes.yaml).
+    # No ServiceMonitor (VMServiceScrape lives in vmscapes.yaml).
     prometheus:
       monitor:
         enabled: false
-    # Tolerations pour être déployé sur tous les nœuds (control-plane inclus).
+    # Tolerations so it is deployed on every node (control-plane included).
     tolerations:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists

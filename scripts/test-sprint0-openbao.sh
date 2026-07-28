@@ -2,10 +2,10 @@
 # OpenAether 0.5.0 — test e2e sprint 0 OpenBao (root + workload)
 # Usage: KUBECONFIG=$PWD/infrastructure/opentofu-local/kubeconfig bash scripts/test-sprint0-openbao.sh
 #
-# Self-contained: n'exige PAS le CLI `bao` en local. Tout passe par l'API HTTP
+# Self-contained: does NOT require the `bao` CLI locally. Everything goes
 # OpenBao (curl via port-forward + wget in-pod avec BAO_ADDR=http://127.0.0.1:8200).
-# Raison: l'image openbao/openbao défaut le CLI sur HTTPS → `bao status` in-pod
-# échoue contre un listener HTTP si BAO_ADDR n'est pas forcé en http.
+# through the HTTP API. Reason: the openbao/openbao image defaults the CLI to
+# HTTPS → in-pod `bao status` fails against an HTTP listener unless BAO_ADDR is forced to http.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -106,7 +106,7 @@ assert_equal "$VOTERS" "3" "raft cluster has 3 voters"
 LEADERS="$(echo "$RAFT" | jq '[.data.config.servers[] | select(.leader==true)] | length' 2>/dev/null || echo 0)"
 assert_equal "$LEADERS" "1" "raft cluster has exactly 1 leader"
 
-# Raft addresses must be STABLE DNS (not pod IPs) — régression POD_IP
+# Raft addresses must be STABLE DNS (not pod IPs) — POD_IP regression
 if echo "$RAFT" | jq -r '.data.config.servers[].address' 2>/dev/null | grep -q 'svc.cluster.local'; then
   log_ok "raft peers use stable DNS (pas d'IP éphémère)"
 else
@@ -175,9 +175,9 @@ else
   log_warn "Root unsealed après restart (inattendu pour Shamir)"
 fi
 
-# NB: après ce test, le root est SEALED → le workload ne pourra plus se
-# re-unsealer tant que le root n'est pas re-unsealed manuellement. C'est le
-# comportement voulu (le root est la racine de confiance Shamir).
+# NB: after this test the root is SEALED → the workload can no longer re-unseal
+# itself until the root is manually re-unsealed. That is the intended
+# behaviour (the root is the Shamir root of trust).
 log_info "⚠ root scellé: re-unseal via bootstrap (Secret recovery) ou cérémonie manuelle"
 kubectl delete job openbao-bootstrap -n "$ROOT_NS" --ignore-not-found >/dev/null 2>&1
 kubectl apply -k apps/base/foundation/pki-root >/dev/null 2>&1 && log_info "bootstrap relancé pour re-unseal root"

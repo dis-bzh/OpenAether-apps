@@ -10,7 +10,7 @@
 #      fraction of the data (5 %, naturally rotating month over month);
 #   2. `restic restore latest` into a throwaway volume, then checks that the
 #      result is NOT EMPTY — that is the end-to-end test.
-# Un échec ici est aussi grave qu'un backup manquant : il se voit via l'alerte
+# A failure here is as serious as a missing backup: it shows through the alert
 # BackupJobFailed (apps/base/observability/vm-customresources/vmrule-backup.yaml).
 ---
 apiVersion: batch/v1
@@ -35,9 +35,9 @@ spec:
       template:
         metadata:
           labels:
-            # ⚠️ Porte AUSSI `app: cnpg-dump` : c'est ce label que sélectionne la
+            # ⚠️ ALSO carries `app: cnpg-dump`: that is the label selected by the
             # CiliumNetworkPolicy qui ouvre l'egress S3 (networkpolicy.yaml).
-            # Sans lui, le pod n'a aucun egress et le test échoue en timeout.
+            # Without it the pod has no egress and the test fails on timeout.
             app: cnpg-dump
             component: restore-test
             openaether.io/component: backup
@@ -66,12 +66,12 @@ spec:
                     ep="$1"; bucket="$2"; label="$3"
                     export RESTIC_REPOSITORY="s3:${ep}/${bucket}/${CLUSTER_NAME}/cnpg"
                     echo "── dépôt ${label}: ${RESTIC_REPOSITORY}"
-                    # Relecture réelle d'une fraction des données (déchiffrement inclus).
+                    # A real re-read of a fraction of the data (decryption included).
                     restic check --read-data-subset=5%
                     target="/tmp/restore-${label}"
                     rm -rf "$target"; mkdir -p "$target"
                     restic restore latest --host cnpg --target "$target"
-                    # Un restore "réussi" mais vide = dépôt inexploitable.
+                    # A "successful" but empty restore = an unusable repository.
                     if [ -z "$(find "$target" -type f -print -quit)" ]; then
                       echo "ERREUR: restauration VIDE depuis le dépôt ${label} —"
                       echo "        le backup n'est PAS exploitable."
@@ -98,7 +98,7 @@ spec:
                 readOnlyRootFilesystem: true
                 runAsNonRoot: true
                 runAsUser: 1000
-                # Exigé PAR CONTENEUR par la policy require-security-context.
+                # Required PER CONTAINER by the require-security-context policy.
                 seccompProfile: { type: RuntimeDefault }
               volumeMounts:
                 - { name: tmp, mountPath: /tmp }
@@ -106,6 +106,6 @@ spec:
                 requests: { cpu: 100m, memory: 256Mi }
                 limits: { cpu: "1", memory: 1Gi }
           volumes:
-            # Jetable : la restauration ne doit RIEN laisser derrière elle.
+            # Throwaway: the restore must leave NOTHING behind.
             - name: tmp
               emptyDir: { sizeLimit: 2Gi }

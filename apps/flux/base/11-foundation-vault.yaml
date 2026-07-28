@@ -1,5 +1,5 @@
 # Groupe 11 — OpenBao Workload (raft HA 3 nodes, auto-unseal via pki-root)
-# Isolation : un crash workload n'impacte pas pki-root ni eso.
+# Isolation: a workload crash affects neither pki-root nor eso.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -16,18 +16,18 @@ spec:
   path: ./apps/base/foundation/vault
   prune: true
   wait: false
-  # force: le Job openbao-vault-bootstrap est IMMUABLE ; sans force, toute
-  # évolution de son spec fait échouer le dry-run → TOUT le bundle vault est
-  # rejeté (vu en cloud réel). force recrée le Job (delete+create), ce qui est
-  # exactement son contrat (« supprimé + recréé à chaque sync », idempotent).
+  # force: the openbao-vault-bootstrap Job is IMMUTABLE; without force, any
+  # change to its spec fails the dry-run → the WHOLE vault bundle is rejected
+  # (seen on real cloud). force recreates the Job (delete+create), which is
+  # exactly its contract ("deleted + recreated on every sync", idempotent).
   force: true
   dependsOn:
-    # cert-manager émet le certificat du listener OpenBao (TLS interne). C'est
-    # possible depuis que la dépendance INVERSE — cert-manager → foundation-vault
-    # — a été retirée : elle était fausse (seuls les ISSUERS dépendent d'OpenBao).
+    # cert-manager issues the OpenBao listener's certificate (internal TLS).
+    # This became possible once the REVERSE dependency — cert-manager →
+    # foundation-vault — was removed: it was wrong (only the ISSUERS depend on OpenBao).
     - name: cert-manager
     - name: vault-ca   # CA du certificat serveur (ns cert-manager)
     - name: platform-gateway-api
     - name: platform-local-path-provisioner  # PVC raft storageClassName local-path-retain
     - name: platform-priority-classes        # priorityClassName platform-critical (pod rejeté à l'admission si absente)
-    # - name: foundation-pki-root  # SUPPRIMÉ: plus de root OpenBao, unsealer HA gère le Shamir
+    # - name: foundation-pki-root  # REMOVED: no more OpenBao root, the HA unsealer handles Shamir

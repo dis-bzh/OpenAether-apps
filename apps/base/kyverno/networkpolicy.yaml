@@ -1,5 +1,5 @@
 # OpenAether 0.5.0 — Kyverno NetworkPolicy
-# Kyverno webhook écoute sur le port 9443 (standard kubebuilder).
+# The Kyverno webhook listens on port 9443 (kubebuilder standard).
 # Le Service kyverno-webhook expose 443 → 9443.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -14,17 +14,17 @@ spec:
   description: "Kyverno webhook: ingress kube-apiserver sur webhook:9443,
     egress DNS + kube-api."
   endpointSelector:
-    # Le chart kyverno v1.12 NE pose PAS app.kubernetes.io/name — les pods
+    # The kyverno v1.12 chart does NOT set app.kubernetes.io/name — the pods
     # portent app.kubernetes.io/part-of=kyverno (+ /component=<role>). Un
-    # selector sur /name ne matchait AUCUN pod → la CNP ne s'appliquait jamais
-    # → apiserver→webhook:9443 droppé par le default-deny (policymutate timeout).
+    # a selector on /name matched NO pod → the CNP never applied →
+    # apiserver→webhook:9443 dropped by the default-deny (policymutate timeout).
     matchLabels:
       app.kubernetes.io/part-of: kyverno
   ingress:
     # kube-apiserver → webhook Kyverno (ValidatingWebhookConfiguration / MutatingWebhookConfiguration)
     # Port standard kubebuilder 9443.
-    # remote-node: sur Talos, le static pod kube-apiserver est identifié
-    # comme nœud (node identity) par Cilium, pas comme kube-apiserver entity.
+    # remote-node: on Talos the static kube-apiserver pod is identified by Cilium
+    # as a node (node identity), not as the kube-apiserver entity.
     - fromEntities:
         - kube-apiserver
         - remote-node

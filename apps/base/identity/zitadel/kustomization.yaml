@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# OpenAether — Zitadel (identité). Le namespace services-identity est déclaré ICI
-# (et non dans apps/base/namespaces/) car aucune couche précoce ne le cible avant
-# la Kustomization Flux `identity` (étape 35). Le backend Postgres CNPG zitadel-db
+# OpenAether — Zitadel (identity). The services-identity namespace is declared
+# HERE (not in apps/base/namespaces/) because no early layer targets it before
+# the `identity` Flux Kustomization (step 35). The zitadel-db CNPG Postgres backend
 # vit dans apps/base/cnpg/ (foundation-databases).
-# NB: PAS d'AuthorizationPolicy Istio — services-identity est HORS mesh (ztunnel
-# n'intercepte pas → une AuthorizationPolicy y serait inerte, théâtre de sécurité).
-# La sécurité réseau vient de la CiliumNetworkPolicy L3/L4 (networkpolicy.yaml).
+# NB: NO Istio AuthorizationPolicy — services-identity is OUTSIDE the mesh (ztunnel
+# does not intercept → an AuthorizationPolicy would be inert there, security theatre).
+# Network security comes from the L3/L4 CiliumNetworkPolicy (networkpolicy.yaml).
 resources:
   - namespace.yaml
   - externalsecrets.yaml

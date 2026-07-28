@@ -1,5 +1,5 @@
 # OpenAether 0.5.0 — Cluster API Operator NetworkPolicy
-# CAPI operator webhook (si activé) écoute sur le port 9443 (standard kubebuilder).
+# The CAPI operator webhook (if enabled) listens on port 9443 (kubebuilder standard).
 # Le Service capi-operator-webhook expose 443 → 9443.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -19,8 +19,8 @@ spec:
   ingress:
     # kube-apiserver → webhook CAPI operator (ValidatingWebhookConfiguration)
     # Port standard kubebuilder 9443.
-    # remote-node: sur Talos, le static pod kube-apiserver est identifié
-    # comme nœud (node identity) par Cilium, pas comme kube-apiserver entity.
+    # remote-node: on Talos the static kube-apiserver pod is identified by Cilium
+    # as a node (node identity), not as the kube-apiserver entity.
     - fromEntities:
         - kube-apiserver
         - remote-node
@@ -38,7 +38,7 @@ spec:
             - port: "9443"
               protocol: TCP
   egress:
-    # DNS — rules.dns requis pour que les toFQDNs matchent (proxy DNS Cilium).
+    # DNS — rules.dns is required for the toFQDNs to match (Cilium DNS proxy).
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -63,10 +63,10 @@ spec:
               protocol: TCP
     - toEntities:
         - kube-apiserver
-    # Releases GitHub — l'operator TÉLÉCHARGE les manifests des providers
-    # (CoreProvider/InfrastructureProvider…) depuis les releases GitHub.
-    # Sans cet egress : "ComponentsFetchError … context deadline exceeded"
-    # et AUCUN provider ne s'installe (constaté en cloud réel).
+    # GitHub releases — the operator DOWNLOADS the providers' manifests
+    # (CoreProvider/InfrastructureProvider…) from GitHub releases.
+    # Without this egress: "ComponentsFetchError … context deadline exceeded"
+    # and NO provider installs (observed on real cloud).
     - toFQDNs:
         - matchName: github.com
         - matchName: api.github.com

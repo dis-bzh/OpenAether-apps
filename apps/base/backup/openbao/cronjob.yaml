@@ -91,9 +91,9 @@ spec:
                 readOnlyRootFilesystem: true
                 runAsNonRoot: true
                 runAsUser: 1000
-                # Exigé PAR CONTENEUR par la policy require-security-context
-                # (l'hériter du pod ne suffit pas) — sinon le Job est rejeté
-                # à l'admission dès que Kyverno est actif.
+                # Required PER CONTAINER by the require-security-context policy
+                # (inheriting from the pod is not enough) — otherwise the Job is
+                # rejected at admission as soon as Kyverno is active.
                 seccompProfile: { type: RuntimeDefault }
               volumeMounts:
                 - { name: backup, mountPath: /backup }
@@ -178,9 +178,9 @@ spec:
                 readOnlyRootFilesystem: true
                 runAsNonRoot: true
                 runAsUser: 1000
-                # Exigé PAR CONTENEUR par la policy require-security-context
-                # (l'hériter du pod ne suffit pas) — sinon le Job est rejeté
-                # à l'admission dès que Kyverno est actif.
+                # Required PER CONTAINER by the require-security-context policy
+                # (inheriting from the pod is not enough) — otherwise the Job is
+                # rejected at admission as soon as Kyverno is active.
                 seccompProfile: { type: RuntimeDefault }
               volumeMounts:
                 - { name: backup, mountPath: /backup, readOnly: true }

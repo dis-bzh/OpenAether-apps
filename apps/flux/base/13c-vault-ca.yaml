@@ -1,13 +1,13 @@
 # Groupe 13c — CA interne d'OpenBao (TLS du listener).
 #
-# POURQUOI UNE KUSTOMIZATION SÉPARÉE DE `foundation-vault`
-#   Le kustomization de la brique vault porte `namespace: foundation-vault`, et
-#   le transformateur de namespace de Kustomize écrase le namespace de CHAQUE
-#   ressource, y compris celles d'une base référencée. La CA doit vivre dans
-#   `cert-manager` — seul endroit où le `ClusterIssuer` openbao sait lire un
-#   `caBundleSecretRef`. Elle ne peut donc pas être portée par la brique vault.
+# WHY A KUSTOMIZATION SEPARATE FROM `foundation-vault`
+#   The vault brick's kustomization carries `namespace: foundation-vault`, and
+#   Kustomize's namespace transformer overrides the namespace of EVERY resource,
+#   including those of a referenced base. The CA must live in `cert-manager` —
+#   the only place where the openbao `ClusterIssuer` can read a
+#   `caBundleSecretRef`. It therefore cannot be carried by the vault brick.
 #
-#   Constaté en cloud le 2026-07-28 : la CA atterrissait dans foundation-vault,
+#   Observed in the cloud on 2026-07-28: the CA landed in foundation-vault,
 #   `openbao-server-tls` restait « Secret does not exist » et les 3 pods OpenBao
 #   bloquaient en ContainerCreating.
 ---
@@ -25,8 +25,8 @@ spec:
     name: openaether
   path: ./apps/base/foundation/vault-ca
   prune: true
-  # wait: true — foundation-vault en dépend : ses pods ne démarrent pas sans le
-  # certificat serveur, lui-même signé par cette CA.
+  # wait: true — foundation-vault depends on it: its pods do not start without
+  # the server certificate, itself signed by this CA.
   wait: true
   dependsOn:
     - name: cert-manager
