@@ -33,21 +33,16 @@ spec:
       # token ou auth/kubernetes, TLS n'authentifie que le serveur.
       mode: SIMPLE
       sni: openbao-ui.foundation-vault.svc.cluster.local
-      # ⚠️ ÉTAT INTERMÉDIAIRE ASSUMÉ, à durcir.
+      # Vérification du certificat serveur par l'Envoy de la gateway.
       #
-      # `caCertificates` exigerait que la CA soit un FICHIER dans le conteneur
-      # Envoy de la gateway — or celui-ci est généré par Istio, on n'y monte
-      # rien facilement. Pointer un chemin inexistant casserait l'UI : ce serait
-      # pire que l'état d'avant.
+      # `credentialName` lit un Secret dans le namespace du CLIENT — donc
+      # `services-gateway`, pas foundation-vault. La CA y est matérialisée par
+      # le Certificate `openbao-ca-bundle`
+      # (apps/base/services-gateway/openbao-ca-bundle.yaml), signé par la même
+      # ClusterIssuer que le listener : seul son `ca.crt` est consommé.
       #
-      # Ce réglage CHIFFRE le trafic gateway → OpenBao (il ne restait plus en
-      # clair) mais ne fait pas authentifier le serveur par la gateway. C'est
-      # strictement meilleur que le HTTP d'avant, et sans régression
-      # fonctionnelle. Les deux extrémités sont in-cluster ; le risque résiduel
-      # est un attaquant capable de se faire passer pour OpenBao DANS le
-      # cluster — qui aurait déjà bien d'autres moyens.
-      #
-      # Durcissement propre, au choix : installer le canal expérimental de
-      # Gateway API pour un `BackendTLSPolicy` (qui, lui, référence un
-      # ConfigMap de CA), ou distribuer la CA aux proxies via trust-manager.
-      insecureSkipVerify: true
+      # Remplace un `insecureSkipVerify: true` qui chiffrait sans authentifier
+      # le serveur. `caCertificates` n'était pas utilisable : il attend un
+      # CHEMIN DE FICHIER dans l'Envoy, que Istio génère et où l'on ne monte
+      # rien facilement.
+      credentialName: openbao-ca-bundle

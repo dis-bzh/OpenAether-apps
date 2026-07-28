@@ -1,0 +1,39 @@
+# Bundle de CA d'OpenBao, matérialisé DANS le namespace de la gateway.
+#
+# ── Pourquoi ce Certificate ─────────────────────────────────────────────────
+# Le `DestinationRule` openbao-tls (apps/base/foundation/vault) doit faire
+# vérifier le certificat d'OpenBao par l'Envoy de la gateway. Istio le permet via
+# `trafficPolicy.tls.credentialName`, qui lit un Secret — mais dans le namespace
+# du CLIENT, ici `services-gateway`. Or la CA vit dans `cert-manager`.
+#
+# On demande donc à cert-manager d'émettre ici un certificat signé par la MÊME
+# CA : le Secret produit contient `ca.crt`, qui est tout ce dont Envoy a besoin
+# en mode SIMPLE. Le certificat feuille lui-même n'est pas utilisé — c'est le
+# prix à payer pour ne pas ajouter un composant (trust-manager) juste pour
+# recopier un bundle de 1 Ko.
+#
+# ⚠️ Alternative si l'on veut éviter la feuille inutile : déployer trust-manager
+# et remplacer ce Certificate par un `Bundle`. À arbitrer si d'autres namespaces
+# ont le même besoin — pour un seul, cette solution reste la plus légère.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-ca-bundle
+  namespace: services-gateway
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: gateway
+spec:
+  secretName: openbao-ca-bundle
+  duration: 8760h
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: openbao-ca
+    kind: ClusterIssuer
+  # Nom sans valeur fonctionnelle : seul `ca.crt` du Secret sera consommé.
+  commonName: openbao-ca-bundle.services-gateway
+  dnsNames:
+    - openbao-ca-bundle.services-gateway.svc.cluster.local
