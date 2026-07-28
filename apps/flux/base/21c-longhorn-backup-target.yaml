@@ -1,20 +1,20 @@
-# Groupe 21c — Cible de sauvegarde des volumes Longhorn.
+# Group 21c — backup target for Longhorn volumes.
 #
-# POURQUOI SÉPARÉE DE LA BRIQUE `storage`
-#   Cette Kustomization porte un `postBuild.substituteFrom` pour injecter
-#   ${BACKUP_TARGET_URL}. Or la substitution Flux s'applique à TOUT le rendu
-#   d'une Kustomization : fusionnée avec `apps/base/storage`, elle viderait les
-#   variables shell de son `install.yaml` (`$VOL_DIR`). Même raison, et même
-#   forme, que les briques `backup-*-identity` (22a).
+# WHY IT IS SEPARATE FROM THE `storage` BRICK
+#   This Kustomization carries a `postBuild.substituteFrom` to inject
+#   ${BACKUP_TARGET_URL}. But Flux substitution applies to the WHOLE render of a
+#   Kustomization: merged with `apps/base/storage`, it would blank the shell
+#   variables of its `install.yaml` (`$VOL_DIR`). Same reason, and same shape,
+#   as the `backup-*-identity` bricks (22a).
 #
-#   ⚠️ Ne jamais fusionner ces ressources dans `apps/base/storage`.
+#   ⚠️ Never merge these resources into `apps/base/storage`.
 #
-# CE QUE ÇA DÉBLOQUE
-#   Jusqu'ici `backupTarget` était vide et renvoyait à un « overlay cloud » qui
-#   n'a jamais existé : les volumes Longhorn n'avaient AUCUNE destination de
-#   sauvegarde, alors que le projet vise à sauvegarder tout ce qui est critique.
-#   Les credentials viennent d'OpenBao (même destination que les dépôts restic),
-#   l'URL du ConfigMap `cluster-identity` posé au bootstrap par OpenTofu.
+# WHAT THIS UNBLOCKS
+#   Until now `backupTarget` was empty and referred to a "cloud overlay" that
+#   never existed: Longhorn volumes had NO backup destination at all, while the
+#   project aims to back up everything critical.
+#   The credentials come from OpenBao (the same destination as the restic
+#   repositories), the URL from the `cluster-identity` ConfigMap laid down at bootstrap by OpenTofu.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

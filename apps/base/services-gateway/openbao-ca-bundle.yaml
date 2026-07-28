@@ -1,20 +1,20 @@
-# Bundle de CA d'OpenBao, matérialisé DANS le namespace de la gateway.
+# OpenBao's CA bundle, materialised IN the gateway's namespace.
 #
 # ── Pourquoi ce Certificate ─────────────────────────────────────────────────
-# Le `DestinationRule` openbao-tls (apps/base/foundation/vault) doit faire
-# vérifier le certificat d'OpenBao par l'Envoy de la gateway. Istio le permet via
-# `trafficPolicy.tls.credentialName`, qui lit un Secret — mais dans le namespace
-# du CLIENT, ici `services-gateway`. Or la CA vit dans `cert-manager`.
+# The openbao-tls `DestinationRule` (apps/base/foundation/vault) must have the
+# gateway's Envoy verify OpenBao's certificate. Istio allows this through
+# `trafficPolicy.tls.credentialName`, which reads a Secret — but in the CLIENT's
+# namespace, here `services-gateway`. Yet the CA lives in `cert-manager`.
 #
-# On demande donc à cert-manager d'émettre ici un certificat signé par la MÊME
-# CA : le Secret produit contient `ca.crt`, qui est tout ce dont Envoy a besoin
-# en mode SIMPLE. Le certificat feuille lui-même n'est pas utilisé — c'est le
-# prix à payer pour ne pas ajouter un composant (trust-manager) juste pour
-# recopier un bundle de 1 Ko.
+# So we ask cert-manager to issue a certificate here signed by the SAME CA: the
+# resulting Secret contains `ca.crt`, which is all Envoy needs in SIMPLE mode.
+# The leaf certificate itself is unused — that is the price of not adding a
+# component (trust-manager) just to copy a 1 KB bundle.
 #
-# ⚠️ Alternative si l'on veut éviter la feuille inutile : déployer trust-manager
-# et remplacer ce Certificate par un `Bundle`. À arbitrer si d'autres namespaces
-# ont le même besoin — pour un seul, cette solution reste la plus légère.
+#
+# ⚠️ Alternative if you want to avoid the useless leaf: deploy trust-manager and
+# replace this Certificate with a `Bundle`. Worth revisiting if other namespaces
+# need the same — for a single one, this stays the lightest option.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -33,7 +33,7 @@ spec:
   issuerRef:
     name: openbao-ca
     kind: ClusterIssuer
-  # Nom sans valeur fonctionnelle : seul `ca.crt` du Secret sera consommé.
+  # The name has no functional value: only the Secret's `ca.crt` is consumed.
   commonName: openbao-ca-bundle.services-gateway
   dnsNames:
     - openbao-ca-bundle.services-gateway.svc.cluster.local

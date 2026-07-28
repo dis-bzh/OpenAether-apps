@@ -1,25 +1,25 @@
 # OpenAether 0.5.0 — Default Deny All (Ingress)
 # ──────────────────────────────────────────────────────────────────────────
-# Ferme INGRESS par défaut sur le cluster.
-# Chaque pod doit avoir sa propre CNP ingress pour être joignable.
+# Closes INGRESS by default across the cluster.
+# Every pod needs its own ingress CNP to be reachable.
 #
-# POSTURE EGRESS : pas de deny-all cluster-wide (voir explication ci-dessous).
-# L'egress est géré par les CCNP et CNP par composant :
-#   CCNP allow-dns      → DNS :53 UDP/TCP vers CoreDNS (tous pods)
+# EGRESS POSTURE: no cluster-wide deny-all (see the explanation below).
+# Egress is handled by the per-component CCNPs and CNPs:
+#   CCNP allow-dns      → DNS :53 UDP/TCP to CoreDNS (all pods)
 #   CCNP allow-kube-api → kube-apiserver :443 (tous pods)
 #   CCNP allow-infra-egress-restricted → FQDNs/CIDRs par ns (Flux, CAPI, Longhorn…)
 #   CNP par composant   → flux:registries, loki:MinIO, grafana:CNPG, gateway:backends…
 #
-# ⚠️ Pourquoi PAS de deny-all-egress cluster-wide (Cilium) :
-#   En Cilium, les CCNPs avec endpointSelector: {} S'INTERSECTENT. Un
-#   endpointSelector: {} + egress: [{}] crée un "deny all egress" qui
-#   OVERRIDES les allows de allow-dns/allow-kube-api (intersection = rien).
-#   Résultat : DNS casse (CoreDNS ne peut plus forward vers upstream),
+# ⚠️ Why there is NO cluster-wide deny-all-egress (Cilium):
+#   In Cilium, CCNPs with endpointSelector: {} INTERSECT. An
+#   endpointSelector: {} + egress: [{}] creates a "deny all egress" that
+#   OVERRIDES the allow-dns/allow-kube-api allows (intersection = nothing).
+#   Result: DNS breaks (CoreDNS can no longer forward upstream),
 #   kube-api inatteignable, cascade de blocages.
-#   La sécurité egress repose sur les CNP par composant (qui sont
-#   ADDITIVES entre elles et avec les CCNP). Les namespaces sans CNP
-#   egress dédié ont un egress libre — acceptable en phase dev, à durcir
-#   en prod par des CNP par namespace (pas par CCNP cluster-wide).
+#   Egress security rests on the per-component CNPs (which are ADDITIVE with
+#   each other and with the CCNPs). Namespaces without a dedicated egress CNP
+#   have free egress — acceptable in the dev phase, to be hardened in
+#   production with per-namespace CNPs (not with a cluster-wide CCNP).
 # ──────────────────────────────────────────────────────────────────────────
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
