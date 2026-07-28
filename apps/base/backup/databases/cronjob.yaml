@@ -59,7 +59,7 @@ spec:
                 secretName: grafana-db-credentials
           initContainers:
             # 1) Logical dumps — image aligned with the newer of the two
-            #    Clusters (pg_dump 16.x dumpe les serveurs 16.x plus anciens).
+            #    Clusters (pg_dump 16.x can dump older 16.x servers).
             - name: pg-dump
               image: ghcr.io/cloudnative-pg/postgresql:16.3
               command:

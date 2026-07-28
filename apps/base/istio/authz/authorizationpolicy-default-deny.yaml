@@ -32,12 +32,12 @@ metadata:
     openaether.io/component: "istio"
 spec: {}
 # NOTE: services-observability is NO LONGER ambient (kubelet probes dropped by
-# HBONE → CrashLoop ; cf. namespaces.yaml). ztunnel n'y intercepte plus rien →
-# an AuthorizationPolicy would be inert there ("security theatre"). Its security
-# = CiliumNetworkPolicy L3/L4 (apps/base/observability/networkpolicy.yaml).
+# HBONE → CrashLoop; cf. namespaces.yaml). ztunnel intercepts nothing there, so
+# an AuthorizationPolicy would be inert ("security theatre"). Its security is
+# CiliumNetworkPolicy L3/L4 (apps/base/observability/networkpolicy.yaml).
 ---
-# foundation-networking : ambient (futurs Gateway-API controllers). Sans policy
-# = allow-all → a real hole. The intra-ns allow is to be completed once
+# foundation-networking: ambient (future Gateway-API controllers). With no
+# policy it is allow-all — a real hole. The intra-ns allow is to be completed
 # workloads are deployed there (the namespace is empty today).
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
