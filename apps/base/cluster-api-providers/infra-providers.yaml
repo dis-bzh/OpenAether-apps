@@ -54,7 +54,7 @@ spec:
 #      (OpenStack): whoever gets it blocks the other in "attempting to acquire
 #      leader lease", so an entire provider stops reconciling anything.
 # The deployment namespace = the CR's metadata.namespace (there is no
-# spec.deployment.namespace) → on isole Outscale ici.
+# spec.deployment.namespace) → Outscale is isolated here.
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
 kind: InfrastructureProvider
 metadata:
