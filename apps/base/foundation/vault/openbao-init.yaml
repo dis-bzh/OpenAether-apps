@@ -107,7 +107,9 @@ spec:
             defaultMode: 0444
       containers:
         - name: init
-          image: alpine/k8s:1.31.1
+          # ⚠️ Préfixe `docker.io/` OBLIGATOIRE : une image sans registre ne
+          # matche AUCUN pattern de la policy restrict-image-registries.
+          image: docker.io/alpine/k8s:1.31.1
           env:
             - name: VAULT_NS
               value: "foundation-vault"
@@ -200,6 +202,7 @@ spec:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 1000
+            seccompProfile: { type: RuntimeDefault }
           volumeMounts:
             - name: tmp
               mountPath: /tmp

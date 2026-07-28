@@ -92,6 +92,7 @@ spec:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 100
+            seccompProfile: { type: RuntimeDefault }
           # Probes: startup tolère uninit/sealed (le temps que l'unsealer HA opère).
           # readiness retire le pod sealed du Service. liveness stricte.
           startupProbe:
