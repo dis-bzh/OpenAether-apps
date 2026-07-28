@@ -33,10 +33,10 @@ messages de commit et documentation. Le français est une **traduction**, jamais
 la source. README : `README.md` = anglais (canonique), `README.fr.md` = français.
 Échange avec l'utilisateur : en français.
 
-⚠️ Fond de commentaires français antérieur à cette convention : les convertir
-**au fil des modifications**, jamais en masse — ils encodent des pièges durement
-acquis (`ipam.mode`, `cni.exclusive`, substitution Flux…) qu'une traduction
-automatique abîmerait.
+⚠️ Le dépôt est **entièrement en anglais depuis le 2026-07-28**. Avant de
+traduire une chaîne, vérifier qu'aucun code ne la compare : `pick.py`
+identifiait ses profils générés par l'en-tête français, et la traduire a rendu
+`--check` aveugle en silence.
 
 ## Backlog
 
