@@ -1,12 +1,12 @@
-# Backups de BASE, complément indispensable de l'archivage WAL.
+# BASE backups, the indispensable complement to WAL archiving.
 #
-# `barmanObjectStore` archive les WAL en continu, mais un WAL ne se rejoue qu'à
-# partir d'un backup de base : sans ces ScheduledBackup, la destination se
-# remplit d'archives inexploitables. C'est le couple qui donne le PITR.
+# `barmanObjectStore` archives WAL continuously, but a WAL can only be replayed
+# from a base backup: without these ScheduledBackups the destination fills up
+# with unusable archives. It is the pair that delivers PITR.
 #
-# ⚠️ Le `schedule` de CNPG N'EST PAS un cron Kubernetes : il porte un champ
-# SECONDES en tête (format robfig/cron, 6 champs). Vérifié dans le CRD vendoré
-# (cnpg-1.23.1.yaml). Écrit à 5 champs, il serait décalé d'un cran — l'heure lue
+# ⚠️ CNPG's `schedule` IS NOT a Kubernetes cron: it carries a leading SECONDS
+# field (robfig/cron format, 6 fields). Verified in the vendored CRD
+# (cnpg-1.23.1.yaml). Written with 5 fields it would shift by one — the hour read
 # comme des minutes.
 ---
 apiVersion: postgresql.cnpg.io/v1
@@ -18,8 +18,8 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: cnpg
 spec:
-  # 03:10, décalé des CronJobs restic (02:17 / 02:47) pour ne pas empiler les
-  # écritures S3 ni la charge disque au même moment.
+  # 03:10, offset from the restic CronJobs (02:17 / 02:47) so as not to stack S3
+  # writes or disk load at the same moment.
   schedule: "0 10 3 * * *"
   backupOwnerReference: self
   cluster:

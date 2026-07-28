@@ -1,13 +1,13 @@
-# Egress générique du Gateway nord-sud vers des backends applicatifs.
-# CiliumClusterwideNetworkPolicy (pas CiliumNetworkPolicy namespacée) car un
-# matchLabels dans une CNP namespacée est implicitement scopé au namespace de
-# la policy (cf. commentaires networkpolicy.yaml L18-19/L74-76) — inutilisable
-# ici puisque les apps backend vivent dans d'autres namespaces.
-# Ce fichier ne connaît aucun nom d'app métier : toute app qui veut être
-# joignable depuis le Gateway s'auto-labellise
-# `networking.openaether.io/gateway-backend: "true"` sur son pod et écoute
-# sur le port 8080 (convention plateforme) — l'opt-in est porté par l'app
-# elle-même dans son propre repo/deploy.
+# Generic egress from the north-south Gateway to application backends.
+# A CiliumClusterwideNetworkPolicy (not a namespaced CiliumNetworkPolicy)
+# because matchLabels in a namespaced CNP is implicitly scoped to the policy's
+# namespace (see the networkpolicy.yaml comments) — unusable here since the
+# backend apps live in other namespaces.
+# This file knows no business app name: any app that wants to be reachable from
+# the Gateway labels itself
+# `networking.openaether.io/gateway-backend: "true"` on its pod and listens on
+# port 8080 (platform convention) — the opt-in is carried by the app itself in
+# its own repo/deploy.
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
 metadata:

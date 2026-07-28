@@ -1,11 +1,11 @@
 # AuthorizationPolicies du namespace foundation-storage (MinIO).
 #
-# ⚠️ Elles vivaient dans apps/base/istio/authz jusqu'au 2026-07-27. Or ce
-# dossier est appliqué dès qu'Istio est pioché, alors que foundation-storage
-# n'existe que si la brique `storage` l'est aussi : un profil « istio sans
-# storage » (cas du profil workload des enfants) bloquait la Kustomization
+# ⚠️ They lived in apps/base/istio/authz until 2026-07-27. But that directory is
+# applied as soon as Istio is picked, whereas foundation-storage only exists if
+# the `storage` brick is picked too: an "istio without storage" profile (the
+# children's workload profile) blocked the Kustomization
 # istio-authorizationpolicies sur « namespaces "foundation-storage" not
-# found » — constaté en réel sur edge-2 le 2026-07-27.
+# found" — observed for real on edge-2 on 2026-07-27.
 #
 # Elles forment donc une brique COMPAGNON à part, dependsOn [istio, storage] :
 # pioché uniquement quand les deux le sont. Règle générale — une policy qui
