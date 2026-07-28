@@ -262,13 +262,13 @@ spec:
           # role: worker par defaut (OscVm.GetRole()). Sans "controlplane" :
           # mauvais subnet, mauvais SG, et surtout AUCUN enregistrement en
           # LBU backend (oscmachine_vm.go only calls
-          # LinkLoadBalancerBackendMachines que si role==controlplane).
+          # LinkLoadBalancerBackendMachines when role==controlplane).
           role: controlplane
-          # PIEGE #8 — l'image. node.vm.imageId (ami-…) OU node.image.name.
+          # TRAP #8 — the image: node.vm.imageId (ami-…) OR node.image.name.
           # getImageId() gives PRIORITY to node.image.name: if both are set,
-          # renseignes, imageId est ignore. On utilise l'ID (deterministe).
-          # Alternative par nom (necessite accountId, sinon CAPOSC logue
-          # "[security] It is recommended to set the image account") :
+          # imageId is ignored. We use the ID (deterministic). By name instead
+          # needs accountId, or CAPOSC logs
+          # "[security] It is recommended to set the image account":
           #   image:
           #     name: ${OSC_IMAGE_NAME}
           #     accountId: ${OSC_IMAGE_ACCOUNT_ID}

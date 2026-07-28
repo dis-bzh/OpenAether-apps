@@ -27,9 +27,9 @@ resources:
 patches:
   # The kyverno Namespace is ALREADY declared by install.yaml (vendored file).
   # Redeclaring it under resources: causes "may not add resource with an
-  # already registered id: Namespace/kyverno". On applique donc nos labels
-  # (Istio ambient + PSS + openaether.io/*) via un strategic-merge patch sur
-  # the existing namespace — namespace.yaml is no longer a resource.
+  # already registered id: Namespace/kyverno". Our labels (Istio ambient + PSS
+  # + openaether.io/*) are therefore applied with a strategic-merge patch on the
+  # existing namespace — namespace.yaml is no longer a resource.
   - path: namespace.yaml
     target:
       kind: Namespace

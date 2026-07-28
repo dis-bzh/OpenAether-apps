@@ -31,7 +31,7 @@ spec:
       retries: 3
   values:
     # CNI chained AFTER Cilium (Cilium = 05-cilium.conflist, Istio = ZZ-istio-cni.conflist)
-    # Cilium doit avoir: cni.exclusive=false, socketLB.hostNamespaceOnly=true
+    # Cilium must have: cni.exclusive=false, socketLB.hostNamespaceOnly=true
     chained: true
     logLevel: info
     excludeNamespaces:

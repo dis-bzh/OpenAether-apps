@@ -64,13 +64,12 @@ spec:
               - "15008"
 ---
 # ════════════════════════════════════════════════════════════════════════
-# services-observability : HORS MESH (plus d'AuthorizationPolicy ici)
+# services-observability: OUT OF MESH (no AuthorizationPolicy here)
 # ════════════════════════════════════════════════════════════════════════
-# The namespace left ambient (kubelet probes dropped by HBONE :15008
-# → CrashLoop vm-operator/KSM/grafana ; cf. namespaces.yaml). ztunnel n'y
-# intercepte plus rien → toute AuthorizationPolicy y serait inerte.
-# Flux intra-stack + ingress Gateway→Grafana :3000 = CiliumNetworkPolicy L3/L4
-# (apps/base/observability/networkpolicy.yaml, CNP grafana ← services-gateway).
+# The namespace left ambient (kubelet probes dropped by HBONE :15008 →
+# CrashLoop vm-operator/KSM/grafana; cf. namespaces.yaml), so ztunnel
+# intercepts nothing and any AuthorizationPolicy would be inert. Its security
+# is CiliumNetworkPolicy L3/L4 (apps/base/observability/networkpolicy.yaml).
 # ════════════════════════════════════════════════════════════════════════
 # services-gateway: the external ingress ENTRY POINT (dedicated Gateway-API Envoy)
 # ════════════════════════════════════════════════════════════════════════
@@ -80,8 +79,8 @@ spec:
 # the external client). So we ALLOW the ingress; the perimeter protection is the
 # Scaleway app-LB ACL (admin_ip, see
 # modules/providers/scw/lb.tf). Zero-trust is still enforced DOWNSTREAM: the
-# meshed backends accept only the Gateway's SPIFFE principal (their
-# propres AuthorizationPolicy / CiliumNetworkPolicy, dans leurs namespaces).
+# meshed backends accept only the Gateway's SPIFFE principal, through their own
+# AuthorizationPolicy / CiliumNetworkPolicy in their namespaces.
 #
 # targetRefs (Gateway API, Istio ≥1.22) targets the Gateway proxy precisely,
 # without touching any other workload in the ns. action ALLOW + `rules: [{}]` =
