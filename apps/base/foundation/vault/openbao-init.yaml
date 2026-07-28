@@ -1,20 +1,20 @@
 # OpenAether 0.5.0 — OpenBao INIT (one-shot, idempotent)
 # ─────────────────────────────────────────────────────────────────────────────
-# Pièce manquante de la fondation agnostique : avec un seal Shamir, OpenBao démarre
-# NON-INITIALISÉ. Quelqu'un doit faire `operator init` (génère 5 parts + root_token)
-# UNE fois, puis peupler les Secrets que consomment l'unsealer et le bootstrap-roles.
+# The missing piece of the agnostic foundation: with a Shamir seal, OpenBao
+# starts UNINITIALISED. Someone must run `operator init` (generating 5 shares +
+# a root_token) ONCE, then populate the Secrets the unsealer and bootstrap-roles consume.
 #
-# Ce Job automatise cette étape pour la phase DEV (destroy/rebuild fréquents).
-# Cible long terme : injection humaine des parts (RAM-only) — voir unsealer.yaml.
+# This Job automates that step for the DEV phase (frequent destroy/rebuild).
+# Long-term target: human injection of the shares (RAM-only) — see unsealer.yaml.
 #
-# Idempotent : si déjà initialisé + Secrets présents → no-op. Sinon init + écriture.
-# Cible openbao-0 explicitement : sur raft on initialise UN seul nœud (il devient
-# leader) ; les pods 1/2 rejoignent via retry_join une fois desscellés par l'unsealer.
+# Idempotent: already initialised + Secrets present → no-op. Otherwise init + write.
+# Targets openbao-0 explicitly: on raft you initialise ONE node only (it becomes
+# leader); pods 1/2 join through retry_join once the unsealer has unsealed them.
 #
-# ⚠ SÉCURITÉ DEV : les parts + root_token sont affichés UNE fois dans les logs (pour
-# escrow manuel Bitwarden EU) et stockés en Secret (etcd). Après escrow :
+# ⚠ DEV SECURITY: the shares + root_token are printed ONCE in the logs (for manual
+# Bitwarden EU escrow) and stored in a Secret (etcd). After escrow:
 #   kubectl delete job openbao-init -n foundation-vault   (purge les logs)
-# Cible prod : escrow direct Bitwarden + pas d'affichage. Voir Risques du plan.
+# Production target: direct Bitwarden escrow and no printing.
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: v1
 kind: ServiceAccount
@@ -37,7 +37,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao-init
 rules:
-  # Créer/mettre à jour les 2 Secrets de seal/recovery (create ne supporte pas
+  # Create/update the 2 seal/recovery Secrets (create does not support
   # resourceNames ; get/update/patch restreints aux 2 noms).
   - apiGroups: [""]
     resources: ["secrets"]
@@ -76,7 +76,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao-init
   annotations:
-    # Re-créé à chaque sync Flux (idempotent : no-op si déjà init + Secrets présents).
+    # Recreated on every Flux sync (idempotent: no-op if already init + Secrets present).
     kustomize.toolkit.fluxcd.io/force: "enabled"
 spec:
   backoffLimit: 10
@@ -107,8 +107,8 @@ spec:
             defaultMode: 0444
       containers:
         - name: init
-          # ⚠️ Préfixe `docker.io/` OBLIGATOIRE : une image sans registre ne
-          # matche AUCUN pattern de la policy restrict-image-registries.
+          # ⚠️ The `docker.io/` prefix is MANDATORY: an image without a registry
+          # matches NO pattern of the restrict-image-registries policy.
           image: docker.io/alpine/k8s:1.31.1
           env:
             - name: VAULT_NS
@@ -123,8 +123,8 @@ spec:
             - |
               set -euo pipefail
               ADDR="https://openbao-0.openbao.${VAULT_NS}.svc.cluster.local:8200"
-              # `curl` doit faire confiance à la CA interne — sinon chaque appel
-              # échoue en erreur 60 (certificat non vérifiable) et le Job boucle.
+              # `curl` must trust the internal CA — otherwise every call fails
+              # with error 60 (unverifiable certificate) and the Job loops.
               CACERT="--cacert /bao/tls/ca.crt"
 
               # ── 1) Attente API openbao-0 ───────────────────────────────────
@@ -139,7 +139,7 @@ spec:
                 [ "$i" = "60" ] && { echo "ERREUR: API openbao-0 injoignable"; exit 1; }
               done
 
-              # ── 2) État d'initialisation ────────────────────────────────────
+              # ── 2) Initialisation state ─────────────────────────────────────
               INITED="$(curl -s $CACERT "${ADDR}/v1/sys/init" | jq -r '.initialized // false')"
               echo "════ sys/init: initialized=${INITED} ════"
 
@@ -159,7 +159,7 @@ spec:
                 exit 1
               fi
 
-              # ── 3) Init (génère parts + root_token) — secrets, pas de trace ──
+              # ── 3) Init (generates shares + root_token) — secrets, no trace ──
               set +x
               echo "════ operator init (${KEY_SHARES} parts, seuil ${KEY_THRESHOLD}) ════"
               RESP="$(curl -s $CACERT -X POST "${ADDR}/v1/sys/init" \
@@ -170,7 +170,7 @@ spec:
               KEYS_NL="$(echo "$RESP" | jq -r '.keys_base64[]')"
               ROOT_TOKEN="$(echo "$RESP" | jq -r '.root_token')"
 
-              # ── 4) Écrire les 2 Secrets (idempotent via apply) ──────────────
+              # ── 4) Write the 2 Secrets (idempotent through apply) ───────────
               printf '%s' "$KEYS_NL" > /tmp/keys.txt
               kubectl create secret generic openbao-unseal-keys -n "$VAULT_NS" \
                 --from-file=unseal_keys=/tmp/keys.txt \

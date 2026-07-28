@@ -1,7 +1,7 @@
-# OpenAether — Zitadel (identité / IAM souverain)
+# OpenAether — Zitadel (sovereign identity / IAM)
 # ──────────────────────────────────────────────────────────────────────────
 # Chart officiel Zitadel. Backend Postgres = CNPG zitadel-db (foundation-databases,
-# 3 instances HA). TLS terminé en amont par la Gateway Istio → Zitadel sert h2c
+# 3 HA instances). TLS terminated upstream by the Istio Gateway → Zitadel serves h2c
 # (TLS.Enabled=false, ExternalSecure=true). Masterkey + password DB via ESO/OpenBao.
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
@@ -44,21 +44,21 @@ spec:
   values:
     replicaCount: 2
 
-    # ── Images : on garde les défauts du chart (PAS de imageRegistry global) ──
-    # PIÈGE (Scaleway juin 2026) : `imageRegistry: ghcr.io` est GLOBAL → il préfixe
-    # TOUTES les images, dont le helper kubectl `alpine/k8s` → `ghcr.io/alpine/k8s`
-    # qui N'EXISTE PAS sur ghcr.io → 403 Forbidden → setupJob (machinekey/pat) en
-    # ImagePullBackOff → install Helm bloquée. Les défauts du chart tirent :
+    # ── Images: we keep the chart defaults (NO global imageRegistry) ──────────
+    # TRAP (Scaleway, June 2026): `imageRegistry: ghcr.io` is GLOBAL → it prefixes
+    # EVERY image, including the `alpine/k8s` kubectl helper → `ghcr.io/alpine/k8s`,
+    # which DOES NOT EXIST on ghcr.io → 403 Forbidden → the setupJob (machinekey/pat)
+    # goes ImagePullBackOff → the Helm install hangs. The chart defaults pull:
     #   ghcr.io/zitadel/zitadel(-login)  (OK), docker.io/alpine/k8s (helper kubectl),
     #   docker.io/wait4x/wait4x:3.6      (initContainer wait-for-zitadel).
     # Kyverno restrict-image-registries est en Audit (non bloquant) → docker.io/*
-    # est seulement signalé, pas refusé — exactement comme openbao-init/bootstrap
-    # (docker.io/alpine/k8s) qui tournent déjà. Si Kyverno passe en Enforce un jour,
-    # miroir ces 2 images sur un registre autorisé via tools.{kubectl,wait4x}.image.
+    # is only reported, not refused — exactly like openbao-init/bootstrap
+    # (docker.io/alpine/k8s), which already run. If Kyverno ever goes Enforce,
+    # mirror those 2 images to an allowed registry through tools.{kubectl,wait4x}.image.
 
     # ── securityContext conforme Kyverno (global / fallback) ─────────────────
-    # Utilisé tel quel par les containers des initJob/setupJob (référence
-    # directe à .Values.securityContext dans les templates du chart).
+    # Used as-is by the initJob/setupJob containers (a direct reference to
+    # .Values.securityContext in the chart templates).
     securityContext:
       runAsNonRoot: true
       runAsUser: 1000
@@ -87,13 +87,13 @@ spec:
               topologyKey: kubernetes.io/hostname
 
     zitadel:
-      # Masterkey (32 octets) depuis le Secret ESO — pas en clair dans le chart.
+      # Masterkey (32 bytes) from the ESO Secret — never in cleartext in the chart.
       masterkeySecretName: zitadel-masterkey
-      # Config secrète (password DB) fusionnée par-dessus configmapConfig.
+      # Secret config (DB password) merged on top of configmapConfig.
       configSecretName: zitadel-secret-config
       configSecretKey: config-yaml
 
-      # securityContext explicite sur le container principal du Deployment.
+      # Explicit securityContext on the Deployment's main container.
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -111,13 +111,13 @@ spec:
         seccompProfile:
           type: RuntimeDefault
 
-      # Config NON secrète (ConfigMap). Les keys suivent l'arbre de config Zitadel.
+      # NON-secret config (ConfigMap). The keys follow Zitadel's config tree.
       configmapConfig:
         ExternalDomain: zitadel.openaether.local
         ExternalPort: 443
         ExternalSecure: true
         TLS:
-          # TLS terminé par la Gateway Istio en amont → Zitadel sert en clair (h2c).
+          # TLS terminated upstream by the Istio Gateway → Zitadel serves cleartext (h2c).
           Enabled: false
         Database:
           Postgres:
@@ -135,8 +135,8 @@ spec:
               SSL:
                 Mode: disable
 
-    # Jobs d'init/setup (création schéma + clés). Activés par défaut.
-    # Images aux défauts du chart (cf. bloc Images en tête des values).
+    # init/setup Jobs (schema + key creation). Enabled by default.
+    # Images at the chart defaults (see the Images block at the top of the values).
     initJob:
       enabled: true
       securityContext:
@@ -158,7 +158,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
 
-    # Startup probe : laisser de la marge pour le cold start (migrations DB).
+    # Startup probe: leave headroom for the cold start (DB migrations).
     startupProbe:
       periodSeconds: 10
       failureThreshold: 30

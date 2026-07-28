@@ -1,23 +1,23 @@
-# OpenAether — CoreDNS egress vers le résolveur HÔTE (Talos hostDNS)
+# OpenAether — CoreDNS egress to the HOST resolver (Talos hostDNS)
 # ──────────────────────────────────────────────────────────────────────────
-# PIÈGE (1er full-stack reconcile cloud, juin 2026) : la CCNP `allow-dns`
-# (allow-dns.yaml) a `endpointSelector: {}` → elle sélectionne AUSSI les pods
-# CoreDNS. Dès qu'une CNP/CCNP egress matche un endpoint, Cilium active le
-# default-deny EGRESS sur cet endpoint. CoreDNS se retrouve donc autorisé à
-# sortir UNIQUEMENT vers les pods kube-dns (la règle d'allow-dns) — or, avec
-# Talos `forwardKubeDNSToHost: true`, CoreDNS forwarde les requêtes externes
-# vers le résolveur de l'HÔTE (link-local 169.254.x.x:53, entité Cilium `host`).
-# Ce trafic CoreDNS→host était DROPPÉ ("Policy denied ... ->host: ...:53 udp")
-# → toute résolution externe en i/o timeout → les HelmRepository (jetstack,
-# longhorn, zitadel, grafana…) ne tiraient plus leur index → cert-manager,
-# istio, identity, storage bloqués en cascade.
+# TRAP (first full-stack cloud reconcile, June 2026): the `allow-dns` CCNP
+# (allow-dns.yaml) has `endpointSelector: {}` → it ALSO selects the CoreDNS
+# pods. As soon as an egress CNP/CCNP matches an endpoint, Cilium turns on
+# default-deny EGRESS on it. CoreDNS is then allowed to egress ONLY to the
+# kube-dns pods (allow-dns's rule) — yet with Talos `forwardKubeDNSToHost: true`
+# CoreDNS forwards external queries to the HOST's resolver (link-local
+# 169.254.x.x:53, the Cilium `host` entity).
+# That CoreDNS→host traffic was DROPPED ("Policy denied ... ->host: ...:53 udp")
+# → every external resolution timed out → the HelmRepositories (jetstack,
+# longhorn, zitadel, grafana…) could no longer fetch their index → cert-manager,
+# istio, identity and storage stuck in cascade.
 #
-# Les image pulls (containerd, hors réseau pod) n'étaient pas affectés → seul
-# le source-controller Flux (fetch d'index Helm depuis un pod) tombait.
+# Image pulls (containerd, outside the pod network) were unaffected → only the
+# Flux source-controller (fetching Helm indexes from a pod) fell over.
 #
-# Fix : autoriser explicitement l'egress CoreDNS → entité `host` (+ remote-node
-# en HA multi-nœuds) sur :53. La résolution externe réelle est faite par l'hôte
-# Talos hors du réseau pod (non soumise aux policies Cilium). Cf. [[cilium-ambient-debug]].
+# Fix: explicitly allow CoreDNS egress → the `host` entity (+ remote-node in
+# multi-node HA) on :53. The actual external resolution is done by the Talos
+# host outside the pod network (not subject to Cilium policies).
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -32,8 +32,8 @@ spec:
     matchLabels:
       k8s-app: kube-dns
   egress:
-    # Résolveur de l'hôte local (Talos forwardKubeDNSToHost → 169.254.x.x:53).
-    # remote-node couvre le cas HA où le forward viserait un autre nœud.
+    # The local host's resolver (Talos forwardKubeDNSToHost → 169.254.x.x:53).
+    # remote-node covers the HA case where the forward would target another node.
     - toEntities:
         - host
         - remote-node
