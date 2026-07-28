@@ -1,15 +1,15 @@
 # Backup quotidien des bases CNPG : pg_dump -Fc (zitadel-db, grafana-db)
-# → restic → 2 dépôts S3 (chiffrement client, cf. backup/openbao/cronjob.yaml).
+# → restic → 2 S3 repositories (client encryption, see backup/openbao/cronjob.yaml).
 #
-# Dumps LOGIQUES (cohérents, restaurables cross-version via pg_restore),
-# provider-agnostiques — pas de PITR. Le PITR barmanObjectStore reste
-# l'upgrade cloud documenté (apps/base/cnpg/cluster.yaml, bloc commenté).
+# LOGICAL dumps (consistent, restorable cross-version through pg_restore),
+# provider-agnostic — no PITR. barmanObjectStore PITR remains the documented
+# cloud upgrade (apps/base/cnpg/cluster.yaml, commented block).
 #
-# Creds DB : les Secrets de bootstrap ESO (zitadel-db-app,
-# grafana-db-credentials) ne portent QUE username/password (vérifié e2e local
-# — PAS host/port/dbname comme les secrets auto-générés CNPG). Host/db sont
-# fixés ici : services `<cluster>-rw` et dbnames définis dans la même brique
-# (apps/base/cnpg/*.yaml). L'owner suffit pour dumper sa base.
+# DB creds: the ESO bootstrap Secrets (zitadel-db-app,
+# grafana-db-credentials) carry ONLY username/password (verified e2e locally —
+# NOT host/port/dbname like CNPG's auto-generated secrets). Host/db are pinned
+# here: `<cluster>-rw` services and dbnames defined in the same brick
+# (apps/base/cnpg/*.yaml). The owner is enough to dump its own database.
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -58,7 +58,7 @@ spec:
               secret:
                 secretName: grafana-db-credentials
           initContainers:
-            # 1) Dumps logiques — image alignée sur la plus récente des deux
+            # 1) Logical dumps — image aligned with the newer of the two
             #    Clusters (pg_dump 16.x dumpe les serveurs 16.x plus anciens).
             - name: pg-dump
               image: ghcr.io/cloudnative-pg/postgresql:16.3
@@ -98,7 +98,7 @@ spec:
                 requests: { cpu: 50m, memory: 128Mi }
                 limits: { cpu: "1", memory: 512Mi }
           containers:
-            # 2) Push restic vers les 2 dépôts.
+            # 2) restic push to both repositories.
             - name: restic-push
               image: docker.io/restic/restic:0.18.0
               command:
@@ -106,10 +106,10 @@ spec:
                 - -c
                 - |
                   set -eu
-                  # Préfixe de dépôt : sans lui, deux clusters partageant un
+                  # Repository prefix: without it, two clusters sharing a
                   # bucket se bloquent mutuellement (« already initialized »,
-                  # le RESTIC_PASSWORD n'étant pas partagé). `set -u` suffirait
-                  # à échouer, mais pas à expliquer pourquoi.
+                  # since RESTIC_PASSWORD is not shared). `set -u` would be
+                  # enough to fail, but not to explain why.
                   if [ -z "${CLUSTER_NAME:-}" ]; then
                     echo "ERREUR: CLUSTER_NAME vide — le ConfigMap cluster-identity"
                     echo "        du namespace est absent ou non substitué"
@@ -121,17 +121,17 @@ spec:
                     ep="$1"; bucket="$2"; label="$3"
                     export RESTIC_REPOSITORY="s3:${ep}/${bucket}/${CLUSTER_NAME}/cnpg"
                     echo "── dépôt ${label}: ${ep}/${bucket}/${CLUSTER_NAME}/cnpg"
-                    # ⚠️ restic ne crée PAS le bucket (il DOIT préexister —
-                    # ensure-buckets côté infra, chart minio en local) et retry
-                    # un NoSuchBucket ~15 min en silence → probe borné.
+                    # ⚠️ restic does NOT create the bucket (it MUST pre-exist —
+                    # ensure-buckets on the infra side, the minio chart locally)
+                    # and retries a NoSuchBucket for ~15 min silently → bounded probe.
                     if ! timeout 60 restic cat config >/dev/null 2>&1; then
-                      # Deux échecs très différents se cachent ici :
-                      #  • dépôt ABSENT           → init légitime ;
-                      #  • dépôt EXISTANT mais illisible (mot de passe d'un
-                      #    AUTRE cluster : les dépôts survivent aux clusters,
-                      #    pas leur RESTIC_PASSWORD) → init échoue avec
-                      #    "already initialized" et il faut trancher : purger
-                      #    le préfixe, ou pointer un bucket/chemin distinct.
+                      # Two very different failures hide here:
+                      #  • repository MISSING     → a legitimate init;
+                      #  • repository PRESENT but unreadable (another cluster's
+                      #    password: repositories outlive clusters, their
+                      #    RESTIC_PASSWORD does not) → init fails with
+                      #    "already initialized" and a decision is needed: purge
+                      #    the prefix, or point at a distinct bucket/path.
                       init_err="$(restic init 2>&1)" || {
                         case "$init_err" in
                           *"already initialized"*)
@@ -161,10 +161,10 @@ spec:
               envFrom:
                 - secretRef:
                     name: backup-restic-env
-                # CLUSTER_NAME — préfixe des dépôts restic, pour que plusieurs
-                # clusters puissent partager un bucket sans se bloquer.
-                # Posé par la Kustomization backup-*-identity (22a) ; lu ici au
-                # RUNTIME, donc aucune substitution Flux ne touche ce fichier.
+                # CLUSTER_NAME — restic repository prefix, so several clusters
+                # can share a bucket without blocking each other.
+                # Laid down by the backup-*-identity Kustomization (22a); read
+                # here at RUNTIME, so no Flux substitution touches this file.
                 - configMapRef:
                     name: cluster-identity
               securityContext:

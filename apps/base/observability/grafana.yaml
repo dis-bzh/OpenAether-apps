@@ -1,15 +1,15 @@
 # OpenAether 0.5.0 Sprint C — Grafana HA
 # ──────────────────────────────────────────────────────────────────
-# 2 répliques avec podAntiAffinity.
+# 2 replicas with podAntiAffinity.
 # Backend DB: PostgreSQL CNPG grafana-db (grafana-cnpg-db.yaml) pour
-# la session, les dashboards, les utilisateurs — requis pour HA.
+# session, dashboards and users — required for HA.
 # Admin: ExternalSecret grafana-admin (username=admin).
 # Datasources: VictoriaMetrics vmselect + Loki (inline values).
-# Dashboards: sidecar dashboard (label grafana_dashboard=1) → découverte
-# ConfigMaps de tous les namespaces (searchNamespace: ALL).
+# Dashboards: dashboard sidecar (label grafana_dashboard=1) → discovers
+# ConfigMaps from every namespace (searchNamespace: ALL).
 #
-# Pas de PVC Grafana (state dans PostgreSQL).
-# Dashboard sidecar recharge les ConfigMaps à chaud (hot-reload).
+# No Grafana PVC (state lives in PostgreSQL).
+# The dashboard sidecar hot-reloads the ConfigMaps.
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -53,7 +53,7 @@ spec:
       existingSecret: grafana-admin
       userKey: admin-user
       passwordKey: admin-password
-    # PostgreSQL CNPG pour la session HA (requis si replicas > 1).
+    # CNPG PostgreSQL for the HA session store (required when replicas > 1).
     grafana.ini:
       database:
         type: postgres
@@ -71,17 +71,17 @@ spec:
         reporting_enabled: false
         check_for_updates: false
       users:
-        # Rôle par défaut d'un utilisateur qui arrive par le SSO sans rôle
-        # reconnu. Lecture seule : élargir ensuite dans Zitadel, pas ici.
+        # Default role for a user arriving through SSO with no recognised role.
+        # Read-only: widen it in Zitadel afterwards, not here.
         auto_assign_org_role: Viewer
       # ── SSO OIDC via Zitadel ────────────────────────────────────────────────
-      # Endpoints VÉRIFIÉS contre la doc Zitadel (apis/openidoauth/endpoints) :
+      # Endpoints VERIFIED against the Zitadel docs (apis/openidoauth/endpoints):
       # /oauth/v2/authorize, /oauth/v2/token, /oidc/v1/userinfo,
       # /oidc/v1/end_session.
       #
-      # ⚠️ Le formulaire de connexion LOCAL reste actif (`disable_login_form`
-      # non posé) : l'admin local est le filet si le SSO est cassé ou pas encore
-      # configuré côté Zitadel. Ne le désactiver qu'une fois le SSO éprouvé.
+      # ⚠️ The LOCAL login form stays enabled (`disable_login_form` not set):
+      # the local admin is the safety net if SSO is broken or not yet configured
+      # on the Zitadel side. Only disable it once SSO is proven.
       auth.generic_oauth:
         enabled: true
         name: Zitadel
@@ -89,46 +89,46 @@ spec:
         use_pkce: true
         client_id: "$__env{GF_AUTH_GENERIC_OAUTH_CLIENT_ID}"
         client_secret: "$__env{GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET}"
-        # ⚠️ `urn:zitadel:iam:org:projects:roles` est INDISPENSABLE : sans lui,
-        # Zitadel n'émet AUCUN claim de rôles et tout le monde retombe sur
-        # `auto_assign_org_role` (Viewer). Mesuré en réel le 2026-07-28 —
-        # avec « openid profile » seul, aucun claim `*:roles` dans
-        # /oidc/v1/userinfo ; il n'apparaît qu'avec ce scope.
+        # ⚠️ `urn:zitadel:iam:org:projects:roles` is ESSENTIAL: without it
+        # Zitadel emits NO role claim at all and everyone falls back to
+        # `auto_assign_org_role` (Viewer). Measured for real on 2026-07-28 —
+        # with "openid profile" alone there is no `*:roles` claim in
+        # /oidc/v1/userinfo; it only appears with this scope.
         scopes: "openid profile email urn:zitadel:iam:org:projects:roles"
         auth_url: "https://zitadel.openaether.local/oauth/v2/authorize"
         token_url: "https://zitadel.openaether.local/oauth/v2/token"
         api_url: "https://zitadel.openaether.local/oidc/v1/userinfo"
-        # Mapping de rôle depuis le claim projet de Zitadel.
+        # Role mapping from Zitadel's project claim.
         #
-        # STRUCTURE VÉRIFIÉE en réel (2026-07-28, Zitadel v4.14) : la valeur est
-        # un OBJET dont les CLÉS sont les rôles — `keys()` est donc la bonne
+        # STRUCTURE VERIFIED for real (2026-07-28, Zitadel v4.14): the value is
+        # an OBJECT whose KEYS are the roles — so `keys()` is the right
         # approche :
         #   {"grafana-admin": {"<orgId>": "<domaine>"}}
         #
-        # ⚠️ NOM du claim : deux formes existent. Zitadel émet la forme
-        # PRÉFIXÉE PAR L'ID DE PROJET (`…:project:<projectId>:roles`) quand les
-        # rôles sont demandés pour d'autres projets ; la forme non préfixée
-        # ci-dessous vaut pour le projet auquel appartient le client — le cas de
-        # Grafana. Si après une vraie connexion tous les comptes restent Viewer,
-        # inspecter le token et, au besoin, substituer l'ID de projet ici :
+        # ⚠️ Claim NAME: two forms exist. Zitadel emits the PROJECT-ID-PREFIXED
+        # form (`…:project:<projectId>:roles`) when roles are requested for other
+        # projects; the unprefixed form below applies to the project the client
+        # belongs to — Grafana's case. If after a real login every account stays
+        # Viewer, inspect the token and, if needed, substitute the project ID
+        # here:
         #   curl -H "Authorization: Bearer <token>" https://zitadel.…/oidc/v1/userinfo
         #
-        # `role_attribute_strict: false` est délibéré : un mapping qui ne matche
-        # pas laisse l'utilisateur en Viewer au lieu de lui refuser l'accès.
+        # `role_attribute_strict: false` is deliberate: a mapping that does not
+        # match leaves the user as Viewer instead of denying access.
         role_attribute_path: >-
           contains(keys("urn:zitadel:iam:org:project:roles"), 'grafana-admin') && 'Admin' || 'Viewer'
         role_attribute_strict: false
         signout_redirect_url: "https://zitadel.openaether.local/oidc/v1/end_session"
-    # Injecter le password DB depuis le Secret grafana-db-credentials.
-    # envFromSecret monte TOUTES les clés du secret comme env vars.
-    # La clé doit s'appeler GF_DATABASE_PASSWORD pour que grafana.ini
-    # la résolve via $__env{GF_DATABASE_PASSWORD}.
+    # Inject the DB password from the grafana-db-credentials Secret.
+    # envFromSecret mounts ALL of the secret's keys as env vars.
+    # The key must be named GF_DATABASE_PASSWORD so that grafana.ini resolves
+    # it through $__env{GF_DATABASE_PASSWORD}.
     envFromSecret: grafana-db-credentials
-    # Identifiants OIDC — `optional: true` est ESSENTIEL : tant que
-    # `secret/grafana/oidc` n'est pas seedé dans OpenBao, le Secret n'existe pas.
-    # Sans `optional`, le pod resterait bloqué et Grafana serait TOTALEMENT
-    # inaccessible faute d'un SSO pas encore configuré — l'inverse du but.
-    # Avec, Grafana démarre, le bouton Zitadel est simplement inopérant, et
+    # OIDC credentials — `optional: true` is ESSENTIAL: until
+    # `secret/grafana/oidc` is seeded into OpenBao, the Secret does not exist.
+    # Without `optional` the pod would stay stuck and Grafana would be TOTALLY
+    # unreachable for want of a not-yet-configured SSO — the opposite of the goal.
+    # With it, Grafana starts, the Zitadel button is simply inert, and
     # l'admin local fonctionne.
     envValueFrom:
       GF_AUTH_GENERIC_OAUTH_CLIENT_ID:
@@ -141,7 +141,7 @@ spec:
           name: grafana-oidc
           key: client-secret
           optional: true
-    # Datasources inline (Flux gère la mise à jour).
+    # Inline datasources (Flux handles updates).
     datasources:
       datasources.yaml:
         apiVersion: 1
@@ -158,7 +158,7 @@ spec:
             type: loki
             url: "http://loki.services-observability:3100"
             editable: false
-    # Sidecar: découverte automatique des ConfigMaps label grafana_dashboard=1.
+    # Sidecar: automatic discovery of ConfigMaps labelled grafana_dashboard=1.
     sidecar:
       dashboards:
         enabled: true

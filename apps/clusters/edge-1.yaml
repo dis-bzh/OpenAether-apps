@@ -1,7 +1,7 @@
-# Cluster enfant edge-1 — PREMIÈRE INSTANCIATION RÉELLE (session test 2026-07-25).
-# Kubeception : CAPI provisionne les VMs Talos ; gitception : le management
-# injecte Cilium+Flux à distance puis l'enfant réconcilie SON profil.
-# Prérequis kubectl (jamais en git) :
+# Child cluster edge-1 — FIRST REAL INSTANTIATION (test session 2026-07-25).
+# Kubeception: CAPI provisions the Talos VMs; gitception: the management
+# injects Cilium+Flux remotely, then the child reconciles ITS OWN profile.
+# kubectl prerequisites (never in git):
 #   Secret capi-clusters/scaleway-capi-credentials (SCW_ACCESS_KEY, SCW_SECRET_KEY)
 #   Secret flux-system/edge-1-substitutes (SCW_PROJECT_ID)
 ---
@@ -25,7 +25,7 @@ spec:
       CLUSTER_NAME: edge-1
       CP_REPLICAS: "1"
       WORKER_REPLICAS: "1"
-      # Alignés sur l'image du parent (talos-image, resolved_image_ref).
+      # Aligned with the parent's image (talos-image, resolved_image_ref).
       K8S_VERSION: v1.35.3
       TALOS_VERSION: v1.13
       SCW_IMAGE_NAME: talos-scaleway-amd64-v1.13.4
@@ -34,10 +34,10 @@ spec:
       - kind: Secret
         name: edge-1-substitutes   # SCW_PROJECT_ID
 ---
-# (La HelmRepository `cilium` est partagée par tous les enfants et vit
-# désormais dans helmrepository-cilium.yaml — elle ne doit pas dépendre de
+# (The `cilium` HelmRepository is shared by every child and now lives in
+# helmrepository-cilium.yaml — it must not depend on edge-1 being enabled.)
 # l'activation d'edge-1.)
-# CNI de l'enfant, appliqué À DISTANCE (kubeConfig CAPI). Values alignées sur
+# The child's CNI, applied REMOTELY (CAPI kubeConfig). Values aligned with
 # le socle parent (render-bootstrap-manifests.sh) : KPR + KubePrism + WireGuard.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -62,26 +62,26 @@ spec:
       sourceRef: { kind: HelmRepository, name: cilium }
   values:
     kubeProxyReplacement: true
-    # ⚠️ ipam.mode=kubernetes — NE PAS RETIRER. Le défaut du chart est
-    # `cluster-pool`, qui IGNORE le `clusterNetwork.pods` déclaré par CAPI
-    # (10.244.0.0/16) et taille les CIDR de pods dans 10.0.0.0/8. Or les nœuds
-    # vivent dans ce même /8 : 10.20.0.0/24 côté OpenStack, 10.0.0.0/24 pour les
-    # sous-réseaux du socle (OVH, Outscale, Proxmox). Le mode `kubernetes`
-    # reprend le podCIDR alloué par kube-controller-manager, comme le parent —
-    # qui pose ce réglage pour exactement la même raison.
+    # ⚠️ ipam.mode=kubernetes — DO NOT REMOVE. The chart default is
+    # `cluster-pool`, which IGNORES the `clusterNetwork.pods` declared by CAPI
+    # (10.244.0.0/16) and carves pod CIDRs out of 10.0.0.0/8. But the nodes
+    # live in that same /8: 10.20.0.0/24 on OpenStack, 10.0.0.0/24 for the
+    # foundation subnets (OVH, Outscale, Proxmox). The `kubernetes` mode
+    # reuses the podCIDR allocated by kube-controller-manager, like the parent —
+    # which sets this for exactly the same reason.
     ipam: { mode: kubernetes }
-    # ⚠️ cni.exclusive=false est EXIGÉ dès que le profil de l'enfant embarque
-    # Istio ambient (apps/base/istio) : sinon Cilium réécrit 05-cilium.conflist
-    # en boucle et en retire le plugin chaîné istio-cni (« conflicting component
-    # constantly reverting our work ») → /readyz 503 → install Helm expirée →
-    # ztunnel, services-gateway et istio-authorizationpolicies bloqués.
+    # ⚠️ cni.exclusive=false is REQUIRED as soon as the child's profile carries
+    # Istio ambient (apps/base/istio): otherwise Cilium rewrites
+    # 05-cilium.conflist in a loop and strips the chained istio-cni plugin
+    # ("conflicting component constantly reverting our work") → /readyz 503 →
+    # Helm install timeout → ztunnel, services-gateway and istio-authorizationpolicies stuck.
     #
-    # hostNamespaceOnly=true : aligné sur le socle parent et exigé par Istio
-    # ambient. Le flag ne coupe le socket-LB que pour les netns NON-root (doc du
+    # hostNamespaceOnly=true: aligned with the parent foundation and required by
+    # Istio ambient. The flag only disables socket-LB for NON-root netns (chart
     # chart : « Disable socket lb for non-root ns ») ; les process host-network,
-    # dont kube-apiserver → ClusterIP des webhooks, gardent la traduction. Le
-    # « failed calling webhook » du 2026-07-26 lui avait été imputé à tort : il a
-    # été observé pendant un rollout de CNI à chaud qui avait déjà cassé le
+    # including kube-apiserver → webhook ClusterIPs, keep the translation. The
+    # "failed calling webhook" of 2026-07-26 was wrongly blamed on it: it was
+    # observed during a hot CNI rollout that had already broken the children's
     # datapath des enfants.
     socketLB: { enabled: true, hostNamespaceOnly: true }
     cni: { exclusive: false }
@@ -137,7 +137,7 @@ spec:
     substitute:
       CHILD_PROFILE: workload
       CHILD_NAME: edge-1   # préfixe des dépôts restic de cet enfant
-      # CHILD_BRANCH volontairement absent → défaut `main` (cf. child-gitops).
-      # Ne le surcharger que pour tester une branche de bout en bout, et penser
-      # à le retirer ensuite : une branche supprimée laisse l'enfant sur une
-      # source introuvable et il ne réconcilie plus rien.
+      # CHILD_BRANCH deliberately absent → defaults to `main` (see child-gitops).
+      # Only override it to test a branch end to end, and remember to remove it
+      # afterwards: a deleted branch leaves the child pointing at a source that
+      # cannot be found, and it stops reconciling anything.

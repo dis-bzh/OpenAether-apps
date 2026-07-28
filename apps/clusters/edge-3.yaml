@@ -1,11 +1,11 @@
-# Cluster enfant edge-3 — Outscale (eu-west-2), 3e provider de la flotte.
+# Child cluster edge-3 — Outscale (eu-west-2), the fleet's 3rd provider.
 #
-# ⚠️ ACTIVATION : ce fichier n'est ajouté à kustomization.yaml qu'une fois l'OMI
-# Talos publiée (variante **aws** — cf. modules/talos-image/outscale) et son ID
-# renseigné dans OSC_IMAGE_ID ci-dessous.
+# ⚠️ ACTIVATION: this file is only added to kustomization.yaml once the Talos
+# OMI is published (the **aws** variant — see modules/talos-image/outscale) and
+# its ID filled into OSC_IMAGE_ID below.
 #
-# Prérequis kubectl (jamais en git) :
-#   Secret capi-clusters/outscale-capi-credentials — clés MINUSCULES
+# kubectl prerequisites (never in git):
+#   Secret capi-clusters/outscale-capi-credentials — LOWERCASE keys
 #     access_key / secret_key / region (≠ convention SCW_* de Scaleway)
 #   keypair Outscale `openaether-capi` (node.vm.keypairName requis + immuable)
 ---
@@ -33,29 +33,29 @@ spec:
       TALOS_CONTRACT: v1.13
       POD_CIDR: 10.244.0.0/16
       SVC_CIDR: 10.96.0.0/12
-      # Réseau Outscale — CIDR distinct des autres clusters de la flotte
+      # Outscale network — a CIDR distinct from the fleet's other clusters
       # (management SCW 172.16.12/22, edge-2 OVH 10.20.0/24).
       OSC_SUBREGION: eu-west-2a
       OSC_NET_CIDR: 10.30.0.0/16
       OSC_SUBNET_PUBLIC: 10.30.2.0/24
       OSC_SUBNET_WORKER: 10.30.3.0/24
       OSC_SUBNET_CP: 10.30.4.0/24
-      # 2 vCPU / 8 Go : la RAM reste au-dessus du seuil OOM Talos, mais les
-      # cœurs sont comptés par le quota Outscale `core_limit` (20 sur ce
-      # compte). Un management HA en consomme déjà 14 → des workers en c4
-      # feraient dépasser (CreateVms → 10042 TooManyResources/QuotaExceeded).
+      # 2 vCPU / 8 GB: RAM stays above the Talos OOM threshold, but the cores
+      # count against the Outscale `core_limit` quota (20 on this account). An
+      # HA management already uses 14 → c4 workers would overflow it
+      # (CreateVms → 10042 TooManyResources/QuotaExceeded).
       OSC_VM_TYPE: tinav6.c2r8p1
-      # Incrémenter à chaque changement de gabarit/image : le spec des
-      # OscMachineTemplate est immuable, un nouveau nom fait rouler les machines.
+      # Bump on every size/image change: the OscMachineTemplate spec is
+      # immutable, and a new name makes the machines roll.
       MACHINE_REV: v2
       OSC_KEYPAIR_NAME: openaether-capi
       OSC_IMAGE_NAME: talos-outscale-amd64-v1.13.4
       OSC_IMAGE_ACCOUNT_ID: "REDACTED-ACCOUNT-ID"
       OSC_IMAGE_ID: "ami-16d2bedd"       # talos-outscale-amd64-v1.13.4 (variante aws)
       WORKER_DATA_DISK_GB: "50"
-      # Le port Talos 50000 ne peut pas passer par la LBU (un seul listener) :
-      # accès direct aux IP publiques des CP, restreint à l'egress du management
-      # (NAT Outscale — le management tourne maintenant chez Outscale) et à l'admin.
+      # The Talos port 50000 cannot go through the LBU (a single listener):
+      # direct access to the CPs' public IPs, restricted to the management's
+      # egress (Outscale NAT — the management now runs on Outscale) and to admin.
       MGMT_EGRESS_CIDR: REDACTED-MGMT-EGRESS-IP/32  # NAT service Outscale (management)
       ADMIN_CIDR: REDACTED-ADMIN-IP/32
 ---
@@ -82,26 +82,26 @@ spec:
       sourceRef: { kind: HelmRepository, name: cilium, namespace: capi-clusters }
   values:
     kubeProxyReplacement: true
-    # ⚠️ ipam.mode=kubernetes — NE PAS RETIRER. Le défaut du chart est
-    # `cluster-pool`, qui IGNORE le `clusterNetwork.pods` déclaré par CAPI
-    # (10.244.0.0/16) et taille les CIDR de pods dans 10.0.0.0/8. Or les nœuds
-    # vivent dans ce même /8 : 10.20.0.0/24 côté OpenStack, 10.0.0.0/24 pour les
-    # sous-réseaux du socle (OVH, Outscale, Proxmox). Le mode `kubernetes`
-    # reprend le podCIDR alloué par kube-controller-manager, comme le parent —
-    # qui pose ce réglage pour exactement la même raison.
+    # ⚠️ ipam.mode=kubernetes — DO NOT REMOVE. The chart default is
+    # `cluster-pool`, which IGNORES the `clusterNetwork.pods` declared by CAPI
+    # (10.244.0.0/16) and carves pod CIDRs out of 10.0.0.0/8. But the nodes
+    # live in that same /8: 10.20.0.0/24 on OpenStack, 10.0.0.0/24 for the
+    # foundation subnets (OVH, Outscale, Proxmox). The `kubernetes` mode
+    # reuses the podCIDR allocated by kube-controller-manager, like the parent —
+    # which sets this for exactly the same reason.
     ipam: { mode: kubernetes }
-    # ⚠️ cni.exclusive=false est EXIGÉ dès que le profil de l'enfant embarque
-    # Istio ambient (apps/base/istio) : sinon Cilium réécrit 05-cilium.conflist
-    # en boucle et en retire le plugin chaîné istio-cni (« conflicting component
-    # constantly reverting our work ») → /readyz 503 → install Helm expirée →
-    # ztunnel, services-gateway et istio-authorizationpolicies bloqués.
+    # ⚠️ cni.exclusive=false is REQUIRED as soon as the child's profile carries
+    # Istio ambient (apps/base/istio): otherwise Cilium rewrites
+    # 05-cilium.conflist in a loop and strips the chained istio-cni plugin
+    # ("conflicting component constantly reverting our work") → /readyz 503 →
+    # Helm install timeout → ztunnel, services-gateway and istio-authorizationpolicies stuck.
     #
-    # hostNamespaceOnly=true : aligné sur le socle parent et exigé par Istio
-    # ambient. Le flag ne coupe le socket-LB que pour les netns NON-root (doc du
+    # hostNamespaceOnly=true: aligned with the parent foundation and required by
+    # Istio ambient. The flag only disables socket-LB for NON-root netns (chart
     # chart : « Disable socket lb for non-root ns ») ; les process host-network,
-    # dont kube-apiserver → ClusterIP des webhooks, gardent la traduction. Le
-    # « failed calling webhook » du 2026-07-26 lui avait été imputé à tort : il a
-    # été observé pendant un rollout de CNI à chaud qui avait déjà cassé le
+    # including kube-apiserver → webhook ClusterIPs, keep the translation. The
+    # "failed calling webhook" of 2026-07-26 was wrongly blamed on it: it was
+    # observed during a hot CNI rollout that had already broken the children's
     # datapath des enfants.
     socketLB: { enabled: true, hostNamespaceOnly: true }
     cni: { exclusive: false }
@@ -157,4 +157,4 @@ spec:
     substitute:
       CHILD_PROFILE: workload
       CHILD_NAME: edge-3   # préfixe des dépôts restic de cet enfant
-      # CHILD_BRANCH volontairement absent → défaut `main` (cf. child-gitops).
+      # CHILD_BRANCH deliberately absent → defaults to `main` (see child-gitops).
