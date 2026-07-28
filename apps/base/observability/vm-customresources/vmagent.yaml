@@ -1,13 +1,13 @@
 # OpenAether 0.5.0 Sprint C — VMAgent HA (scraping Kubernetes)
 # ──────────────────────────────────────────────────────────────────
-# VMAgent scrape les métriques via kubernetes_sd (découverte automatique)
-# et les envoie à vminsert via remote_write.
+# VMAgent scrapes metrics through kubernetes_sd (automatic discovery) and sends
+# them to vminsert through remote_write.
 #
-# 2 répliques + shardCount=2: chaque agent scrape 1/2 des targets.
-# Évite la duplication de scraping tout en assurant la HA.
+# 2 replicas + shardCount=2: each agent scrapes half the targets.
+# Avoids duplicate scraping while providing HA.
 #
 # ClusterRole vmagent: lecture cluster-wide pods/nodes/services/endpoints.
-# Nécessaire pour la découverte automatique Kubernetes SD.
+# Required for automatic Kubernetes SD discovery.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -78,10 +78,10 @@ spec:
   serviceAccountName: vmagent
   remoteWrite:
     - url: "http://vminsert-victoria-metrics.services-observability:8480/insert/0/prometheus"
-  # request mémoire abaissée 256Mi→128Mi : vmagent est un scraper/forwarder léger
-  # (usage réel < 128Mi sur ce cluster). 4 pods (replicaCount=2 × shardCount=2)
-  # → libère 256Mi sur worker-1 pour que loki-1 (256Mi, PV local-path épinglé)
-  # puisse scheduler. La LIMITE reste 512Mi (pas de risque OOM, burst préservé).
+  # memory request lowered 256Mi→128Mi: vmagent is a light scraper/forwarder
+  # (real usage < 128Mi on this cluster). 4 pods (replicaCount=2 × shardCount=2)
+  # → frees 256Mi on worker-1 so loki-1 (256Mi, pinned local-path PV) can be
+  # scheduled. The LIMIT stays 512Mi (no OOM risk, burst preserved).
   resources:
     requests:
       cpu: 100m
@@ -98,7 +98,7 @@ spec:
               matchLabels:
                 app.kubernetes.io/name: vmagent
             topologyKey: kubernetes.io/hostname
-  # Sélectionner tous les VMServiceScrape/VMNodeScrape du cluster.
+  # Select every VMServiceScrape/VMNodeScrape in the cluster.
   selectAllByDefault: true
   podDisruptionBudget:
     minAvailable: 1

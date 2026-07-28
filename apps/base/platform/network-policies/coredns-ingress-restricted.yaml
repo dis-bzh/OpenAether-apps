@@ -1,15 +1,15 @@
 # OpenAether 0.5.0 — CoreDNS Ingress (Zero Trust)
-# DNS est un service d'infrastructure universel: tous les pods du cluster en ont besoin.
-# Restricter par namespace créerait un deadlock de bootstrap (ex: foundation-pki-root
-# ne pouvant pas résoudre les noms de service → OpenBao inaccessible au Job bootstrap).
-# La restriction pertinente est sur le PORT (53 UDP/TCP uniquement), pas sur la source.
-# La sécurité réelle est assurée par:
-#   - Les policies EGRESS sur les pods sources (chaque pod ne peut contacter que ce
-#     dont il a besoin, DNS compris via allow-dns CCNP ou sa propre CNP)
-#   - L'isolation réseau Cilium entre pods dans les namespaces
+# DNS is a universal infrastructure service: every pod in the cluster needs it.
+# Restricting it per namespace would create a bootstrap deadlock (e.g. a component
+# unable to resolve service names → OpenBao unreachable for the bootstrap Job).
+# The meaningful restriction is on the PORT (53 UDP/TCP only), not on the source.
+# The real security comes from:
+#   - The EGRESS policies on the source pods (each pod can only reach what it
+#     needs, DNS included, through the allow-dns CCNP or its own CNP)
+#   - Cilium's network isolation between pods across namespaces
 #
 # Note Cilium: utiliser fromEntities: cluster (pas fromEndpoints: [{}])
-# car Cilium 1.19 n'étend pas le sélecteur vide à tous les pods en ingress.
+# because Cilium 1.19 does not extend the empty selector to all pods on ingress.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -24,8 +24,8 @@ spec:
     matchLabels:
       k8s-app: kube-dns
   ingress:
-    # Tous les pods du cluster peuvent utiliser DNS (port 53 uniquement).
-    # La restriction se fait à l'EGRESS (allow-dns CCNP + CNP par composant).
+    # Every pod in the cluster may use DNS (port 53 only).
+    # The restriction happens on EGRESS (allow-dns CCNP + per-component CNP).
     - fromEntities:
         - cluster
       toPorts:
