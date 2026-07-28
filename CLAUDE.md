@@ -26,6 +26,18 @@ doit rester **décomposable** — activer un sous-ensemble sans casser les dépe
   `cluster-api-operator` + `cluster-api-providers` activés. Sans eux, c'est un cluster
   autonome standard. Cf. `OpenAether-infra/CLAUDE.md`.
 
+## Langue
+
+**L'anglais est la langue par défaut du dépôt** : commentaires de manifests,
+messages de commit et documentation. Le français est une **traduction**, jamais
+la source. README : `README.md` = anglais (canonique), `README.fr.md` = français.
+Échange avec l'utilisateur : en français.
+
+⚠️ Fond de commentaires français antérieur à cette convention : les convertir
+**au fil des modifications**, jamais en masse — ils encodent des pièges durement
+acquis (`ipam.mode`, `cni.exclusive`, substitution Flux…) qu'une traduction
+automatique abîmerait.
+
 ## Backlog
 
 Les améliorations identifiées (SSO Zitadel↔Grafana, tokens OpenBao nominatifs,
