@@ -130,6 +130,7 @@ spec:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 100
+            seccompProfile: { type: RuntimeDefault }
           resources:
             requests:
               cpu: 10m
