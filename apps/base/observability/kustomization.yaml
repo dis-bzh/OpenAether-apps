@@ -11,24 +11,24 @@
 #   NetworkPolicy Cilium par composant
 #   Dashboards GitOps (ConfigMaps label grafana_dashboard=1)
 #
-# NB: PAS de directive `namespace:` globale — chaque ressource déclare
-# son propre namespace pour éviter les réécritures non voulues.
+# NB: NO global `namespace:` directive — each resource declares its own
+# namespace to avoid unwanted rewrites.
 # grafana-cnpg-db + externalsecret foundation-databases → apps/base/cnpg/.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  # NB: le Namespace services-observability est déclaré dans apps/base/namespaces/
-  # (Kustomization Flux 'namespaces', étape précoce) car la Kustomization
-  # istio-authorizationpolicies (14b) y crée une policy avant que ce groupe (30)
-  # ne tourne. Le déclarer ici aussi → double-ownership SSA entre 2 Kustomizations.
+  # NB: the services-observability Namespace is declared in apps/base/namespaces/
+  # (the 'namespaces' Flux Kustomization, an early step) because the
+  # istio-authorizationpolicies Kustomization (14b) creates a policy there before
+  # this group (30) runs. Declaring it here too → SSA double-ownership between two Kustomizations.
   # VictoriaMetrics Operator (installe les CRDs VMCluster/VMAgent/VM*Scrape).
-  # Les Custom Resources qui CONSOMMENT ces CRDs (vmcluster/vmagent/vmscapes)
-  # sont dans vm-customresources/ — appliquées par une Kustomization Flux
-  # séparée APRÈS cet opérateur, pour éviter le rejet du bundle au dry-run
+  # The Custom Resources that CONSUME these CRDs (vmcluster/vmagent/vmscrapes)
+  # live in vm-customresources/ — applied by a separate Flux Kustomization AFTER
+  # this operator, to avoid the bundle being rejected at dry-run
   # ("no matches for kind VMAgent"). Cf. vm-customresources/kustomization.yaml.
   - vm-operator.yaml
-  # Exporters métriques
+  # Metrics exporters
   - kube-state-metrics.yaml
   - node-exporter.yaml
   # Logs: Loki + Alloy

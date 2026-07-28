@@ -1,14 +1,14 @@
 # OpenAether 0.5.0 Sprint C — VMCluster HA (VictoriaMetrics)
 # ──────────────────────────────────────────────────────────────────
-# VMCluster déploie 3 composants séparés:
-#   vminsert  (2 répliques) — ingestion HTTP HA
-#   vmstorage (2 répliques) — stockage données, replicationFactor=2
-#   vmselect  (2 répliques) — query HA (PromQL/MetricsQL)
+# VMCluster deploys 3 separate components:
+#   vminsert  (2 replicas) — HA HTTP ingestion
+#   vmstorage (2 replicas) — data storage, replicationFactor=2
+#   vmselect  (2 replicas) — HA querying (PromQL/MetricsQL)
 #
-# replicationFactor=2: chaque série est stockée sur 2 vmstorage.
-# → tolérance: 1 vmstorage peut tomber sans perte de données.
-# → StorageClass local-path: vmstorage gère sa propre réplication,
-#   doubler avec Longhorn serait du gaspillage réseau/IO.
+# replicationFactor=2: every series is stored on 2 vmstorage instances.
+# → tolerance: one vmstorage can go down with no data loss.
+# → local-path StorageClass: vmstorage handles its own replication, doubling up
+#   with Longhorn would waste network/IO.
 #
 # Ports:
 #   vminsert  :8480 — remote_write endpoint (VMAgent → vminsert)
@@ -31,7 +31,7 @@ spec:
   vminsert:
     replicaCount: 2
     extraArgs:
-      # Taille du buffer interne pour absorber les pics de trafic.
+      # Internal buffer size to absorb traffic spikes.
       maxInsertRequestSize: "64MB"
     resources:
       requests:
@@ -57,7 +57,7 @@ spec:
     storage:
       volumeClaimTemplate:
         spec:
-          # local-path: VMCluster gère sa propre réplication (replicationFactor=2).
+          # local-path: VMCluster handles its own replication (replicationFactor=2).
           # Longhorn x2 + VMCluster x2 = 4× overhead inutile.
           storageClassName: local-path
           accessModes:

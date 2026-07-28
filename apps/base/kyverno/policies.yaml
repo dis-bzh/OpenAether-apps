@@ -26,21 +26,21 @@ spec:
               - capi-operator-system
               - cnpg-system
               - cert-manager
-              # Mesh Istio : charts upstream (istiod, ztunnel) qui ne posent pas
-              # runAsNonRoot:true explicitement et requièrent des privilèges réseau.
+              # Istio mesh: upstream charts (istiod, ztunnel) that do not set
+              # runAsNonRoot:true explicitly and require network privileges.
               - istio-system
               - foundation-service-mesh
-              # Gateway Istio : istiod génère AUTO le Deployment Envoy
-              # (openaether-gateway-istio) qui ne pose pas runAsNonRoot:true → bloqué
-              # → Gateway jamais Programmed (pas d'Envoy/LB), constaté Scaleway juin 2026.
+              # Istio Gateway: istiod AUTO-generates the Envoy Deployment
+              # (openaether-gateway-istio), which does not set runAsNonRoot:true →
+              # blocked → Gateway never Programmed (no Envoy/LB), seen on Scaleway June 2026.
               - services-gateway
               # Observability : charts upstream Grafana/Loki/Alloy/KSM/node-exporter/
-              # vm-operator. node-exporter (hostPath/hostNetwork) tourne légitimement
-              # root ; les autres ne posent pas tous runAsNonRoot:true explicitement →
-              # rejet à l'admission (6 HelmReleases bloquées en "Helm install failed",
-              # constaté Scaleway juin 2026). Exclusion large pour débloquer le monitoring.
-              # Passe 2 (durcissement) : resserrer via les securityContext Helm là où
-              # le chart le permet (Grafana peut tourner non-root) plutôt que l'exclusion.
+              # vm-operator. node-exporter (hostPath/hostNetwork) legitimately runs as
+              # root; the others do not all set runAsNonRoot:true explicitly →
+              # admission rejection (6 HelmReleases stuck in "Helm install failed",
+              # seen on Scaleway June 2026). A broad exclusion to unblock monitoring.
+              # Pass 2 (hardening): tighten through the Helm securityContexts where
+              # the chart allows it (Grafana can run non-root) rather than excluding.
               - services-observability
       validate:
         message: "Running as root is not allowed."

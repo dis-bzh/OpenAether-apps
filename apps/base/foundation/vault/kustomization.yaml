@@ -1,14 +1,14 @@
-# OpenAether 0.5.0 — OpenBao (3 répl raft 3, Shamir seal + unsealer HA)
-# Refacto de l'ancien apps/base/openbao/ — single OpenBao HA, pas de root.
+# OpenAether 0.5.0 — OpenBao (3 raft replicas, Shamir seal + HA unsealer)
+# A refactor of the former apps/base/openbao/ — a single HA OpenBao, no root.
 # Seal: Shamir 5/3 (auto-unseal via unsealer HA externe)
-# Unsealer HA: 2-3 répliques RAM-only, source configurable (file/bitwarden/manual).
+# HA unsealer: 2-3 RAM-only replicas, configurable source (file/bitwarden/manual).
 # Removed: foundation-pki-root, transit seal, openbao-seal-token, openbao-root-recovery.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# NB: le namespace `foundation-vault` est défini dans
-# apps/base/namespaces/namespaces.yaml. On ne le (re)déclare pas ici.
-# La directive `namespace:` réécrit les metadata.namespace des ressources
+# NB: the `foundation-vault` namespace is defined in
+# apps/base/namespaces/namespaces.yaml. We do not (re)declare it here.
+# The `namespace:` directive rewrites the resources' metadata.namespace
 # ci-dessous vers foundation-vault.
 namespace: foundation-vault
 
@@ -27,9 +27,9 @@ resources:
   - bootstrap-roles-job.yaml
   - unsealer.yaml
   - bitwarden-unseal-creds.yaml
-  # NB: le Secret openbao-unseal-keys n'est PAS géré par Flux (anti-drift) :
-  # l'init-Job (openbao-init.yaml) le crée avec les vraies parts Shamir. Le
-  # déclarer ici ferait écraser/pruner les vraies parts à chaque reconcile.
+  # NB: the openbao-unseal-keys Secret is NOT managed by Flux (anti-drift):
+  # the init-Job (openbao-init.yaml) creates it with the real Shamir shares.
+  # Declaring it here would overwrite/prune the real shares on every reconcile.
   # bitwarden-unseal-creds.yaml reste placeholder (optionnel, source=bitwarden).
 
 labels:

@@ -1,14 +1,14 @@
 # Certificat TLS du listener OpenBao.
 #
-# La CHAÎNE DE CA vit dans `apps/base/foundation/vault-ca` (brique séparée,
-# namespace `cert-manager`) — voir l'explication détaillée là-bas. Elle ne peut
-# pas rester ici : le `namespace: foundation-vault` de ce kustomization
-# écraserait son namespace et le ClusterIssuer openbao ne la trouverait plus.
+# The CA CHAIN lives in `apps/base/foundation/vault-ca` (a separate brick, in
+# the `cert-manager` namespace) — see the detailed explanation there. It cannot
+# stay here: this kustomization's `namespace: foundation-vault` would override
+# its namespace and the openbao ClusterIssuer would no longer find it.
 #
-# ⚠️ Les SANs couvrent TROIS familles de noms, et il en manque une = le cluster
-# ne monte pas :
+# ⚠️ The SANs cover THREE families of names, and missing one means the cluster
+# does not come up:
 #   1. le Service stable  → clients (ESO, cert-manager, backup) ;
-#   2. les noms PAR POD du headless → `retry_join` entre réplicas raft ;
+#   2. the headless PER-POD names → `retry_join` between raft replicas;
 #   3. `127.0.0.1` / `localhost` → probes et scripts du conteneur.
 ---
 apiVersion: cert-manager.io/v1
@@ -38,11 +38,11 @@ spec:
   - openbao-0.openbao.foundation-vault.svc.cluster.local
   - openbao-1.openbao.foundation-vault.svc.cluster.local
   - openbao-2.openbao.foundation-vault.svc.cluster.local
-  # ⚠️ Service SÉPARÉ `openbao-ui`, visé par le DestinationRule de la gateway.
-  # Sans ces noms, la vérification TLS échoue dès qu'on sort de
-  # `insecureSkipVerify` : le SNI ne matche aucun SAN et l'UI casse. Constaté
-  # avant livraison le 2026-07-28 — l'ancienne version ne vérifiait rien, donc
-  # l'absence ne se voyait pas.
+  # ⚠️ A SEPARATE `openbao-ui` Service, targeted by the gateway's DestinationRule.
+  # Without these names, TLS verification fails as soon as you leave
+  # `insecureSkipVerify`: the SNI matches no SAN and the UI breaks. Caught
+  # before shipping on 2026-07-28 — the old version verified nothing, so the
+  # omission was invisible.
   - openbao-ui
   - openbao-ui.foundation-vault
   - openbao-ui.foundation-vault.svc

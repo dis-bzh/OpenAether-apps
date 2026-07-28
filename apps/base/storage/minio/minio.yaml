@@ -1,15 +1,15 @@
 # OpenAether 0.5.0 Sprint C — MinIO S3-compatible (test local uniquement)
 # ──────────────────────────────────────────────────────────────────
-# MinIO est déployé EN LOCAL UNIQUEMENT pour tester les configurations
-# S3 (Loki backend, VMCluster backup futur) avec la même interface
+# MinIO is deployed LOCALLY ONLY, to test the S3 configurations (Loki backend,
+# future VMCluster backup) with the same interface
 # qu'un S3 cloud (Scaleway Object Storage, OVH OBS, Outscale OSU).
 #
-# Ce fichier est inclus UNIQUEMENT dans apps/overlays/local/kustomization.yaml.
-# apps/overlays/management/ (cloud) pointe directement vers le S3 natif
-# du provider via overlay patch sur les valeurs des HelmReleases.
+# This file is included ONLY in apps/overlays/local/kustomization.yaml.
+# apps/overlays/management/ (cloud) points straight at the provider's native S3
+# through an overlay patch on the HelmRelease values.
 #
-# Architecture: 1 pod Deployment, 10Gi local-path. Pas de HA (test local).
-# Accès: http://minio.foundation-storage:9000 (API S3)
+# Architecture: a 1-pod Deployment, 10Gi local-path. No HA (local test).
+# Access: http://minio.foundation-storage:9000 (S3 API)
 #        http://minio.foundation-storage:9001 (console UI, port-forward local)
 # Credentials: ExternalSecret depuis OpenBao secret/minio/root
 ---
@@ -76,9 +76,9 @@ spec:
       limits:
         cpu: 500m
         memory: 512Mi
-    # Buckets créés automatiquement au démarrage (post-job mc).
-    # ⚠️ restic ne crée PAS les buckets : ceux de la brique backup doivent
-    # préexister (ici en local ; en cloud = opérateur/ensure-buckets).
+    # Buckets created automatically at startup (mc post-job).
+    # ⚠️ restic does NOT create the buckets: the backup brick's must pre-exist
+    # (here locally; in the cloud = operator/ensure-buckets).
     buckets:
       - name: loki
         policy: none
@@ -92,7 +92,7 @@ spec:
       - name: backups-replica
         policy: none
         purge: false
-    # Désactiver les features non nécessaires en local.
+    # Disable the features that are not needed locally.
     metrics:
       serviceMonitor:
         enabled: false
