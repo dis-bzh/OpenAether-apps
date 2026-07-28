@@ -1,122 +1,123 @@
 # OpenAether Apps
 
-Manifests Kubernetes **communs / plateforme** de OpenAether, réconciliés par
-**Flux** (GitOps). Ce dépôt est lu par les contrôleurs Flux amorcés depuis
+**Common / platform** Kubernetes manifests for OpenAether, reconciled by **Flux**
+(GitOps). This repository is read by the Flux controllers bootstrapped from
 [dis-bzh/OpenAether-infra](https://github.com/dis-bzh/OpenAether-infra).
 
-🇬🇧 [English version](README.en.md)
+🇫🇷 [Version française](README.fr.md)
 
-## Principe : socle figé + pioche modulaire
+## Principle: fixed foundation + modular pick
 
-**Seul socle figé : CNI (Cilium) + Flux.** Tout le reste — mesh Istio, Zitadel,
-OpenBao, CNPG, Longhorn, observabilité… — est **optionnel et composable**. Un
-cluster pioche les briques dont il a besoin ; la fermeture transitive des
-dépendances est calculée par `scripts/pick.py`.
+**The only fixed foundation is CNI (Cilium) + Flux.** Everything else — Istio
+mesh, Zitadel, OpenBao, CNPG, Longhorn, observability… — is **optional and
+composable**. A cluster picks the bricks it needs; the transitive closure of
+dependencies is computed by `scripts/pick.py`.
 
-Les manifests **métier** ne vivent PAS ici : ils restent dans chaque dépôt
-applicatif (`deploy/k8s/`). Ce dépôt ne porte que le commun et le pointeur Flux.
+**Business** manifests do NOT live here: they stay in each application
+repository (`deploy/k8s/`). This repo only carries the shared platform and the
+Flux pointer to those repos.
 
 ## Structure
 
 ```
 apps/
-├── base/                      # Manifests, une brique par répertoire
-│   ├── namespaces/            # Découpage foundation-*/services-* + labels PSA
+├── base/                      # Manifests, one brick per directory
+│   ├── namespaces/            # foundation-*/services-* split + PSA labels
 │   ├── platform/              # StorageClasses, Gateway API, PriorityClasses,
 │   │                          #   LB-IPAM, network policies, metrics-server
-│   ├── foundation/vault/      # OpenBao HA raft (seal Shamir 5/3, TLS interne)
-│   ├── foundation/vault-ca/   # CA du listener OpenBao (ns cert-manager)
-│   ├── external-secrets/      # ESO + ClusterSecretStore openbao
-│   ├── cert-manager/          # cert-manager + ClusterIssuers adossés à OpenBao
+│   ├── foundation/vault/      # OpenBao HA raft (Shamir 5/3 seal, internal TLS)
+│   ├── foundation/vault-ca/   # CA for the OpenBao listener (ns cert-manager)
+│   ├── external-secrets/      # ESO + openbao ClusterSecretStore
+│   ├── cert-manager/          # cert-manager + OpenBao-backed ClusterIssuers
 │   ├── istio/                 # Istio ambient (istiod, CNI, ztunnel) + policies
-│   ├── services-gateway/      # Gateway nord-sud + NodePorts FIGÉS 30080/30443
-│   ├── cnpg/                  # CloudNativePG + clusters zitadel-db / grafana-db
-│   ├── storage/               # Longhorn (volumes répliqués, LUKS via OpenBao)
-│   ├── backup/                # Snapshots OpenBao + pg_dump → restic, 2 dépôts S3
+│   ├── services-gateway/      # North-south Gateway + FIXED NodePorts 30080/30443
+│   ├── cnpg/                  # CloudNativePG + zitadel-db / grafana-db clusters
+│   ├── storage/               # Longhorn (replicated volumes, LUKS via OpenBao)
+│   ├── backup/                # OpenBao snapshots + pg_dump → restic, 2 S3 repos
 │   ├── observability/         # VictoriaMetrics, Loki, Grafana, Alloy
-│   ├── identity/              # Zitadel (IAM/SSO, backend CNPG)
-│   ├── kyverno/               # Policy engine + policies OpenAether
-│   ├── cluster-api-operator/  # Opérateur CAPI          ┐
-│   ├── cluster-api-providers/ # Providers + inventaire   │ surcouche
-│   ├── cluster-api-clusters/  # Templates d'enfants      │ management
-│   └── orc/                   # Dépendance CAPO          ┘  (optionnelle)
-├── clusters/                  # Un fichier par cluster enfant CAPI (edge-1, edge-2…)
+│   ├── identity/              # Zitadel (IAM/SSO, CNPG backend)
+│   ├── kyverno/               # Policy engine + OpenAether policies
+│   ├── cluster-api-operator/  # CAPI operator          ┐
+│   ├── cluster-api-providers/ # Providers + inventory   │ management
+│   ├── cluster-api-clusters/  # Child cluster templates │ layer
+│   └── orc/                   # CAPO dependency         ┘ (optional)
+├── clusters/                  # One file per CAPI child cluster (edge-1, edge-2…)
 └── flux/
-    ├── base/                  # DAG COMPLET — source de vérité des dependsOn
-    ├── bricks.yaml            # Catalogue : alias, socle, compagnons, descriptions
-    ├── management/            # Profil : DAG complet
-    ├── workload/              # Profil généré (pioche : vault eso certs gateway)
-    └── local/                 # Profil : Docker local
+    ├── base/                  # FULL DAG — source of truth for dependsOn
+    ├── bricks.yaml            # Catalogue: aliases, baseline, companions, descriptions
+    ├── management/            # Profile: full DAG
+    ├── workload/              # Generated profile (pick: vault eso certs gateway)
+    └── local/                 # Profile: local Docker
 ```
 
-## La pioche (`scripts/pick.py`)
+## The pick (`scripts/pick.py`)
 
-Un profil = `../base` + des patches `$patch: delete` retirant les briques non
-retenues. La **fermeture transitive** garantit qu'aucune brique conservée ne
-dépend d'une brique supprimée.
+A profile is `../base` plus `$patch: delete` patches removing the bricks that
+were not selected. The **transitive closure** guarantees that no retained brick
+depends on a removed one.
 
 ```bash
 python3 scripts/pick.py --list                      # catalogue
 python3 scripts/pick.py vault eso certs gateway \
-        -o apps/flux/workload                        # générer un profil
-python3 scripts/pick.py --validate                   # DAG + catalogue cohérents
-python3 scripts/pick.py --check                      # profils à jour (CI)
+        -o apps/flux/workload                        # generate a profile
+python3 scripts/pick.py --validate                   # DAG + catalogue consistent
+python3 scripts/pick.py --check                      # profiles up to date (CI)
 ```
 
-**Invariant** : `spec.dependsOn` doit encoder les dépendances **réelles**
-(StorageClass, PriorityClass, pool LB…). Le catalogue ne fait que décorer.
+**Invariant**: `spec.dependsOn` must encode the **real** dependencies
+(StorageClass, PriorityClass, LB pool…). The catalogue is decoration only.
 
-Avant toute modification du DAG : `task apps-validate` (depuis le dépôt infra).
+Before touching the DAG: `task apps-validate` (from the infra repo).
 
-## Amorçage
+## Bootstrap flow
 
 ```
 OpenAether-infra: tofu apply -var talos_bootstrap=true
-  └─► inlineManifests Talos :
+  └─► Talos inlineManifests:
         ├── cilium.yaml          # CNI
-        ├── flux-install.yaml    # contrôleurs Flux + CRDs
-        └── flux-bootstrap.yaml  # GitRepository (→ ce dépôt) + Kustomization racine
-              └─► Flux synchronise apps/flux/<profil>/
-                    └─► le DAG déploie apps/base/ dans l'ordre des dependsOn
+        ├── flux-install.yaml    # Flux controllers + CRDs
+        └── flux-bootstrap.yaml  # GitRepository (→ this repo) + root Kustomization
+              └─► Flux syncs apps/flux/<profile>/
+                    └─► the DAG deploys apps/base/ in dependsOn order
 ```
 
-## Clusters enfants (kubeception / gitception)
+## Child clusters (kubeception / gitception)
 
-`apps/clusters/<nom>.yaml` décrit un cluster enfant complet :
+`apps/clusters/<name>.yaml` describes a complete child cluster:
 
-1. une **Kustomization** qui instancie un template CAPI (`cluster-talos-*`) ;
-2. une **HelmRelease Cilium** appliquée **à distance** via `spec.kubeConfig` ;
-3. **Flux** posé à distance, puis `child-gitops` qui pointe l'enfant sur SON
-   propre profil — l'enfant réconcilie ensuite en autonomie.
+1. a **Kustomization** instantiating a CAPI template (`cluster-talos-*`);
+2. a **Cilium HelmRelease** applied **remotely** through `spec.kubeConfig`;
+3. **Flux** installed remotely, then `child-gitops` pointing the child at ITS
+   own profile — from there the child reconciles autonomously.
 
-⚠️ **Deux clusters de management ne doivent jamais lire le même
-`apps/clusters`** : ils se disputeraient les mêmes CR CAPI. Isoler par branche
-(`CHILD_BRANCH`) ou par chemin.
+⚠️ **Two management clusters must never read the same `apps/clusters`**: they
+would fight over the same CAPI CRs. Isolate by branch (`CHILD_BRANCH`) or by
+path.
 
-## Ajouter une brique
+## Adding a brick
 
-1. créer `apps/base/<brique>/` avec son `kustomization.yaml` ;
-2. ajouter la `Kustomization` dans `apps/flux/base/` avec ses `dependsOn`
-   **réels** ;
-3. la référencer dans `apps/flux/base/kustomization.yaml` ;
-4. décrire la brique dans `apps/flux/bricks.yaml` (alias, compagnon, description) ;
-5. régénérer les profils (`pick.py`) puis `task apps-validate` ;
-6. commiter et pousser → Flux réconcilie.
+1. create `apps/base/<brick>/` with its `kustomization.yaml`;
+2. add the `Kustomization` under `apps/flux/base/` with its **real**
+   `dependsOn`;
+3. reference it in `apps/flux/base/kustomization.yaml`;
+4. describe the brick in `apps/flux/bricks.yaml` (alias, companion, description);
+5. regenerate the profiles (`pick.py`) then run `task apps-validate`;
+6. commit and push → Flux reconciles.
 
-⚠️ **Opérateur et ses CR dans deux Kustomizations séparées** : un bundle
-contenant à la fois un opérateur et des CR de ses propres CRDs est rejeté au
-dry-run tant que les CRDs n'existent pas.
+⚠️ **Keep an operator and its own CRs in two separate Kustomizations**: a bundle
+containing both an operator and CRs of the CRDs it installs is rejected at
+dry-run while those CRDs do not yet exist.
 
-## Développement local
+## Local development
 
-Nécessite [OpenAether-infra](https://github.com/dis-bzh/OpenAether-infra) cloné
-à côté :
+Requires [OpenAether-infra](https://github.com/dis-bzh/OpenAether-infra) cloned
+alongside:
 
 ```bash
 cd ../OpenAether-infra
-task local-up      # cluster Talos 3 CP + 3 workers sous Docker
-task local-test    # Flux SUSPENDU, déploiement via kubectl apply -k du working tree
+task local-up      # 3 CP + 3 worker Talos cluster on Docker
+task local-test    # Flux SUSPENDED, deploy via kubectl apply -k from the working tree
 ```
 
-En local, Flux est volontairement un no-op : on applique depuis l'arbre de
-travail, ce qui permet de tester une modification **avant** de la pousser.
+Locally, Flux is deliberately a no-op: you apply from the working tree, which
+lets you test a change **before** pushing it.
