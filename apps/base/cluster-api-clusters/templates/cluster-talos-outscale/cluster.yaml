@@ -1,26 +1,26 @@
 # Cluster client Talos sur Outscale via CAPOSC v1.5.0 — namespace capi-clusters.
 #
-# apiVersions vérifiées sur les CRDs installées : osc*.infrastructure.cluster.x-k8s.io
+# apiVersions verified against the installed CRDs: osc*.infrastructure.cluster.x-k8s.io
 # en v1beta1 (unique version servie) ; CAPI v1.13.2 → refs v1beta2 {apiGroup,kind,name} ;
 # CACPPT/CABPT v1alpha3 (infrastructureTemplate = ObjectReference pleine).
 #
-# PRÉREQUIS hors git :
-#   - Secret capi-clusters/outscale-capi-credentials, clés **minuscules**
+# PREREQUISITES outside git:
+#   - Secret capi-clusters/outscale-capi-credentials, **lowercase** keys
 #     `access_key`, `secret_key`, `region` (≠ convention SCW_* de Scaleway) ;
 #   - keypair Outscale `openaether-capi` (node.vm.keypairName est requis ET
-#     immuable, même si Talos n'a pas de SSH) ;
+#     immutable, even though Talos has no SSH);
 #   - OMI Talos construite en variante **aws** (cf. modules/talos-image/outscale) :
-#     seule elle lit l'IMDS EC2, donc ingère le user-data CAPI et fait entrer
-#     l'IP publique (NAT 1:1) dans les SAN du certificat apid — sans quoi CACPPT
-#     ne peut ni bootstrapper etcd ni récupérer le kubeconfig.
+#     only it reads the EC2 IMDS, so it ingests the CAPI user-data and puts the
+#     public IP (1:1 NAT) into the apid certificate SANs — without which CACPPT
+#     can neither bootstrap etcd nor fetch the kubeconfig.
 #
-# ⚠️ spec.template.spec d'un OscMachineTemplate est IMMUABLE (webhook
-# voscmachinetemplate) : changer vmType/image/disque exige un NOUVEAU nom, d'où
-# ${MACHINE_REV} — l'incrémenter (v2, v3…) fait rouler les machines par CAPI.
+# ⚠️ An OscMachineTemplate's spec.template.spec is IMMUTABLE (voscmachinetemplate
+# webhook): changing vmType/image/disk requires a NEW name, hence
+# ${MACHINE_REV} — bumping it (v2, v3…) makes CAPI roll the machines.
 #
-# ⚠️ La LBU CAPOSC ne crée QU'UN listener (6443) : le port Talos 50000 ne peut
-# pas passer par le load balancer → les control planes portent une IP publique
-# (`publicIp: true`) et une règle SG dédiée.
+# ⚠️ The CAPOSC LBU creates ONLY ONE listener (6443): the Talos port 50000
+# cannot go through the load balancer → the control planes carry a public IP
+# (`publicIp: true`) and a dedicated SG rule.
 
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: OscCluster
@@ -35,31 +35,31 @@ spec:
   credentials:
     fromSecret: outscale-capi-credentials
   network:
-    # PIEGE #2 — CIDR. Le defaut CAPOSC est 10.0.0.0/16 … qui est EXACTEMENT le
+    # TRAP #2 — CIDR. The CAPOSC default is 10.0.0.0/16 … which is EXACTLY the
     # net du management Outscale (modules/providers/outscale/network.tf:
     # outscale_net.this.ip_range = 10.0.0.0/16, private 10.0.0.0/24, public
-    # 10.0.1.0/24). Laisser le defaut interdirait tout netPeering futur et
-    # rendrait le diagnostic ambigu => on force un /16 libre.
+    # 10.0.1.0/24). Keeping the default would forbid any future netPeering and
+    # make diagnosis ambiguous => we force a free /16.
     net:
       name: ${CLUSTER_NAME}-net
       ipRange: ${OSC_NET_CIDR}
 
-    # LBU mono-subnet (CreateLoadBalancer ne prend qu'UN subnetId) => mono-AZ.
+    # Single-subnet LBU (CreateLoadBalancer takes only ONE subnetId) => single-AZ.
     subregions:
       - ${OSC_SUBREGION}
 
     # PIEGE #3 — layout des subnets.
-    # Si subnets est vide, CAPOSC en genere 3 par AZ a partir du net :
+    # If subnets is empty, CAPOSC generates 3 per AZ from the net:
     # x.y.2.0/24 (loadbalancer+bastion+nat), x.y.3.0/24 (worker),
     # x.y.4.0/24 (controlplane) — cf. ClusterScope.GetSubnets().
-    # On les declare explicitement pour maitriser les plages ET les roles :
+    # We declare them explicitly to control both the ranges AND the roles:
     # SubnetIsPublic() == "a le role bastion, loadbalancer ou nat".
-    # NE PAS ajouter loadbalancer/bastion/nat au subnet controlplane pour le
-    # rendre "public" : getAutomaticSecurityGroups() fait `continue` sur les
-    # subnets publics AVANT de remplir allSNCP => les regles LB->CP:6443,
-    # worker<-CP:1024-65535 et etcd 2378-2380 se retrouveraient avec une liste
-    # d'ipRanges VIDE. Le subnet CP reste "prive" au sens des roles ; c'est la
-    # ROUTE TABLE qui le rend joignable (piege #4).
+    # DO NOT add loadbalancer/bastion/nat to the controlplane subnet to make it
+    # "public": getAutomaticSecurityGroups() does a `continue` on public subnets
+    # BEFORE filling allSNCP => the LB->CP:6443, worker<-CP:1024-65535 and etcd
+    # 2378-2380 rules would end up with an EMPTY ipRanges list. The CP subnet
+    # stays "private" in terms of roles; it is the ROUTE TABLE that makes it
+    # reachable (trap #4).
     subnets:
       - name: ${CLUSTER_NAME}-public
         ipSubnetRange: ${OSC_SUBNET_PUBLIC}
@@ -74,23 +74,23 @@ spec:
         subregionName: ${OSC_SUBREGION}
         roles: [controlplane]
 
-    # PIEGE #4 — le control plane doit etre joignable en 50000 (API Talos).
-    # La LBU CAPOSC ne cree qu'UN SEUL listener (load_balancer.go :
+    # TRAP #4 — the control plane must be reachable on 50000 (Talos API).
+    # The CAPOSC LBU creates only ONE listener (load_balancer.go:
     # `Listeners: []osc.ListenerForCreation{first_listener}`) => 6443 OU 50000,
-    # jamais les deux. Et l'endpoint du cluster est le DnsName de cette LBU
+    # never both. And the cluster endpoint is that LBU's DnsName.
     # (osccluster_loadbalancer.go: SetControlPlaneEndpoint{Host: DnsName,
     # Port: listener.loadbalancerport}).
-    # CACPPT, lui, ne passe PAS par l'endpoint : il ouvre une session Talos sur
+    # CACPPT does NOT go through the endpoint: it opens a Talos session on
     # machine.Status.Addresses (ExternalIP *ou* InternalIP), port 50000
     # (controllers/configs.go::talosconfigFromMachines). Le management etant sur
-    # un AUTRE cloud, l'InternalIP 10.30.x est injoignable => les CP DOIVENT
-    # avoir une IP publique (node.vm.publicIp, cf. OscMachineTemplate).
-    # Or sur Outscale (modele VPC/AWS) une IP publique ne fonctionne QUE si la
-    # route table du subnet pointe 0.0.0.0/0 vers l'Internet Service. Les route
-    # tables auto-generees envoient tout subnet non-public vers le NAT
-    # (GetRouteTables()) => on les declare a la main pour router le subnet CP
-    # vers la gateway. GetRouteTables() retourne spec.network.routeTables des
-    # qu'il est non vide : declarer une seule table les remplace TOUTES.
+    # ANOTHER cloud, where the 10.30.x InternalIP is unreachable => the CPs MUST
+    # have a public IP (node.vm.publicIp, see OscMachineTemplate).
+    # But on Outscale (VPC/AWS model) a public IP works ONLY if the subnet's
+    # route table points 0.0.0.0/0 at the Internet Service. The auto-generated
+    # route tables send every non-public subnet to the NAT (GetRouteTables())
+    # => we declare them by hand to route the CP subnet to the gateway.
+    # GetRouteTables() returns spec.network.routeTables as soon as it is
+    # non-empty: declaring a single table replaces them ALL.
     routeTables:
       - name: ${CLUSTER_NAME}-public-rt
         role: loadbalancer
@@ -109,8 +109,8 @@ spec:
           - ${CLUSTER_NAME}-cp
 
         routes:
-          # gateway (et pas nat) : sans cela l'IP publique du CP est inerte
-          # (trafic retour asymetrique) et CACPPT ne joint jamais :50000.
+          # gateway (not nat): without this the CP's public IP is inert
+          # (asymmetric return traffic) and CACPPT never reaches :50000.
           - name: ${CLUSTER_NAME}-cp-default
             destination: 0.0.0.0/0
             targetType: gateway
@@ -121,14 +121,14 @@ spec:
           - ${CLUSTER_NAME}-worker
 
         routes:
-          # workers sans IP publique => egress par le NAT service. targetName
-          # vide = le NAT service unique du cluster (GetNatService("", az)).
+          # workers without a public IP => egress through the NAT service. An
+          # empty targetName = the cluster's single NAT service (GetNatService("", az)).
           - name: ${CLUSTER_NAME}-worker-default
             destination: 0.0.0.0/0
             targetType: nat
 
     # natServices volontairement OMIS : GetNatServices() derive automatiquement
-    # un NAT service par subnet portant le role "nat" (ici ${CLUSTER_NAME}-public).
+    # one NAT service per subnet carrying the "nat" role (here ${CLUSTER_NAME}-public).
 
     loadBalancer:
       # <=32 car., [0-9A-Za-z espace -] uniquement. Immuable apres creation
@@ -148,20 +148,20 @@ spec:
         timeout: 5
         healthythreshold: 2
         unhealthythreshold: 3
-      # securitygroupname / subnetname sont DEPRECIES : la LBU est placee via
+      # securitygroupname / subnetname are DEPRECATED: the LBU is placed through
       # les roles (subnet role=loadbalancer, SG role=loadbalancer).
 
     # PIEGE #5 — les security groups automatiques n'ouvrent NI 50000 NI 50001.
-    # getAutomaticSecurityGroups() ne connait que 6443 / 2378-2380 / 10250-10252
+    # getAutomaticSecurityGroups() only knows 6443 / 2378-2380 / 10250-10252
     # / 179 / 4240 / 4244 / 8472 / 51820-51821 / 51871 / 30000-32767. Talos a
     # besoin de apid:50000 (management -> CP, et node -> node) et trustd:50001
-    # (join des workers). On les ajoute via additionalSecurityRules.
+    # (worker join). We add them through additionalSecurityRules.
     # ATTENTION : getAdditionalRules() matche avec slices.Equal(roles, ar.Roles)
-    # => la liste `roles` doit etre IDENTIQUE ET DANS LE MEME ORDRE que celle du
-    # SG cible : [controlplane] pour le SG "-controlplane", [worker] pour le SG
-    # "-worker", [controlplane, worker] (cet ordre) pour le SG "-node",
-    # [loadbalancer] pour le SG "-lb", [bastion] pour le SG "-bastion".
-    # Une liste [worker, controlplane] ne matcherait RIEN, silencieusement.
+    # => the `roles` list must be IDENTICAL AND IN THE SAME ORDER as the target
+    # SG's: [controlplane] for the "-controlplane" SG, [worker] for the
+    # "-worker" SG, [controlplane, worker] (that order) for the "-node" SG,
+    # [loadbalancer] for the "-lb" SG, [bastion] for the "-bastion" SG.
+    # A [worker, controlplane] list would match NOTHING, silently.
     additionalSecurityRules:
       - roles: [controlplane]
         rules:
@@ -176,7 +176,7 @@ spec:
       - roles: [controlplane, worker]
         rules:
           # apid (50000) + trustd (50001) intra-cluster : join des workers et
-          # routage des appels Talos entre noeuds.
+          # routing of Talos calls between nodes.
           - name: talos-apid-trustd-intra
             flow: Inbound
             ipProtocol: tcp
@@ -185,13 +185,13 @@ spec:
             ipRanges:
               - ${OSC_NET_CIDR}
           # KubePrism (7445) est en loopback -> rien a ouvrir. Cilium WireGuard
-          # 51871/udp et health 4240 sont deja dans le SG "-node" par defaut.
+          # 51871/udp and health 4240 are already in the "-node" SG by default.
 
     # allowFromIPRanges volontairement NON positionne : il restreint l'inbound
-    # 6443 du SG "-lb" (et 22 du bastion) et vaut 0.0.0.0/0 par defaut. Le
+    # the "-lb" SG's 6443 (and the bastion's 22) and defaults to 0.0.0.0/0.
     # restreindre casserait l'acces des noeuds eux-memes a l'endpoint public
-    # (ils sortent par l'IP - inconnue a l'avance - du NAT service). Le
-    # durcissement se fait sur 50000 (ci-dessus), pas sur 6443 (mTLS/authn k8s).
+    # (they egress through the NAT service's IP, unknown in advance). Hardening
+    # happens on 50000 (above), not on 6443 (mTLS / k8s authn).
 
     bastion:
       enable: false
@@ -199,12 +199,12 @@ spec:
 ---
 # -----------------------------------------------------------------------------
 # Cluster — cluster.x-k8s.io/v1beta2 (CAPI v1.13.2).
-# PIEGE #7 — en v1beta2 les refs sont {apiGroup, kind, name} : PAS d'apiVersion,
-# PAS de namespace (l'objet doit vivre dans le meme namespace que le Cluster).
-# C'est l'inverse de TalosControlPlane.spec.infrastructureTemplate (v1alpha3)
-# qui est un ObjectReference PLEIN (apiVersion + kind + name + namespace).
-# spec.controlPlaneEndpoint est volontairement absent : CAPOSC le remplit avec
-# le DnsName de la LBU une fois celle-ci creee, et CAPI le recopie.
+# TRAP #7 — in v1beta2 refs are {apiGroup, kind, name}: NO apiVersion,
+# NO namespace (the object must live in the same namespace as the Cluster).
+# This is the opposite of TalosControlPlane.spec.infrastructureTemplate (v1alpha3),
+# which is a FULL ObjectReference (apiVersion + kind + name + namespace).
+# spec.controlPlaneEndpoint is deliberately absent: CAPOSC fills it with the
+# LBU's DnsName once it is created, and CAPI copies it over.
 # -----------------------------------------------------------------------------
 apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster
@@ -239,10 +239,10 @@ spec:
 # Champs reellement obligatoires (webhook voscmachinetemplate.kb.io ->
 # ValidateOscMachineSpec) : node.vm.keypairName (Required) et node.vm.vmType
 # (Required : ValidateVmType renvoie Required sur chaine vide — le "defaut
-# tinav7.c4r8p1" du commentaire de CRD n'est applique qu'APRES admission, cote
-# reconcile). Le schema CRD, lui, ne marque required que template et
-# template.spec (+ volumes[].device si un volume est declare).
-# spec.template.spec est IMMUABLE (ValidateUpdate) => toute modif = nouveau
+# tinav7.c4r8p1" from the CRD comment is only applied AFTER admission, on the
+# reconcile side). The CRD schema itself only marks template and
+# template.spec as required (+ volumes[].device if a volume is declared).
+# spec.template.spec is IMMUTABLE (ValidateUpdate) => any change = a new
 # template + nouveau nom (versionner le nom si CP_REPLICAS/vmType/image bougent).
 # -----------------------------------------------------------------------------
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
@@ -261,11 +261,11 @@ spec:
         vm:
           # role: worker par defaut (OscVm.GetRole()). Sans "controlplane" :
           # mauvais subnet, mauvais SG, et surtout AUCUN enregistrement en
-          # backend de la LBU (oscmachine_vm.go n'appelle
+          # LBU backend (oscmachine_vm.go only calls
           # LinkLoadBalancerBackendMachines que si role==controlplane).
           role: controlplane
           # PIEGE #8 — l'image. node.vm.imageId (ami-…) OU node.image.name.
-          # getImageId() donne la PRIORITE a node.image.name : si les deux sont
+          # getImageId() gives PRIORITY to node.image.name: if both are set,
           # renseignes, imageId est ignore. On utilise l'ID (deterministe).
           # Alternative par nom (necessite accountId, sinon CAPOSC logue
           # "[security] It is recommended to set the image account") :
@@ -273,31 +273,31 @@ spec:
           #     name: ${OSC_IMAGE_NAME}
           #     accountId: ${OSC_IMAGE_ACCOUNT_ID}
           imageId: ${OSC_IMAGE_ID}
-          # PIEGE #9 — keypairName est OBLIGATOIRE et doit EXISTER cote Outscale
-          # (CreateVm echoue sinon), alors que Talos n'a pas de SSH. Aucun
-          # outscale_keypair n'est cree par le socle tofu => a provisionner une
+          # TRAP #9 — keypairName is MANDATORY and must EXIST on the Outscale
+          # side (CreateVm fails otherwise), even though Talos has no SSH. The
+          # tofu foundation creates no outscale_keypair => to be provisioned
           # fois, hors CAPI. Champ IMMUABLE sur OscMachine.
           keypairName: ${OSC_KEYPAIR_NAME}
           # tinavX.cVCPUrRAMpPERF — regexp
           # ^tinav([3-9]|[1-9][0-9]).c[1-9][0-9]*r[1-9][0-9]*p[1-3]$
           # tinav6.c4r8p2 = 4 vCPU / 8 GiB (equivalent DEV1-L / b3-8).
-          # < 8 GiB => OOMController Talos qui SIGKILL les cgroups (cf. la
+          # < 8 GiB => the Talos OOMController SIGKILLs the cgroups (see the
           # cascade observee sur DEV1-M 4 GB cote Scaleway).
           vmType: ${OSC_VM_TYPE}
           # PIEGE #6 — IP publique + certSANs.
-          # publicIp:true fait allouer une EIP et la fait attacher via un tag
+          # publicIp:true allocates an EIP and attaches it through a tag
           # userdata (section "-----BEGIN OUTSCALE SECTION-----" prependee au
-          # bootstrap data, avec filter_private_section=true : Outscale la
-          # retire avant de l'exposer a l'instance, la machine config Talos
-          # reste donc intacte — cf. cloud/utils/utils.go + cloud/services/
+          # bootstrap data, with filter_private_section=true: Outscale strips it
+          # before exposing it to the instance, so the Talos machine config
+          # stays intact — see cloud/utils/utils.go + cloud/services/
           # compute/vm.go).
-          # publicIpPool = pool d'IP PRE-ALLOUEES : indispensable ici, parce que
-          # l'IP publique est du NAT 1:1 (la NIC ne voit que la 10.30.x) et que
-          # l'image Talos est un build "nocloud" -> apid ne mettra JAMAIS l'IP
-          # publique dans les SAN de son certificat. Il faut donc connaitre les
-          # IPs A L'AVANCE pour les injecter en machine.certSANs (voir le patch
-          # du TalosControlPlane). Sans cela : x509 "certificate is valid for
-          # 10.30.3.x, not <IP publique>" et CACPPT ne bootstrappe pas etcd.
+          # publicIpPool = a pool of PRE-ALLOCATED IPs: essential here, because
+          # the public IP is 1:1 NAT (the NIC only sees the 10.30.x) and the
+          # Talos image is a "nocloud" build -> apid will NEVER put the public
+          # IP into its certificate SANs. We therefore need to know the IPs IN
+          # ADVANCE to inject them as machine.certSANs (see the TalosControlPlane
+          # patch). Without this: x509 "certificate is valid for
+          # 10.30.3.x, not <public IP>" and CACPPT never bootstraps etcd.
           publicIp: true
           rootDisk:
             rootDiskType: io1
@@ -326,7 +326,7 @@ spec:
   version: ${K8S_VERSION}
   replicas: ${CP_REPLICAS}
   # ObjectReference PLEIN (v1alpha3) : apiVersion ET namespace obligatoires ici,
-  # contrairement aux refs du Cluster v1beta2.
+  # unlike the v1beta2 Cluster refs.
   infrastructureTemplate:
     apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
     kind: OscMachineTemplate
@@ -337,15 +337,15 @@ spec:
     rollingUpdate:
       maxSurge: 1
   controlPlaneConfig:
-    # spec.controlPlaneConfig.init est volontairement ABSENT : deprecie depuis
-    # cacppt v0.4.0, et s'il est present son sous-champ generateType devient
-    # required (le laisser vide fait echouer la validation du CRD).
+    # spec.controlPlaneConfig.init is deliberately ABSENT: deprecated since
+    # cacppt v0.4.0, and if present its generateType sub-field becomes required
+    # (leaving it empty fails CRD validation).
     controlplane:
       generateType: controlplane
-      # contrat Talos majeur.mineur ("v1.13"), PAS la version patch.
+      # Talos major.minor contract ("v1.13"), NOT the patch version.
       talosVersion: ${TALOS_CONTRACT}
       # PIEGE #10 — CABPT >= 0.6 / Talos v1.13 : strategicPatches (YAML) et
-      # SURTOUT PAS configPatches (JSON6902) qui echoue avec
+      # DEFINITELY NOT configPatches (JSON6902), which fails with
       # "not supported for multi-document machine configuration".
       strategicPatches:
         - |
@@ -378,7 +378,7 @@ spec:
           imageId: ${OSC_IMAGE_ID}
           keypairName: ${OSC_KEYPAIR_NAME}
           vmType: ${OSC_VM_TYPE}
-          # Pas d'IP publique : egress par le NAT service du subnet public.
+          # No public IP: egress through the public subnet's NAT service.
           publicIp: false
           rootDisk:
             rootDiskType: io1
@@ -386,12 +386,12 @@ spec:
             rootDiskIops: 1500
           subregionNames:
             - ${OSC_SUBREGION}
-          # repulseServer est deja positionne par defaut au nom du
+          # repulseServer is already set by default to the name of the
           # MachineDeployment (anti-affinite serveur best-effort).
           tags:
             openaether.io/cluster: ${CLUSTER_NAME}
             openaether.io/role: worker
-        # Disque de donnees dedie (equivalent worker_storage des tfvars) :
+        # Dedicated data disk (the equivalent of worker_storage in the tfvars):
         # partitionne ensuite en user volumes Talos chiffres (local-path +
         # longhorn). device DOIT matcher ^(/dev/sda1|/dev/sd[a-z]|/dev/xvd[a-z])$
         # et iops/size doit rester <= 300.
@@ -431,7 +431,7 @@ spec:
 ---
 # -----------------------------------------------------------------------------
 # MachineDeployment — cluster.x-k8s.io/v1beta2.
-# Refs {apiGroup, kind, name} ; en v1beta2 la strategie de rollout est sous
+# Refs {apiGroup, kind, name}; in v1beta2 the rollout strategy lives under
 # spec.rollout.strategy (et non plus spec.strategy).
 # -----------------------------------------------------------------------------
 apiVersion: cluster.x-k8s.io/v1beta2
