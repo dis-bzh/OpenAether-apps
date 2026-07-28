@@ -1,0 +1,31 @@
+# Inventaire clusterctl du cluster de management.
+#
+# Sans lui, `clusterctl move` REFUSE ce cluster comme cible — condition
+# nécessaire pour amorcer un management depuis un cluster jetable puis le
+# rendre autogéré (cf. docs/capi-bootstrap.md côté infra).
+#
+# `wait: false` : ces objets n'ont pas de condition Ready, ce sont de simples
+# entrées d'inventaire.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: clusterctl-inventory
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/cluster-api-providers/clusterctl-inventory
+  prune: true
+  wait: false
+  dependsOn:
+    # La CRD providers.clusterctl.cluster.x-k8s.io vient des composants du
+    # CoreProvider. cluster-api-providers a wait:true, mais il ne garantit que
+    # la création des CR de l'opérateur, pas l'installation des composants :
+    # les premiers reconciles peuvent échouer sur « no matches for kind
+    # Provider », et Flux réessaie jusqu'à ce que la CRD soit là.
+    - name: cluster-api-providers

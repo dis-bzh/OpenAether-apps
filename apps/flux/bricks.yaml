@@ -28,6 +28,7 @@ companions:
   - backup-databases                 # backup par défaut dès que CNPG + ESO piochés
   - capi-clusters                    # instanciation clusters clients (si CAPI pioché)
   - orc                              # dépendance CAPO (OpenStack) — CRDs openstack.k-orc.cloud
+  - clusterctl-inventory             # rend le cluster éligible comme cible de `clusterctl move`
 
 # Alias conviviaux → nom de Kustomization Flux.
 aliases:
@@ -87,4 +88,5 @@ descriptions:
   cluster-api-providers: Providers CAPI (Talos, Scaleway, OpenStack, Outscale)
   capi-clusters: Clusters clients CAPI (apps/clusters, kubeception/gitception)
   orc: openstack-resource-controller (CRDs requises par CAPO)
+  clusterctl-inventory: Inventaire clusterctl (exigé comme cible de `clusterctl move`)
   flux-egress: NetworkPolicy egress-restricted flux-system
