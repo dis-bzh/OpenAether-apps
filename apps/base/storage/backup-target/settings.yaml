@@ -1,27 +1,16 @@
 # Backup target for Longhorn volumes.
 #
-# ── API: BackupTarget, NOT the `backup-target` setting ───────────────────────
-# Longhorn ≥ 1.6 moved the backup destination out of `Setting` into a dedicated
-# CRD, `backuptargets.longhorn.io` (several destinations are possible). The
-# validating webhook now explicitly REJECTS the old
-# nom :
-#   admission webhook "validator.longhorn.io" denied the request:
-#   setting backup-target is not supported
-# Observed on real cloud on 2026-07-28 with Longhorn v1.9.2 — the previous
-# version of this file used the removed API. Schema verified against the
-# CRD servie : spec = {backupTargetURL, credentialSecret, pollInterval}.
+# ⚠️ Longhorn ≥ 1.6 moved this out of `Setting` into the `BackupTarget` CRD; the
+# webhook now rejects the old name ("setting backup-target is not supported").
+# We patch the `default` object Longhorn creates at startup — the one volumes
+# use without an annotation.
 #
-# We patch the `default` object Longhorn creates itself at startup, rather than
-# adding one: it is the one volumes use without an annotation.
+# Separate Kustomization on purpose: it carries a `substituteFrom`, and Flux
+# substitution applies to a whole render — merged with `apps/base/storage` it
+# would blank the shell variables of its `install.yaml`.
 #
-# ── Why a separate Kustomization ─────────────────────────────────────────────
-# This directory is substituted by Flux (${BACKUP_TARGET_URL} comes from the
-# `cluster-identity` ConfigMap). Substitution applies to the WHOLE render of a
-# Kustomization: merged with `apps/base/storage`, it would blank the shell
-# variables of its `install.yaml` (`$VOL_DIR`).
-#
-# EMPTY default: a cluster that does not publish the URL keeps Longhorn without
-# volume backups — the previous behaviour, no silent regression.
+# Empty default: a cluster that publishes no URL keeps Longhorn without volume
+# backups, i.e. the previous behaviour — no silent regression.
 ---
 apiVersion: longhorn.io/v1beta2
 kind: BackupTarget

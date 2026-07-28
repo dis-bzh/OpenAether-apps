@@ -1,25 +1,15 @@
 # clusterctl inventory — required for `clusterctl move`.
 #
-# WHY THIS FILE EXISTS
-# cluster-api-operator and clusterctl keep TWO different inventories:
-#   - the operator declares its providers under operator.cluster.x-k8s.io
-#     (CoreProvider/BootstrapProvider/…, see core-providers.yaml);
-#   - clusterctl only ever reads clusterctl.cluster.x-k8s.io/Provider, which it
-#     normally creates itself during `clusterctl init`.
-# A cluster equipped by the operator therefore has the CRD but NO entries, and
-# `clusterctl move` rejects it as a target:
-#   Error: failed to check providers in target cluster: [provider
-#   bootstrap-talos not found in the target cluster, …]
-# even though every controller is running. Aggravating factor: `--dry-run` does
-# NOT perform this check — it passes, and the failure only surfaces on the real
-# move (observed 2026-07-28 while pivoting a CAPI-bootstrapped management).
+# cluster-api-operator and clusterctl keep two different inventories: the
+# operator uses operator.cluster.x-k8s.io, clusterctl only reads
+# clusterctl.cluster.x-k8s.io/Provider, which it normally creates itself at
+# `clusterctl init`. A cluster equipped by the operator therefore has the CRD
+# but no entries, and `move` rejects it as a target while every controller runs.
+# ⚠️ `--dry-run` does NOT perform that check: it passes, and only the real move
+# fails.
 #
-# ⚠️ Versions MUST stay aligned with core-providers.yaml and infra-providers.yaml
-# — clusterctl compares source and target. Any provider version bump has to be
-# mirrored here.
-#
-# Namespaces = where the operator actually installs the components (capi-system
-# for all of them, except Outscale which has its own).
+# ⚠️ Versions MUST stay aligned with core-providers.yaml / infra-providers.yaml —
+# clusterctl compares source and target.
 ---
 apiVersion: clusterctl.cluster.x-k8s.io/v1alpha3
 kind: Provider

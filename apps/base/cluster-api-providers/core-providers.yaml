@@ -1,29 +1,14 @@
-# CAPI providers — PINNED versions; the operator fetches each provider's
-# release correspondants sur GitHub.
+# CAPI providers — PINNED versions; the operator fetches each release from GitHub.
 #
-# ⚠️ GITHUB RATE LIMIT — the fetch is ANONYMOUS, hence subject to 60 requests/h/IP
-# shared by everything egressing from the same public IP. With 6 providers and
-# repeated reconciles (crashloop, upgrade, reinstall) you can hit it: the
-# providers then stay stuck failing to fetch, with no apparent link to the
-# configuration. Two remedies; the API was checked against the CRD schema
-# `operator.cluster.x-k8s.io/v1alpha2` (champs `configSecret` et `fetchConfig`) :
+# ⚠️ The fetch is ANONYMOUS: 60 requests/h/IP, shared by everything leaving the
+# same public IP. With 6 providers and repeated reconciles you can hit it, and
+# the providers then stay stuck on a fetch error with no visible link to the
+# configuration.
 #
-#   1. A GitHub token (the simplest) — the Secret DOES NOT GO IN GIT:
-#        kubectl -n capi-system create secret generic capi-github-token \
-#          --from-literal=GITHUB_TOKEN=ghp_xxx
-#      then, on EVERY provider:
-#        spec:
-#          configSecret:
-#            name: capi-github-token
-#            namespace: capi-system
-#      (the `configSecret` slot is free: no provider uses it here.)
-#
-#   2. An OCI mirror — `spec.fetchConfig.oci: <ref>`: more robust (no
-#      dependency on GitHub at reconcile time) but requires pushing and maintaining
-#      les artefacts.
-#
-# Deliberately NOT enabled by default: the token is the operator's own secret,
-# and a `configSecret` pointing at a missing Secret BREAKS the provider.
+# Two remedies, both left OFF by default (a `configSecret` pointing at a missing
+# Secret BREAKS the provider):
+#   1. a GitHub token in `spec.configSecret` (the slot is free — nothing uses it);
+#   2. an OCI mirror in `spec.fetchConfig.oci`, more robust but to maintain.
 ---
 # CoreProvider — Cluster API core controllers
 # https://github.com/kubernetes-sigs/cluster-api
