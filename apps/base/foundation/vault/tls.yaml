@@ -1,85 +1,23 @@
-# TLS du listener OpenBao — CA DÉDIÉE, indépendante de la PKI qu'OpenBao sert.
+# Certificat TLS du listener OpenBao.
 #
-# ── Pourquoi pas la PKI d'OpenBao ────────────────────────────────────────────
-# L'issuer `openbao` (cert-manager-issuers) signe via `pki/sign/openaether`.
-# L'utiliser ici créerait un cycle insoluble : OpenBao devrait être JOIGNABLE
-# pour émettre le certificat qui le rend joignable — et son intermediate n'est
-# signé qu'après une étape manuelle hors ligne. D'où une chaîne selfSigned → CA
-# → certificat serveur, entièrement locale à cette brique.
-#
-# ── Ce que ce certificat protège, et ce qu'il ne protège pas ─────────────────
-# C'est du TLS de TRANSPORT entre les clients in-cluster et OpenBao. La CA n'a
-# aucun rapport avec la PKI applicative (`openaether-tls`, la gateway) : elle ne
-# signe QUE le listener d'OpenBao, et n'est distribuée qu'à ses clients.
-# ⚠️ ClusterIssuer et NON Issuer, et la CA vit dans le namespace `cert-manager`.
-# Raison : le `ClusterIssuer` vault (apps/base/cert-manager-issuers) doit lire
-# cette CA pour valider le certificat d'OpenBao, or un ClusterIssuer résout ses
-# Secrets dans le « cluster resource namespace » de cert-manager, PAS dans
-# foundation-vault. Une CA namespacée obligerait à la recopier — deux clés à
-# faire vivre, ou un mirroring maison. Ici, une seule CA, lisible des deux côtés.
----
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: openbao-selfsigned
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: vault
-spec:
-  selfSigned: {}
----
-# CA interne. TTL long (10 ans) : la renouveler impose de redistribuer le bundle
-# à TOUS les clients d'OpenBao, ce qui n'est pas une opération de routine.
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: openbao-ca
-  # Namespace de cert-manager : c'est là que le ClusterIssuer ci-dessous ET le
-  # ClusterIssuer vault iront chercher le Secret.
-  namespace: cert-manager
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: vault
-spec:
-  isCA: true
-  commonName: openaether-openbao-internal-ca
-  secretName: openbao-ca
-  duration: 87600h
-  renewBefore: 8760h
-  privateKey:
-    algorithm: ECDSA
-    size: 256
-  issuerRef:
-    name: openbao-selfsigned
-    kind: ClusterIssuer
----
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: openbao-ca
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: vault
-spec:
-  ca:
-    secretName: openbao-ca
----
-# Certificat du listener.
+# La CHAÎNE DE CA vit dans `apps/base/foundation/vault-ca` (brique séparée,
+# namespace `cert-manager`) — voir l'explication détaillée là-bas. Elle ne peut
+# pas rester ici : le `namespace: foundation-vault` de ce kustomization
+# écraserait son namespace et le ClusterIssuer openbao ne la trouverait plus.
 #
 # ⚠️ Les SANs couvrent TROIS familles de noms, et il en manque une = le cluster
 # ne monte pas :
 #   1. le Service stable  → clients (ESO, cert-manager, backup) ;
-#   2. les noms PAR POD du headless (`openbao-0.openbao…`) → `retry_join` entre
-#      réplicas raft, qui s'adressent nominativement ;
-#   3. `127.0.0.1` / `localhost` → les probes et les scripts du conteneur, qui
-#      passent par la boucle locale.
+#   2. les noms PAR POD du headless → `retry_join` entre réplicas raft ;
+#   3. `127.0.0.1` / `localhost` → probes et scripts du conteneur.
+---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: openbao-server-tls
   namespace: foundation-vault
   labels:
-    openaether.io/managed: "true"
+    openaether.io/managed: 'true'
     openaether.io/component: vault
 spec:
   secretName: openbao-server-tls
@@ -93,13 +31,13 @@ spec:
     kind: ClusterIssuer
   commonName: openbao.foundation-vault.svc.cluster.local
   dnsNames:
-    - openbao
-    - openbao.foundation-vault
-    - openbao.foundation-vault.svc
-    - openbao.foundation-vault.svc.cluster.local
-    - openbao-0.openbao.foundation-vault.svc.cluster.local
-    - openbao-1.openbao.foundation-vault.svc.cluster.local
-    - openbao-2.openbao.foundation-vault.svc.cluster.local
-    - localhost
+  - openbao
+  - openbao.foundation-vault
+  - openbao.foundation-vault.svc
+  - openbao.foundation-vault.svc.cluster.local
+  - openbao-0.openbao.foundation-vault.svc.cluster.local
+  - openbao-1.openbao.foundation-vault.svc.cluster.local
+  - openbao-2.openbao.foundation-vault.svc.cluster.local
+  - localhost
   ipAddresses:
-    - 127.0.0.1
+  - 127.0.0.1

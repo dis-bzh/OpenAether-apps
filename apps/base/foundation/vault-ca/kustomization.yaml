@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace du Secret de CA — lu par le ClusterIssuer openbao.
+namespace: cert-manager
+
+resources:
+  - ca.yaml

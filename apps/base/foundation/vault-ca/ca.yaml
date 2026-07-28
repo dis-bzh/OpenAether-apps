@@ -1,0 +1,64 @@
+# CA interne d'OpenBao — brique SÉPARÉE, ciblée sur le namespace `cert-manager`.
+#
+# ⚠️ POURQUOI UN DOSSIER À PART
+# Le `kustomization.yaml` de la brique vault porte `namespace: foundation-vault`,
+# et le transformateur de namespace de Kustomize écrase le namespace déclaré sur
+# CHAQUE ressource — y compris celui d'une base référencée. La CA atterrissait
+# donc dans `foundation-vault` au lieu de `cert-manager`, et le `ClusterIssuer`
+# openbao (apps/base/cert-manager-issuers) ne pouvait pas lire son
+# `caBundleSecretRef` : un ClusterIssuer résout ses Secrets dans le « cluster
+# resource namespace » de cert-manager, nulle part ailleurs.
+#
+# Conséquence observée en cloud le 2026-07-28 : `openbao-server-tls` restait
+# « Issuing certificate as Secret does not exist » et les 3 pods OpenBao
+# bloquaient en ContainerCreating.
+#
+# ⚠️ Ce défaut n'avait PAS été vu en local parce que le test y appliquait
+# `tls.yaml` DIRECTEMENT (`kubectl apply -f`), ce qui court-circuite la
+# surcharge du kustomization. Valider un fichier n'est pas valider la brique.
+#
+# La CA est volontairement DÉDIÉE et n'a rien à voir avec la PKI qu'OpenBao
+# sert : l'utiliser créerait un cycle (il devrait être joignable pour émettre
+# le certificat qui le rend joignable).
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: openbao-selfsigned
+  labels:
+    openaether.io/managed: 'true'
+    openaether.io/component: vault
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-ca
+  namespace: cert-manager
+  labels:
+    openaether.io/managed: 'true'
+    openaether.io/component: vault
+spec:
+  isCA: true
+  commonName: openaether-openbao-internal-ca
+  secretName: openbao-ca
+  duration: 87600h
+  renewBefore: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: openbao-selfsigned
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: openbao-ca
+  labels:
+    openaether.io/managed: 'true'
+    openaether.io/component: vault
+spec:
+  ca:
+    secretName: openbao-ca
