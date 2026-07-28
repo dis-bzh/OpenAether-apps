@@ -26,6 +26,7 @@ spec:
     # possible depuis que la dépendance INVERSE — cert-manager → foundation-vault
     # — a été retirée : elle était fausse (seuls les ISSUERS dépendent d'OpenBao).
     - name: cert-manager
+    - name: vault-ca   # CA du certificat serveur (ns cert-manager)
     - name: platform-gateway-api
     - name: platform-local-path-provisioner  # PVC raft storageClassName local-path-retain
     - name: platform-priority-classes        # priorityClassName platform-critical (pod rejeté à l'admission si absente)
