@@ -22,7 +22,7 @@ spec:
   # WITHOUT remediation Flux never retried it and the mesh stayed blocked for
   # 3 h even though the cause had been fixed. With retries, a source change
   # (or a fresh attempt) is enough to
-  # repartir sans intervention manuelle.
+  # restart without manual intervention.
   install:
     remediation:
       retries: 3

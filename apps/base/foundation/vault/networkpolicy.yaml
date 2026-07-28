@@ -41,7 +41,7 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # 3. CSI driver (mount OpenBao secrets dans pods stateful sprint 1+)
+    # 3. CSI driver (mounts OpenBao secrets into stateful pods)
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -71,7 +71,7 @@ spec:
               protocol: TCP
     # 6. (removed) OpenBao root — no more foundation-pki-root (Shamir seal).
     # 6b. Backup (openbao-snapshot CronJob, same ns): sys/leader, login
-    #     auth/kubernetes, snapshot raft. Egress miroir dans
+    #     auth/kubernetes, raft snapshot. Mirrored egress in
     #     apps/base/backup/openbao/networkpolicy.yaml.
     - fromEndpoints:
         - matchLabels:
@@ -113,7 +113,7 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # 10. Unsealer HA (route A) → /v1/sys/unseal + /v1/sys/health sur les 3 pods.
+    # 10. HA unsealer (route A) → /v1/sys/unseal + /v1/sys/health on all 3 pods.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault

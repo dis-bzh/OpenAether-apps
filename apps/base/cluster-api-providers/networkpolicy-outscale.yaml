@@ -15,7 +15,7 @@ spec:
   description: "Manager CAPOSC: webhooks 9443 + egress DNS + API Outscale (+ enfants :6443)"
   endpointSelector: {}
   ingress:
-    # kube-apiserver → webhooks des providers (core/CABPT/CACPPT/CAPS…, :9443).
+    # kube-apiserver → provider webhooks (core/CABPT/CACPPT/CAPS…, :9443).
     # remote-node: on Talos the static kube-apiserver is seen as a node.
     # Without it: "failed calling webhook … context deadline exceeded" when
     # creating the child CRs (observed on real cloud).

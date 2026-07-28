@@ -61,7 +61,7 @@ spec:
   chart:
     spec:
       chart: cilium
-      version: "1.16.x"   # aligner sur la version socle côté infra
+      version: "1.16.x"   # match the foundation version on the infra side
       sourceRef: { kind: HelmRepository, name: cilium }
   values:
     # Aligner sur bootstrap-manifests/cilium.yaml côté infra (kubeProxyReplacement,
@@ -79,6 +79,35 @@ spec:
     # Cf. apps/clusters/edge-1.yaml pour le jeu de values complet.
     socketLB: { enabled: true, hostNamespaceOnly: true }
     cni: { exclusive: false }
+---
+# providerID: Talos does not set one, so CAPI never resolves nodeRef and
+# MachineHealthCheck stays dead. The CCM fills it in from the Talos platform
+# metadata — natively in CAPS's own format, no transformation needed
+# (validated on real Scaleway, 2026-07-28).
+# ⚠️ Ships with the kubelet `cloud-provider=external` patch in the cluster
+# template: that flag alone leaves every node tainted `uninitialized`. This
+# release clears the taint, so the child's Flux pods stay Pending until it runs.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: ${CLUSTER_NAME}-talos-ccm
+  namespace: capi-clusters
+spec:
+  interval: 10m
+  timeout: 10m
+  kubeConfig:
+    secretRef:
+      name: ${CLUSTER_NAME}-kubeconfig
+  targetNamespace: kube-system
+  storageNamespace: kube-system
+  releaseName: talos-ccm
+  install:
+    remediation: { retries: -1 }   # retry until the child's API is ready
+  chart:
+    spec:
+      chart: talos-cloud-controller-manager
+      version: "0.5.5"
+      sourceRef: { kind: HelmRepository, name: talos-ccm }
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

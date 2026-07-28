@@ -5,7 +5,7 @@
 # A repository can pass `check` green and still be unrecoverable (bit-rot on the
 # packs, wrong RESTIC_PASSWORD, truncated S3 objects).
 #
-# Ce Job, sur CHACUNE des 2 destinations :
+# This Job, against EACH of the 2 destinations:
 #   1. `restic check --read-data-subset` — actually re-reads and decrypts a
 #      fraction of the data (5 %, naturally rotating month over month);
 #   2. `restic restore latest` into a throwaway volume, then checks that the
@@ -36,7 +36,7 @@ spec:
         metadata:
           labels:
             # ⚠️ ALSO carries `app: cnpg-dump`: that is the label selected by the
-            # CiliumNetworkPolicy qui ouvre l'egress S3 (networkpolicy.yaml).
+            # CiliumNetworkPolicy that opens S3 egress (networkpolicy.yaml).
             # Without it the pod has no egress and the test fails on timeout.
             app: cnpg-dump
             component: restore-test

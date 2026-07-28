@@ -13,7 +13,7 @@
 #
 # ⚠ DEV SECURITY: the shares + root_token are printed ONCE in the logs (for manual
 # Bitwarden EU escrow) and stored in a Secret (etcd). After escrow:
-#   kubectl delete job openbao-init -n foundation-vault   (purge les logs)
+#   kubectl delete job openbao-init -n foundation-vault   (purges the logs)
 # Production target: direct Bitwarden escrow and no printing.
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: v1
@@ -181,7 +181,7 @@ spec:
               shred -u /tmp/keys.txt 2>/dev/null || rm -f /tmp/keys.txt
               echo "  Secrets openbao-unseal-keys + openbao-recovery written."
 
-              # ── 5) ESCROW (affichage one-time — copier dans Bitwarden EU) ────
+              # ── 5) ESCROW (printed ONCE — copy into Bitwarden EU) ────
               echo ""
               echo "╔══════════════════════════════════════════════════════════════════╗"
               echo "║  ESCROW MANUEL REQUIS — copie ces valeurs dans Bitwarden EU MAINTENANT"

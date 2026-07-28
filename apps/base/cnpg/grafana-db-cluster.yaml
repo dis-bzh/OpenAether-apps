@@ -1,11 +1,11 @@
-# OpenAether 0.5.0 Sprint C — CNPG Cluster PostgreSQL pour Grafana
+# CNPG PostgreSQL Cluster for Grafana
 # ──────────────────────────────────────────────────────────────────
 # Grafana HA (2 replicas) requires a shared DB backend for the session,
 # dashboards, users and alerts.
 # PostgreSQL CNPG: 2 instances (streaming replication) sur stockage local-path.
 # CNPG handles ALL the HA (transaction-aware WAL replication + failover).
 # Stacking Longhorn (block replication, blind to transactions) = anti-pattern:
-# amplification, double failover concurrent (cause des volumes "faulted" 06/2026),
+# amplification and concurrent double failover (the cause of the "faulted" volumes, 06/2026),
 # and x1-rwo brings no storage HA anyway. See openbao-workload, which already
 # applies this principle (raft replicates → local storage is enough).
 #

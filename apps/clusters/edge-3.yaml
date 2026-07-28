@@ -98,11 +98,11 @@ spec:
     #
     # hostNamespaceOnly=true: aligned with the parent foundation and required by
     # Istio ambient. The flag only disables socket-LB for NON-root netns (chart
-    # chart : « Disable socket lb for non-root ns ») ; les process host-network,
+    # "Disable socket lb for non-root ns"); host-network processes,
     # including kube-apiserver → webhook ClusterIPs, keep the translation. The
     # "failed calling webhook" of 2026-07-26 was wrongly blamed on it: it was
     # observed during a hot CNI rollout that had already broken the children's
-    # datapath des enfants.
+    # datapath.
     socketLB: { enabled: true, hostNamespaceOnly: true }
     cni: { exclusive: false }
     nodeSelectorLabels: true
@@ -117,6 +117,35 @@ spec:
       capabilities:
         ciliumAgent: [CHOWN, KILL, NET_ADMIN, NET_RAW, IPC_LOCK, SYS_ADMIN, SYS_RESOURCE, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
         cleanCiliumState: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE]
+---
+# providerID: Talos does not set one, so CAPI never resolves nodeRef and
+# MachineHealthCheck stays dead. The CCM fills it in from the Talos platform
+# metadata — natively in CAPS's own format, no transformation needed
+# (validated on real Scaleway, 2026-07-28).
+# ⚠️ Ships with the kubelet `cloud-provider=external` patch in the cluster
+# template: that flag alone leaves every node tainted `uninitialized`. This
+# release clears the taint, so the child's Flux pods stay Pending until it runs.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: edge-3-talos-ccm
+  namespace: capi-clusters
+spec:
+  interval: 10m
+  timeout: 10m
+  kubeConfig:
+    secretRef:
+      name: edge-3-kubeconfig
+  targetNamespace: kube-system
+  storageNamespace: kube-system
+  releaseName: talos-ccm
+  install:
+    remediation: { retries: -1 }   # retry until the child's API is ready
+  chart:
+    spec:
+      chart: talos-cloud-controller-manager
+      version: "0.5.5"
+      sourceRef: { kind: HelmRepository, name: talos-ccm }
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

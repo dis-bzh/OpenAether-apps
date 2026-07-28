@@ -6,6 +6,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - helmrepository-cilium.yaml   # chart source shared by ALL children
+  - helmrepository-talos-ccm.yaml   # idem — providerID/CCM chart
   - edge-1.yaml   # Scaleway — re-enabled 2026-07-28 to re-validate a child
   #   on a SECOND provider (the management itself is on OVH, so this is also
   #   a cross-provider kubeception test).

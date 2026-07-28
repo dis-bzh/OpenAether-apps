@@ -1,4 +1,4 @@
-# Backup quotidien des bases CNPG : pg_dump -Fc (zitadel-db, grafana-db)
+# Daily backup of the CNPG databases: pg_dump -Fc (zitadel-db, grafana-db)
 # → restic → 2 S3 repositories (client encryption, see backup/openbao/cronjob.yaml).
 #
 # LOGICAL dumps (consistent, restorable cross-version through pg_restore),

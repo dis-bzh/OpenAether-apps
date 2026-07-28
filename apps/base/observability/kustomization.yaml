@@ -22,7 +22,7 @@ resources:
   # (the 'namespaces' Flux Kustomization, an early step) because the
   # istio-authorizationpolicies Kustomization (14b) creates a policy there before
   # this group (30) runs. Declaring it here too → SSA double-ownership between two Kustomizations.
-  # VictoriaMetrics Operator (installe les CRDs VMCluster/VMAgent/VM*Scrape).
+  # VictoriaMetrics Operator (installs the VMCluster/VMAgent/VM*Scrape CRDs).
   # The Custom Resources that CONSUME these CRDs (vmcluster/vmagent/vmscrapes)
   # live in vm-customresources/ — applied by a separate Flux Kustomization AFTER
   # this operator, to avoid the bundle being rejected at dry-run
@@ -35,7 +35,7 @@ resources:
   - loki.yaml
   - externalsecret-loki.yaml
   - alloy.yaml
-  # Grafana HA (CNPG DB dans apps/base/cnpg/)
+  # Grafana HA (CNPG DB in apps/base/cnpg/)
   - grafana.yaml
   - externalsecrets-grafana.yaml
   - externalsecret-grafana-oidc.yaml

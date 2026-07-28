@@ -1,7 +1,7 @@
 # Groupe 21 — Storage (Longhorn HelmRelease + StorageClasses + ExternalSecret LUKS)
 # Depends on eso (the longhorn-encryption ExternalSecret).
 # Isolation: a Longhorn problem does not affect the foundation stack.
-# MinIO : overlay local uniquement (voir apps/flux/local/21-storage.yaml).
+# MinIO: local overlay only (see apps/flux/local/21-storage.yaml).
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

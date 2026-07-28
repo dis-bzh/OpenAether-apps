@@ -1,4 +1,4 @@
-# Groupe 60 — Instanciation des clusters clients CAPI (kubeception/gitception).
+# Group 60 — instantiation of the CAPI client clusters (kubeception/gitception).
 # Reconciles apps/clusters/ (one file per child cluster, see its README).
 # A pick companion: enabled automatically alongside cluster-api-providers.
 ---
