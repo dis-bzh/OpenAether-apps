@@ -4,7 +4,7 @@
 # VPC network. Without this policy the VIPs are allocated but unreachable (no
 # node announces the MAC for the virtual IP).
 #
-# externalIPs + loadBalancerIPs couvrent les deux cas d'usage.
+# externalIPs + loadBalancerIPs cover both use cases.
 # Every node is eligible (no nodeSelector) — Cilium elects one leader per VIP
 # to answer ARP (automatic failover if that node goes down).
 # ─────────────────────────────────────────────────────────────────────────────

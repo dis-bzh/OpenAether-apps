@@ -6,7 +6,7 @@ kind: Kustomization
 # This kustomization is deployed by the 13b-cert-manager-issuers Flux Kustomization,
 # which depends on cert-manager (HelmRelease ready).
 # Single OpenBao (foundation-vault) : un seul issuer signant via
-# pki/sign/openaether. Les anciens issuers openbao-pki-root /
+# pki/sign/openaether. The former openbao-pki-root issuers /
 # openbao-pki-intermediate (mounts pki-root/pki-intermediate de l'archi 2-OpenBao)
 # have been removed — referenced by no Certificate.
 resources:

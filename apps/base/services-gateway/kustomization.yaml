@@ -3,7 +3,7 @@ kind: Kustomization
 
 # OpenAether — north-south Gateway (ns services-gateway), DECOUPLED from the istio mesh.
 # Separated from apps/base/istio because the `openaether-tls` cert is issued by
-# (issuer openbao → pki/sign/openaether) et requiert une signature OFFLINE
+# (openbao issuer → pki/sign/openaether) and requires an OFFLINE signature
 # OpenBao. Leaving it in the istio Kustomization (wait:true) blocked istio and
 # its dependants (observability, authz-policies). The mesh has its own CA → it
 # must not depend on the OpenBao PKI.

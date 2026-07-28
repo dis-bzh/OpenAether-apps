@@ -3,7 +3,7 @@ kind: Kustomization
 # OpenAether — Zitadel (identity). The services-identity namespace is declared
 # HERE (not in apps/base/namespaces/) because no early layer targets it before
 # the `identity` Flux Kustomization (step 35). The zitadel-db CNPG Postgres backend
-# vit dans apps/base/cnpg/ (foundation-databases).
+# lives in apps/base/cnpg/ (foundation-databases).
 # NB: NO Istio AuthorizationPolicy — services-identity is OUTSIDE the mesh (ztunnel
 # does not intercept → an AuthorizationPolicy would be inert there, security theatre).
 # Network security comes from the L3/L4 CiliumNetworkPolicy (networkpolicy.yaml).

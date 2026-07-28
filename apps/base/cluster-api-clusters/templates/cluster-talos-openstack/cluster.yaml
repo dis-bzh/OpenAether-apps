@@ -4,7 +4,7 @@
 #   CAPI   v1.13.2 → cluster.x-k8s.io/v1beta2: refs are {apiGroup, kind,
 #                    name} — plus d'apiVersion ni de namespace.
 #   CAPO   v0.14.4 → infrastructure.cluster.x-k8s.io/v1beta1 (seule version servie)
-#   CACPPT v0.5.13 → controlplane…/v1alpha3 : infrastructureTemplate reste une
+#   CACPPT v0.5.13 → controlplane…/v1alpha3: infrastructureTemplate is still a
 #                    ObjectReference PLEINE (apiVersion + namespace).
 #   CABPT  v0.6.12 → bootstrap…/v1alpha3
 #
@@ -99,7 +99,7 @@ spec:
       generateType: controlplane
       talosVersion: ${TALOS_VERSION:=v1.13}
       # strategicPatches (YAML) and NOT configPatches: JSON6902 is rejected on
-      # les machine configs multi-documents (Talos ≥ 1.13).
+      # multi-document machine configs (Talos ≥ 1.13).
       strategicPatches:
         - |
           machine:
@@ -116,6 +116,23 @@ spec:
                 name: none
             proxy:
               disabled: true
+        # providerID: Talos sets none, so CAPI never resolves nodeRef and
+        # MachineHealthCheck is dead. The CCM (apps/clusters/*.yaml) fills it
+        # in, but only for nodes the kubelet hands it via the `uninitialized`
+        # taint — and it reads the metadata over the Talos API from kube-system.
+        # ⚠️ Never ship this flag without that CCM: the nodes stay tainted.
+        - |
+          machine:
+            kubelet:
+              extraArgs:
+                cloud-provider: external
+            features:
+              kubernetesTalosAPIAccess:
+                enabled: true
+                allowedRoles:
+                  - os:reader
+                allowedKubernetesNamespaces:
+                  - kube-system
 ---
 apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
 kind: TalosConfigTemplate
@@ -127,6 +144,14 @@ spec:
     spec:
       generateType: join
       talosVersion: ${TALOS_VERSION:=v1.13}
+      # Same kubelet flag as the control plane (see cluster.yaml above);
+      # kubernetesTalosAPIAccess is control-plane only.
+      strategicPatches:
+        - |
+          machine:
+            kubelet:
+              extraArgs:
+                cloud-provider: external
 ---
 apiVersion: cluster.x-k8s.io/v1beta2
 kind: MachineDeployment

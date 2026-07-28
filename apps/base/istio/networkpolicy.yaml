@@ -55,7 +55,7 @@ spec:
             - port: "443"
               protocol: TCP
 ---
-# ztunnel: DaemonSet ambient — doit joindre istiod (xDS+CA) et kube-api
+# ztunnel: ambient DaemonSet — must reach istiod (xDS+CA) and kube-api
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -70,7 +70,7 @@ spec:
     matchLabels:
       app: ztunnel
   ingress:
-    # HBONE tunnels depuis n'importe quel pod ambient (cross-node).
+    # HBONE tunnels from any ambient pod (cross-node).
     # fromEntities: [cluster] instead of fromEndpoints: [matchLabels: {}]
     # because the latter does not resolve cross-namespace identities (Cilium limitation).
     - fromEntities:
@@ -79,7 +79,7 @@ spec:
         - ports:
             - port: "15008"
               protocol: TCP
-    # stats/health depuis kube-apiserver
+    # stats/health from kube-apiserver
     - fromEntities:
         - kube-apiserver
         - remote-node
@@ -127,7 +127,7 @@ spec:
         - ports:
             - port: "15008"
               protocol: TCP
-    # Remote ztunnel sur autres noeuds (HBONE cross-node)
+    # Remote ztunnel on other nodes (HBONE cross-node)
     - toEntities:
         - remote-node
       toPorts:

@@ -1,4 +1,4 @@
-# OpenAether 0.5.0 Sprint C — MinIO S3-compatible (test local uniquement)
+# MinIO, S3-compatible (local testing only)
 # ──────────────────────────────────────────────────────────────────
 # MinIO is deployed LOCALLY ONLY, to test the S3 configurations (Loki backend,
 # future VMCluster backup) with the same interface
@@ -11,7 +11,7 @@
 # Architecture: a 1-pod Deployment, 10Gi local-path. No HA (local test).
 # Access: http://minio.foundation-storage:9000 (S3 API)
 #        http://minio.foundation-storage:9001 (console UI, port-forward local)
-# Credentials: ExternalSecret depuis OpenBao secret/minio/root
+# Credentials: ExternalSecret from OpenBao secret/minio/root
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
@@ -62,7 +62,7 @@ spec:
       valuesKey: secretKey
       targetPath: rootPassword
   values:
-    # Single node — test local uniquement.
+    # Single node — local testing only.
     mode: standalone
     replicas: 1
     persistence:

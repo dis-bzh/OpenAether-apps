@@ -9,7 +9,7 @@ metadata:
     # "operation not permitted" (EPERM) → every object creation subject to the
     # webhook fails (dry-run included). An admission webhook MUST be reachable
     # by the apiserver outside the mesh. Same reason as cert-manager/external-secrets.
-    # baseline: Kyverno background-controller utilise hostPID pour certaines ops.
+    # baseline: the Kyverno background-controller uses hostPID for some operations.
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
