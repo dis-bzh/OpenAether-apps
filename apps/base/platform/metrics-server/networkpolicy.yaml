@@ -1,23 +1,23 @@
 # OpenAether — CiliumNetworkPolicy Metrics Server
 # ──────────────────────────────────────────────────────────────────
-# metrics-server (kube-system) n'était couvert par AUCUNE CNP, donc régi
-# uniquement par les CCNP cluster-wide à sélecteur vide :
-#   default-deny-all-ingress {}  → ingress deny par défaut
+# metrics-server (kube-system) was covered by NO CNP, so it was governed only by
+# the cluster-wide CCNPs with an empty selector:
+#   default-deny-all-ingress {}  → ingress denied by default
 #   allow-dns {} + allow-kube-api {} → egress deny sauf DNS + kube-apiserver
 #
-# Conséquence (sans cette policy) :
-#   • EGRESS scrape kubelet :10250 autorisé SEULEMENT vers les IP portant
-#     l'identité kube-apiserver = les nœuds control-plane (apiserver hostNetwork).
-#     Les kubelets des WORKERS (identité host/remote-node) sont injoignables
+# Consequence (without this policy):
+#   • EGRESS kubelet :10250 scraping allowed ONLY towards the IPs carrying the
+#     kube-apiserver identity = the control-plane nodes (hostNetwork apiserver).
+#     The WORKERS' kubelets (host/remote-node identity) are unreachable
 #     → "Failed to scrape node ... 10250: i/o timeout".
-#   • INGRESS apiserver → metrics-server bloqué → APIService metrics.k8s.io
-#     en FailedDiscoveryCheck → `kubectl top` échoue ("Metrics API not available").
-#   • La readiness probe locale (host → pod local) passe quand même → le pod
-#     est Ready mais inutile (faux positif classique en ambient/CNP).
+#   • INGRESS apiserver → metrics-server blocked → the metrics.k8s.io APIService
+#     goes FailedDiscoveryCheck → `kubectl top` fails ("Metrics API not available").
+#   • The local readiness probe (host → local pod) still passes → the pod is
+#     Ready but useless (a classic false positive with ambient/CNP).
 #
-# Fix = même motif que la CNP vmagent (observability/networkpolicy.yaml) :
+# Fix = the same pattern as the vmagent CNP (observability/networkpolicy.yaml):
 # autoriser explicitement host + remote-node sur :10250.
-# Les CCNP allow-dns/allow-kube-api restent additives (Cilium OR les policies).
+# The allow-dns/allow-kube-api CCNPs stay additive (Cilium ORs the policies).
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -33,9 +33,9 @@ spec:
     matchLabels:
       app.kubernetes.io/name: metrics-server
   ingress:
-    # apiserver → metrics-server (API agrégée : discovery + requêtes kubectl top).
+    # apiserver → metrics-server (aggregated API: discovery + kubectl top queries).
     # L'apiserver tourne en hostNetwork sur les CP → source host/remote-node ;
-    # kube-apiserver couvre l'identité réservée dédiée (Cilium ≥1.14).
+    # kube-apiserver covers the dedicated reserved identity (Cilium ≥1.14).
     - fromEntities:
         - host
         - remote-node
@@ -45,7 +45,7 @@ spec:
             - port: "10250"
               protocol: TCP
   egress:
-    # DNS (déjà couvert par allow-dns ; explicite par robustesse, cf. CNP vmagent).
+    # DNS (already covered by allow-dns; explicit for robustness, see the vmagent CNP).
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -56,8 +56,8 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # Scrape kubelet/cadvisor :10250 sur TOUS les nœuds (host = nœud local,
-    # remote-node = les autres). Sans remote-node, seuls les CP répondent.
+    # Scrape kubelet/cadvisor :10250 on ALL nodes (host = the local node,
+    # remote-node = the others). Without remote-node, only the CPs answer.
     - toEntities:
         - host
         - remote-node

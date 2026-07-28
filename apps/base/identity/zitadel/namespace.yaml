@@ -1,27 +1,27 @@
-# OpenAether — Namespace identité (Zitadel)
+# OpenAether — identity namespace (Zitadel)
 # ──────────────────────────────────────────────────────────────────────────
-# services-identity reste HORS du mesh ambient (PAS de label
+# services-identity stays OUTSIDE the ambient mesh (NO label
 # istio.io/dataplane-mode: ambient), comme la fondation (OpenBao/PKI/DB).
 #
-# POURQUOI un IdP ne va PAS dans le mesh (cf. [[foundation-namespaces-hors-mesh]]) :
-# Zitadel est une RACINE DE CONFIANCE, pas une app métier ordinaire. Un composant
-# racine de confiance ne doit pas dépendre du mesh qu'il contribue à sécuriser :
-#   - dépendance circulaire au bootstrap (ztunnel doit tourner pour que l'IdP démarre) ;
-#   - ztunnel intercepte les probes kubelet (169.254.7.127 → :8080) et les redirige
+# WHY an IdP does NOT belong in the mesh:
+# Zitadel is a ROOT OF TRUST, not an ordinary business app. A root-of-trust
+# component must not depend on the mesh it helps secure:
+#   - circular bootstrap dependency (ztunnel must run for the IdP to start);
+#   - ztunnel intercepts the kubelet probes (169.254.7.127 → :8080) and redirects
 #     en HBONE → DROP par la CiliumNetworkPolicy L4 → startupProbe timeout →
-#     CrashLoopBackOff (constaté Scaleway juin 2026, identique au piège fondation) ;
-#   - un rollout/upgrade de ztunnel pourrait faire tomber l'auth → panne globale.
+#     CrashLoopBackOff (seen on Scaleway June 2026, identical to the foundation trap);
+#   - a ztunnel rollout/upgrade could take auth down → a global outage.
 #
-# Le zero-trust reste tenu SANS le mesh :
-#   - chiffrement est-ouest : Cilium WireGuard (niveau nœud) ;
-#   - segmentation moindre privilège : CiliumNetworkPolicy L3/L4 (networkpolicy.yaml) ;
-#   - authN/authZ : Zitadel lui-même (OIDC/OAuth, tokens validés offline via JWKS) ;
+# Zero-trust still holds WITHOUT the mesh:
+#   - east-west encryption: Cilium WireGuard (node level);
+#   - least-privilege segmentation: L3/L4 CiliumNetworkPolicy (networkpolicy.yaml);
+#   - authN/authZ: Zitadel itself (OIDC/OAuth, tokens validated offline through JWKS);
 #   - secrets : ESO + OpenBao ; durcissement pod : PSS + Kyverno.
-# Le mesh n'apporterait que du mTLS/SPIFFE est-ouest SUR l'IdP — gain marginal ici
-# (le nord-sud est terminé TLS à la Gateway ; les consommateurs valident des JWT).
+# The mesh would only add east-west mTLS/SPIFFE ON the IdP — marginal here
+# (north-south TLS terminates at the Gateway; consumers validate JWTs).
 #
-# baseline: Zitadel tourne non-root mais le chart peut demander quelques tolérances
-# (pas restricted strict d'emblée) ; à resserrer en restricted une fois validé.
+# baseline: Zitadel runs non-root but the chart may need a few tolerances
+# (not strict restricted from the start); to tighten to restricted once validated.
 apiVersion: v1
 kind: Namespace
 metadata:

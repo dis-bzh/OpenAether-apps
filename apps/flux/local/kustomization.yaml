@@ -2,32 +2,32 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 # OpenAether — Overlay LOCAL management (Docker/WSL2).
 #
-# PRINCIPE : en local, Flux ne peut pas réconcilier depuis GitHub (DNS Docker cassé).
-# Toutes les Kustomizations sont suspendues → Flux est un no-op.
-# Le déploiement et les tests se font via `kubectl apply -k apps/base/<composant>`.
+# PRINCIPLE: locally, Flux does not reconcile from GitHub.
+# Every Kustomization is suspended → Flux is a no-op.
+# Deployment and testing happen through `kubectl apply -k apps/base/<component>`.
 #
-# Ordre de déploiement local (à suivre à la main ou via local-apply.sh) :
+# Local deployment order (to follow by hand or through local-apply.sh):
 #   1. kubectl apply -k apps/base/namespaces
 #   2. kubectl apply -k apps/base/platform/local-path-provisioner
 #   3. kubectl apply -k apps/base/platform/gateway-api
 #   4. kubectl apply -k apps/base/platform/priority-classes
 #   5. kubectl apply -k apps/base/platform/network-policies
 #   6. kubectl apply -k apps/base/platform/cilium-lb-ipam-local
-#      → pool LB-IPAM patché sur le bridge Docker (10.5.0.240-254). Sans ça,
-#        le Service LoadBalancer du Gateway (services-gateway) reste <pending>
-#        indéfiniment (le pool base cible le VPC privé Scaleway, injoignable ici).
+#      → LB-IPAM pool patched onto the Docker bridge (10.5.0.240-254). Without
+#        it the Gateway's LoadBalancer Service (services-gateway) stays <pending>
+#        forever (the base pool targets the Scaleway private VPC, unreachable here).
 #   7. kubectl apply -k apps/base/foundation/vault
-#      → OpenBao HA (seal Shamir 5/3) + Job openbao-init (init + écrit le Secret
-#        openbao-unseal-keys) + unsealer HA (descelle les 3 pods). PLUS de pki-root.
+#      → HA OpenBao (Shamir 5/3 seal) + the openbao-init Job (init + writes the
+#        openbao-unseal-keys Secret) + HA unsealer (unseals the 3 pods). No more pki-root.
 #        Escrow des parts : kubectl logs -n foundation-vault job/openbao-init
 #   8. kubectl apply -k apps/base/external-secrets
 #   9. kubectl apply -k apps/base/external-secrets/stores
 #
-# NB Zitadel (apps/base/identity/zitadel) = CLOUD-ONLY pour l'instant : dépend de
-# la Gateway TLS (cert OpenBao, intermediate signé hors-ligne) absente en local.
-# La Kustomization `identity` est de toute façon suspendue par le patch global.
+# NB Zitadel (apps/base/identity/zitadel) is CLOUD-ONLY for now: it depends on
+# the TLS Gateway (OpenBao cert, offline-signed intermediate), absent locally.
+# The `identity` Kustomization is suspended by the global patch anyway.
 #
-# Pour vérifier l'état : task local-test (ou kubectl get kustomization -A)
+# To check the state: task local-test (or kubectl get kustomization -A)
 resources:
   - ../base
   - 00b-local-storage.yaml
@@ -40,16 +40,16 @@ patches:
     patch: |-
       - { op: add, path: /spec/suspend, value: true }
   # Longhorn requiert iscsi-tools (extension Talos absente de l'image Docker).
-  # Redirige storage vers un stub vide — protège contre un apply accidentel en local.
+  # Redirects storage to an empty stub — guards against an accidental local apply.
   - target:
       group: kustomize.toolkit.fluxcd.io
       kind: Kustomization
       name: storage
     patch: |-
       - { op: replace, path: /spec/path, value: ./apps/base/storage/local }
-  # Pool LB-IPAM repointé sur l'overlay local (range Docker bridge 10.5.0.0/24
-  # au lieu du VPC privé Scaleway 172.16.12.0/22) — sinon tout Service
-  # LoadBalancer (dont le Gateway openaether) reste <pending> en local.
+  # LB-IPAM pool repointed at the local overlay (Docker bridge range 10.5.0.0/24
+  # instead of the Scaleway private VPC 172.16.12.0/22) — otherwise every
+  # LoadBalancer Service (including the openaether Gateway) stays <pending> locally.
   - target:
       group: kustomize.toolkit.fluxcd.io
       kind: Kustomization

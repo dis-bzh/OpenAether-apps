@@ -1,17 +1,17 @@
-# Alerting des sauvegardes — sans ces règles, un backup qui échoue est SILENCIEUX.
+# Backup alerting — without these rules a failing backup is SILENT.
 #
-# Les deux CronJobs (`openbao-snapshot` 02:17, `cnpg-dump` 02:47) poussent vers
-# deux dépôts restic. Jusqu'ici rien ne remontait : ni un Job en échec, ni un
-# CronJob qui ne se déclenche plus (ExternalSecret NotReady, schedule supprimé,
-# controller-manager en carafe). Or un backup qu'on croit fait est pire que pas
-# de backup — on ne le découvre qu'au moment de restaurer.
+# Both CronJobs (`openbao-snapshot` 02:17, `cnpg-dump` 02:47) push to two restic
+# repositories. Until now nothing surfaced: neither a failed Job, nor a CronJob
+# that no longer fires (ExternalSecret NotReady, schedule removed, a stalled
+# controller-manager). And a backup you believe was taken is worse than no
+# backup — you only find out when restoring.
 #
-# Métriques : kube-state-metrics (apps/base/observability/kube-state-metrics.yaml).
+# Metrics: kube-state-metrics (apps/base/observability/kube-state-metrics.yaml).
 #
-# ⚠️ Ce fichier vit dans vm-customresources/ et pas dans observability/ : le kind
-# `VMRule` n'existe qu'APRÈS l'installation des CRDs par l'opérateur VictoriaMetrics.
-# Dans le même bundle, le dry-run Flux rejetterait TOUT (même piège que les CR
-# VMCluster/VMAgent — cf. kustomization.yaml de ce dossier).
+# ⚠️ This file lives in vm-customresources/ rather than observability/: the
+# `VMRule` kind only exists AFTER the VictoriaMetrics operator installs the CRDs.
+# In the same bundle, the Flux dry-run would reject EVERYTHING (the same trap as
+# the VMCluster/VMAgent CRs — see this directory's kustomization.yaml).
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:
@@ -25,8 +25,8 @@ spec:
     - name: openaether-backups
       interval: 5m
       rules:
-        # 1) Un Job de sauvegarde a échoué. `for: 15m` laisse passer les échecs
-        #    qu'une reprise du CronJob corrige d'elle-même.
+        # 1) A backup Job failed. `for: 15m` lets through the failures a CronJob
+        #    retry fixes on its own.
         - alert: BackupJobFailed
           expr: |
             max by (namespace, job_name) (
@@ -44,9 +44,9 @@ spec:
               absent, creds S3 périmés. Logs : kubectl logs -n
               {{ $labels.namespace }} job/{{ $labels.job_name }}
 
-        # 2) Le CronJob ne se déclenche PLUS. Le cas le plus dangereux : aucun
-        #    Job en échec à voir, donc invisible sans cette règle. Seuil 26 h
-        #    pour une planification quotidienne (2 h de marge).
+        # 2) The CronJob NO LONGER fires. The most dangerous case: there is no
+        #    failed Job to see, so it is invisible without this rule. A 26 h
+        #    threshold for a daily schedule (2 h of margin).
         - alert: BackupCronJobStale
           expr: |
             time() - max by (namespace, cronjob) (
@@ -63,8 +63,8 @@ spec:
               Vérifier que le CronJob n'est pas suspendu et que l'ExternalSecret
               backup-restic-env est Ready (destinations seedées dans OpenBao).
 
-        # 3) Le CronJob est suspendu — souvent volontaire pendant une opération,
-        #    mais on oublie de le réactiver. Avertissement, pas critique.
+        # 3) The CronJob is suspended — often deliberate during an operation, but
+        #    people forget to re-enable it. A warning, not a critical.
         - alert: BackupCronJobSuspended
           expr: |
             max by (namespace, cronjob) (
