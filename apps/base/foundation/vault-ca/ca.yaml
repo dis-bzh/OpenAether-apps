@@ -1,25 +1,25 @@
-# CA interne d'OpenBao — brique SÉPARÉE, ciblée sur le namespace `cert-manager`.
+# OpenBao's internal CA — a SEPARATE brick, targeting the `cert-manager` namespace.
 #
-# ⚠️ POURQUOI UN DOSSIER À PART
-# Le `kustomization.yaml` de la brique vault porte `namespace: foundation-vault`,
-# et le transformateur de namespace de Kustomize écrase le namespace déclaré sur
-# CHAQUE ressource — y compris celui d'une base référencée. La CA atterrissait
-# donc dans `foundation-vault` au lieu de `cert-manager`, et le `ClusterIssuer`
-# openbao (apps/base/cert-manager-issuers) ne pouvait pas lire son
-# `caBundleSecretRef` : un ClusterIssuer résout ses Secrets dans le « cluster
+# ⚠️ WHY A SEPARATE DIRECTORY
+# The vault brick's `kustomization.yaml` carries `namespace: foundation-vault`,
+# and Kustomize's namespace transformer overrides the namespace declared on
+# EVERY resource — including that of a referenced base. The CA therefore landed
+# in `foundation-vault` instead of `cert-manager`, and the openbao
+# `ClusterIssuer` (apps/base/cert-manager-issuers) could not read its
+# `caBundleSecretRef`: a ClusterIssuer resolves its Secrets in the "cluster
 # resource namespace » de cert-manager, nulle part ailleurs.
 #
-# Conséquence observée en cloud le 2026-07-28 : `openbao-server-tls` restait
+# Consequence observed in the cloud on 2026-07-28: `openbao-server-tls` stayed
 # « Issuing certificate as Secret does not exist » et les 3 pods OpenBao
 # bloquaient en ContainerCreating.
 #
-# ⚠️ Ce défaut n'avait PAS été vu en local parce que le test y appliquait
-# `tls.yaml` DIRECTEMENT (`kubectl apply -f`), ce qui court-circuite la
-# surcharge du kustomization. Valider un fichier n'est pas valider la brique.
+# ⚠️ This defect was NOT caught locally because the test applied `tls.yaml`
+# DIRECTLY (`kubectl apply -f`), which bypasses the kustomization's override.
+# Validating a file is not validating the brick.
 #
-# La CA est volontairement DÉDIÉE et n'a rien à voir avec la PKI qu'OpenBao
-# sert : l'utiliser créerait un cycle (il devrait être joignable pour émettre
-# le certificat qui le rend joignable).
+# The CA is deliberately DEDICATED and has nothing to do with the PKI OpenBao
+# serves: using that would create a cycle (it would have to be reachable to
+# issue the certificate that makes it reachable).
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
