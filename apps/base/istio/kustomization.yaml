@@ -3,8 +3,8 @@ kind: Kustomization
 
 # OpenAether 0.5.0 Sprint B — Istio Ambient Mesh (Istio 1.24+)
 # Profile: ambient (ztunnel DaemonSet + istiod)
-# IMPORTANT: Requiert Cilium reconfiguré (cni-exclusive=false, bpf-lb-sock-hostns-only=true)
-# Bootstrap Cilium mis à jour AVANT ce kustomize.
+# IMPORTANT: requires a reconfigured Cilium (cni-exclusive=false, bpf-lb-sock-hostns-only=true)
+# The Cilium bootstrap must be updated BEFORE this kustomize.
 resources:
   - namespace.yaml
   - networkpolicy.yaml
@@ -15,13 +15,13 @@ resources:
   - ztunnel.yaml
   - gatewayclass-istio.yaml
   - waypoints.yaml
-# NB: la Gateway nord-sud (openaether-gateway), son cert TLS (openaether-tls, émis
-# par OpenBao) et la HTTPRoute de redirect sont DÉCOUPLÉS dans
-# apps/base/services-gateway (flux 14c) : leur cert dépend d'une signature PKI
-# offline manuelle → en wait:true ici, il bloquait istio + observability. Le ns
-# services-gateway et la GatewayClass `istio` restent fournis ici.
-# Pas de `namespace:` global: les HelmRelease ont namespace explicite (foundation-service-mesh),
-# istio-base.yaml déclare istio-system (requis Istio).
+# NB: the north-south Gateway (openaether-gateway), its TLS cert (openaether-tls,
+# issued by OpenBao) and the redirect HTTPRoute are DECOUPLED into
+# apps/base/services-gateway (flux 14c): their cert depends on a manual offline
+# PKI signature → under wait:true here it blocked istio + observability. The
+# services-gateway ns and the `istio` GatewayClass are still provided here.
+# No global `namespace:`: the HelmReleases have an explicit namespace (foundation-service-mesh),
+# istio-base.yaml declares istio-system (required by Istio).
 # Un namespace: global renommerait istio-system → foundation-service-mesh (conflit namespaces.yaml).
 
 labels:

@@ -1,36 +1,36 @@
-# Catalogue de pioche OpenAether — consommé par scripts/pick.py
+# OpenAether pick catalogue — consumed by scripts/pick.py
 #
-# IMPORTANT : les dépendances NE SONT PAS déclarées ici. La source de vérité
-# reste `spec.dependsOn` des Kustomizations Flux (apps/flux/base/*.yaml).
-# Ce fichier ne porte que des métadonnées UX : alias, briques socle,
-# compagnons et descriptions. pick.py refuse tout nom inconnu du DAG.
+# IMPORTANT: dependencies are NOT declared here. The source of truth remains
+# `spec.dependsOn` of the Flux Kustomizations (apps/flux/base/*.yaml).
+# This file carries UX metadata only: aliases, baseline bricks, companions and
+# descriptions. pick.py rejects any name unknown to the DAG.
 
-# Toujours inclus dans un profil (posture sécurité par défaut).
-# Désactivable via --no-baseline (déconseillé).
+# Always included in a profile (the default security posture).
+# Can be disabled with --no-baseline (not recommended).
 baseline:
-  - namespaces                 # PSA labels + découpage foundation-*/services-*
-  - platform-network-policies  # default-deny + allow-dns/kube-api (tout le reste suppose cette posture)
-  - flux-egress                # verrouillage egress de flux-system
+  - namespaces                 # PSA labels + foundation-*/services-* split
+  - platform-network-policies  # default-deny + allow-dns/kube-api (everything else assumes this posture)
+  - flux-egress                # locks down flux-system egress
 
-# Ajoutés automatiquement dès que TOUTES leurs dépendances (dependsOn) sont
-# déjà sélectionnées — jamais moteurs d'inclusion de nouvelles dépendances.
+# Added automatically as soon as ALL their dependencies (dependsOn) are already
+# selected — never a driver for pulling in new dependencies.
 companions:
-  - external-secrets-stores          # ClusterSecretStore openbao (si ESO + OpenBao piochés)
-  - cert-manager-issuers             # ClusterIssuer openbao (si cert-manager + OpenBao piochés)
-  - istio-authorizationpolicies      # AuthorizationPolicies du mesh (si istio pioché)
-  - istio-authorizationpolicies-storage # policies foundation-storage (si istio ET storage piochés)
-  - kyverno-policies                 # policies (si kyverno pioché)
-  - observability-vm-customresources # VMCluster/VMAgent (si observability pioché)
-  - storage-backup-target            # cible S3 des backups de volumes (si storage + ESO piochés)
-  - backup-openbao-identity          # ConfigMap CLUSTER_NAME (préfixe des dépôts restic)
-  - backup-databases-identity        # idem, côté CNPG
-  - backup-openbao                   # backup par défaut dès que OpenBao + ESO piochés
-  - backup-databases                 # backup par défaut dès que CNPG + ESO piochés
-  - capi-clusters                    # instanciation clusters clients (si CAPI pioché)
-  - orc                              # dépendance CAPO (OpenStack) — CRDs openstack.k-orc.cloud
+  - external-secrets-stores          # openbao ClusterSecretStore (if ESO + OpenBao picked)
+  - cert-manager-issuers             # openbao ClusterIssuer (if cert-manager + OpenBao picked)
+  - istio-authorizationpolicies      # mesh AuthorizationPolicies (if istio picked)
+  - istio-authorizationpolicies-storage # foundation-storage policies (if istio AND storage picked)
+  - kyverno-policies                 # policies (if kyverno picked)
+  - observability-vm-customresources # VMCluster/VMAgent (if observability picked)
+  - storage-backup-target            # S3 target for volume backups (if storage + ESO picked)
+  - backup-openbao-identity          # CLUSTER_NAME ConfigMap (restic repository prefix)
+  - backup-databases-identity        # same, on the CNPG side
+  - backup-openbao                   # backup by default once OpenBao + ESO are picked
+  - backup-databases                 # backup by default once CNPG + ESO are picked
+  - capi-clusters                    # client cluster instantiation (if CAPI picked)
+  - orc                              # CAPO (OpenStack) dependency — openstack.k-orc.cloud CRDs
   - clusterctl-inventory             # makes the cluster eligible as a `clusterctl move` target
 
-# Alias conviviaux → nom de Kustomization Flux.
+# Friendly aliases → Flux Kustomization name.
 aliases:
   vault: foundation-vault
   openbao: foundation-vault
@@ -54,39 +54,39 @@ aliases:
   management: cluster-api-providers
   metrics: platform-metrics-server
 
-# Descriptions affichées par --list (facultatif, une ligne).
+# Descriptions shown by --list (optional, one line).
 descriptions:
-  namespaces: Namespaces foundation-*/services-* (PSA, découpage mesh/hors-mesh)
-  platform-local-path-provisioner: StorageClasses local-path / local-path-retain
-  platform-gateway-api: CRDs Gateway API
+  namespaces: foundation-*/services-* namespaces (PSA, mesh/out-of-mesh split)
+  platform-local-path-provisioner: local-path / local-path-retain StorageClasses
+  platform-gateway-api: Gateway API CRDs
   platform-priority-classes: PriorityClasses platform-critical/medium/low/batch
-  platform-cilium-lb-ipam: Pool LB-IPAM Cilium (Service LoadBalancer)
+  platform-cilium-lb-ipam: Cilium LB-IPAM pool (LoadBalancer Services)
   platform-network-policies: Default-deny + allow-dns/kube-api (CiliumNetworkPolicy)
   platform-metrics-server: metrics-server (kubectl top, HPA)
-  vault-ca: CA interne du listener OpenBao (ns cert-manager)
-  foundation-vault: OpenBao HA raft 3 (seal Shamir 5/3, unsealer, PKI intermediate)
+  vault-ca: internal CA of the OpenBao listener (ns cert-manager)
+  foundation-vault: HA OpenBao, raft 3 (Shamir 5/3 seal, unsealer, PKI intermediate)
   external-secrets: External Secrets Operator
-  external-secrets-stores: ClusterSecretStore openbao partagé
-  cert-manager: cert-manager (webhooks TLS, certs internes)
-  cert-manager-issuers: ClusterIssuer openbao (PKI OpenBao)
+  external-secrets-stores: shared openbao ClusterSecretStore
+  cert-manager: cert-manager (TLS webhooks, internal certs)
+  cert-manager-issuers: openbao ClusterIssuer (OpenBao PKI)
   istio: Istio ambient (istiod, CNI, ztunnel)
-  istio-authorizationpolicies: AuthorizationPolicies du mesh
-  services-gateway: Gateway nord-sud + cert TLS openaether
-  cnpg: CloudNativePG (operator + clusters zitadel-db/grafana-db)
-  storage: Longhorn (volumes répliqués, LUKS via OpenBao)
-  storage-backup-target: Cible S3 des sauvegardes de volumes Longhorn (creds via OpenBao)
-  backup-openbao-identity: ConfigMap CLUSTER_NAME (préfixe des dépôts restic, ns foundation-vault)
-  backup-databases-identity: ConfigMap CLUSTER_NAME (préfixe des dépôts restic, ns foundation-databases)
-  backup-openbao: Snapshot raft OpenBao → restic (chiffré client, 2 dépôts S3)
-  backup-databases: pg_dump CNPG → restic (chiffré client, 2 dépôts S3)
+  istio-authorizationpolicies: mesh AuthorizationPolicies
+  services-gateway: north-south Gateway + openaether TLS cert
+  cnpg: CloudNativePG (operator + zitadel-db/grafana-db clusters)
+  storage: Longhorn (replicated volumes, LUKS through OpenBao)
+  storage-backup-target: S3 target for Longhorn volume backups (credentials through OpenBao)
+  backup-openbao-identity: CLUSTER_NAME ConfigMap (restic repository prefix, ns foundation-vault)
+  backup-databases-identity: CLUSTER_NAME ConfigMap (restic repository prefix, ns foundation-databases)
+  backup-openbao: OpenBao raft snapshot → restic (client-encrypted, 2 S3 repositories)
+  backup-databases: CNPG pg_dump → restic (client-encrypted, 2 S3 repositories)
   observability: VictoriaMetrics + Loki + Grafana + Alloy
   observability-vm-customresources: VMCluster/VMAgent/VM*Scrape
-  identity: Zitadel (IAM/SSO, backend CNPG)
+  identity: Zitadel (IAM/SSO, CNPG backend)
   kyverno: Kyverno (policy engine)
-  kyverno-policies: Policies Kyverno OpenAether
-  cluster-api-operator: CAPI operator (surcouche management)
-  cluster-api-providers: Providers CAPI (Talos, Scaleway, OpenStack, Outscale)
-  capi-clusters: Clusters clients CAPI (apps/clusters, kubeception/gitception)
-  orc: openstack-resource-controller (CRDs requises par CAPO)
+  kyverno-policies: OpenAether Kyverno policies
+  cluster-api-operator: CAPI operator (management layer)
+  cluster-api-providers: CAPI providers (Talos, Scaleway, OpenStack, Outscale)
+  capi-clusters: CAPI client clusters (apps/clusters, kubeception/gitception)
+  orc: openstack-resource-controller (CRDs required by CAPO)
   clusterctl-inventory: clusterctl inventory (required to be a `clusterctl move` target)
-  flux-egress: NetworkPolicy egress-restricted flux-system
+  flux-egress: egress-restricted NetworkPolicy for flux-system
