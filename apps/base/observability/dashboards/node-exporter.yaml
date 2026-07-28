@@ -1,7 +1,7 @@
 # OpenAether 0.5.0 Sprint C — Dashboard Node Exporter Full (Grafana ID 1860)
-# Sidecar Grafana découvre ce ConfigMap via label grafana_dashboard=1.
+# The Grafana sidecar discovers this ConfigMap through the grafana_dashboard=1 label.
 # JSON source: https://grafana.com/grafana/dashboards/1860
-# Adapté: datasource variable → ${DS_VICTORIAMETRICS} (compatible VMCluster).
+# Adapted: variable datasource → ${DS_VICTORIAMETRICS} (VMCluster-compatible).
 ---
 apiVersion: v1
 kind: ConfigMap

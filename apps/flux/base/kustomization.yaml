@@ -1,8 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# DAG complet — source de vérité pour tous les overlays et profils.
-# Tout actif. La sélection par cluster se fait via un profil généré par
-# scripts/pick.py (fermeture transitive des dependsOn), cf. apps/flux/README.md.
+# The full DAG — the source of truth for every overlay and profile.
+# Everything is active. Per-cluster selection happens through a profile generated
+# by scripts/pick.py (transitive closure of dependsOn), see apps/flux/README.md.
 resources:
   - gitrepository.yaml
   - 00-namespaces.yaml

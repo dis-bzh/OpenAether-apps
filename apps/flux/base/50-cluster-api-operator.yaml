@@ -1,6 +1,6 @@
 # Groupe 50 — CAPI Operator (HelmRelease + CRDs)
-# Dépend de cert-manager (webhooks de l'operator).
-# Doit être Ready AVANT 51-cluster-api-providers (via wait: true).
+# Depends on cert-manager (the operator's webhooks).
+# Must be Ready BEFORE 51-cluster-api-providers (through wait: true).
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

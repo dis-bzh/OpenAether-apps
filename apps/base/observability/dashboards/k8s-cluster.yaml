@@ -1,5 +1,5 @@
 # OpenAether 0.5.0 Sprint C — Dashboard Kubernetes Cluster Overview
-# Métriques cluster: pods, nodes, namespaces, PVCs, deployments.
+# Cluster metrics: pods, nodes, namespaces, PVCs, deployments.
 # Source: kube-state-metrics + kubelet (cAdvisor).
 ---
 apiVersion: v1

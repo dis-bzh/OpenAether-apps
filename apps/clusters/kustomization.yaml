@@ -5,8 +5,8 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - namespace.yaml
-  - helmrepository-cilium.yaml   # source de chart partagée par TOUS les enfants
-  - edge-1.yaml   # Scaleway — réactivé le 2026-07-28 pour re-valider un enfant
+  - helmrepository-cilium.yaml   # chart source shared by ALL children
+  - edge-1.yaml   # Scaleway — re-enabled 2026-07-28 to re-validate a child
   #   on a SECOND provider (the management itself is on OVH, so this is also
   #   a cross-provider kubeception test).
   - edge-2.yaml   # OVH

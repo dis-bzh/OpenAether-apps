@@ -7,11 +7,11 @@
 # istio-authorizationpolicies sur « namespaces "foundation-storage" not
 # found" — observed for real on edge-2 on 2026-07-27.
 #
-# Elles forment donc une brique COMPAGNON à part, dependsOn [istio, storage] :
-# pioché uniquement quand les deux le sont. Règle générale — une policy qui
-# protège une brique optionnelle doit suivre le sort de cette brique.
+# They therefore form a separate COMPANION brick, dependsOn [istio, storage]:
+# picked only when both are. General rule — a policy protecting an optional
+# brick must follow that brick's fate.
 ---
-# foundation-storage : ambient (MinIO). Sans policy = allow-all → trou réel.
+# foundation-storage: ambient (MinIO). Without a policy = allow-all → a real hole.
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:

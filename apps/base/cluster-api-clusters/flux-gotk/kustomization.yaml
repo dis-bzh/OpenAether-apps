@@ -1,6 +1,6 @@
-# Composants Flux épinglés (flux install --export, v2.4.0) appliqués À DISTANCE
-# dans un cluster enfant CAPI via une Kustomization `spec.kubeConfig` côté
-# management. Régénérer lors d'un bump Flux : flux install --export > gotk-components.yaml
+# Pinned Flux components (flux install --export, v2.4.0) applied REMOTELY into a
+# CAPI child cluster through a `spec.kubeConfig` Kustomization on the management
+# side. Regenerate on a Flux bump: flux install --export > gotk-components.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:

@@ -134,8 +134,8 @@ spec:
               set +x
               echo "════ Lecture root_token ════"
               if ! kubectl get secret openbao-recovery -n "$VAULT_NS" >/dev/null 2>&1; then
-                echo "⚠ Secret openbao-recovery absent — non initialisé."
-                echo "  Ce Job sera re-exécuté au prochain sync Flux."
+                echo "⚠ Secret openbao-recovery missing — not initialised."
+                echo "  This Job will run again on the next Flux sync."
                 echo "  Pour forcer: kubectl delete job openbao-vault-bootstrap -n $VAULT_NS"
                 exit 1
               fi
@@ -144,7 +144,7 @@ spec:
               if [ -z "$WL_TOKEN" ]; then
                 echo "ERREUR: root_token vide dans le Secret"; exit 1
               fi
-              echo "  root_token récupéré"
+              echo "  root_token retrieved"
               set -x; set +x
 
               # ── 2) Attente API ─────────────────────────────────────
@@ -160,7 +160,7 @@ spec:
               # The headless service round-robins across all pods (standbys included).
               # /v1/sys/leader gives the active node's URL → we point every write
               # at it. If the current node answers with redirect_addr, we follow.
-              echo "════ Résolution leader raft ════"
+              echo "════ Raft leader resolution ════"
               set +x
               LEADER_URL=""
               for i in $(seq 1 24); do
@@ -168,7 +168,7 @@ spec:
                 LEADER_URL="$(echo "$LEADER_JSON" | jq -r '.leader_address // empty' 2>/dev/null || true)"
                 IS_SELF="$(echo "$LEADER_JSON" | jq -r '.is_self // "false"' 2>/dev/null || echo "false")"
                 if [ -n "$LEADER_URL" ] && [ "$LEADER_URL" != "null" ]; then
-                  echo "  leader trouvé: $LEADER_URL (is_self=${IS_SELF})"
+                  echo "  leader found: $LEADER_URL (is_self=${IS_SELF})"
                   # Point wlapi straight at the leader
                   WL_ADDR="$LEADER_URL"
                   # Strip the trailing slash if present
@@ -179,7 +179,7 @@ spec:
                 sleep 5
               done
               if [ -z "$LEADER_URL" ] || [ "$LEADER_URL" = "null" ]; then
-                echo "ERREUR: impossible de déterminer le leader raft après 2min"; exit 1
+                echo "ERROR: could not determine the raft leader after 2 min"; exit 1
               fi
               set -x; set +x
 
@@ -195,7 +195,7 @@ spec:
               #     to cover the intermediate's lifetime (17520h).
               wlapi POST /v1/sys/mounts/pki \
                 '{"type":"pki","config":{"max_lease_ttl":"87600h"}}' "$WL_TOKEN" >/dev/null || true
-              echo "  pki mount: HTTP=$(WH) (204=créé, 400=déjà)"
+              echo "  pki mount: HTTP=$(WH) (204=created, 400=already there)"
 
               # 4c. Intermediate CA — generates the CSR if absent, PRINTS it, DOES NOT BLOCK.
               #     Importing the signed certificate is a MANUAL step (offline root):
@@ -204,24 +204,24 @@ spec:
               #     See pki-root-offline-runbook.md. Until set-signed is done, the
               #     PKI signs no leaf (issuers NotReady) — BY DESIGN.
               #     (Before: a blocking `read -r` timed the Job out under GitOps.)
-              echo "════ Intermediate CA (génération CSR — import = étape manuelle) ════"
+              echo "════ Intermediate CA (CSR generation — import is a manual step) ════"
               set +x
               INT_CERT="$(wlapi GET /v1/pki/cert/ca | jq -r '.data.certificate // empty' 2>/dev/null || true)"
               if [ -n "$INT_CERT" ]; then
-                echo "  intermediate CA déjà présente (signée + importée) → no-op"
+                echo "  intermediate CA already present (signed + imported) → no-op"
               else
-                echo "  génération du CSR intermediate..."
+                echo "  generating the intermediate CSR..."
                 CSR_RESP="$(wlapi POST /v1/pki/intermediate/generate/internal \
                   '{"common_name":"OpenAether Workload Intermediate CA","ttl":"17520h"}' "$WL_TOKEN")"
                 CSR="$(echo "$CSR_RESP" | jq -r '.data.csr // empty')"
                 if [ -z "$CSR" ]; then
-                  echo "  ⚠ génération CSR échouée (HTTP=$(WH)) — sera re-tentée au prochain sync"
+                  echo "  ⚠ CSR generation failed (HTTP=$(WH)) — will be retried on the next sync"
                   echo "$CSR_RESP"
                 else
                   echo ""
                   echo "  >>> ÉTAPE MANUELLE (runbook PKI root-offline) :"
-                  echo "  >>> 1. Signer ce CSR avec la ROOT CA hors-ligne (clé dans Bitwarden EU)"
-                  echo "  >>> 2. Importer le signé : bao write pki/intermediate/set-signed \\"
+                  echo "  >>> 1. Sign this CSR with the offline ROOT CA (key in Bitwarden EU)"
+                  echo "  >>> 2. Import the signed cert: bao write pki/intermediate/set-signed \\"
                   echo "  >>>      certificate=@intermediate-signed.pem"
                   echo "  ----- BEGIN INTERMEDIATE CSR -----"
                   echo "$CSR"
@@ -238,11 +238,11 @@ spec:
               wlapi POST /v1/pki/roles/openaether \
                 '{"allowed_domains":["openaether.local"],"allow_subdomains":true,"allow_bare_domains":true,"allow_localhost":false,"max_ttl":"2160h","key_type":"rsa","key_bits":2048,"server_flag":true,"client_flag":true}' \
                 "$WL_TOKEN" >/dev/null || true
-              echo "  pki role openaether: HTTP=$(WH) (204=créé/maj)"
+              echo "  pki role openaether: HTTP=$(WH) (204=created/updated)"
 
               # 4c. enable KV v2 engine (secret/) — chemin pour ESO + seeder
               wlapi POST /v1/sys/mounts/secret '{"type":"kv","options":{"version":"2"}}' "$WL_TOKEN" >/dev/null || true
-              echo "  kv v2 secret/ mount: HTTP=$(WH) (204=créé, 400=déjà)"
+              echo "  kv v2 secret/ mount: HTTP=$(WH) (204=created, 400=already there)"
 
               # ── 5) Policies (ESO + secret-seeder + cert-manager) ──────────
               # The policies do not need auth/kubernetes, so we create them first.
@@ -303,7 +303,7 @@ spec:
               # Must be enabled + configured BEFORE creating the roles: they live
               # under /v1/auth/kubernetes/role/* → 404 if the backend is not mounted.
               wlapi POST /v1/sys/auth/kubernetes '{"type":"kubernetes"}' "$WL_TOKEN" >/dev/null || true
-              echo "  auth kubernetes: HTTP=$(WH) (204=activé, 400=déjà)"
+              echo "  auth kubernetes: HTTP=$(WH) (204=enabled, 400=already there)"
 
               CA_CRT="$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)"
               wlapi POST /v1/auth/kubernetes/config \
@@ -314,7 +314,7 @@ spec:
               CODE="$(WH)"
               echo "  config auth k8s: HTTP=$CODE"
               case "$CODE" in 200|204) : ;; *)
-                echo "ERREUR: config auth k8s a échoué (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
+                echo "ERROR: k8s auth config failed (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
 
               # ── 7) Roles (ESO + cert-manager) — AFTER auth/kubernetes ───────
               wlapi POST /v1/auth/kubernetes/role/external-secrets-operator \
@@ -327,7 +327,7 @@ spec:
               CODE="$(WH)"
               echo "  role external-secrets-operator: HTTP=$CODE"
               case "$CODE" in 200|204) : ;; *)
-                echo "ERREUR: role external-secrets-operator échoué (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
+                echo "ERROR: role external-secrets-operator failed (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
 
               wlapi POST /v1/auth/kubernetes/role/cert-manager-issuer \
                 "$(jq -nc '{
@@ -339,7 +339,7 @@ spec:
               CODE="$(WH)"
               echo "  role cert-manager-issuer: HTTP=$CODE"
               case "$CODE" in 200|204) : ;; *)
-                echo "ERREUR: role cert-manager-issuer échoué (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
+                echo "ERROR: role cert-manager-issuer failed (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
 
               wlapi POST /v1/auth/kubernetes/role/backup-snapshot \
                 "$(jq -nc '{
@@ -351,7 +351,7 @@ spec:
               CODE="$(WH)"
               echo "  role backup-snapshot: HTTP=$CODE"
               case "$CODE" in 200|204) : ;; *)
-                echo "ERREUR: role backup-snapshot échoué (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
+                echo "ERROR: role backup-snapshot failed (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
               set -x; set +x
 
               # ── 10) Seed secrets Sprint C (grafana, minio, longhorn) ────────
@@ -368,10 +368,10 @@ spec:
                 local code
                 code="$(WH)"
                 if [ "$code" = "200" ]; then
-                  echo "  secret/${path}: déjà présent → no-op"
+                  echo "  secret/${path}: already present → no-op"
                   return 0
                 fi
-                echo "  secret/${path}: absent (HTTP=$code) → génération + seed"
+                echo "  secret/${path}: missing (HTTP=$code) → generate + seed"
                 wlapi POST "/v1/secret/data/${path}" \
                   "$(jq -nc --argjson d "$payload" '{"data":$d}')" \
                   "$WL_TOKEN" >/dev/null
@@ -379,7 +379,7 @@ spec:
                 wcode="$(WH)"
                 echo "    → HTTP=$wcode"
                 case "$wcode" in 200|204) : ;; *)
-                  echo "ERREUR: write secret/${path} échoué (HTTP=$wcode)"; cat /tmp/wlbody; exit 1 ;; esac
+                  echo "ERROR: write secret/${path} failed (HTTP=$wcode)"; cat /tmp/wlbody; exit 1 ;; esac
               }
 
               # Generate the random values BEFORE kv_seed (set +x active).
@@ -423,14 +423,14 @@ spec:
                 echo "  ----- END RESTIC PASSWORD -----"
                 echo ""
               else
-                echo "  secret/backup/restic: déjà présent → no-op"
+                echo "  secret/backup/restic: already present → no-op"
               fi
 
-              echo "  ✅ Secrets Sprint C seedés (idempotents)"
+              echo "  ✅ Sprint C secrets seeded (idempotent)"
               set -x; set +x
 
               echo ""
-              echo "✅ Roles ESO + cert-manager configurés + secrets Sprint C seedés"
+              echo "✅ ESO + cert-manager roles configured, Sprint C secrets seeded"
           securityContext:
             capabilities:
               drop: ["ALL"]

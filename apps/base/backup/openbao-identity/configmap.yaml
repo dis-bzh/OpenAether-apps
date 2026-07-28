@@ -1,11 +1,11 @@
-# Identité du cluster, recopiée dans foundation-vault pour que le CronJob de backup
-# préfixe ses dépôts restic ($CLUSTER_NAME).
+# The cluster identity, copied into foundation-vault so the backup CronJob
+# prefixes its restic repositories ($CLUSTER_NAME).
 #
-# ⚠️ Ce fichier vit dans une Kustomization SÉPARÉE (22a-backup-identity.yaml) et
-# c'est délibéré : elle porte un `postBuild.substituteFrom`, et la substitution
-# Flux s'applique à TOUT le rendu d'une Kustomization. Fusionné avec la brique
-# backup, il viderait les variables shell nues de ses CronJobs
-# ($PRIMARY_ENDPOINT, $LEADER, $init_err…). Ici il n'y a aucun script.
+# ⚠️ This file lives in a SEPARATE Kustomization (22a-backup-identity.yaml) and
+# that is deliberate: it carries a `postBuild.substituteFrom`, and Flux
+# substitution applies to the WHOLE render of a Kustomization. Merged into the
+# backup brick it would blank the bare shell variables of its CronJobs
+# ($PRIMARY_ENDPOINT, $LEADER, $init_err…). There is no script here.
 apiVersion: v1
 kind: ConfigMap
 metadata:

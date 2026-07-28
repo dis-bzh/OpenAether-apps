@@ -11,17 +11,17 @@ spec:
   description: "ESO controller+webhook+cert-controller: label commun app.kubernetes.io/instance=external-secrets.
     Ingress: kube-apiserver → webhook:10250. Egress: DNS, kube-api, OpenBao workload.
     Intra-ns: cert-controller → webhook (rotation TLS)."
-  # Couvre les 3 pods (controller/webhook/cert-controller) via le label instance commun.
-  # app.kubernetes.io/name diffère par pod (external-secrets / external-secrets-webhook /
-  # external-secrets-cert-controller) — utiliser instance qui est identique sur tous.
+  # Covers all 3 pods (controller/webhook/cert-controller) through the shared instance label.
+  # app.kubernetes.io/name differs per pod (external-secrets / external-secrets-webhook /
+  # external-secrets-cert-controller) — use instance, which is identical on all of them.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/instance: external-secrets
   ingress:
     # kube-apiserver → webhook ESO (ValidatingWebhookConfiguration sur port 10250)
     # Le Service external-secrets-webhook expose 443→10250 en backend.
-    # remote-node: sur Talos, le static pod kube-apiserver est identifié
-    # comme nœud (node identity) par Cilium, pas comme kube-apiserver entity.
+    # remote-node: on Talos the static kube-apiserver pod is identified by Cilium
+    # as a node (node identity), not as the kube-apiserver entity.
     - fromEntities:
         - kube-apiserver
         - remote-node

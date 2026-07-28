@@ -52,7 +52,7 @@ assert_equal "$(echo "$ROOT_STATUS" | jq -r .sealed)" "false" "Root is unsealed"
 
 ROOT_TOKEN="$(kubectl get secret openbao-root-recovery -n "$ROOT_NS" -o jsonpath='{.data.root_token}' 2>/dev/null | base64 -d || echo "")"
 [ -n "$ROOT_TOKEN" ] && log_ok "Secret openbao-root-recovery present (root token + unseal keys)" \
-  || log_ko "Secret openbao-root-recovery missing" "bootstrap Job a-t-il tourné ?"
+  || log_ko "Secret openbao-root-recovery missing" "did the bootstrap Job run?"
 
 MOUNTS="$(kubectl exec -n "$ROOT_NS" openbao-pki-root-0 -- sh -c \
   "wget -qO- --header='X-Vault-Token: $ROOT_TOKEN' http://127.0.0.1:8200/v1/sys/mounts" 2>/dev/null)"
@@ -108,9 +108,9 @@ assert_equal "$LEADERS" "1" "raft cluster has exactly 1 leader"
 
 # Raft addresses must be STABLE DNS (not pod IPs) — POD_IP regression
 if echo "$RAFT" | jq -r '.data.config.servers[].address' 2>/dev/null | grep -q 'svc.cluster.local'; then
-  log_ok "raft peers use stable DNS (pas d'IP éphémère)"
+  log_ok "raft peers use stable DNS (no ephemeral IP)"
 else
-  log_ko "raft peers use IP addresses" "régression: BAO_CLUSTER_ADDR doit être DNS"
+  log_ko "raft peers use IP addresses" "regression: BAO_CLUSTER_ADDR must be DNS"
 fi
 
 # ─── Test 3: Auth k8s workload → login root ───────────────────
@@ -131,7 +131,7 @@ else
 fi
 
 # ─── Test 4: Restart workload pod → auto-unseal ───────────────
-log_section "Test 4: Restart workload openbao-0 → auto-unseal sans clés"
+log_section "Test 4: restart workload openbao-0 → auto-unseal without keys"
 
 log_info "deleting openbao-0"
 kubectl delete pod -n "$WORKLOAD_NS" openbao-0 --wait=false >/dev/null 2>&1
@@ -147,7 +147,7 @@ for i in $(seq 1 30); do
   sleep 5
 done
 [ "$UNSEALED" = "true" ] \
-  && log_ok "openbao-0 auto-unsealed via transit after restart (zéro intervention)" \
+  && log_ok "openbao-0 auto-unsealed via transit after restart (zero intervention)" \
   || log_ko "openbao-0 did not auto-unseal" "kubectl logs -n $WORKLOAD_NS openbao-0 | tail -30"
 
 # Raft reconverges to 3 voters after restart
@@ -169,21 +169,21 @@ sleep 5
 
 ROOT_SEALED="$(ipod "$ROOT_NS" openbao-pki-root-0 /v1/sys/seal-status | jq -r .sealed 2>/dev/null || echo true)"
 if [ "$ROOT_SEALED" = "true" ]; then
-  log_ok "Root sealed après restart (Shamir actif — unseal manuel requis, attendu)"
+  log_ok "root sealed after restart (Shamir active — manual unseal required, expected)"
   log_info "Recovery: voir apps/base/foundation/pki-root/README.md"
 else
-  log_warn "Root unsealed après restart (inattendu pour Shamir)"
+  log_warn "root unsealed after restart (unexpected for Shamir)"
 fi
 
 # NB: after this test the root is SEALED → the workload can no longer re-unseal
 # itself until the root is manually re-unsealed. That is the intended
 # behaviour (the root is the Shamir root of trust).
-log_info "⚠ root scellé: re-unseal via bootstrap (Secret recovery) ou cérémonie manuelle"
+log_info "⚠ root sealed: re-unseal through the bootstrap (recovery Secret) or a manual ceremony"
 kubectl delete job openbao-bootstrap -n "$ROOT_NS" --ignore-not-found >/dev/null 2>&1
-kubectl apply -k apps/base/foundation/pki-root >/dev/null 2>&1 && log_info "bootstrap relancé pour re-unseal root"
+kubectl apply -k apps/base/foundation/pki-root >/dev/null 2>&1 && log_info "bootstrap re-run to unseal the root"
 
 # ─── Test 6: NetworkPolicy sanity ─────────────────────────────
-log_section "Test 6: NetworkPolicy Cilium présentes"
+log_section "Test 6: Cilium NetworkPolicies present"
 kubectl get ciliumclusterwidenetworkpolicy allow-dns >/dev/null 2>&1 && log_ok "CCNP allow-dns present"
 kubectl get ciliumclusterwidenetworkpolicy allow-kube-api >/dev/null 2>&1 && log_ok "CCNP allow-kube-api present"
 kubectl get cnp -n "$WORKLOAD_NS" openbao-workload >/dev/null 2>&1 && log_ok "CNP openbao-workload present"

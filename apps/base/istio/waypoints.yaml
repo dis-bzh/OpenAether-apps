@@ -18,5 +18,5 @@ spec:
           from: All
 ---
 # Waypoint par service via annotation (ex: openbao, keycloak, demo-app)
-# Les services meshés déclarent: annotations: networking.istio.io/use-waypoint=istio-waypoint
-# Les HTTPRoutes pointent vers le Gateway openaether-gateway (services-gateway)
+# Meshed services declare: annotations: networking.istio.io/use-waypoint=istio-waypoint
+# The HTTPRoutes point at the openaether-gateway Gateway (services-gateway)

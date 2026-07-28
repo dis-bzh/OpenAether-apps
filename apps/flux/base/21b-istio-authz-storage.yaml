@@ -1,11 +1,11 @@
 # Groupe 21b — AuthorizationPolicies du namespace foundation-storage (MinIO).
 #
-# Brique SÉPARÉE de 14b volontairement : ses policies visent un namespace créé
-# par la brique `storage`. Fondues dans 14b, elles rendaient tout profil
-# « istio sans storage » (profil workload des enfants) bloqué sur
-# « namespaces "foundation-storage" not found » — constaté sur edge-2 le
-# 2026-07-27. Déclarée COMPAGNON dans bricks.yaml : elle n'est piochée que si
-# istio ET storage le sont déjà, et n'entraîne jamais storage dans un profil.
+# Deliberately SEPARATE from 14b: its policies target a namespace created by the
+# `storage` brick. Merged into 14b they left any "istio without storage" profile
+# (the children's workload profile) stuck on
+# "namespaces \"foundation-storage\" not found" — observed on edge-2 on
+# 2026-07-27. Declared a COMPANION in bricks.yaml: it is only picked if istio
+# AND storage already are, and it never drags storage into a profile.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

@@ -1,10 +1,10 @@
 # OpenAether — HTTPRoute Longhorn UI → openaether-gateway
 # parentRef: openaether-gateway (Istio, ns services-gateway, from: All).
-# Longhorn UI (longhorn-frontend:80) — gestion du stockage distribué.
+# Longhorn UI (longhorn-frontend:80) — distributed storage management.
 #
-# ⚠️ AUTH : la UI Longhorn n'a PAS d'authN native. La protection repose pour
+# ⚠️ AUTH: the Longhorn UI has NO native authN. Protection relies for now on
 # l'instant sur l'ACL du LB (admin_ip, niveau infra). Durcissement futur :
-# basicAuth via la Gateway ou OIDC Zitadel. Cf. README accès admin.
+# basicAuth through the Gateway or Zitadel OIDC. See the admin access README.
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

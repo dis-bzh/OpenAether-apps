@@ -1,8 +1,8 @@
 # OpenAether 0.5.0 Sprint C — kube-state-metrics
 # ──────────────────────────────────────────────────────────────────
-# Expose les métriques des objets Kubernetes (Deployments, Pods, Nodes,
+# Exposes the metrics of Kubernetes objects (Deployments, Pods, Nodes,
 # PersistentVolumes, etc.) au format Prometheus.
-# Scraping assuré par VMServiceScrape kube-state-metrics (vmscapes.yaml).
+# Scraping is handled by the kube-state-metrics VMServiceScrape (vmscapes.yaml).
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
@@ -61,11 +61,11 @@ spec:
       limits:
         cpu: 200m
         memory: 512Mi
-    # Pas de ServiceMonitor (on utilise VMServiceScrape dans vmscapes.yaml).
+    # No ServiceMonitor (we use VMServiceScrape in vmscapes.yaml).
     prometheus:
       monitor:
         enabled: false
-    # podDisruptionBudget: le chart kube-state-metrics 5.25.1 attend la spec PDB brute
-    # (minAvailable/maxUnavailable), SANS champ `enabled` qui casse le schéma.
+    # podDisruptionBudget: the kube-state-metrics 5.25.1 chart expects the raw PDB spec
+    # (minAvailable/maxUnavailable), WITHOUT an `enabled` field, which breaks the schema.
     podDisruptionBudget:
       minAvailable: 1

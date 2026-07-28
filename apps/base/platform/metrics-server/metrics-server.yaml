@@ -1,9 +1,9 @@
 # OpenAether — Metrics Server
 # ──────────────────────────────────────────────────────────────────
-# Active l'API de métriques pour kubectl top nodes/pods.
+# Enables the metrics API for kubectl top nodes/pods.
 # Sur Talos, --kubelet-preferred-address-types=InternalIP
-# et --kubelet-insecure-tls sont nécessaires car Talos n'utilise
-# pas de certificats kubelet signés par l'apiserver.
+# and --kubelet-insecure-tls are required because Talos does not use
+# kubelet certificates signed by the apiserver.
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository

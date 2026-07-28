@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 """pick.py — pioche modulaire OpenAether.
 
-Sélectionne des briques du DAG Flux (apps/flux/base) et génère un profil
-(overlay kustomize) contenant la fermeture transitive de leurs dépendances.
+Selects bricks from the Flux DAG (apps/flux/base) and generates a profile
+(a kustomize overlay) holding the transitive closure of their dependencies.
 
-La source de vérité des dépendances est `spec.dependsOn` des Kustomizations
+The source of truth for dependencies is the Kustomizations' `spec.dependsOn`
 Flux de apps/flux/base/*.yaml. Le catalogue apps/flux/bricks.yaml n'apporte
-que des métadonnées UX (alias, socle, compagnons, descriptions).
+only UX metadata (aliases, baseline, companions, descriptions).
 
-Le profil généré référence ../base entier et SUPPRIME ($patch: delete) les
-Kustomizations non sélectionnées : la base reste l'unique source de vérité,
+The generated profile references the whole of ../base and REMOVES
+($patch: delete) the unselected Kustomizations: the base stays the single
 et la fermeture transitive garantit qu'aucune Kustomization retenue ne
-dépend d'une supprimée.
+depends on a removed one.
 
 Usage :
   python3 scripts/pick.py --list                 # briques disponibles
-  python3 scripts/pick.py --validate             # santé du DAG + catalogue
+  python3 scripts/pick.py --validate             # DAG + catalogue health
   python3 scripts/pick.py vault gateway          # plan (dry-run)
-  python3 scripts/pick.py vault gateway -o apps/flux/edge   # génère le profil
+  python3 scripts/pick.py vault gateway -o apps/flux/edge   # generate the profile
 
-Dépendance : PyYAML (python3-yaml).
+Dependency: PyYAML (python3-yaml).
 """
 
 import re
@@ -46,7 +46,7 @@ class Brick:
         self.deps = deps          # noms dependsOn
         self.path = path          # spec.path (./apps/base/…)
         self.source_file = source_file  # fichier de apps/flux/base
-        self.order = order        # (fichier, index doc) pour l'affichage trié
+        self.order = order        # (file, doc index) for sorted display
 
 
 def load_dag():
@@ -66,11 +66,11 @@ def load_dag():
             spec = doc.get("spec", {})
             deps = [d["name"] for d in spec.get("dependsOn") or []]
             if name in bricks:
-                sys.exit(f"DAG invalide : Kustomization '{name}' définie deux fois "
+                sys.exit(f"Invalid DAG: Kustomization '{name}' defined twice "
                          f"({bricks[name].source_file.name} et {f.name})")
             bricks[name] = Brick(name, deps, spec.get("path", ""), f, (i, j))
     if not bricks:
-        sys.exit(f"Aucune Kustomization Flux trouvée sous {BASE}")
+        sys.exit(f"No Flux Kustomization found under {BASE}")
     return bricks
 
 
@@ -86,20 +86,20 @@ def load_catalog(bricks):
         if target not in bricks:
             errors.append(f"alias '{alias}' → '{target}' inconnu du DAG")
         if alias in bricks:
-            errors.append(f"alias '{alias}' masque une Kustomization du même nom")
+            errors.append(f"alias '{alias}' shadows a Kustomization of the same name")
     if errors:
-        sys.exit("Catalogue bricks.yaml incohérent avec le DAG :\n  - "
+        sys.exit("bricks.yaml catalogue inconsistent with the DAG:\n  - "
                  + "\n  - ".join(errors))
     return cat
 
 
 def validate_dag(bricks):
-    """Dépendances inconnues, cycles, chemins morts. Retourne la liste d'erreurs."""
+    """Unknown dependencies, cycles, dead paths. Returns the list of errors."""
     errors = []
     for b in bricks.values():
         for d in b.deps:
             if d not in bricks:
-                errors.append(f"{b.name} ({b.source_file.name}) dépend de '{d}' qui n'existe pas")
+                errors.append(f"{b.name} ({b.source_file.name}) depends on '{d}', which does not exist")
         if b.path:
             target = REPO / b.path.lstrip("./")
             if not target.is_dir():
@@ -125,12 +125,12 @@ def validate_dag(bricks):
         if color[n] == WHITE:
             dfs(n, [n])
 
-    # Chaque fichier du DAG doit être listé dans base/kustomization.yaml
+    # Every DAG file must be listed in base/kustomization.yaml
     kust = yaml.safe_load((BASE / "kustomization.yaml").read_text())
     listed = set(kust.get("resources") or [])
     for f in sorted(BASE.glob("*.yaml")):
         if f.name != "kustomization.yaml" and f.name not in listed:
-            errors.append(f"{f.name} absent de base/kustomization.yaml (jamais déployé)")
+            errors.append(f"{f.name} missing from base/kustomization.yaml (never deployed)")
     return errors
 
 
@@ -145,7 +145,7 @@ def resolve_names(requested, bricks, aliases):
             msg = f"brique inconnue : '{r}'"
             if hint:
                 msg += f" — vouliez-vous dire : {', '.join(hint)} ?"
-            sys.exit(msg + "\n(liste complète : scripts/pick.py --list)")
+            sys.exit(msg + "\n(full list: scripts/pick.py --list)")
         resolved.append(name)
     return resolved
 
@@ -159,20 +159,20 @@ def closure(selected, bricks, reasons):
         for d in bricks[n].deps:
             if d not in out:
                 out.add(d)
-                reasons.setdefault(d, f"dépendance de {n}")
+                reasons.setdefault(d, f"dependency of {n}")
                 work.append(d)
     return out
 
 
 def pick(requested, bricks, cat, with_baseline=True, with_companions=True):
-    """Retourne (sélection, raisons) : fermeture + socle + compagnons."""
-    reasons = {n: "demandé" for n in requested}
+    """Returns (selection, reasons): closure + baseline + companions."""
+    reasons = {n: "requested" for n in requested}
     selected = closure(requested, bricks, reasons)
 
     if with_baseline:
         for n in cat.get("baseline") or []:
             if n not in selected:
-                reasons[n] = "socle"
+                reasons[n] = "baseline"
         selected = closure(selected | set(cat.get("baseline") or []), bricks, reasons)
 
     if with_companions:
@@ -183,24 +183,24 @@ def pick(requested, bricks, cat, with_baseline=True, with_companions=True):
             for c in companions:
                 if c not in selected and all(d in selected for d in bricks[c].deps):
                     selected.add(c)
-                    reasons[c] = "compagnon (" + ", ".join(bricks[c].deps) + ")"
+                    reasons[c] = "companion (" + ", ".join(bricks[c].deps) + ")"
                     changed = True
-        # Un compagnon n'introduit jamais de nouvelle dépendance (toutes déjà
-        # sélectionnées par construction) — pas de re-fermeture nécessaire.
+        # A companion never introduces a new dependency (all are already
+        # selected by construction) — no need to re-close the graph.
 
     return selected, reasons
 
 
 def print_plan(selected, reasons, bricks, cat):
     desc = cat.get("descriptions") or {}
-    print(f"\nProfil : {len(selected)} Kustomizations retenues, "
-          f"{len(bricks) - len(selected)} exclues\n")
-    print("  RETENUES")
+    print(f"\nProfile: {len(selected)} Kustomizations retained, "
+          f"{len(bricks) - len(selected)} excluded\n")
+    print("  RETAINED")
     for n in sorted(selected, key=lambda x: bricks[x].order):
         print(f"    {n:<36} [{reasons[n]}]")
     excluded = [n for n in bricks if n not in selected]
     if excluded:
-        print("\n  EXCLUES (supprimées du profil)")
+        print("\n  EXCLUDED (removed from the profile)")
         for n in sorted(excluded, key=lambda x: bricks[x].order):
             d = desc.get(n, "")
             print(f"    {n:<36} {d}")
@@ -208,7 +208,7 @@ def print_plan(selected, reasons, bricks, cat):
 
 
 def render_profile(outdir, selected, requested_cli, bricks):
-    """Texte du kustomization.yaml d'un profil (sans écrire) — sert aussi à --check."""
+    """A profile's kustomization.yaml text (without writing) — also used by --check."""
     rel_base = os.path.relpath(BASE, outdir)
 
     excluded = sorted((n for n in bricks if n not in selected),
@@ -216,13 +216,13 @@ def render_profile(outdir, selected, requested_cli, bricks):
     lines = [
         "apiVersion: kustomize.config.k8s.io/v1beta1",
         "kind: Kustomization",
-        "# Profil OpenAether GÉNÉRÉ par scripts/pick.py — ne pas éditer à la main.",
-        f"# Pioche : {' '.join(requested_cli)}",
-        f"# Régénérer : python3 scripts/pick.py {' '.join(requested_cli)} -o <ce dossier>",
+        "# OpenAether profile GENERATED by scripts/pick.py — do not edit by hand.",
+        f"# Pick: {' '.join(requested_cli)}",
+        f"# Regenerate: python3 scripts/pick.py {' '.join(requested_cli)} -o <this directory>",
         "#",
-        "# Le DAG complet reste dans ../base ; ce profil supprime ($patch: delete)",
-        "# les Kustomizations non sélectionnées. La fermeture transitive garantit",
-        "# qu'aucune Kustomization retenue ne dépend d'une supprimée.",
+        "# The full DAG stays in ../base; this profile removes ($patch: delete) the",
+        "# unselected Kustomizations. The transitive closure guarantees that no",
+        "# retained Kustomization depends on a removed one.",
         "resources:",
         f"  - {rel_base}",
     ]
@@ -251,46 +251,49 @@ def emit_profile(outdir, selected, requested_cli, bricks):
     return outdir
 
 
-PIOCHE_RE = re.compile(r"^# Pioche : (.*)$", re.M)
+# ⚠️ This marker is the ONLY link between a generated profile and --check.
+# Translating it without updating BOTH the generator above and this regex makes
+# --check silently skip every profile (hit on 2026-07-28).
+PICK_RE = re.compile(r"^# Pick: (.*)$", re.M)
 
 
 def cmd_check(bricks, cat):
-    """Vérifie que les profils générés sur disque sont à jour vis-à-vis du DAG.
+    """Checks that the generated profiles on disk are up to date with the DAG.
 
     Un profil fige la liste des Kustomizations EXCLUES : ajouter une brique au
-    DAG (ou changer un dependsOn) rend périmés tous les profils déjà générés —
-    la nouvelle brique est alors héritée de ../base sans avoir été pioché, et
-    reste bloquée si ses dépendances, elles, sont bien exclues (cas vécu : orc
-    hérité par les clusters edge alors que cluster-api-providers était exclu).
-    Ce contrôle rejoue la génération en mémoire et compare, sans rien écrire.
+    DAG (or changing a dependsOn) makes every already-generated profile stale —
+    the new brick is then inherited from ../base without having been picked, and
+    stays stuck if its own dependencies are excluded (real case: orc inherited
+    by the edge clusters while cluster-api-providers was excluded).
+    This check replays the generation in memory and compares, writing nothing.
     """
     stale, checked = [], 0
     for kfile in sorted(BASE.parent.glob("*/kustomization.yaml")):
         text = kfile.read_text()
-        if "GÉNÉRÉ par scripts/pick.py" not in text:
-            continue          # profil écrit à la main (ex. local/) — hors périmètre
+        if "GENERATED by scripts/pick.py" not in text:
+            continue          # hand-written profile (e.g. local/) — out of scope
         checked += 1
-        m = PIOCHE_RE.search(text)
+        m = PICK_RE.search(text)
         if not m:
-            stale.append((kfile, "en-tête « # Pioche : » absent — régénérer"))
+            stale.append((kfile, "missing '# Pick:' header — regenerate"))
             continue
         requested_cli = m.group(1).split()
         try:
             requested = resolve_names(requested_cli, bricks, cat.get("aliases") or {})
         except SystemExit as e:
-            stale.append((kfile, f"pioche invalide ({e})"))
+            stale.append((kfile, f"invalid pick ({e})"))
             continue
         selected, _ = pick(requested, bricks, cat)
         if render_profile(kfile.parent, selected, requested_cli, bricks) != text:
-            stale.append((kfile, "périmé vis-à-vis du DAG — régénérer : "
+            stale.append((kfile, "stale with respect to the DAG — regenerate: "
                           f"python3 scripts/pick.py {' '.join(requested_cli)} "
                           f"-o apps/flux/{kfile.parent.name}"))
     if stale:
-        print("Profils à régénérer :", file=sys.stderr)
+        print("Profiles to regenerate:", file=sys.stderr)
         for f, why in stale:
             print(f"  - {f.parent.name} : {why}", file=sys.stderr)
         sys.exit(1)
-    print(f"OK — {checked} profil(s) généré(s) à jour vis-à-vis du DAG.")
+    print(f"OK — {checked} generated profile(s) up to date with the DAG.")
 
 
 def cmd_list(bricks, cat):
@@ -309,21 +312,21 @@ def cmd_list(bricks, cat):
         if desc.get(n):
             print(f"       {desc[n]}")
         if b.deps:
-            print(f"       dépend de : {', '.join(b.deps)}")
+            print(f"       depends on: {', '.join(b.deps)}")
     print("\nExemple : python3 scripts/pick.py vault gateway -o apps/flux/edge\n")
 
 
 def main():
     p = argparse.ArgumentParser(description="Pioche modulaire OpenAether")
-    p.add_argument("bricks", nargs="*", help="briques ou alias à installer")
+    p.add_argument("bricks", nargs="*", help="bricks or aliases to install")
     p.add_argument("-o", "--output", metavar="DIR",
-                   help="génère le profil dans DIR (ex : apps/flux/edge)")
+                   help="generate the profile into DIR (e.g. apps/flux/edge)")
     p.add_argument("--list", action="store_true", help="liste les briques")
     p.add_argument("--validate", action="store_true", help="valide DAG + catalogue")
     p.add_argument("--check", action="store_true",
-                   help="vérifie que les profils générés sont à jour (CI ; sort 1 si drift)")
+                   help="check that the generated profiles are up to date (CI; exits 1 on drift)")
     p.add_argument("--no-baseline", action="store_true",
-                   help="n'ajoute pas le socle sécurité (déconseillé)")
+                   help="do not add the security baseline (not recommended)")
     p.add_argument("--no-companions", action="store_true",
                    help="n'ajoute pas les compagnons automatiques")
     args = p.parse_args()
@@ -338,7 +341,7 @@ def main():
     cat = load_catalog(bricks)
 
     if args.validate:
-        print(f"OK — DAG sain : {len(bricks)} Kustomizations, catalogue cohérent.")
+        print(f"OK — healthy DAG: {len(bricks)} Kustomizations, consistent catalogue.")
         return
     if args.check:
         cmd_check(bricks, cat)
@@ -346,7 +349,7 @@ def main():
     if args.list or not args.bricks:
         cmd_list(bricks, cat)
         if not args.bricks and not args.list:
-            sys.exit("Aucune brique demandée.")
+            sys.exit("No brick requested.")
         return
 
     requested = resolve_names(args.bricks, bricks, cat.get("aliases") or {})
@@ -357,12 +360,12 @@ def main():
 
     if args.output:
         outdir = emit_profile(args.output, selected, args.bricks, bricks)
-        print(f"Profil écrit : {outdir}/kustomization.yaml")
-        print("Vérifier le rendu : kubectl kustomize " + str(outdir) + " | head")
+        print(f"Profile written: {outdir}/kustomization.yaml")
+        print("Check the render: kubectl kustomize " + str(outdir) + " | head")
         print("Pointer Flux dessus : spec.path de la Kustomization racine "
-              "(côté OpenAether-infra, cf. bootstrap-manifests).")
+              "(on the OpenAether-infra side, see bootstrap-manifests).")
     else:
-        print("(dry-run — ajouter -o apps/flux/<profil> pour générer l'overlay)")
+        print("(dry-run — add -o apps/flux/<profile> to generate the overlay)")
 
 
 if __name__ == "__main__":

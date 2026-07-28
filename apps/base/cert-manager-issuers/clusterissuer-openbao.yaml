@@ -6,9 +6,9 @@ spec:
   vault:
     path: pki/sign/openaether
     server: https://openbao.foundation-vault.svc.cluster.local:8200
-    # CA interne d'OpenBao. Résolue dans le « cluster resource namespace » de
-    # cert-manager (`cert-manager`) — c'est pourquoi la CA y est émise
-    # (apps/base/foundation/vault/tls.yaml) plutôt que dans foundation-vault.
+    # OpenBao's internal CA. Resolved in cert-manager's "cluster resource
+    # namespace" (`cert-manager`) — which is why the CA is issued there
+    # (apps/base/foundation/vault-ca) rather than in foundation-vault.
     caBundleSecretRef:
       name: openbao-ca
       key: ca.crt

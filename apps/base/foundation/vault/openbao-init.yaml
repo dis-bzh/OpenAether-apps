@@ -150,12 +150,12 @@ spec:
 
               if [ "$INITED" = "true" ]; then
                 if secrets_present; then
-                  echo "  Déjà initialisé + Secrets présents → no-op."
+                  echo "  Already initialised + Secrets present → no-op."
                   exit 0
                 fi
-                echo "ERREUR: OpenBao est initialisé mais les Secrets de seal sont absents."
-                echo "  Les parts ne sont récupérables QU'À l'init. Récupère-les depuis"
-                echo "  Bitwarden EU et recrée les Secrets, OU wipe les PVCs pour re-init."
+                echo "ERROR: OpenBao is initialised but the seal Secrets are missing."
+                echo "  The shares are ONLY recoverable at init time. Retrieve them from"
+                echo "  Bitwarden EU and recreate the Secrets, OR wipe the PVCs to re-init."
                 exit 1
               fi
 
@@ -165,7 +165,7 @@ spec:
               RESP="$(curl -s $CACERT -X POST "${ADDR}/v1/sys/init" \
                 -d "{\"secret_shares\":${KEY_SHARES},\"secret_threshold\":${KEY_THRESHOLD}}")"
               if ! echo "$RESP" | jq -e '.keys_base64 and .root_token' >/dev/null 2>&1; then
-                echo "ERREUR: init a échoué"; echo "$RESP"; exit 1
+                echo "ERROR: init failed"; echo "$RESP"; exit 1
               fi
               KEYS_NL="$(echo "$RESP" | jq -r '.keys_base64[]')"
               ROOT_TOKEN="$(echo "$RESP" | jq -r '.root_token')"
@@ -179,7 +179,7 @@ spec:
                 --from-literal=root_token="$ROOT_TOKEN" \
                 --dry-run=client -o yaml | kubectl apply -f - >/dev/null
               shred -u /tmp/keys.txt 2>/dev/null || rm -f /tmp/keys.txt
-              echo "  Secrets openbao-unseal-keys + openbao-recovery écrits."
+              echo "  Secrets openbao-unseal-keys + openbao-recovery written."
 
               # ── 5) ESCROW (affichage one-time — copier dans Bitwarden EU) ────
               echo ""
@@ -194,7 +194,7 @@ spec:
               echo "║    ${ROOT_TOKEN}"
               echo "╚══════════════════════════════════════════════════════════════════╝"
               echo ""
-              echo "✅ Init terminé. L'unsealer va desceller les 3 pods (parts via Secret)."
+              echo "✅ Init complete. The unsealer will unseal the 3 pods (shares through the Secret)."
           securityContext:
             capabilities:
               drop: ["ALL"]

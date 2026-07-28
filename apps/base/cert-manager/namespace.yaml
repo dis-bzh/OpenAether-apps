@@ -3,9 +3,9 @@ kind: Namespace
 metadata:
   name: cert-manager
   labels:
-    # PAS de istio.io/dataplane-mode: ambient — cert-manager fabrique les certs,
-    # il ne peut pas dépendre d'un mesh qui dépend de lui. En ambient, ses appels
-    # vers OpenBao (8200) partaient en HBONE/15008, bloqués par CiliumNetworkPolicy
+    # NO istio.io/dataplane-mode: ambient — cert-manager makes the certificates,
+    # it cannot depend on a mesh that depends on it. Under ambient its calls to
+    # OpenBao (8200) went over HBONE/15008, blocked by CiliumNetworkPolicy
     # + default-deny → "connection reset / context deadline exceeded".
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/warn: restricted

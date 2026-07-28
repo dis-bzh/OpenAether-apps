@@ -1,5 +1,5 @@
 # OpenAether 0.5.0 Sprint C — Dashboard VMCluster Overview
-# Métriques VMCluster: ingestion rate, query rate, storage, réplication.
+# VMCluster metrics: ingestion rate, query rate, storage, replication.
 ---
 apiVersion: v1
 kind: ConfigMap

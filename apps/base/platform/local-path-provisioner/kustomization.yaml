@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - local-path-storage.yaml  # vendored from v0.0.31 — évite fetch remote (DNS Docker)
+  - local-path-storage.yaml  # vendored from v0.0.31 — avoids a remote fetch (Docker DNS)
 patches:
   - patch: |
       - op: add

@@ -56,7 +56,7 @@ spec:
   storageNamespace: kube-system
   releaseName: cilium
   install:
-    remediation: { retries: -1 }   # retry jusqu'à ce que l'API enfant réponde
+    remediation: { retries: -1 }   # retry until the child's API answers
   chart:
     spec:
       chart: cilium
@@ -138,5 +138,5 @@ spec:
   postBuild:
     substitute:
       CHILD_PROFILE: workload
-      CHILD_NAME: edge-2   # préfixe des dépôts restic de cet enfant
+      CHILD_NAME: edge-2   # prefix of this child's restic repositories
       # CHILD_BRANCH deliberately absent → defaults to `main` (see child-gitops).

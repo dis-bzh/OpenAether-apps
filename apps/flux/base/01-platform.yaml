@@ -1,7 +1,7 @@
 # Groupe 01 — Platform (priority classes + network policies de base)
 ---
-# local-path-provisioner: installé par OpenTofu à l'init cluster, géré ici par Flux
-# pour assurer la cohérence des StorageClasses (local-path + local-path-retain).
+# local-path-provisioner: installed by OpenTofu at cluster init, managed here by Flux
+# to keep the StorageClasses consistent (local-path + local-path-retain).
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:

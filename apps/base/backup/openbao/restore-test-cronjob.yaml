@@ -65,7 +65,7 @@ spec:
                   verify() {
                     ep="$1"; bucket="$2"; label="$3"
                     export RESTIC_REPOSITORY="s3:${ep}/${bucket}/${CLUSTER_NAME}/openbao"
-                    echo "── dépôt ${label}: ${RESTIC_REPOSITORY}"
+                    echo "── repository ${label}: ${RESTIC_REPOSITORY}"
                     # A real re-read of a fraction of the data (decryption included).
                     restic check --read-data-subset=5%
                     target="/tmp/restore-${label}"
@@ -73,11 +73,11 @@ spec:
                     restic restore latest --host openbao --target "$target"
                     # A "successful" but empty restore = an unusable repository.
                     if [ -z "$(find "$target" -type f -print -quit)" ]; then
-                      echo "ERREUR: restauration VIDE depuis le dépôt ${label} —"
+                      echo "ERROR: EMPTY restore from repository ${label} —"
                       echo "        le backup n'est PAS exploitable."
                       exit 1
                     fi
-                    echo "   ✓ ${label} : $(find "$target" -type f | wc -l) fichier(s) restauré(s)"
+                    echo "   ✓ ${label}: $(find "$target" -type f | wc -l) file(s) restored"
                     rm -rf "$target"
                   }
                   AWS_ACCESS_KEY_ID="$PRIMARY_ACCESS_KEY" \
@@ -86,7 +86,7 @@ spec:
                   AWS_ACCESS_KEY_ID="$REPLICA_ACCESS_KEY" \
                     AWS_SECRET_ACCESS_KEY="$REPLICA_SECRET_KEY" \
                     verify "$REPLICA_ENDPOINT" "$REPLICA_BUCKET" replica
-                  echo "✅ le snapshot raft OpenBao : restauration vérifiée sur les 2 destinations"
+                  echo "✅ OpenBao raft snapshot: restore verified on both destinations"
               envFrom:
                 - secretRef:
                     name: backup-restic-env

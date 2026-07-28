@@ -54,11 +54,11 @@ spec:
   storageNamespace: kube-system
   releaseName: cilium
   install:
-    remediation: { retries: -1 }   # retry tant que le kubeconfig/API enfant n'est pas prêt
+    remediation: { retries: -1 }   # retry until the child's kubeconfig/API is ready
   chart:
     spec:
       chart: cilium
-      version: "1.19.2"            # même version que le socle parent
+      version: "1.19.2"            # same version as the parent foundation
       sourceRef: { kind: HelmRepository, name: cilium }
   values:
     kubeProxyReplacement: true
@@ -136,7 +136,7 @@ spec:
   postBuild:
     substitute:
       CHILD_PROFILE: workload
-      CHILD_NAME: edge-1   # préfixe des dépôts restic de cet enfant
+      CHILD_NAME: edge-1   # prefix of this child's restic repositories
       # CHILD_BRANCH deliberately absent → defaults to `main` (see child-gitops).
       # Only override it to test a branch end to end, and remember to remove it
       # afterwards: a deleted branch leaves the child pointing at a source that
