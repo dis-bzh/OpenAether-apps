@@ -15,7 +15,7 @@
 
 # ── VMAgent ────────────────────────────────────────────────────────
 # egress: DNS + k8s API (SD) + tous pods scrape ports + vminsert
-# ingress: aucun (VMAgent ne sert pas de requêtes externes)
+# ingress: none (VMAgent serves no external requests)
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -44,10 +44,10 @@ spec:
             - port: "53"
               protocol: TCP
     # Kubernetes API (SD discovery + auth)
-    # kube-apiserver via toEntities (PAS toServices:kubernetes). Le Service
-    # `kubernetes` DNAT 443→6443 : toServices n'ouvre que 443, mais Cilium
-    # applique l'egress sur le port post-DNAT (6443) → droppé. Ici pas de
-    # toEntities de secours → la SD k8s (Alloy/vmagent/sidecar Grafana) casse.
+    # kube-apiserver through toEntities (NOT toServices:kubernetes). The
+    # `kubernetes` Service DNATs 443→6443: toServices only opens 443, but Cilium
+    # applies egress on the post-DNAT port (6443) → dropped. There is no
+    # fallback toEntities → k8s SD (Alloy/vmagent/Grafana sidecar) breaks.
     - toEntities:
         - kube-apiserver
     # remote_write vers vminsert
@@ -59,12 +59,12 @@ spec:
         - ports:
             - port: "8480"
               protocol: TCP
-    # Scraping cluster-wide: tous pods sur ports métriques courants.
-    # VMAgent utilise un port dynamique par cible; autoriser les ports
-    # standards de scraping pour les composants connus.
+    # Cluster-wide scraping: all pods on the usual metrics ports.
+    # VMAgent uses a dynamic port per target; allow the standard scraping
+    # ports for the known components.
     # ⚠️ toPorts-SEUL = n'importe quelle destination (y compris world).
-    # on ajoute toEntities: cluster pour borner le scraping au cluster
-    # (empêche VMAgent compromis d'atteindre :8200 OpenBao hors-cluster).
+    # we add toEntities: cluster to bound scraping to the cluster
+    # (stops a compromised VMAgent reaching OpenBao :8200 outside the cluster).
     - toEntities:
         - cluster
       toPorts:
@@ -89,9 +89,9 @@ spec:
               protocol: TCP
             - port: "9187"   # postgres-exporter
               protocol: TCP
-    # Scrape kubelet/cadvisor sur les nœuds (:10250) — cible host, pas pod.
-    # En ambient ce trafic partait en HBONE ; hors mesh il faut l'autoriser
-    # explicitement vers les entités host + remote-node.
+    # Scrape kubelet/cadvisor on the nodes (:10250) — a host target, not a pod.
+    # Under ambient this traffic went over HBONE; outside the mesh it must be
+    # allowed explicitly to the host + remote-node entities.
     - toEntities:
         - host
         - remote-node
@@ -101,7 +101,7 @@ spec:
               protocol: TCP
 
 # ── VMCluster (vminsert + vmstorage + vmselect) ────────────────────
-# Labels posés par VMOperator: app.kubernetes.io/name = vminsert|vmstorage|vmselect
+# Labels set by VMOperator: app.kubernetes.io/name = vminsert|vmstorage|vmselect
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -177,7 +177,7 @@ spec:
         - ports:
             - port: "8401"
               protocol: TCP
-    # Peers vmstorage (réplication interne VMCluster)
+    # vmstorage peers (internal VMCluster replication)
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability
@@ -233,7 +233,7 @@ spec:
         - ports:
             - port: "8481"
               protocol: TCP
-    # Aussi depuis VMAgent pour les queries d'alertes (futur Alertmanager).
+    # Also from VMAgent for alert queries (future Alertmanager).
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability
@@ -299,7 +299,7 @@ spec:
         - ports:
             - port: "3100"
               protocol: TCP
-    # Loki peers (réplication memberlist)
+    # Loki peers (memberlist replication)
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability
@@ -322,9 +322,9 @@ spec:
             - port: "53"
               protocol: TCP
     # MinIO S3 (local) ou S3 cloud :443 (overlay)
-    # ⚠️ le chart minio 5.2.0 pose le label legacy `app: minio` (PAS
-    # app.kubernetes.io/name) — découvert au test e2e de la brique backup :
-    # le selector canonique seul ne matche RIEN → egress S3 local droppé.
+    # ⚠️ the minio 5.2.0 chart sets the legacy label `app: minio` (NOT
+    # app.kubernetes.io/name) — found during the backup brick's e2e test:
+    # the canonical selector alone matches NOTHING → local S3 egress dropped.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-storage
@@ -338,9 +338,9 @@ spec:
               protocol: TCP
     # S3 cloud (HTTPS) — pour overlay cloud.
     # ⚠️ toEntities:world :443 = n'importe quelle IP publique → exfiltration possible.
-    # Resserré sur les FQDNs S3 cloud du provider. Les overlays cloud peuvent
-    # ajouter d'autres providers si nécessaire.
-    # En local : cette règle n'est pas atteinte (MinIO interne :9000 suffit).
+    # Narrowed to the provider's cloud S3 FQDNs. Cloud overlays may add other
+    # providers if needed.
+    # Locally: this rule is never reached (the internal MinIO :9000 is enough).
     - toFQDNs:
         - matchName: s3.fr-par.scw.cloud     # Scaleway Object Storage
         - matchName: s3.eu-west-par.io.cloud.ovh.net  # OVH (aligné tfvars eu-west-par)
@@ -352,7 +352,7 @@ spec:
 
 # ── Alloy (DaemonSet) ──────────────────────────────────────────────
 # egress: DNS + Loki :3100 + k8s API :443 (discovery pods)
-# Alloy utilise l'API k8s pour lire les logs → pas de hostPath requis.
+# Alloy uses the k8s API to read logs → no hostPath required.
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -379,10 +379,10 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # kube-apiserver via toEntities (PAS toServices:kubernetes). Le Service
-    # `kubernetes` DNAT 443→6443 : toServices n'ouvre que 443, mais Cilium
-    # applique l'egress sur le port post-DNAT (6443) → droppé. Ici pas de
-    # toEntities de secours → la SD k8s (Alloy/vmagent/sidecar Grafana) casse.
+    # kube-apiserver through toEntities (NOT toServices:kubernetes). The
+    # `kubernetes` Service DNATs 443→6443: toServices only opens 443, but Cilium
+    # applies egress on the post-DNAT port (6443) → dropped. There is no
+    # fallback toEntities → k8s SD (Alloy/vmagent/Grafana sidecar) breaks.
     - toEntities:
         - kube-apiserver
     - toEndpoints:
@@ -414,7 +414,7 @@ spec:
       app.kubernetes.io/name: grafana
   ingress:
     # Gateway Envoy (services-gateway, hors ambient) → Grafana :3000 en direct.
-    # Observability hors mesh: plus de ztunnel/waypoint, l'Envoy se connecte
+    # Observability outside the mesh: no more ztunnel/waypoint, Envoy connects
     # directement au pod Grafana → source = namespace services-gateway.
     - fromEndpoints:
         - matchLabels:
@@ -439,10 +439,10 @@ spec:
             - port: "53"
               protocol: TCP
     # k8s API (sidecar dashboard discovery + ServiceAccountToken)
-    # kube-apiserver via toEntities (PAS toServices:kubernetes). Le Service
-    # `kubernetes` DNAT 443→6443 : toServices n'ouvre que 443, mais Cilium
-    # applique l'egress sur le port post-DNAT (6443) → droppé. Ici pas de
-    # toEntities de secours → la SD k8s (Alloy/vmagent/sidecar Grafana) casse.
+    # kube-apiserver through toEntities (NOT toServices:kubernetes). The
+    # `kubernetes` Service DNATs 443→6443: toServices only opens 443, but Cilium
+    # applies egress on the post-DNAT port (6443) → dropped. There is no
+    # fallback toEntities → k8s SD (Alloy/vmagent/Grafana sidecar) breaks.
     - toEntities:
         - kube-apiserver
     # vmselect (datasource VictoriaMetrics)
@@ -472,13 +472,13 @@ spec:
         - ports:
             - port: "5432"
               protocol: TCP
-    # OIDC Zitadel — SSO. Le navigateur parle à Zitadel de son côté, mais
-    # Grafana l'appelle AUSSI côté serveur (échange du code contre un token,
-    # puis /oidc/v1/userinfo). Sans cette règle, la connexion échoue en
-    # « operation not permitted » côté Cilium, sans rien dans les logs Grafana
-    # d'autre qu'un timeout.
-    # Ciblé par namespace + app + port RÉEL : un `toEndpoints: {}` serait scopé
-    # au namespace local et ne matcherait jamais cross-ns.
+    # Zitadel OIDC — SSO. The browser talks to Zitadel on its own side, but
+    # Grafana ALSO calls it server-side (exchanging the code for a token, then
+    # /oidc/v1/userinfo). Without this rule the login fails with Cilium's
+    # "operation not permitted", with nothing in the Grafana logs but a
+    # timeout.
+    # Targeted by namespace + app + REAL port: a `toEndpoints: {}` would be
+    # scoped to the local namespace and would never match cross-ns.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-identity
