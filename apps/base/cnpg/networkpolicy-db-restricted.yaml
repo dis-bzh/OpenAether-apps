@@ -1,9 +1,9 @@
 # OpenAether 0.5.0 — CNPG Database Ingress Restricted (Zero Trust)
 # Replaces networkpolicy-db.yaml (which allowed the whole foundation-databases namespace)
 # Allows ONLY the legitimate consumers:
-# - Grafana (monitoring) depuis services-observability
-# - VictoriaMetrics (metrics scraping) depuis services-observability
-# - Backup jobs (CNPG backups) depuis foundation-databases
+# - Grafana (monitoring) from services-observability
+# - VictoriaMetrics (metrics scraping) from services-observability
+# - Backup jobs (CNPG backups) from foundation-databases
 # - CNPG internal replication (instances + operator)
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -54,7 +54,7 @@ spec:
             - port: "5432"
               protocol: TCP
     # 3+4. INTERNAL foundation-databases traffic: streaming replication between
-    # instances, pods "join" (pg_basebackup d'un nouveau replica), instance-manager
+    # instances, "join" pods (pg_basebackup of a new replica), instance-manager
     # peer (:8000), backup jobs. Selector NAMESPACE-ONLY volontaire.
     # BEWARE (the cause of the June 2026 deadlock): `cnpg.io/cluster: ""` in
     # matchLabels means an EMPTY-VALUED label, NOT "Exists". The instances carry

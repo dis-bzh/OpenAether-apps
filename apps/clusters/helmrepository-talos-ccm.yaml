@@ -1,0 +1,13 @@
+# Talos CCM chart source, shared by ALL children — same reasoning as
+# helmrepository-cilium.yaml: a resource shared by N children must not live in
+# one of their files.
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: talos-ccm
+  namespace: capi-clusters
+spec:
+  type: oci
+  interval: 24h
+  url: oci://ghcr.io/siderolabs/charts

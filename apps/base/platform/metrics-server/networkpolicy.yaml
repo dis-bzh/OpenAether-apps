@@ -34,7 +34,7 @@ spec:
       app.kubernetes.io/name: metrics-server
   ingress:
     # apiserver → metrics-server (aggregated API: discovery + kubectl top queries).
-    # L'apiserver tourne en hostNetwork sur les CP → source host/remote-node ;
+    # The apiserver runs hostNetwork on the CPs → source host/remote-node;
     # kube-apiserver covers the dedicated reserved identity (Cilium ≥1.14).
     - fromEntities:
         - host

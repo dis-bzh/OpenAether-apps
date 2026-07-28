@@ -9,7 +9,7 @@ kind: Kustomization
 # NB: the `foundation-vault` namespace is defined in
 # apps/base/namespaces/namespaces.yaml. We do not (re)declare it here.
 # The `namespace:` directive rewrites the resources' metadata.namespace
-# ci-dessous vers foundation-vault.
+# below to foundation-vault.
 namespace: foundation-vault
 
 resources:

@@ -1,7 +1,7 @@
 # OpenAether 0.5.0 — Foundation Storage
 # local-path: the simple provisioner (existing, default)
 # Longhorn Sprint C: distributed storage, multiple StorageClasses, OpenBao encryption
-# MinIO: overlay local uniquement (apps/overlays/local/)
+# MinIO: local overlay only (apps/overlays/local/)
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

@@ -2,8 +2,8 @@
 # Lives IN the minio brick (rather than in storage/networkpolicy.yaml) so it is
 # applied wherever minio is — found during the backup e2e test.
 # ⚠️ the minio 5.2.0 chart sets the legacy label `app: minio` (NOT
-# app.kubernetes.io/name) — selector sur les deux formes.
-# egress : DNS + kube-api couverts par les CCNP allow-dns / allow-kube-api.
+# app.kubernetes.io/name) — the selector covers both forms.
+# egress: DNS + kube-api are covered by the allow-dns / allow-kube-api CCNPs.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:

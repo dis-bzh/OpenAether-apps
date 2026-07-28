@@ -5,7 +5,7 @@ kind: Kustomization
 # WARNING: do NOT apply namespace: to the vendored CNPG install
 # (it defines its own `cnpg-system` namespace for the operator).
 # Solution: let the install create the operator in cnpg-system, and
-# override uniquement cluster.yaml.
+# override cluster.yaml only.
 resources:
   - namespace.yaml
   - cnpg-1.23.1.yaml  # vendored from v1.23.1 — avoids a remote fetch (DNS/IPv6)

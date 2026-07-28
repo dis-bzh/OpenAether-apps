@@ -10,7 +10,7 @@
 # moving from the internal MinIO to the provider's S3 therefore requires NO
 # code change at all, only a reseed. The destination is deliberately distinct
 # from `backup/s3-primary` — Loki has no business writing into the
-# bucket des sauvegardes.
+# backup bucket.
 #
 # schemaConfig v13 (tsdb): the recommended schema since Loki 2.8+.
 # auth_enabled=false: no multi-tenant auth (private cluster).

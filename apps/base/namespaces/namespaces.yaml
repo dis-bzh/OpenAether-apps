@@ -47,7 +47,7 @@ metadata:
 # by an early layer must exist early.
 #
 # NO istio.io/dataplane-mode: ambient — observability is OUTSIDE the mesh.
-# Raison: l'ambient redirige les probes kubelet (livez/readyz/health) via
+# Reason: ambient redirects the kubelet probes (livez/readyz/health) through
 # ztunnel HBONE :15008, blocked by the CiliumNetworkPolicies + default-deny.
 # Result: vm-operator/kube-state-metrics/grafana start healthy then get killed
 # on liveness failure (i/o timeout) → CrashLoop, and vmagent→vminsert goes over
@@ -60,13 +60,13 @@ kind: Namespace
 metadata:
   name: services-observability
   labels:
-    # enforce: privileged — REQUIS par prometheus-node-exporter (DaemonSet) qui
-    # monte hostPath /proc /sys /host + hostNetwork/hostPID/hostPort 9100 pour
+    # enforce: privileged — REQUIRED by prometheus-node-exporter (DaemonSet), which
+    # mounts hostPath /proc /sys /host + hostNetwork/hostPID/hostPort 9100 to
     # expose system metrics. Those needs violate baseline WITH NO possible
     # workaround (the hostPath is intrinsic to its function). Since PSA has no
     # per-pod granularity, the whole namespace must go privileged.
     # Consistent with designating "observability = trusted infrastructure":
-    #   - hors mesh ambient (cf. bloc ci-dessus)
+    #   - outside the ambient mesh (see the block above)
     #   - excluded from Kyverno disallow-root-user (node-exporter/loki specific uids)
     #   - real security = L3/L4 CiliumNetworkPolicy (observability/networkpolicy.yaml)
     # warn/audit stay restricted → drift of the other pods (grafana/loki/vm-*)

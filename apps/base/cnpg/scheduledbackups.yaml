@@ -7,7 +7,7 @@
 # ⚠️ CNPG's `schedule` IS NOT a Kubernetes cron: it carries a leading SECONDS
 # field (robfig/cron format, 6 fields). Verified in the vendored CRD
 # (cnpg-1.23.1.yaml). Written with 5 fields it would shift by one — the hour read
-# comme des minutes.
+# as minutes.
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: ScheduledBackup

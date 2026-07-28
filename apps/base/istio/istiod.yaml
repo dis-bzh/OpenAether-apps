@@ -42,5 +42,5 @@ spec:
       enableAutoMtls: true
       # trustDomain = cluster.local (Istio default). Single-cluster dev → idiomatic.
       # If multi-cluster mesh federation ever happens, reintroduce a trustDomain
-      # unique + aliases (ex. openaether.local) et migrer les principals.
+      # single name + aliases (e.g. openaether.local) and migrate the principals.
       trustDomain: cluster.local

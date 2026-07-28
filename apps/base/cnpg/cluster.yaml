@@ -36,7 +36,7 @@ spec:
       database: zitadel
       owner: zitadel
       # CNPG requires the bootstrap Secret to be in the SAME namespace as the
-      # Cluster → ExternalSecret zitadel-db-app dans foundation-databases
+      # Cluster → zitadel-db-app ExternalSecret in foundation-databases
       # (apps/base/cnpg/secret.yaml), mirroring secret/zitadel/db in OpenBao.
       secret:
         name: zitadel-db-app

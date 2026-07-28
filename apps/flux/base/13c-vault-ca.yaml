@@ -8,7 +8,7 @@
 #   `caBundleSecretRef`. It therefore cannot be carried by the vault brick.
 #
 #   Observed in the cloud on 2026-07-28: the CA landed in foundation-vault,
-#   `openbao-server-tls` restait « Secret does not exist » et les 3 pods OpenBao
+#   `openbao-server-tls` stayed "Secret does not exist" and the 3 OpenBao pods
 #   bloquaient en ContainerCreating.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1

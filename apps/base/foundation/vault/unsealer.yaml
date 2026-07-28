@@ -8,7 +8,7 @@
 # principe « fondation agnostique ».
 #
 # Security (answering the "shell + root" objection):
-#   - Tourne en uid 100 (openbao), runAsNonRoot, JAMAIS root.
+#   - Runs as uid 100 (openbao), runAsNonRoot, NEVER root.
 #   - readOnlyRootFilesystem, drop ALL caps, allowPrivilegeEscalation=false,
 #     seccomp RuntimeDefault.
 #   - automountServiceAccountToken: false → no API token mounted (the unsealer
@@ -178,7 +178,7 @@ spec:
               topologyKey: kubernetes.io/hostname
 # ─────────────────────────────────────────────────────────────────────────────
 # TODO (cible souveraine, Wave 3) : remplacer UNSEAL_KEYS_FILE (Secret en etcd)
-# par une injection humaine RAM-only. Deux options :
+# by a RAM-only human injection. Two options:
 #   - UNSEAL_SOURCE=stdin: `kubectl attach` on the pod, the operator pastes the
 #     shares → kept in the process's memory, never on disk nor in etcd.
 #   - UNSEAL_SOURCE=bitwarden : fetch direct Bitwarden EU (token court) au boot.

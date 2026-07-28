@@ -191,7 +191,7 @@ spec:
               #     par l'issuer openbao : pki.
               #     DO NOT mount `pki/` at the root: it would occupy the prefix and
               #     prevent the nested pki mount (conflict → HTTP 400,
-              #     puis 404 sur pki/intermediate/...). max_lease_ttl long
+              #     then 404 on pki/intermediate/...). A long max_lease_ttl
               #     to cover the intermediate's lifetime (17520h).
               wlapi POST /v1/sys/mounts/pki \
                 '{"type":"pki","config":{"max_lease_ttl":"87600h"}}' "$WL_TOKEN" >/dev/null || true
@@ -240,7 +240,7 @@ spec:
                 "$WL_TOKEN" >/dev/null || true
               echo "  pki role openaether: HTTP=$(WH) (204=created/updated)"
 
-              # 4c. enable KV v2 engine (secret/) — chemin pour ESO + seeder
+              # 4c. enable KV v2 engine (secret/) — the path used by ESO + the seeder
               wlapi POST /v1/sys/mounts/secret '{"type":"kv","options":{"version":"2"}}' "$WL_TOKEN" >/dev/null || true
               echo "  kv v2 secret/ mount: HTTP=$(WH) (204=created, 400=already there)"
 
@@ -281,7 +281,7 @@ spec:
               # heredoc would indent to column 0 and escape this script's YAML
               # scalar (observed).
               #
-              # `openaether-admin` couvre l'exploitation courante mais REFUSE
+              # `openaether-admin` covers daily operations but DENIES
               # seal / rekey / rotation explicitly — those actions stay with the
               # offline-escrowed root token, hence deliberate and traceable.
               # Written as `deny` rather than omitted: the intent is readable in

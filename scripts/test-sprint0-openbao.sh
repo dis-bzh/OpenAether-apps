@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# OpenAether 0.5.0 — test e2e sprint 0 OpenBao (root + workload)
+# End-to-end OpenBao test (root + workload)
 # Usage: KUBECONFIG=$PWD/infrastructure/opentofu-local/kubeconfig bash scripts/test-sprint0-openbao.sh
 #
 # Self-contained: does NOT require the `bao` CLI locally. Everything goes
-# OpenBao (curl via port-forward + wget in-pod avec BAO_ADDR=http://127.0.0.1:8200).
 # through the HTTP API. Reason: the openbao/openbao image defaults the CLI to
 # HTTPS → in-pod `bao status` fails against an HTTP listener unless BAO_ADDR is forced to http.
 set -uo pipefail

@@ -48,7 +48,7 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-    # MinIO S3 (local uniquement). ⚠️ chart minio 5.2.0 = label legacy
+    # MinIO S3 (local only). ⚠️ minio chart 5.2.0 = legacy label
     # `app: minio` (see backup/openbao/networkpolicy.yaml) — both forms.
     - toEndpoints:
         - matchLabels:

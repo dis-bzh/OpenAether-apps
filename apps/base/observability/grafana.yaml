@@ -1,7 +1,7 @@
 # OpenAether 0.5.0 Sprint C — Grafana HA
 # ──────────────────────────────────────────────────────────────────
 # 2 replicas with podAntiAffinity.
-# Backend DB: PostgreSQL CNPG grafana-db (grafana-cnpg-db.yaml) pour
+# Backend DB: CNPG PostgreSQL grafana-db (grafana-cnpg-db.yaml) for
 # session, dashboards and users — required for HA.
 # Admin: ExternalSecret grafana-admin (username=admin).
 # Datasources: VictoriaMetrics vmselect + Loki (inline values).
@@ -48,7 +48,7 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: grafana
               topologyKey: kubernetes.io/hostname
-    # Admin credentials depuis ExternalSecret grafana-admin.
+    # Admin credentials from the grafana-admin ExternalSecret.
     admin:
       existingSecret: grafana-admin
       userKey: admin-user
