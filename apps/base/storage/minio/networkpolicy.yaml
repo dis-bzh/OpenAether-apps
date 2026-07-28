@@ -1,7 +1,7 @@
 # MinIO (local) — ingress S3 :9000 sous default-deny-all-ingress (CCNP).
-# Vit DANS la brique minio (et pas dans storage/networkpolicy.yaml) pour être
-# appliquée partout où minio l'est — découvert au test e2e backup.
-# ⚠️ le chart minio 5.2.0 pose le label legacy `app: minio` (PAS
+# Lives IN the minio brick (rather than in storage/networkpolicy.yaml) so it is
+# applied wherever minio is — found during the backup e2e test.
+# ⚠️ the minio 5.2.0 chart sets the legacy label `app: minio` (NOT
 # app.kubernetes.io/name) — selector sur les deux formes.
 # egress : DNS + kube-api couverts par les CCNP allow-dns / allow-kube-api.
 apiVersion: cilium.io/v2
@@ -28,7 +28,7 @@ spec:
         - ports:
             - port: "9000"
               protocol: TCP
-    # Jobs backup (restic → dépôts locaux) + mc post-job du chart (intra-ns)
+    # Backup Jobs (restic → local repositories) + the chart's mc post-job (intra-ns)
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault
@@ -42,11 +42,11 @@ spec:
         - ports:
             - port: "9000"
               protocol: TCP
-    # Pas de :9001 (console UI) — accès via port-forward uniquement.
+    # No :9001 (console UI) — access through port-forward only.
 ---
-# Post-job mc du chart (création des buckets) : son EGRESS vers minio:9000
-# était droppé par le default-deny egress → buckets jamais créés en local
-# (découvert au test e2e backup : restic ne crée PAS les buckets).
+# The chart's mc post-job (bucket creation): its EGRESS to minio:9000 was
+# dropped by the default-deny egress → buckets never created locally
+# (found during the backup e2e test: restic does NOT create the buckets).
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:

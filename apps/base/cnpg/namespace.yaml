@@ -3,13 +3,13 @@ kind: Namespace
 metadata:
   name: foundation-databases
   labels:
-    # PAS de istio.io/dataplane-mode: ambient — couche données (CNPG).
-    # En ambient, ztunnel reprend les probes du kubelet et les ré-émet depuis
-    # 169.254.7.127 vers le port instance-manager CNPG (:8000) → bloqué par la
+    # NO istio.io/dataplane-mode: ambient — the data layer (CNPG).
+    # Under ambient, ztunnel takes over the kubelet probes and re-emits them
+    # from 169.254.7.127 to CNPG's instance-manager port (:8000) → blocked by
     # CiliumNetworkPolicy → startup probe timeout → l'instance Postgres ne passe
-    # jamais Ready ("Waiting for instances to become active"), alors que la DB
-    # tourne. Un opérateur de DB (réplication propre, accès direct/CNPG) n'a pas
-    # sa place dans le mesh. Même raison que la fondation PKI/secrets.
+    # never Ready ("Waiting for instances to become active") while the DB is
+    # running. A DB operator (its own replication, direct/CNPG access) has no
+    # place in the mesh. Same reason as the PKI/secrets foundation.
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted

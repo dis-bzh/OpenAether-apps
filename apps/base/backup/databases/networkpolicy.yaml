@@ -1,5 +1,5 @@
-# Egress du pod de dump CNPG (posture default-deny).
-# L'ingress DB :5432 est déjà couvert par la règle intra-namespace de
+# Egress of the CNPG dump pod (default-deny posture).
+# DB ingress :5432 is already covered by the intra-namespace rule of
 # cnpg/networkpolicy-db-restricted.yaml (selector namespace-only).
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -15,7 +15,7 @@ spec:
     matchLabels:
       app: cnpg-dump
   egress:
-    # DNS — rules.dns OBLIGATOIRE pour que les toFQDNs matchent (proxy DNS),
+    # DNS — rules.dns is MANDATORY for the toFQDNs to match (DNS proxy),
     # cf. backup/openbao/networkpolicy.yaml.
     - toEndpoints:
         - matchLabels:
@@ -30,7 +30,7 @@ spec:
           rules:
             dns:
               - matchPattern: "*"
-    # Instances Postgres (même namespace)
+    # Postgres instances (same namespace)
     - toEndpoints:
         - matchExpressions:
             - key: "cnpg.io/cluster"
@@ -39,7 +39,7 @@ spec:
         - ports:
             - port: "5432"
               protocol: TCP
-    # S3 cloud (HTTPS) — resserré FQDNs providers (pas de toEntities:world).
+    # Cloud S3 (HTTPS) — narrowed to the providers' FQDNs (no toEntities:world).
     - toFQDNs:
         - matchName: s3.fr-par.scw.cloud          # Scaleway Object Storage
         - matchName: s3.eu-west-par.io.cloud.ovh.net  # OVH (aligné tfvars eu-west-par)
@@ -49,7 +49,7 @@ spec:
             - port: "443"
               protocol: TCP
     # MinIO S3 (local uniquement). ⚠️ chart minio 5.2.0 = label legacy
-    # `app: minio` (cf. backup/openbao/networkpolicy.yaml) — les deux formes.
+    # `app: minio` (see backup/openbao/networkpolicy.yaml) — both forms.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-storage

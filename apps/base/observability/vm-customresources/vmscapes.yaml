@@ -1,12 +1,12 @@
 # OpenAether 0.5.0 Sprint C — VMServiceScrape / VMNodeScrape
 # ──────────────────────────────────────────────────────────────────
-# Ces CRDs définissent CE QUE scrape VMAgent (découverte GitOps-native).
-# Pas besoin d'éditer des ConfigMaps manuellement.
+# These CRDs define WHAT VMAgent scrapes (GitOps-native discovery).
+# No need to edit ConfigMaps by hand.
 #
-# Ajouter un nouveau scrape = créer un VMServiceScrape dans n'importe quel ns
-# (VMAgent selectAllByDefault=true → découverte cluster-wide).
+# Adding a new scrape = create a VMServiceScrape in any namespace
+# (VMAgent selectAllByDefault=true → cluster-wide discovery).
 
-# ── kubelet + cAdvisor (métriques nodes + containers) ──────────────
+# ── kubelet + cAdvisor (node + container metrics) ─────────────────
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMNodeScrape
@@ -22,13 +22,13 @@ spec:
   tlsConfig:
     insecureSkipVerify: true
   bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
-  # kubelet expose métriques node standard + cadvisor (containers).
+  # kubelet exposes the standard node metrics + cadvisor (containers).
   relabelConfigs:
     - action: labelmap
       regex: __meta_kubernetes_node_label_(.+)
   path: /metrics
 ---
-# cAdvisor: métriques détaillées par container (CPU, mémoire, réseau, IO).
+# cAdvisor: detailed per-container metrics (CPU, memory, network, IO).
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMNodeScrape
 metadata:

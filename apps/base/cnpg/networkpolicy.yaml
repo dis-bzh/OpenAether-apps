@@ -1,6 +1,6 @@
 # OpenAether 0.5.0 — CNPG (CloudNativePG) NetworkPolicy
-# L'opérateur CNPG tourne dans cnpg-system (pas foundation-databases).
-# Le webhook (9443) est appelé par kube-apiserver lors de tout Cluster/Backup CRD apply.
+# The CNPG operator runs in cnpg-system (not foundation-databases).
+# The webhook (9443) is called by kube-apiserver on any Cluster/Backup CRD apply.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -18,7 +18,7 @@ spec:
   ingress:
     # kube-apiserver → webhook CNPG (MutatingWebhook + ValidatingWebhook)
     # Le Service cnpg-webhook-service expose 443 → 9443.
-    # remote-node: le static pod kube-apiserver est identifié comme node par Cilium (kubeadm/Talos).
+    # remote-node: the static kube-apiserver pod is identified as a node by Cilium (kubeadm/Talos).
     - fromEntities:
         - kube-apiserver
         - remote-node
@@ -50,10 +50,10 @@ spec:
     - toEntities:
         - kube-apiserver
     # Instances Postgres (foundation-databases) : l'operator scrute le status via
-    # l'instance-manager (:8000 /pg/status) et opère le SQL (:5432). Sans cette
-    # règle egress, l'operator ne sort pas → "Instance Status Extraction Error:
-    # i/o timeout" → Cluster jamais "healthy". Le pendant ingress est dans
-    # networkpolicy-db-restricted.yaml (règle #5, operator depuis cnpg-system).
+    # the instance-manager (:8000 /pg/status) and runs the SQL (:5432). Without
+    # this egress rule the operator cannot get out → "Instance Status Extraction
+    # Error: i/o timeout" → the Cluster is never "healthy". Its ingress
+    # counterpart is in networkpolicy-db-restricted.yaml (rule #5).
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-databases

@@ -2,10 +2,10 @@
 # ──────────────────────────────────────────────────────────────────
 # VMOperator installe les CRDs: VMCluster, VMAgent, VMSingle,
 # VMServiceScrape, VMNodeScrape, VMPodScrape, VMRule, VMAlertManager.
-# Ces CRDs permettent de déclarer scrapes, alertes et clusters en GitOps.
+# These CRDs let you declare scrapes, alerts and clusters in GitOps.
 #
-# selfHeal Flux gère le race CRDs → CRs (VMCluster/VMAgent appliqués
-# avant que le CRD soit installé → selfHeal re-applique automatiquement).
+# Flux selfHeal handles the CRDs → CRs race (VMCluster/VMAgent applied before
+# the CRD is installed → selfHeal reapplies automatically).
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
@@ -49,7 +49,7 @@ spec:
     remediation:
       retries: 3
   values:
-    # 1 réplique: 2 répliques se disputent le leader lease → crash loop.
+    # 1 replica: 2 replicas fight over the leader lease → crash loop.
     replicaCount: 1
     resources:
       requests:

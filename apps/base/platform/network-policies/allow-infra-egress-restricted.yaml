@@ -1,8 +1,8 @@
 # OpenAether 0.5.0 — Allow Infrastructure Egress (Restricted / Zero Trust)
 # Remplace allow-infra-egress.yaml (trop permissif: world)
-# Chaque namespace a ses FQDNs spécifiques autorisés.
-# DNS (53 UDP/TCP) vers cluster (CoreDNS) autorisé pour tous.
-# Kube-API (443) autorisé pour tous via allow-kube-api.yaml (CCNP séparé).
+# Each namespace has its own allowed FQDNs.
+# DNS (53 UDP/TCP) to the cluster (CoreDNS) is allowed for everyone.
+# Kube-API (443) is allowed for everyone through allow-kube-api.yaml (a separate CCNP).
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
 metadata:
@@ -25,7 +25,7 @@ spec:
           - kyverno
           - cnpg-system
   egress:
-    # ===== COMMUN: CoreDNS pour tous =====
+    # ===== COMMON: CoreDNS for everyone =====
     - toEntities:
         - cluster
       toPorts:
@@ -58,7 +58,7 @@ spec:
             - port: "443"
               protocol: TCP
     # ===== CAPI-SYSTEM (Cluster API controllers) =====
-    # Cilium ne supporte pas toFQDNs + toCIDR dans la même règle → règles séparées
+    # Cilium does not support toFQDNs + toCIDR in the same rule → separate rules
     - toFQDNs:
         - matchName: api.scaleway.com
         - matchName: api.ovh.com
@@ -77,7 +77,7 @@ spec:
             - port: "443"
               protocol: TCP
     # ===== CAPI-OPERATOR-SYSTEM (Cluster API Operator) =====
-    # Même besoins que capi-system pour providers
+    # Same needs as capi-system for the providers
     - toFQDNs:
         - matchName: api.scaleway.com
         - matchName: api.ovh.com
@@ -97,7 +97,7 @@ spec:
             - port: "443"
               protocol: TCP
     # ===== LONGHORN-SYSTEM =====
-    # Longhorn a besoin d'accéder à son registry et potentiellement aux API cloud pour CSI
+    # Longhorn needs its registry and possibly the cloud APIs for CSI
     - toFQDNs:
         - matchName: charts.longhorn.io
         - matchName: github.com
@@ -118,7 +118,7 @@ spec:
             - port: "443"
               protocol: TCP
     # ===== KYVERNO =====
-    # Kyverno a besoin de GitHub pour les policies externes et releases
+    # Kyverno needs GitHub for external policies and releases
     - toFQDNs:
         - matchName: github.com
         - matchName: raw.githubusercontent.com

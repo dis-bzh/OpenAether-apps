@@ -1,6 +1,6 @@
 # Groupe 30 — Observability (VMCluster, Loki, Grafana, Alloy, exporters)
-# Isolation clé : Grafana KO n'impacte pas OpenBao, Istio, ou le stockage.
-# Dépend de storage (volumes), cert-manager (certs Grafana), istio (mTLS), cnpg (grafana-db).
+# Key isolation: a broken Grafana affects neither OpenBao, Istio nor storage.
+# Depends on storage (volumes), cert-manager (Grafana certs), istio (mTLS), cnpg (grafana-db).
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -26,12 +26,12 @@ spec:
     - name: platform-local-path-provisioner  # Loki + VMCluster en storageClass local-path
 ---
 # Groupe 30b — VictoriaMetrics Custom Resources (VMCluster/VMAgent/VM*Scrape)
-# Séparé de 'observability' pour casser le chicken-and-egg CRD→CR : ces kinds
-# n'existent qu'après que le HelmRelease victoria-metrics-operator ait installé
-# ses CRDs. Dans le même bundle, le dry-run échoue ("no matches for kind
-# VMAgent") et Flux REJETTE tout — y compris l'opérateur → rien ne s'installe.
-# Isolé, ce groupe retente seul (retryInterval) jusqu'à apparition des CRDs,
-# sans bloquer l'opérateur. Même pattern que cert-manager-issuers.
+# Separated from 'observability' to break the CRD→CR chicken-and-egg: these kinds
+# only exist after the victoria-metrics-operator HelmRelease has installed its
+# CRDs. In the same bundle the dry-run fails ("no matches for kind VMAgent") and
+# Flux REJECTS everything — including the operator → nothing installs.
+# Isolated, this group retries on its own (retryInterval) until the CRDs appear,
+# without blocking the operator. Same pattern as cert-manager-issuers.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:

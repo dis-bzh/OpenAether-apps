@@ -1,6 +1,6 @@
 # Groupe 20 — CloudNative-PG (operator + clusters)
-# Dépend d'eso (ExternalSecrets pour grafana-db-credentials).
-# Isolation : crash CNPG n'impacte pas la stack foundation ni la storage layer.
+# Depends on eso (ExternalSecrets for grafana-db-credentials).
+# Isolation: a CNPG crash affects neither the foundation stack nor the storage layer.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -16,13 +16,13 @@ spec:
     name: openaether
   path: ./apps/base/cnpg
   prune: true
-  # Injecte la destination S3 du PITR (${BACKUP_S3_BUCKET}/${BACKUP_S3_ENDPOINT})
-  # depuis le ConfigMap `cluster-identity` posé au bootstrap.
+  # Injects the PITR S3 destination (${BACKUP_S3_BUCKET}/${BACKUP_S3_ENDPOINT})
+  # from the `cluster-identity` ConfigMap laid down at bootstrap.
   #
-  # ⚠️ Sûr ICI, contrairement aux briques backup/storage : le manifeste vendoré
-  # de l'opérateur contient bien des `$(VAR_NAME)`, mais VÉRIFIÉ le 2026-07-27 —
-  # les 13 occurrences sont toutes dans des champs `description` de CRD, aucune
-  # dans un conteneur. Aucune variable shell fonctionnelle à vider.
+  # ⚠️ Safe HERE, unlike the backup/storage bricks: the operator's vendored
+  # manifest does contain `$(VAR_NAME)` occurrences, but VERIFIED 2026-07-27 —
+  # all 13 are inside CRD `description` fields, none in a container. No
+  # functional shell variable to blank.
   postBuild:
     substituteFrom:
       - kind: ConfigMap

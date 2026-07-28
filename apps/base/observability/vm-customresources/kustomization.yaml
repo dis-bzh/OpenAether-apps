@@ -1,15 +1,15 @@
 # OpenAether 0.5.0 Sprint C — VictoriaMetrics Custom Resources
 # ──────────────────────────────────────────────────────────────────
-# Séparé du bundle observability pour casser le chicken-and-egg CRD→CR :
+# Separated from the observability bundle to break the CRD→CR chicken-and-egg:
 # ces objets (VMCluster, VMAgent, VMNodeScrape, VMServiceScrape) n'existent
-# comme kinds qu'APRÈS que le HelmRelease victoria-metrics-operator (dans
-# apps/base/observability/) ait installé ses CRDs. Si on les laisse dans le
-# même bundle, le dry-run de validation Flux échoue ("no matches for kind
-# VMAgent") et REJETTE tout le bundle — y compris l'opérateur → rien ne
-# s'installe, jamais. Même pattern que cert-manager-issuers.
+# these only exist as kinds AFTER the victoria-metrics-operator HelmRelease (in
+# apps/base/observability/) has installed its CRDs. Left in the same bundle,
+# Flux's validating dry-run fails ("no matches for kind VMAgent") and REJECTS
+# the whole bundle — including the operator → nothing installs, ever.
+# Same pattern as cert-manager-issuers.
 #
 # La Kustomization Flux 'observability-vm-customresources' (apps/flux/base/
-# 30-observability.yaml) applique ce dossier APRÈS 'observability' (Ready).
+# 30-observability.yaml) applies this directory AFTER 'observability' is Ready.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

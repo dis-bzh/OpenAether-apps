@@ -1,14 +1,14 @@
-# Clusters clients CAPI — un fichier par cluster enfant, listé EXPLICITEMENT ici.
-# example-scaleway.yaml.example n'est PAS appliqué (renommer + lister pour activer).
-# Le marqueur namespace+configmap garde ce build non-vide (Flux refuse un build vide).
+# CAPI client clusters — one file per child cluster, listed EXPLICITLY here.
+# example-scaleway.yaml.example is NOT applied (rename + list it to enable).
+# The namespace+configmap marker keeps this build non-empty (Flux refuses an empty build).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - namespace.yaml
   - helmrepository-cilium.yaml   # source de chart partagée par TOUS les enfants
   - edge-1.yaml   # Scaleway — réactivé le 2026-07-28 pour re-valider un enfant
-  #   sur un SECOND provider (le management, lui, est chez OVH : c'est donc
-  #   aussi un test de kubeception cross-provider).
+  #   on a SECOND provider (the management itself is on OVH, so this is also
+  #   a cross-provider kubeception test).
   - edge-2.yaml   # OVH
-  # - edge-3.yaml   # Outscale — DÉSACTIVÉ : quota RAM du compte (40 Go) déjà
-  #   dépassé par le management HA (44 Go). Cf. docs/backlog.md.
+  # - edge-3.yaml   # Outscale — DISABLED: the account's RAM quota (40 GB) is
+  #   already exceeded by the HA management (44 GB). See docs/backlog.md.

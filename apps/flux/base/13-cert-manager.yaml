@@ -1,5 +1,5 @@
 # Groupe 13 — cert-manager (HelmRelease)
-# Dépend de vault (ClusterIssuers OpenBao PKI) et d'eso (ExternalSecrets).
+# Depends on vault (OpenBao PKI ClusterIssuers) and eso (ExternalSecrets).
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -17,14 +17,14 @@ spec:
   prune: true
   wait: true
   dependsOn:
-    # ⚠️ PLUS de dépendance à `foundation-vault` (retirée le 2026-07-27).
-    # Elle était superflue : cette brique installe l'OPÉRATEUR cert-manager et
-    # un RBAC qui vit dans son propre namespace — rien n'y appelle OpenBao. Ce
-    # sont les ISSUERS (13b) qui en dépendent, et ils sont déjà une brique à part.
+    # ⚠️ NO MORE dependency on `foundation-vault` (removed 2026-07-27).
+    # It was superfluous: this brick installs the cert-manager OPERATOR and an
+    # RBAC living in its own namespace — nothing in it calls OpenBao. It is the
+    # ISSUERS (13b) that depend on it, and they are already a separate brick.
     #
-    # Ce qu'elle coûtait : cert-manager attendait OpenBao, et istio,
+    # What it cost: cert-manager waited on OpenBao, and istio,
     # observability et cluster-api-operator attendaient cert-manager — OpenBao
-    # se retrouvait sur le chemin critique de la moitié du DAG.
-    # Ce qu'elle bloquait : donner un certificat cert-manager au listener
-    # d'OpenBao (TLS interne) était impossible, cert-manager arrivant après lui.
+    # put OpenBao on the critical path of half the DAG.
+    # What it blocked: giving a cert-manager certificate to OpenBao's listener
+    # (internal TLS) was impossible, since cert-manager came after it.
     - name: external-secrets
