@@ -4,7 +4,7 @@ metadata:
   name: foundation-networking
   labels:
     istio.io/dataplane-mode: ambient
-    # baseline: tolérance pour Gateway API controllers (hostPort potentiel)
+    # baseline: tolerance for Gateway API controllers (possible hostPort)
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
@@ -14,23 +14,23 @@ kind: Namespace
 metadata:
   name: foundation-policy-engine
   labels:
-    # baseline: Kyverno background-controller peut avoir besoin de host watchers
+    # baseline: the Kyverno background-controller may need host watchers
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
 ---
-# foundation-vault est ici (et non dans son service respectif) car le RBAC
-# cross-namespace a besoin que ce namespace existe AVANT que vault soit déployé.
+# foundation-vault lives here (rather than in its own service) because the
+# cross-namespace RBAC needs it to exist BEFORE vault is deployed.
 apiVersion: v1
 kind: Namespace
 metadata:
   name: foundation-vault
   labels:
-    # PAS de istio.io/dataplane-mode: ambient — couche fondation HORS mesh.
-    # Raison: la PKI/secrets vit SOUS le mesh (cycle de dépendance sinon:
+    # NO istio.io/dataplane-mode: ambient — the foundation layer is OUTSIDE the mesh.
+    # Reason: PKI/secrets live UNDER the mesh (otherwise a dependency cycle:
     # istio→cert-manager-issuers→cert-manager→openbao→ztunnel→istio) + HBONE/15008
-    # bloqué par CiliumNetworkPolicy. Bonus: le raft inter-pod (8201) repasse
-    # en direct (en ambient il partait aussi en HBONE → join cassé silencieusement).
+    # blocked by CiliumNetworkPolicy. Bonus: inter-pod raft (8201) goes back to
+    # direct (under ambient it also went over HBONE → join silently broken).
     # restricted: OpenBao tourne runAsNonRoot uid=100, drop ALL caps, readOnlyRootFS.
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/warn: restricted
@@ -39,22 +39,22 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao
 ---
-# services-observability déclaré ICI (et non dans observability/) car les
-# AuthorizationPolicy Istio (Kustomization istio-authorizationpolicies, étape 14b)
-# créent une policy default-deny DANS ce namespace AVANT que la Kustomization
-# observability (étape 30) ne tourne. Sans déclaration précoce → 14b échoue
-# "namespaces services-observability not found". Règle: tout namespace ciblé
-# par une couche précoce doit exister tôt.
+# services-observability is declared HERE (not in observability/) because the
+# Istio AuthorizationPolicies (istio-authorizationpolicies Kustomization, step 14b)
+# create a default-deny policy IN that namespace BEFORE the observability
+# Kustomization (step 30) runs. Without an early declaration → 14b fails with
+# "namespaces services-observability not found". Rule: any namespace targeted
+# by an early layer must exist early.
 #
-# PAS de istio.io/dataplane-mode: ambient — observability HORS mesh.
+# NO istio.io/dataplane-mode: ambient — observability is OUTSIDE the mesh.
 # Raison: l'ambient redirige les probes kubelet (livez/readyz/health) via
-# ztunnel HBONE :15008, bloqué par les CiliumNetworkPolicy + default-deny.
-# Résultat: vm-operator/kube-state-metrics/grafana démarrent sains puis sont
-# tués sur échec de liveness (i/o timeout) → CrashLoop, et vmagent→vminsert
-# part en HBONE cassé. L'observability est de l'infra (scrape tout le cluster,
-# parle au kubelet :10250) → même logique que la fondation hors mesh
-# (voir foundation-vault ci-dessus). Sécurité L3/L4 = CiliumNetworkPolicy.
-# Les AuthorizationPolicy Istio (étape 14b) deviennent inertes ici → à nettoyer.
+# ztunnel HBONE :15008, blocked by the CiliumNetworkPolicies + default-deny.
+# Result: vm-operator/kube-state-metrics/grafana start healthy then get killed
+# on liveness failure (i/o timeout) → CrashLoop, and vmagent→vminsert goes over
+# broken HBONE. Observability is infrastructure (it scrapes the whole cluster,
+# talks to the kubelet :10250) → same logic as the out-of-mesh foundation
+# (see foundation-vault above). L3/L4 security = CiliumNetworkPolicy.
+# The Istio AuthorizationPolicies (step 14b) become inert here → to be cleaned up.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -62,15 +62,15 @@ metadata:
   labels:
     # enforce: privileged — REQUIS par prometheus-node-exporter (DaemonSet) qui
     # monte hostPath /proc /sys /host + hostNetwork/hostPID/hostPort 9100 pour
-    # exposer les métriques système. Ces besoins violent baseline SANS contournement
-    # possible (le hostPath est intrinsèque à sa fonction). PSA n'ayant pas de
-    # granularité par-pod, le namespace entier doit passer privileged.
-    # Cohérent avec la désignation "observability = infra de confiance" :
+    # expose system metrics. Those needs violate baseline WITH NO possible
+    # workaround (the hostPath is intrinsic to its function). Since PSA has no
+    # per-pod granularity, the whole namespace must go privileged.
+    # Consistent with designating "observability = trusted infrastructure":
     #   - hors mesh ambient (cf. bloc ci-dessus)
-    #   - exclu de Kyverno disallow-root-user (node-exporter/loki uid spécifiques)
-    #   - sécurité réelle = CiliumNetworkPolicy L3/L4 (observability/networkpolicy.yaml)
-    # warn/audit restent restricted → drift des autres pods (grafana/loki/vm-*)
-    # toujours visible dans les logs apiserver sans bloquer node-exporter.
+    #   - excluded from Kyverno disallow-root-user (node-exporter/loki specific uids)
+    #   - real security = L3/L4 CiliumNetworkPolicy (observability/networkpolicy.yaml)
+    # warn/audit stay restricted → drift of the other pods (grafana/loki/vm-*)
+    # remains visible in the apiserver logs without blocking node-exporter.
     pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted

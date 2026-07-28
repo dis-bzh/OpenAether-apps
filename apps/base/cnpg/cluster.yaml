@@ -1,7 +1,7 @@
-# OpenAether — Cluster CNPG PostgreSQL pour Zitadel (identité).
-# Remplace l'ancien keycloak-db : décision actée = Zitadel (Go, multi-tenant
-# natif) plutôt que Keycloak. Le Cluster CNPG (3 instances HA) sert de backend
-# Postgres à Zitadel (apps/base/identity/zitadel/).
+# OpenAether — CNPG PostgreSQL cluster for Zitadel (identity).
+# Replaces the former keycloak-db: the decision taken was Zitadel (Go, natively
+# multi-tenant) over Keycloak. The CNPG Cluster (3 HA instances) is Zitadel's
+# Postgres backend (apps/base/identity/zitadel/).
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -22,10 +22,10 @@ spec:
       shared_buffers: "128MB"
 
   # Storage Configuration
-  # local-path-retain: CNPG gère la HA (3 instances, streaming replication +
-  # failover transaction-aware). Pas de Longhorn sous CNPG (anti-pattern: double
-  # réplication bloc+transaction → write amplification, volumes faulted). Retain:
-  # données conservées si le PVC est supprimé. Cf. grafana-db-cluster.yaml.
+  # local-path-retain: CNPG handles HA itself (3 instances, streaming
+  # replication + transaction-aware failover). No Longhorn under CNPG
+  # (anti-pattern: block+transaction double replication → write amplification,
+  # faulted volumes). Retain: data kept if the PVC is deleted. See grafana-db-cluster.yaml.
   storage:
     size: 5Gi
     storageClass: local-path-retain
@@ -35,19 +35,19 @@ spec:
     initdb:
       database: zitadel
       owner: zitadel
-      # CNPG exige que le Secret bootstrap soit dans le MÊME namespace que le
+      # CNPG requires the bootstrap Secret to be in the SAME namespace as the
       # Cluster → ExternalSecret zitadel-db-app dans foundation-databases
-      # (apps/base/cnpg/secret.yaml), miroir de secret/zitadel/db dans OpenBao.
+      # (apps/base/cnpg/secret.yaml), mirroring secret/zitadel/db in OpenBao.
       secret:
         name: zitadel-db-app
 
-  # Managed roles : le `zitadel init` (admin==user==zitadel, pas de superuser CNPG)
-  # exécute un `CREATE DATABASE` même si la DB existe déjà (créée par initdb) →
-  # échec `permission denied to create database (SQLSTATE 42501)` si le rôle n'a
-  # pas CREATEDB. On accorde CREATEDB de façon déclarative (idempotent : la DB
-  # existant déjà, l'init la détecte et passe au bootstrap de schéma, owner-only).
-  # Survit au DR/rebuild (vs un ALTER ROLE manuel). enableSuperuserAccess reste
-  # false : on n'accorde que le strict nécessaire (pas superuser, pas createrole).
+  # Managed roles: `zitadel init` (admin==user==zitadel, no CNPG superuser) runs
+  # a `CREATE DATABASE` even when the DB already exists (created by initdb) →
+  # it fails with `permission denied to create database (SQLSTATE 42501)` if the
+  # role lacks CREATEDB. We grant CREATEDB declaratively (idempotent: since the
+  # DB already exists, init detects it and moves on to schema bootstrap, owner-only).
+  # Survives DR/rebuild (unlike a manual ALTER ROLE). enableSuperuserAccess stays
+  # false: we grant only the strict minimum (no superuser, no createrole).
   managed:
     roles:
       - name: zitadel
@@ -61,24 +61,24 @@ spec:
   monitoring:
     enablePodMonitor: true
 
-  # Affinity: anti-affinité préférée pour répartir les 3 instances sur les nœuds
-  # (même config que grafana-db-cluster.yaml)
+  # Affinity: preferred anti-affinity to spread the 3 instances across nodes
+  # (same config as grafana-db-cluster.yaml)
   affinity:
     podAntiAffinityType: preferred
     topologyKey: kubernetes.io/hostname
 
   # ── PITR (Point-In-Time Recovery) ───────────────────────────────────────────
-  # Avant : le seul filet était le `pg_dump` quotidien de la brique backup, soit
-  # un RPO de 24 h. barmanObjectStore archive les WAL en continu → RPO de
-  # quelques minutes, et restauration à un instant précis.
+  # Before: the only net was the backup brick's daily `pg_dump`, i.e. a 24 h
+  # RPO. barmanObjectStore archives WAL continuously → an RPO of a few minutes,
+  # and restoration to a precise point in time.
   #
-  # `${BACKUP_S3_*}` vient du ConfigMap `cluster-identity` posé au bootstrap
-  # (substitution portée par la Kustomization `cnpg`). Si le cluster ne les
-  # publie pas, la destination est vide et le backup reste inactif — pas de
-  # régression silencieuse.
+  # `${BACKUP_S3_*}` comes from the `cluster-identity` ConfigMap laid down at
+  # bootstrap (substitution carried by the `cnpg` Kustomization). If the cluster
+  # does not publish them, the destination is empty and the backup stays
+  # inactive — no silent regression.
   #
-  # Le chemin inclut le nom de la base : les deux clusters partagent le bucket
-  # sans se marcher dessus, comme les dépôts restic.
+  # The path includes the database name: both clusters share the bucket without
+  # stepping on each other, like the restic repositories.
   backup:
     retentionPolicy: "30d"
     barmanObjectStore:
@@ -92,7 +92,7 @@ spec:
           name: cnpg-backup-s3
           key: ACCESS_SECRET_KEY
       wal:
-        # Les WAL sont volumineux et le stockage S3 se paie au volume.
+        # WAL are bulky and S3 storage is billed by volume.
         compression: gzip
       data:
         compression: gzip
