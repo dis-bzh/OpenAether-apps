@@ -1,15 +1,15 @@
-# Test de RESTAURATION mensuel — la seule preuve qu'un backup est exploitable.
+# Monthly RESTORE test — the only proof that a backup is usable.
 #
-# `restic check` (lancé à chaque sauvegarde) ne lit que les MÉTADONNÉES : il dit
-# que l'index est cohérent, pas que les données sont lisibles ni déchiffrables.
-# Un dépôt peut passer `check` au vert et être irrécupérable (bit-rot sur les
-# packs, mauvais RESTIC_PASSWORD, objets S3 tronqués).
+# `restic check` (run on every backup) only reads the METADATA: it says the index
+# is consistent, not that the data is readable or decryptable.
+# A repository can pass `check` green and still be unrecoverable (bit-rot on the
+# packs, wrong RESTIC_PASSWORD, truncated S3 objects).
 #
 # Ce Job, sur CHACUNE des 2 destinations :
-#   1. `restic check --read-data-subset` — relit et déchiffre réellement une
-#      fraction des données (5 %, rotation naturelle d'un mois sur l'autre) ;
-#   2. `restic restore latest` vers un volume jetable, puis vérifie que le
-#      résultat est NON VIDE — c'est le test de bout en bout.
+#   1. `restic check --read-data-subset` — actually re-reads and decrypts a
+#      fraction of the data (5 %, naturally rotating month over month);
+#   2. `restic restore latest` into a throwaway volume, then checks that the
+#      result is NOT EMPTY — that is the end-to-end test.
 # Un échec ici est aussi grave qu'un backup manquant : il se voit via l'alerte
 # BackupJobFailed (apps/base/observability/vm-customresources/vmrule-backup.yaml).
 ---

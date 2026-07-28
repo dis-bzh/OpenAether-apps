@@ -1,11 +1,11 @@
-# OpenAether 0.5.0 — OpenBao StatefulSet (3 répl, Shamir seal + unsealer HA)
+# OpenAether 0.5.0 — OpenBao StatefulSet (3 replicas, Shamir seal + HA unsealer)
 # - Raft cluster 3/3
 # - Seal: Shamir 5/3 (auto-unseal via unsealer HA externe)
 # - PSS privileged (PKI system-level)
 # - PriorityClass platform-critical
 # - Storage: local-path-retain (local-path provisioner, Retain policy)
-#   Raft réplique les données entre les 3 nœuds → réplication storage inutile.
-#   local-path: montage immédiat (pas de CSI attach/detach), pas de volume fault.
+#   Raft replicates the data across the 3 nodes → storage replication is pointless.
+#   local-path: immediate mount (no CSI attach/detach), no volume faults.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -19,9 +19,9 @@ metadata:
 spec:
   serviceName: openbao
   replicas: 3
-  # Parallel: raft a besoin que les 3 pods démarrent ensemble pour le bootstrap
-  # du cluster. OrderedReady bloque pod-1/2 tant que pod-0 n'est pas Ready, or
-  # pod-0 ne peut pas devenir Ready sans ses peers raft → deadlock.
+  # Parallel: raft needs all 3 pods to start together to bootstrap the cluster.
+  # OrderedReady blocks pods 1/2 until pod-0 is Ready, but pod-0 cannot become
+  # Ready without its raft peers → deadlock.
   podManagementPolicy: Parallel
   selector:
     matchLabels:
@@ -57,7 +57,7 @@ spec:
       containers:
         - name: openbao
           image: docker.io/openbao/openbao:2.5.4
-          # Wrapper: Shamir seal — pas de transit token. L'unsealer HA gère l'unseal.
+          # Wrapper: Shamir seal — no transit token. The HA unsealer handles unsealing.
           # api_addr/cluster_addr via DNS stable (POD FQDN).
           command: ["/bin/sh", "/bao/config/entrypoint.sh"]
           env:
@@ -65,14 +65,14 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            # Adresse du CLI `bao` dans le pod (kubectl exec ... bao status). Le
-            # serveur écoute en clair (tls_disable=1, TLS = Wave 2) → http://, sinon
-            # le CLI tente https:// par défaut ("HTTP response to HTTPS client").
-            # N'affecte PAS `bao server` (qui utilise BAO_API_ADDR/BAO_CLUSTER_ADDR).
+            # Address of the `bao` CLI inside the pod (kubectl exec … bao status).
+            # The server listened in cleartext (tls_disable=1) → http://, otherwise
+            # the CLI defaults to https:// ("HTTP response to HTTPS client").
+            # Does NOT affect `bao server` (which uses BAO_API_ADDR/BAO_CLUSTER_ADDR).
             - name: BAO_ADDR
               value: "https://127.0.0.1:8200"
-            # Les scripts du conteneur (`bao` CLI) doivent faire confiance à la
-            # CA interne : sans ça, tout appel local échoue en « x509: certificate
+            # The container's scripts (`bao` CLI) must trust the internal CA:
+            # without it every local call fails with "x509: certificate
             # signed by unknown authority ».
             - name: BAO_CACERT
               value: "/bao/tls/ca.crt"
@@ -84,7 +84,7 @@ spec:
               name: cluster
               protocol: TCP
           securityContext:
-            # IPC_LOCK retiré: mlock supprimé dans OpenBao 2.x.
+            # IPC_LOCK removed: mlock was dropped in OpenBao 2.x.
             capabilities:
               drop:
                 - ALL
@@ -93,8 +93,8 @@ spec:
             runAsNonRoot: true
             runAsUser: 100
             seccompProfile: { type: RuntimeDefault }
-          # Probes: startup tolère uninit/sealed (le temps que l'unsealer HA opère).
-          # readiness retire le pod sealed du Service. liveness stricte.
+          # Probes: startup tolerates uninit/sealed (while the HA unsealer works).
+          # readiness removes a sealed pod from the Service. liveness is strict.
           startupProbe:
             httpGet:
               path: /v1/sys/health?standbyok=true&uninitcode=200&sealedcode=200
@@ -140,7 +140,7 @@ spec:
         - name: config
           configMap:
             name: openbao-config
-        # Certificat serveur + CA, émis par cert-manager (tls.yaml).
+        # Server certificate + CA, issued by cert-manager (tls.yaml).
         - name: tls
           secret:
             secretName: openbao-server-tls
