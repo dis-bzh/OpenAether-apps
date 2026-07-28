@@ -3,26 +3,26 @@
 # Convention: longhorn-{replication}-{access}[-encrypted]
 #   replication : x1 (1 replica Longhorn) · x2 (2 replicas) · x3 (3 replicas)
 #   access      : rwo (ReadWriteOnce) · rwx (ReadWriteMany)
-#   encrypted   : LUKS via clé OpenBao (Secret longhorn-encryption)
+#   encrypted   : LUKS through an OpenBao key (longhorn-encryption Secret)
 #
-# RÈGLE D'OR : ne jamais doubler la réplication.
-#   App auto-réplique (CNPG, VMCluster, Loki, Kafka, OpenSearch)
+# GOLDEN RULE: never double up replication.
+#   App self-replicates (CNPG, VMCluster, Loki, Kafka, OpenSearch)
 #     → longhorn-x1-rwo ou local-path
 #   App single-replica sans failover propre
-#     → longhorn-x2-rwo (ou encrypted si données sensibles)
+#     → longhorn-x2-rwo (or encrypted for sensitive data)
 #
-# AVERTISSEMENT RÉSEAU : Longhorn x2 = 2× le trafic write sur le réseau cluster.
-#   Sur 1Gbps entre nœuds, dépasser 30% en IO Longhorn dégrade le cluster.
-#   Préférer local-path ou x1 pour les workloads IO-intensifs (métriques, logs).
+# NETWORK WARNING: Longhorn x2 = 2× the write traffic on the cluster network.
+#   On 1 Gbps between nodes, exceeding 30% of Longhorn IO degrades the cluster.
+#   Prefer local-path or x1 for IO-intensive workloads (metrics, logs).
 #
-# Tous les volumes Longhorn : reclaimPolicy=Retain (pas de perte accidentelle).
-# allowVolumeExpansion=true (agrandir sans recréer le pod).
+# All Longhorn volumes: reclaimPolicy=Retain (no accidental loss).
+# allowVolumeExpansion=true (grow without recreating the pod).
 # ──────────────────────────────────────────────────────────────────
 
 # ── longhorn-x1-rwo ────────────────────────────────────────────────
-# 1 réplique Longhorn + ReadWriteOnce.
-# Pour: apps qui auto-répliquent (CNPG primaire, vmstorage, Loki singleBinary).
-# Avantage: le volume n'est PAS répliqué par Longhorn → 0 overhead réseau Longhorn.
+# 1 Longhorn replica + ReadWriteOnce.
+# For: apps that self-replicate (CNPG primary, vmstorage, Loki singleBinary).
+# Benefit: the volume is NOT replicated by Longhorn → zero Longhorn network overhead.
 # HA fournie par l'applicatif. Backup Longhorn (S3) reste disponible.
 ---
 apiVersion: storage.k8s.io/v1
@@ -43,10 +43,10 @@ parameters:
   fromBackup: ""
 
 # ── longhorn-x1-rwo-encrypted ──────────────────────────────────────
-# 1 réplique Longhorn + ReadWriteOnce + chiffrement LUKS.
-# Pour: apps auto-répliquent + données sensibles (CNPG chiffré, secrets stockés).
-# La clé LUKS est dans Secret longhorn-encryption (ns longhorn-system),
-# géré par ExternalSecret → OpenBao (secret/longhorn/encryption.passphrase).
+# 1 Longhorn replica + ReadWriteOnce + LUKS encryption.
+# For: self-replicating apps + sensitive data (encrypted CNPG, stored secrets).
+# The LUKS key lives in the longhorn-encryption Secret (ns longhorn-system),
+# managed by an ExternalSecret → OpenBao (secret/longhorn/encryption.passphrase).
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -73,10 +73,10 @@ parameters:
   csi.storage.k8s.io/node-stage-secret-namespace: longhorn-system
 
 # ── longhorn-x2-rwo ────────────────────────────────────────────────
-# 2 répliques Longhorn + ReadWriteOnce.
-# Pour: apps single-replica sans HA propre (Grafana, Keycloak, apps stateful).
-# Longhorn assure la HA du volume : si un nœud tombe, le volume reste accessible.
-# ATTENTION: 2× le trafic write réseau. Éviter pour workloads IO-intensifs.
+# 2 Longhorn replicas + ReadWriteOnce.
+# For: single-replica apps with no HA of their own (Grafana, Keycloak, stateful apps).
+# Longhorn provides the volume's HA: if a node dies, the volume stays reachable.
+# WARNING: 2× the network write traffic. Avoid for IO-intensive workloads.
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -96,8 +96,8 @@ parameters:
   fromBackup: ""
 
 # ── longhorn-x2-rwo-encrypted ──────────────────────────────────────
-# 2 répliques Longhorn + ReadWriteOnce + chiffrement LUKS.
-# Pour: apps single-replica + données sensibles (Keycloak, apps avec credentials).
+# 2 Longhorn replicas + ReadWriteOnce + LUKS encryption.
+# For: single-replica apps + sensitive data (Keycloak, apps holding credentials).
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -124,9 +124,9 @@ parameters:
   csi.storage.k8s.io/node-stage-secret-namespace: longhorn-system
 
 # ── longhorn-x2-rwx ────────────────────────────────────────────────
-# 2 répliques Longhorn + ReadWriteMany (NFS-like via Longhorn Share Manager).
-# Pour: cas rares de stockage partagé multi-pods (assets statiques, uploads).
-# ATTENTION: overhead NFS sur le réseau. Ne pas utiliser pour IO haute fréquence.
+# 2 Longhorn replicas + ReadWriteMany (NFS-like through the Longhorn Share Manager).
+# For: the rare multi-pod shared storage cases (static assets, uploads).
+# WARNING: NFS overhead on the network. Do not use for high-frequency IO.
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -147,8 +147,8 @@ parameters:
   nfsOptions: "vers=4.1,noresvport,softerr,timeo=600,retrans=5"
 
 # ── longhorn-x2-rwx-encrypted ──────────────────────────────────────
-# 2 répliques Longhorn + ReadWriteMany + chiffrement LUKS.
-# Pour: stockage partagé multi-pods + données sensibles.
+# 2 Longhorn replicas + ReadWriteMany + LUKS encryption.
+# For: multi-pod shared storage + sensitive data.
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass

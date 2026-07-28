@@ -1,14 +1,14 @@
 # OpenAether 0.5.0 Sprint C — Longhorn distributed block storage
 # ──────────────────────────────────────────────────────────────────
-# Longhorn fournit le stockage distribué pour les apps qui n'ont pas
-# leur propre réplication (single-replica apps, RWX, volumes chiffrés).
+# Longhorn provides distributed storage for apps that have no replication of
+# their own (single-replica apps, RWX, encrypted volumes).
 #
-# Apps qui auto-répliquent (CNPG, VMCluster, Loki singleBinary)
-# → utiliser StorageClass local-path ou longhorn-x1-rwo pour éviter
-#   la double réplication (app 2× + Longhorn 2× = 4× le volume de données).
+# Apps that self-replicate (CNPG, VMCluster, Loki singleBinary)
+# → use the local-path or longhorn-x1-rwo StorageClass to avoid double
+#   replication (app 2× + Longhorn 2× = 4× the data volume).
 #
 # Talos: kubeletRootDir=/var/lib/kubelet (standard).
-# Cilium CNI: pas d'iSCSI mais Longhorn utilise NFS/TCP → OK.
+# Cilium CNI: no iSCSI, but Longhorn uses NFS/TCP → fine.
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
@@ -26,13 +26,13 @@ metadata:
   namespace: longhorn-system
 spec:
   interval: 1h
-  # Le timeout Helm par défaut (5 min) ne suffit pas à Longhorn en cloud : le
-  # DaemonSet longhorn-manager et les engine images sont lourds à tirer, l'install
-  # reste « InProgress » et expire. Elle est alors remédiée par un uninstall — si
-  # celui-ci est lui-même interrompu (reboot de nœud), la release Helm reste en
+  # Helm's default timeout (5 min) is not enough for Longhorn in the cloud: the
+  # longhorn-manager DaemonSet and the engine images are heavy to pull, the
+  # install stays "InProgress" and expires. It is then remediated by an
+  # uninstall — and if that is itself interrupted (node reboot), the Helm
   # statut `uninstalling` et Flux se bloque sur « unable to determine state »
-  # alors que tous les pods tournent (vécu le 2026-07-26, management Outscale).
-  # Déblocage manuel : supprimer le Secret sh.helm.release.v1.longhorn.v1.
+  # release stays stuck while every pod runs (hit 2026-07-26, Outscale management).
+  # Manual unblock: delete the sh.helm.release.v1.longhorn.v1 Secret.
   timeout: 15m
   chart:
     spec:
@@ -53,24 +53,24 @@ spec:
       retries: 3
   values:
     defaultSettings:
-      # Chemin des données Longhorn sur chaque nœud → user volume Talos dédié et
-      # chiffré (LUKS2), monté en /var/mnt/longhorn (cf. OpenAether-infra
-      # worker_storage). Isole les réplicas du disque OS et survit à
-      # `talosctl upgrade --preserve`. Défaut amont = /var/lib/longhorn.
+      # Longhorn's data path on each node → a dedicated, encrypted (LUKS2) Talos
+      # user volume, mounted at /var/mnt/longhorn (see OpenAether-infra
+      # worker_storage). Isolates the replicas from the OS disk and survives
+      # `talosctl upgrade --preserve`. Upstream default = /var/lib/longhorn.
       defaultDataPath: /var/mnt/longhorn
-      # Nombre de répliques par défaut pour les nouveaux volumes.
-      # Surchargé par StorageClass (numberOfReplicas).
+      # Default replica count for new volumes.
+      # Overridden per StorageClass (numberOfReplicas).
       defaultReplicaCount: 2
-      # Espace minimal disponible avant de refuser de nouveaux volumes.
+      # Minimum free space before refusing new volumes.
       storageMinimalAvailablePercentage: 15
-      # Supprimer automatiquement les volumes orphelins (sans PVC).
+      # Automatically delete orphaned volumes (with no PVC).
       orphanAutoDeletion: true
-      # backupTarget : laissé vide ICI volontairement. `defaultSettings` n'est lu
-      # qu'au PREMIER déploiement ; la vérité vit ensuite dans les Setting CR,
-      # posées par la brique `storage-backup-target`
-      # (apps/base/storage/backup-target) qui reçoit l'URL du ConfigMap
-      # `cluster-identity` et les credentials d'OpenBao. Y mettre une valeur ici
-      # ne servirait qu'à l'installation initiale et divergerait ensuite.
+      # backupTarget: deliberately left empty HERE. `defaultSettings` is only
+      # read on the FIRST deployment; the truth then lives in the CRs laid down
+      # by the `storage-backup-target` brick
+      # (apps/base/storage/backup-target), which gets the URL from the
+      # `cluster-identity` ConfigMap and the credentials from OpenBao. A value
+      # here would only serve the initial install and would diverge afterwards.
       backupTarget: ""
       # kubelet path Talos
       kubernetesClusterAutoscalerEnabled: false
@@ -81,14 +81,14 @@ spec:
       tolerations: []
       nodeSelector: {}
     csi:
-      # Talos: /var/lib/kubelet est le kubelet root dir standard.
+      # Talos: /var/lib/kubelet is the standard kubelet root dir.
       kubeletRootDir: /var/lib/kubelet
       attacherReplicaCount: 2
       provisionerReplicaCount: 2
       resizerReplicaCount: 2
       snapshotterReplicaCount: 2
     persistence:
-      # Ne pas définir de StorageClass par défaut ici — local-path reste default.
+      # Do not set a default StorageClass here — local-path stays the default.
       defaultClass: false
       defaultClassReplicaCount: 2
     ingress:

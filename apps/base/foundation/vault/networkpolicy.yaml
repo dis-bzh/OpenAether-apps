@@ -18,8 +18,8 @@ spec:
     # 1. Istio Gateway (Gateway API) — vault.openaether.local
     #    ⚠️ Le pod Envoy Gateway-API porte `service.istio.io/canonical-name:
     #    openaether-gateway-istio`, PAS `k8s-app: cilium-gateway` (label legacy
-    #    Cilium Gateway, jamais posé ici) → l'ancien selector ne matchait jamais
-    #    → vault UI en timeout. On cible le label Istio réel.
+    #    Cilium Gateway, never set here) → the old selector never matched
+    #    → the vault UI timed out. We target the real Istio label.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-gateway
@@ -29,10 +29,10 @@ spec:
             - port: "8200"
               protocol: TCP
     # 2. ESO (pull ExternalSecret)
-    #    NB: le chart external-secrets ne pose PAS de label `app:` nu — il
+    #    NB: the external-secrets chart does NOT set a bare `app:` label — so
     #    utilise `app.kubernetes.io/name`. Un selector `app: external-secrets`
-    #    bloque donc ESO→OpenBao en PERMANENCE (cloud inclus), pas seulement
-    #    en local. Toujours sélectionner sur le label canonique.
+    #    it blocked ESO→OpenBao PERMANENTLY (cloud included), not just locally.
+    #    Always select on the canonical label.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-pki-management
@@ -51,7 +51,7 @@ spec:
             - port: "8200"
               protocol: TCP
     # 4. cert-manager (sign certs via OpenBao PKI)
-    #    Le chart cert-manager pose app.kubernetes.io/instance (pas app: nu).
+    #    The cert-manager chart sets app.kubernetes.io/instance (not a bare app:).
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: cert-manager
@@ -69,8 +69,8 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # 6. (supprimé) Root OpenBao — plus de foundation-pki-root (seal Shamir).
-    # 6b. Backup (CronJob openbao-snapshot, même ns) : sys/leader, login
+    # 6. (removed) OpenBao root — no more foundation-pki-root (Shamir seal).
+    # 6b. Backup (openbao-snapshot CronJob, same ns): sys/leader, login
     #     auth/kubernetes, snapshot raft. Egress miroir dans
     #     apps/base/backup/openbao/networkpolicy.yaml.
     - fromEndpoints:
@@ -90,9 +90,9 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # 8. Peers raft (3 répliques): le join challenge passe par l'API 8200,
-    #    le trafic cluster par 8201. Sans ces 2 ports en ingress ET egress,
-    #    les pods 1/2 ne rejoignent jamais le leader → restent uninitialized.
+    # 8. Raft peers (3 replicas): the join challenge goes through the 8200 API,
+    #    cluster traffic through 8201. Without both ports in ingress AND egress,
+    #    pods 1/2 never join the leader → they stay uninitialized.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault
@@ -104,7 +104,7 @@ spec:
             - port: "8201"
               protocol: TCP
     # 9. Job bootstrap-roles (configures auth/policies/roles ESO+cert-manager
-    #    PostSync vault). Même namespace: le Job est en foundation-vault.
+    #    vault PostSync). Same namespace: the Job runs in foundation-vault.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault
@@ -144,15 +144,15 @@ spec:
             - port: "53"
               protocol: TCP
     # Kubernetes API (auth kubernetes login → TokenReview + health).
-    # ⚠️ toEntities:kube-apiserver, PAS toServices:kubernetes. Le Service
-    # `kubernetes` DNAT 443→6443 : `toServices` n'ouvre QUE le port 443, mais
-    # Cilium applique l'egress sur le port post-DNAT (6443) → paquet droppé.
-    # Résultat : OpenBao ne peut pas faire le TokenReview du login k8s-auth
+    # ⚠️ toEntities:kube-apiserver, NOT toServices:kubernetes. The `kubernetes`
+    # Service DNATs 443→6443: `toServices` only opens port 443, but Cilium
+    # applies egress on the post-DNAT port (6443) → the packet is dropped.
+    # Result: OpenBao cannot perform the TokenReview of the k8s-auth login
     # (ESO/cert-manager) → ClusterSecretStore InvalidProviderConfig.
     - toEntities:
         - kube-apiserver
-    # (supprimé) egress vers foundation-pki-root — plus de root (seal Shamir).
-    # Raft entre les 3 répliques: join challenge sur l'API 8200 + cluster 8201.
+    # (removed) egress to foundation-pki-root — no more root (Shamir seal).
+    # Raft between the 3 replicas: join challenge on the 8200 API + cluster 8201.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault
@@ -164,7 +164,7 @@ spec:
             - port: "8201"
               protocol: TCP
 ---
-# Politique egress pour le Job bootstrap-roles (foundation-vault).
+# Egress policy for the bootstrap-roles Job (foundation-vault).
 # Permet: DNS + kube-apiserver (kubectl) + API OpenBao.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -191,10 +191,10 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # kube-apiserver via toEntities (PAS toServices:kubernetes) : le Service
-    # `kubernetes` DNAT 443→6443, et `toServices` n'ouvre que 443 → le paquet
-    # post-DNAT vers 6443 est droppé. Casse le `kubectl apply` du Job (écriture
-    # des Secrets de seal) → deadlock unsealer. Voir le bloc openbao ci-dessus.
+    # kube-apiserver through toEntities (NOT toServices:kubernetes): the
+    # `kubernetes` Service DNATs 443→6443, and `toServices` only opens 443 → the
+    # post-DNAT packet to 6443 is dropped. Breaks the Job's `kubectl apply`
+    # (writing the seal Secrets) → unsealer deadlock. See the openbao block above.
     - toEntities:
         - kube-apiserver
     - toEndpoints:
@@ -206,7 +206,7 @@ spec:
             - port: "8200"
               protocol: TCP
 ---
-# Egress unsealer HA (route A) : DNS (résolution des FQDN openbao-N) + API OpenBao.
+# HA unsealer egress (route A): DNS (resolving the openbao-N FQDNs) + OpenBao API.
 # Pas d'API k8s (automountServiceAccountToken=false). Bitwarden 443 = Wave 3.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -269,10 +269,10 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # kube-apiserver via toEntities (PAS toServices:kubernetes) : le Service
-    # `kubernetes` DNAT 443→6443, et `toServices` n'ouvre que 443 → le paquet
-    # post-DNAT vers 6443 est droppé. Casse le `kubectl apply` du Job (écriture
-    # des Secrets de seal) → deadlock unsealer. Voir le bloc openbao ci-dessus.
+    # kube-apiserver through toEntities (NOT toServices:kubernetes): the
+    # `kubernetes` Service DNATs 443→6443, and `toServices` only opens 443 → the
+    # post-DNAT packet to 6443 is dropped. Breaks the Job's `kubectl apply`
+    # (writing the seal Secrets) → unsealer deadlock. See the openbao block above.
     - toEntities:
         - kube-apiserver
     - toEndpoints:
