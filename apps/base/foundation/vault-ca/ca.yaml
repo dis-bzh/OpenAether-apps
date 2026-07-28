@@ -1,25 +1,16 @@
-# OpenBao's internal CA — a SEPARATE brick, targeting the `cert-manager` namespace.
+# OpenBao's internal CA — a SEPARATE brick, in the `cert-manager` namespace.
 #
-# ⚠️ WHY A SEPARATE DIRECTORY
-# The vault brick's `kustomization.yaml` carries `namespace: foundation-vault`,
-# and Kustomize's namespace transformer overrides the namespace declared on
-# EVERY resource — including that of a referenced base. The CA therefore landed
-# in `foundation-vault` instead of `cert-manager`, and the openbao
-# `ClusterIssuer` (apps/base/cert-manager-issuers) could not read its
-# `caBundleSecretRef`: a ClusterIssuer resolves its Secrets in the "cluster
-# resource namespace » de cert-manager, nulle part ailleurs.
+# ⚠️ It cannot live in the vault brick: that kustomization carries
+# `namespace: foundation-vault`, and Kustomize's namespace transformer overrides
+# EVERY resource, including a referenced base's. The CA then lands outside
+# `cert-manager` — the only namespace where a ClusterIssuer resolves its
+# `caBundleSecretRef` — and OpenBao's pods hang in ContainerCreating waiting for
+# a certificate that is never issued (observed in the cloud, 2026-07-28).
+# Missed locally because the test applied the file directly with `apply -f`,
+# which bypasses the override: validating a file is not validating the brick.
 #
-# Consequence observed in the cloud on 2026-07-28: `openbao-server-tls` stayed
-# « Issuing certificate as Secret does not exist » et les 3 pods OpenBao
-# bloquaient en ContainerCreating.
-#
-# ⚠️ This defect was NOT caught locally because the test applied `tls.yaml`
-# DIRECTLY (`kubectl apply -f`), which bypasses the kustomization's override.
-# Validating a file is not validating the brick.
-#
-# The CA is deliberately DEDICATED and has nothing to do with the PKI OpenBao
-# serves: using that would create a cycle (it would have to be reachable to
-# issue the certificate that makes it reachable).
+# The CA is deliberately dedicated, not OpenBao's own PKI — that would need
+# OpenBao reachable to issue the certificate that makes it reachable.
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer

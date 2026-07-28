@@ -1,26 +1,13 @@
-# OpenAether 0.5.0 — Default Deny All (Ingress)
-# ──────────────────────────────────────────────────────────────────────────
-# Closes INGRESS by default across the cluster.
-# Every pod needs its own ingress CNP to be reachable.
+# Default-deny INGRESS, cluster-wide. Every pod needs its own ingress CNP.
 #
-# EGRESS POSTURE: no cluster-wide deny-all (see the explanation below).
-# Egress is handled by the per-component CCNPs and CNPs:
-#   CCNP allow-dns      → DNS :53 UDP/TCP to CoreDNS (all pods)
-#   CCNP allow-kube-api → kube-apiserver :443 (tous pods)
-#   CCNP allow-infra-egress-restricted → FQDNs/CIDRs par ns (Flux, CAPI, Longhorn…)
-#   CNP par composant   → flux:registries, loki:MinIO, grafana:CNPG, gateway:backends…
+# ⚠️ There is deliberately NO cluster-wide deny-all EGRESS: in Cilium, CCNPs
+# with `endpointSelector: {}` INTERSECT, so one would override allow-dns and
+# allow-kube-api (intersection = nothing) and break DNS across the cluster.
 #
-# ⚠️ Why there is NO cluster-wide deny-all-egress (Cilium):
-#   In Cilium, CCNPs with endpointSelector: {} INTERSECT. An
-#   endpointSelector: {} + egress: [{}] creates a "deny all egress" that
-#   OVERRIDES the allow-dns/allow-kube-api allows (intersection = nothing).
-#   Result: DNS breaks (CoreDNS can no longer forward upstream),
-#   kube-api inatteignable, cascade de blocages.
-#   Egress security rests on the per-component CNPs (which are ADDITIVE with
-#   each other and with the CCNPs). Namespaces without a dedicated egress CNP
-#   have free egress — acceptable in the dev phase, to be hardened in
-#   production with per-namespace CNPs (not with a cluster-wide CCNP).
-# ──────────────────────────────────────────────────────────────────────────
+# Egress is handled additively instead: the allow-dns / allow-kube-api /
+# allow-infra-egress-restricted CCNPs, plus a CNP per component. A namespace
+# without its own egress CNP has free egress — acceptable in dev, to harden
+# per namespace in production (never with a cluster-wide CCNP).
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
 metadata:

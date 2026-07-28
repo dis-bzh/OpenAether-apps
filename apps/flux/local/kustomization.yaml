@@ -1,33 +1,19 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# OpenAether — Overlay LOCAL management (Docker/WSL2).
+# OpenAether — LOCAL overlay (Docker/WSL2).
 #
-# PRINCIPLE: locally, Flux does not reconcile from GitHub.
-# Every Kustomization is suspended → Flux is a no-op.
-# Deployment and testing happen through `kubectl apply -k apps/base/<component>`.
+# Locally Flux does not reconcile from GitHub: every Kustomization is suspended,
+# Flux is a no-op, and deployment happens with `kubectl apply -k apps/base/<x>`.
+# `task local-test` (infra repo) drives the whole order; check with
+# `kubectl get kustomization -A`.
 #
-# Local deployment order (to follow by hand or through local-apply.sh):
-#   1. kubectl apply -k apps/base/namespaces
-#   2. kubectl apply -k apps/base/platform/local-path-provisioner
-#   3. kubectl apply -k apps/base/platform/gateway-api
-#   4. kubectl apply -k apps/base/platform/priority-classes
-#   5. kubectl apply -k apps/base/platform/network-policies
-#   6. kubectl apply -k apps/base/platform/cilium-lb-ipam-local
-#      → LB-IPAM pool patched onto the Docker bridge (10.5.0.240-254). Without
-#        it the Gateway's LoadBalancer Service (services-gateway) stays <pending>
-#        forever (the base pool targets the Scaleway private VPC, unreachable here).
-#   7. kubectl apply -k apps/base/foundation/vault
-#      → HA OpenBao (Shamir 5/3 seal) + the openbao-init Job (init + writes the
-#        openbao-unseal-keys Secret) + HA unsealer (unseals the 3 pods). No more pki-root.
-#        Escrow des parts : kubectl logs -n foundation-vault job/openbao-init
-#   8. kubectl apply -k apps/base/external-secrets
-#   9. kubectl apply -k apps/base/external-secrets/stores
+# Two local specifics, both patched below:
+#   * the LB-IPAM pool must point at the Docker bridge (10.5.0.240-254) — the
+#     base pool targets the Scaleway VPC and every LoadBalancer stays <pending>;
+#   * storage is redirected to an empty stub (no Longhorn locally).
 #
-# NB Zitadel (apps/base/identity/zitadel) is CLOUD-ONLY for now: it depends on
-# the TLS Gateway (OpenBao cert, offline-signed intermediate), absent locally.
-# The `identity` Kustomization is suspended by the global patch anyway.
-#
-# To check the state: task local-test (or kubectl get kustomization -A)
+# Zitadel is cloud-only for now: it needs the TLS Gateway, whose intermediate is
+# signed offline.
 resources:
   - ../base
   - 00b-local-storage.yaml

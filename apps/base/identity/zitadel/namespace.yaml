@@ -1,27 +1,16 @@
-# OpenAether — identity namespace (Zitadel)
-# ──────────────────────────────────────────────────────────────────────────
-# services-identity stays OUTSIDE the ambient mesh (NO label
-# istio.io/dataplane-mode: ambient), comme la fondation (OpenBao/PKI/DB).
+# Zitadel namespace — deliberately OUTSIDE the ambient mesh, like the foundation.
 #
-# WHY an IdP does NOT belong in the mesh:
-# Zitadel is a ROOT OF TRUST, not an ordinary business app. A root-of-trust
-# component must not depend on the mesh it helps secure:
-#   - circular bootstrap dependency (ztunnel must run for the IdP to start);
-#   - ztunnel intercepts the kubelet probes (169.254.7.127 → :8080) and redirects
-#     en HBONE → DROP par la CiliumNetworkPolicy L4 → startupProbe timeout →
-#     CrashLoopBackOff (seen on Scaleway June 2026, identical to the foundation trap);
-#   - a ztunnel rollout/upgrade could take auth down → a global outage.
+# An IdP is a ROOT OF TRUST: it must not depend on the mesh it helps secure.
+# Circular bootstrap (ztunnel must run for the IdP to start), and ztunnel
+# intercepts the kubelet probes → HBONE → dropped by the L4 CNP → startupProbe
+# timeout → CrashLoopBackOff (seen on Scaleway, same trap as the foundation).
 #
-# Zero-trust still holds WITHOUT the mesh:
-#   - east-west encryption: Cilium WireGuard (node level);
-#   - least-privilege segmentation: L3/L4 CiliumNetworkPolicy (networkpolicy.yaml);
-#   - authN/authZ: Zitadel itself (OIDC/OAuth, tokens validated offline through JWKS);
-#   - secrets : ESO + OpenBao ; durcissement pod : PSS + Kyverno.
-# The mesh would only add east-west mTLS/SPIFFE ON the IdP — marginal here
-# (north-south TLS terminates at the Gateway; consumers validate JWTs).
+# Zero-trust still holds without it: WireGuard east-west, L3/L4 CNP
+# (networkpolicy.yaml), and Zitadel's own OIDC. The mesh would only add
+# east-west mTLS on the IdP — marginal, since north-south TLS terminates at the
+# Gateway and consumers validate JWTs.
 #
-# baseline: Zitadel runs non-root but the chart may need a few tolerances
-# (not strict restricted from the start); to tighten to restricted once validated.
+# baseline (not restricted): the chart needs a few tolerances; tighten later.
 apiVersion: v1
 kind: Namespace
 metadata:
