@@ -13,6 +13,7 @@ kind: Kustomization
 resources:
   - gateway-openaether.yaml
   - service-nodeport.yaml
+  - openbao-ca-bundle.yaml
   - certificate-openaether-tls.yaml
   - httproute-redirect.yaml
 
