@@ -4,14 +4,10 @@
 # wait: false — the ExternalSecrets stay NotReady until the operator has seeded
 # backup/s3-{primary,replica} (provider credentials) — by design.
 #
-# ⚠️ The restic repository PATH is prefixed with the cluster name
-# (`$CLUSTER_NAME`, injected into the container by the `cluster-identity`
-# ConfigMap of their namespace — see 22a-backup-identity.yaml). Without that
-# prefix, two clusters sharing a bucket write to the same place; and a restic
-# repository is only readable with the RESTIC_PASSWORD of its creator, which is
-# regenerated on every OpenBao bootstrap. The second can then neither read nor
-# initialise ("already initialized"): backups fail permanently. Hit during the
-# Outscale deployment on the Scaleway replica bucket left by the OVH management.
+# ⚠️ The restic repository PATH is prefixed with the cluster name (see
+# 22a-backup-identity.yaml). Without it, two clusters sharing a bucket collide:
+# a restic repo is only readable with its creator's RESTIC_PASSWORD, so the
+# second can neither read nor init it and its backups fail permanently.
 #
 # ⚠️ DO NOT add a `postBuild.substituteFrom` HERE: these manifests contain shell
 # scripts with BARE variables (`$PRIMARY_ENDPOINT`, `$LEADER`, `$init_err`…)
