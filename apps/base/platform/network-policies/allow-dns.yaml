@@ -1,6 +1,6 @@
-# OpenAether 0.5.0 — Allow DNS (kube-system/CoreDNS) pour tous les pods
-# CCNP qui autorise egress UDP/TCP 53 vers kube-dns.
-# Cette policy est ESSENTIELLE: sans DNS, aucun service ne peut démarrer.
+# OpenAether 0.5.0 — allow DNS (kube-system/CoreDNS) for every pod
+# A CCNP allowing UDP/TCP 53 egress to kube-dns.
+# This policy is ESSENTIAL: without DNS no service can start.
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
 metadata:

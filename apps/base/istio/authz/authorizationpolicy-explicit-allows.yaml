@@ -101,4 +101,4 @@ spec:
       name: openaether-gateway
   action: ALLOW
   rules:
-    - {} # autorise tout ingress vers l'Envoy Gateway (périmètre = ACL LB admin_ip)
+    - {} # allows all ingress to the Envoy Gateway (perimeter = the LB's admin_ip ACL)

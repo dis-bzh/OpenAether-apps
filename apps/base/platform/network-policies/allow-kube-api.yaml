@@ -1,5 +1,5 @@
 # OpenAether 0.5.0 — Allow Kube API (TCP 443 vers API server)
-# CCNP qui autorise tous les pods à parler au kube-apiserver.
+# A CCNP allowing every pod to talk to the kube-apiserver.
 # Indispensable pour: cert-manager webhooks, Kyverno webhooks, Flux,
 # ESO, CNPG, OpenBao auth kubernetes, etc.
 apiVersion: cilium.io/v2

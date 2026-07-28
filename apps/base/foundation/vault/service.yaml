@@ -10,8 +10,8 @@ metadata:
     openaether.io/component: openbao
 spec:
   clusterIP: None
-  # CRITIQUE: les pods sealed sont NotReady. Sans ceci, retry_join raft ne peut
-  # pas résoudre les peers au boot → deadlock (aucun pod ne devient Ready).
+  # CRITICAL: sealed pods are NotReady. Without this, raft retry_join cannot
+  # resolve the peers at boot → deadlock (no pod ever becomes Ready).
   publishNotReadyAddresses: true
   ports:
     - name: api

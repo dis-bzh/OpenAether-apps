@@ -1,14 +1,14 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# OpenAether 0.5.0 fix P0 sync: ns réel foundation-databases pour cluster.yaml.
-# ATTENTION: ne PAS appliquer namespace: sur l'install vendored CNPG
-# (celui-ci définit son propre namespace `cnpg-system` pour l'opérateur).
-# Solution: on laisse l'install créer l'opérateur dans cnpg-system, et on
+# OpenAether 0.5.0 P0 sync fix: the real ns is foundation-databases for cluster.yaml.
+# WARNING: do NOT apply namespace: to the vendored CNPG install
+# (it defines its own `cnpg-system` namespace for the operator).
+# Solution: let the install create the operator in cnpg-system, and
 # override uniquement cluster.yaml.
 resources:
   - namespace.yaml
-  - cnpg-1.23.1.yaml  # vendored from v1.23.1 — évite fetch remote (DNS/IPv6)
+  - cnpg-1.23.1.yaml  # vendored from v1.23.1 — avoids a remote fetch (DNS/IPv6)
   - networkpolicy.yaml
   - networkpolicy-db-restricted.yaml
   - cluster.yaml

@@ -1,6 +1,6 @@
-# Groupe 14b — Istio AuthorizationPolicies (après CRDs Istio prêts)
-# Dépend du Kustomization 'istio' (qui installe CRDs via istio-base HelmRelease).
-# Applique le sous-dossier authz/ qui contient les AuthorizationPolicies.
+# Group 14b — Istio AuthorizationPolicies (once the Istio CRDs are ready)
+# Depends on the 'istio' Kustomization (which installs the CRDs through the istio-base HelmRelease).
+# Applies the authz/ subdirectory holding the AuthorizationPolicies.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

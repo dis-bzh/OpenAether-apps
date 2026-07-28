@@ -4,7 +4,7 @@ kind: Namespace
 metadata:
   name: capi-system
   labels:
-    # baseline: CAPI controllers n'ont pas besoin de privileged
+    # baseline: the CAPI controllers do not need privileged
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted

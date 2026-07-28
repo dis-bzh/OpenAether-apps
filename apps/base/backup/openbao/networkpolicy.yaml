@@ -45,18 +45,18 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # S3 cloud (HTTPS) — resserré FQDNs providers (pas de toEntities:world).
+    # Cloud S3 (HTTPS) — narrowed to the providers' FQDNs (no toEntities:world).
     - toFQDNs:
         - matchName: s3.fr-par.scw.cloud          # Scaleway Object Storage
-        - matchName: s3.eu-west-par.io.cloud.ovh.net  # OVH (aligné tfvars eu-west-par)
+        - matchName: s3.eu-west-par.io.cloud.ovh.net  # OVH (aligned with the eu-west-par tfvars)
         - matchName: oos.eu-west-2.outscale.com   # Outscale OSU
       toPorts:
         - ports:
             - port: "443"
               protocol: TCP
-    # MinIO S3 (local uniquement). ⚠️ le chart minio 5.2.0 pose le label
-    # legacy `app: minio` (PAS app.kubernetes.io/name) — vérifié en e2e local :
-    # le selector canonique seul ne matche rien → restic hang. Les deux formes.
+    # MinIO S3 (local only). ⚠️ the minio 5.2.0 chart sets the legacy label
+    # `app: minio` (NOT app.kubernetes.io/name) — verified in a local e2e run:
+    # the canonical selector alone matches nothing → restic hangs. Both forms.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-storage

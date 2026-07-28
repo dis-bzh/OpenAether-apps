@@ -33,7 +33,7 @@ metadata:
   labels:
     openaether.io/managed: "true"
     openaether.io/component: "istio"
-spec: {} # ALLOW implicite, 0 règle → deny par défaut, surchargé par les ALLOW
+spec: {} # implicit ALLOW, 0 rules → deny by default, overridden by the ALLOWs
 ---
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy

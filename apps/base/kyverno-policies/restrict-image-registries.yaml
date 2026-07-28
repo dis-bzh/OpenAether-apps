@@ -1,6 +1,6 @@
 # OpenAether 0.5.0 — Restrict Image Registries
-# Interdit les images hors des registres autorisés.
-# Empêche le pull d'images non vérifiées / compromises.
+# Forbids images from outside the allowed registries.
+# Prevents pulling unverified or compromised images.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:

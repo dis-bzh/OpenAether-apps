@@ -121,10 +121,10 @@ volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Delete
 
 ---
-# Variante Retain pour les composants PKI/secrets (OpenBao root + workload).
-# reclaimPolicy: Retain → le PV survit si le PVC est supprimé accidentellement,
-# ce qui permet une récupération manuelle des données raft.
-# WaitForFirstConsumer → PV créé sur le nœud où le pod est schedulé (co-localité).
+# A Retain variant for the PKI/secrets components (OpenBao root + workload).
+# reclaimPolicy: Retain → the PV survives an accidental PVC deletion, which
+# allows manual recovery of the raft data.
+# WaitForFirstConsumer → the PV is created on the node where the pod is scheduled (co-location).
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:

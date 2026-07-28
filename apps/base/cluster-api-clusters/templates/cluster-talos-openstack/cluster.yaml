@@ -76,7 +76,7 @@ spec:
     # CAPO also opens the matching security group rule.
     additionalPorts: [50000]
   managedSecurityGroups:
-    allowAllInClusterTraffic: true   # requis dès qu'on déclare le bloc
+    allowAllInClusterTraffic: true   # required as soon as the block is declared
   tags: ["openaether", "${CLUSTER_NAME}"]
 ---
 apiVersion: controlplane.cluster.x-k8s.io/v1alpha3

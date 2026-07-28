@@ -1,14 +1,14 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# ClusterIssuers séparés du HelmRelease cert-manager pour éviter le dry-run
-# chicken-and-egg : les CRDs cert-manager.io/v1 n'existent qu'après l'install Helm.
-# Cette kustomization est déployée par la Kustomization Flux 13b-cert-manager-issuers
-# qui dépend de cert-manager (HelmRelease ready).
+# ClusterIssuers kept separate from the cert-manager HelmRelease to avoid the
+# dry-run chicken-and-egg: the cert-manager.io/v1 CRDs only exist after the Helm install.
+# This kustomization is deployed by the 13b-cert-manager-issuers Flux Kustomization,
+# which depends on cert-manager (HelmRelease ready).
 # Single OpenBao (foundation-vault) : un seul issuer signant via
 # pki/sign/openaether. Les anciens issuers openbao-pki-root /
 # openbao-pki-intermediate (mounts pki-root/pki-intermediate de l'archi 2-OpenBao)
-# sont supprimés — non référencés par aucun Certificate.
+# have been removed — referenced by no Certificate.
 resources:
   - clusterissuer-openbao.yaml
 

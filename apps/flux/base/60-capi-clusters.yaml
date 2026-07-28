@@ -1,6 +1,6 @@
 # Groupe 60 — Instanciation des clusters clients CAPI (kubeception/gitception).
-# Réconcilie apps/clusters/ (un fichier par cluster enfant, cf. son README).
-# Compagnon de la pioche : activé automatiquement avec cluster-api-providers.
+# Reconciles apps/clusters/ (one file per child cluster, see its README).
+# A pick companion: enabled automatically alongside cluster-api-providers.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

@@ -1,5 +1,5 @@
 # Groupe 40 — Kyverno (admission controller + policies)
-# Isolation : politiques admission, pas de dépendance sur la stack applicative.
+# Isolation: admission policies, with no dependency on the application stack.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

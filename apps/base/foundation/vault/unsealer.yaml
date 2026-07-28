@@ -96,7 +96,7 @@ spec:
                 bao status >/dev/null 2>&1
                 rc=$?
                 if [ "$rc" = "0" ]; then
-                  return 0                      # déjà unsealed
+                  return 0                      # already unsealed
                 fi
                 if [ "$rc" != "2" ]; then
                   echo "[unsealer] $addr injoignable (rc=$rc) — skip"
@@ -112,11 +112,11 @@ spec:
                     return 0
                   fi
                 done < "$KEYS_FILE"
-                echo "[unsealer] $addr toujours sealed après les parts dispo"
+                echo "[unsealer] $addr still sealed after replaying the available shares"
                 return 1
               }
 
-              echo "[unsealer] démarrage — surveillance toutes les ${INTERVAL}s"
+              echo "[unsealer] starting — watching every ${INTERVAL}s"
               while true; do
                 for p in $PODS; do
                   unseal_pod "https://${p}.openbao.${NS}.svc.cluster.local:8200"

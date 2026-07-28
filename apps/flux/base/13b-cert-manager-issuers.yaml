@@ -1,7 +1,7 @@
 # Groupe 13b — ClusterIssuers cert-manager (OpenBao PKI)
-# Séparé du groupe 13 pour éviter le dry-run chicken-and-egg :
-# les CRDs cert-manager.io/v1 n'existent qu'après que le HelmRelease cert-manager
-# soit installé. Cette Kustomization attend cert-manager Ready avant de s'appliquer.
+# Separated from group 13 to avoid the dry-run chicken-and-egg:
+# the cert-manager.io/v1 CRDs only exist once the cert-manager HelmRelease is
+# installed. This Kustomization waits for cert-manager to be Ready before applying.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

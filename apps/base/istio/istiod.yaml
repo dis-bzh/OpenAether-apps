@@ -17,8 +17,8 @@ spec:
       interval: 1h
   dependsOn:
     - name: istio-base
-  # Filet d'idempotence : sans remediation, une install Helm qui échoue une
-  # fois reste bloquée définitivement (Flux ne la retente jamais).
+  # Idempotence net: without remediation, a Helm install that fails once stays
+  # blocked forever (Flux never retries it).
   install:
     remediation:
       retries: 3
@@ -40,7 +40,7 @@ spec:
           memory: 1Gi
     meshConfig:
       enableAutoMtls: true
-      # trustDomain = cluster.local (défaut Istio). Mono-cluster dev → idiomatique.
-      # Si fédération mesh multi-cluster un jour, réintroduire un trustDomain
+      # trustDomain = cluster.local (Istio default). Single-cluster dev → idiomatic.
+      # If multi-cluster mesh federation ever happens, reintroduce a trustDomain
       # unique + aliases (ex. openaether.local) et migrer les principals.
       trustDomain: cluster.local

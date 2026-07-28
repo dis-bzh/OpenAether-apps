@@ -36,7 +36,7 @@ spec:
   wait: false
   dependsOn:
     - name: external-secrets-stores  # implique foundation-vault + external-secrets
-    - name: backup-openbao-identity  # ConfigMap CLUSTER_NAME (préfixe du dépôt)
+    - name: backup-openbao-identity  # CLUSTER_NAME ConfigMap (repository prefix)
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -55,5 +55,5 @@ spec:
   wait: false
   dependsOn:
     - name: external-secrets-stores
-    - name: cnpg                     # Secrets <cluster>-app + instances à dumper
-    - name: backup-databases-identity # ConfigMap CLUSTER_NAME (préfixe du dépôt)
+    - name: cnpg                     # <cluster>-app Secrets + the instances to dump
+    - name: backup-databases-identity # CLUSTER_NAME ConfigMap (repository prefix)

@@ -36,7 +36,7 @@ spec:
       - kind: ConfigMap
         name: cluster-identity
   dependsOn:
-    - name: foundation-vault   # propriétaire du namespace foundation-vault
+    - name: foundation-vault   # owner of the foundation-vault namespace
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -58,4 +58,4 @@ spec:
       - kind: ConfigMap
         name: cluster-identity
   dependsOn:
-    - name: cnpg               # propriétaire du namespace foundation-databases
+    - name: cnpg               # owner of the foundation-databases namespace

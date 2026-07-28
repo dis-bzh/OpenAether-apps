@@ -1,10 +1,10 @@
 # OpenAether 0.5.0 — Flux Egress Restricted (Zero Trust)
 # Remplace flux-egress-allow-all.yaml (trop permissif: world + host + remote-node)
-# Autorise UNIQUEMENT les destinations nécessaires:
+# Allows ONLY the required destinations:
 # - github.com (GitRepository + Helm charts GitHub Pages)
 # - Helm registries: charts.jetstack.io, charts.longhorn.io, charts.min.io, istio-release.storage.googleapis.com, victoriametrics.github.io, grafana.github.io, prometheus-community.github.io, kubernetes-sigs.github.io
-# - CoreDNS (cluster) pour résolution DNS
-# - Kube-API (cluster) pour opérations Kubernetes
+# - CoreDNS (cluster) for DNS resolution
+# - Kube-API (cluster) for Kubernetes operations
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -80,7 +80,7 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-    # 10. CoreDNS (kube-system) pour résolution DNS
+    # 10. CoreDNS (kube-system) for DNS resolution
     - toEntities:
         - cluster
       toPorts:
@@ -89,7 +89,7 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # 11. Kube-API Server pour opérations Kubernetes
+    # 11. Kube-API server for Kubernetes operations
     - toServices:
         - k8sService:
             serviceName: kubernetes

@@ -21,7 +21,7 @@ spec:
             component: openbao
           annotations:
             summary: "OpenBao sealed > 2min"
-            description: "OpenBao (ns foundation-vault) est scellé. Unsealer HA inopérant (parts Shamir non chargées, network policy, ou unsealer down). Vérifier les logs de l'unsealer + statut OpenBao."
+            description: "OpenBao (ns foundation-vault) is sealed. The HA unsealer is inoperative (Shamir shares not loaded, network policy, or unsealer down). Check the unsealer logs and the OpenBao status."
             runbook_url: "https://github.com/dis-bzh/OpenAether/blob/main/docs/runbooks/openbao-unseal.md"
         # Raft no leader = critical
         - alert: OpenBaoRaftNoLeader
@@ -32,8 +32,8 @@ spec:
             component: openbao
           annotations:
             summary: "OpenBao raft cluster has no leader"
-            description: "Aucune instance raft n'est leader. Le cluster ne peut pas traiter de requêtes d'écriture."
-        # Raft lag élevé = warning
+            description: "No raft instance is leader. The cluster cannot serve write requests."
+        # High raft lag = warning
         - alert: OpenBaoRaftLagHigh
           expr: openbao_raft_commit_index - openbao_raft_last_log_index > 100
           for: 5m
@@ -42,4 +42,4 @@ spec:
             component: openbao
           annotations:
             summary: "OpenBao raft commit lag > 100 entries"
-            description: "Une réplique est en retard sur le commit. Possible I/O lente ou network."
+            description: "A replica is lagging on commit. Possibly slow I/O or network."

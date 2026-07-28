@@ -27,7 +27,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: platform
 spec:
-  description: "CoreDNS egress vers le résolveur hôte (Talos hostDNS) sur :53."
+  description: "CoreDNS egress to the host resolver (Talos hostDNS) on :53."
   endpointSelector:
     matchLabels:
       k8s-app: kube-dns

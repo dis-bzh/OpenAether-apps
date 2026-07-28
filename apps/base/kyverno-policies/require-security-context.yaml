@@ -1,7 +1,7 @@
 # OpenAether 0.5.0 — Require SecurityContext on all containers
-# Bloque tout pod sans securityContext au niveau conteneur.
+# Blocks any pod without a container-level securityContext.
 # Exclusions: namespaces privileged (longhorn, istio-cni, capi, local-path)
-# où les workloads ont besoin de privileges légitimes.
+# where the workloads legitimately need privileges.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
