@@ -1,19 +1,19 @@
 # OpenAether 0.5.0 Sprint C — Loki HA (stockage logs)
 # ──────────────────────────────────────────────────────────────────
-# Mode: SingleBinary x2 (simple à opérer, HA par réplication Loki).
+# Mode: SingleBinary x2 (simple to operate, HA through Loki replication).
 # Backend: S3 (MinIO en local, S3 natif en cloud via overlay).
-# replication_factor=2: chaque chunk est répliqué sur les 2 instances.
+# replication_factor=2: every chunk is replicated across both instances.
 #
 # Destination S3 : ExternalSecret loki-s3-credentials (externalsecret-loki.yaml),
-# alimenté par `secret/observability/loki-s3` dans OpenBao. Credentials ET
-# emplacement (endpoint + bucket) transitent par ce Secret, injectés en
-# `valuesFrom` : passer du MinIO interne au S3 du provider ne demande donc
-# AUCUN changement de code, seulement un reseed. Destination volontairement
-# distincte de `backup/s3-primary` — Loki n'a pas à pouvoir écrire dans le
+# fed from `secret/observability/loki-s3` in OpenBao. Credentials AND location
+# (endpoint + bucket) travel through that Secret, injected with `valuesFrom`:
+# moving from the internal MinIO to the provider's S3 therefore requires NO
+# code change at all, only a reseed. The destination is deliberately distinct
+# from `backup/s3-primary` — Loki has no business writing into the
 # bucket des sauvegardes.
 #
-# schemaConfig v13 (tsdb): schéma recommandé depuis Loki 2.8+.
-# auth_enabled=false: pas d'auth multi-tenant (cluster privé).
+# schemaConfig v13 (tsdb): the recommended schema since Loki 2.8+.
+# auth_enabled=false: no multi-tenant auth (private cluster).
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
@@ -63,11 +63,11 @@ spec:
       name: loki-s3-credentials
       valuesKey: secretKey
       targetPath: loki.storage.s3.secretAccessKey
-    # endpoint et bucket viennent du MÊME Secret : le chart n'accepte que des
-    # chaînes littérales, et cette brique ne peut pas être substituée par Flux
-    # (les dashboards Grafana contiennent des ${datasource} qui seraient vidés).
-    # Résultat : passer du MinIO interne au S3 du provider ne demande QUE de
-    # reseeder `secret/observability/loki-s3` — aucun changement de code.
+    # endpoint and bucket come from the SAME Secret: the chart only accepts
+    # literal strings, and this brick cannot be substituted by Flux (the Grafana
+    # dashboards contain ${datasource} placeholders that would be blanked).
+    # Result: moving from the internal MinIO to the provider's S3 ONLY requires
+    # reseeding `secret/observability/loki-s3` — no code change.
     - kind: Secret
       name: loki-s3-credentials
       valuesKey: endpoint
@@ -120,8 +120,8 @@ spec:
         replication_factor: 2
       storage:
         type: s3
-        # bucketNames et endpoint sont ÉCRASÉS par les `valuesFrom` ci-dessus,
-        # depuis le Secret loki-s3-credentials. Ces valeurs ne servent que de
+        # bucketNames and endpoint are OVERWRITTEN by the `valuesFrom` above,
+        # from the loki-s3-credentials Secret. These values only act as
         # documentation du format attendu.
         bucketNames:
           chunks: loki
@@ -147,24 +147,24 @@ spec:
         reject_old_samples_max_age: 168h
         ingestion_rate_mb: 10
         ingestion_burst_size_mb: 20
-    # Pas de MinIO intégré (on utilise notre propre instance).
+    # No bundled MinIO (we use our own instance).
     minio:
       enabled: false
-    # Caches memcached désactivés : le chart Loki les dimensionne pour la prod
-    # (chunksCache ~9.6Gi + resultsCache ~1.2Gi de requests mémoire). Le
-    # chunksCache (8Gi alloc) ne rentre sur AUCUN worker DEV-S (~3.3Gi
-    # allouables) → Pending permanent, et la pression mémoire bloque aussi
-    # le scheduling de vminsert. En SingleBinary dev (faible volume de logs),
-    # le cache n'apporte rien d'essentiel. À ré-activer + dimensionner si les
+    # memcached caches disabled: the Loki chart sizes them for production
+    # (chunksCache ~9.6Gi + resultsCache ~1.2Gi of memory requests). The
+    # chunksCache (8Gi alloc) fits on NO DEV-S worker (~3.3Gi allocatable) →
+    # permanently Pending, and the memory pressure also blocks vminsert
+    # scheduling. In SingleBinary dev (low log volume) the cache brings nothing
+    # essential. To re-enable and size if the
     # workers grossissent (cf. sizing nodes / overlay cloud).
     chunksCache:
       enabled: false
     resultsCache:
       enabled: false
-    # Pas de gateway/ingress (accès interne seulement via service ClusterIP).
+    # No gateway/ingress (internal access only, through the ClusterIP service).
     gateway:
       enabled: false
-    # Désactiver les composants distribués non nécessaires en SingleBinary.
+    # Disable the distributed components that SingleBinary does not need.
     backend:
       replicas: 0
     read:

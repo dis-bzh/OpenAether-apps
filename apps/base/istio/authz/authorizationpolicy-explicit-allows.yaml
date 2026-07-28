@@ -1,14 +1,14 @@
 # OpenAether 0.5.0 — Istio AuthorizationPolicy Explicit Allows (Zero Trust)
 # ──────────────────────────────────────────────────────────────────────────
-# Allows L7 LÉGITIMES entre workloads, UNIQUEMENT dans les namespaces AMBIENT
-# (où ztunnel applique réellement la policy). Ordre d'éval : DENY → ALLOW ;
+# LEGITIMATE L7 allows between workloads, ONLY in AMBIENT namespaces (where
+# ztunnel actually enforces the policy). Eval order: DENY → ALLOW;
 # le default-deny (authorizationpolicy-default-deny.yaml, forme `spec: {}`)
-# n'autorise rien, ces ALLOW rouvrent les flux nécessaires.
+# allows nothing, so these ALLOWs reopen the required flows.
 #
-# Les flux des namespaces HORS-MESH (cert-manager→OpenBao, grafana→CNPG,
-# flux→kube-api, webhooks cert-manager/kyverno, longhorn interne) NE SONT PLUS
-# ici : ils sont protégés par CiliumNetworkPolicy L3/L4 + OpenBao k8s-auth.
-# En ambient, l'egress d'un pop meshé vers une destination hors-mesh (CNPG,
+# The flows of OUT-OF-MESH namespaces (cert-manager→OpenBao, grafana→CNPG,
+# flux→kube-api, cert-manager/kyverno webhooks, internal longhorn) are NO LONGER
+# here: they are protected by L3/L4 CiliumNetworkPolicy + OpenBao k8s-auth.
+# Under ambient, egress from a meshed pod to an out-of-mesh destination (CNPG,
 # OpenBao) sort hors HBONE → seul Cilium L4 s'applique côté destination.
 #
 # Identités SPIFFE = trustDomain `cluster.local` (cf. istiod.yaml).
