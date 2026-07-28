@@ -9,13 +9,13 @@
 # flux→kube-api, cert-manager/kyverno webhooks, internal longhorn) are NO LONGER
 # here: they are protected by L3/L4 CiliumNetworkPolicy + OpenBao k8s-auth.
 # Under ambient, egress from a meshed pod to an out-of-mesh destination (CNPG,
-# OpenBao) sort hors HBONE → seul Cilium L4 s'applique côté destination.
+# OpenBao) leaves HBONE → only Cilium L4 applies on the destination side.
 #
-# Identités SPIFFE = trustDomain `cluster.local` (cf. istiod.yaml).
+# SPIFFE identities = trustDomain `cluster.local` (see istiod.yaml).
 # ──────────────────────────────────────────────────────────────────────────
 
 # ════════════════════════════════════════════════════════════════════════
-# istio-system : plan de contrôle (xDS / CA / HBONE)
+# istio-system: control plane (xDS / CA / HBONE)
 # ════════════════════════════════════════════════════════════════════════
 # istiod ↔ ztunnel ↔ gateway ↔ waypoint : xDS (15010/15012) + injection (15017)
 apiVersion: security.istio.io/v1beta1
@@ -66,26 +66,26 @@ spec:
 # ════════════════════════════════════════════════════════════════════════
 # services-observability : HORS MESH (plus d'AuthorizationPolicy ici)
 # ════════════════════════════════════════════════════════════════════════
-# Le namespace a quitté l'ambient (probes kubelet droppées par HBONE :15008
+# The namespace left ambient (kubelet probes dropped by HBONE :15008
 # → CrashLoop vm-operator/KSM/grafana ; cf. namespaces.yaml). ztunnel n'y
 # intercepte plus rien → toute AuthorizationPolicy y serait inerte.
 # Flux intra-stack + ingress Gateway→Grafana :3000 = CiliumNetworkPolicy L3/L4
 # (apps/base/observability/networkpolicy.yaml, CNP grafana ← services-gateway).
 # ════════════════════════════════════════════════════════════════════════
-# services-gateway : POINT D'ENTRÉE ingress externe (Envoy Gateway-API dédié)
+# services-gateway: the external ingress ENTRY POINT (dedicated Gateway-API Envoy)
 # ════════════════════════════════════════════════════════════════════════
-# L'Envoy Gateway reçoit le trafic EXTERNE non-authentifié (navigateurs) → il
-# n'a AUCUNE identité SPIFFE source. Gater l'entrée sur `principals` (mTLS) la
-# bloquait (403 sur toutes les UIs : le seul principal autorisé était la Gateway
-# elle-même, jamais le client externe). On AUTORISE donc l'ingress ; la
-# protection périmétrique = ACL de l'app-LB Scaleway (admin_ip, voir
-# modules/providers/scw/lb.tf). Le zero-trust reste appliqué EN AVAL : les
-# backends meshés n'acceptent que le principal SPIFFE de la Gateway (leurs
+# The Gateway Envoy receives EXTERNAL unauthenticated traffic (browsers) → it
+# has NO source SPIFFE identity. Gating the entry on `principals` (mTLS) blocked
+# it (403 on every UI: the only allowed principal was the Gateway itself, never
+# the external client). So we ALLOW the ingress; the perimeter protection is the
+# Scaleway app-LB ACL (admin_ip, see
+# modules/providers/scw/lb.tf). Zero-trust is still enforced DOWNSTREAM: the
+# meshed backends accept only the Gateway's SPIFFE principal (their
 # propres AuthorizationPolicy / CiliumNetworkPolicy, dans leurs namespaces).
 #
-# targetRefs (Gateway API, Istio ≥1.22) cible le proxy Gateway précisément, sans
-# toucher d'autres workloads éventuels du ns. action ALLOW + `rules: [{}]` =
-# « autorise toute requête entrante vers ce proxy » (surcharge le default-deny).
+# targetRefs (Gateway API, Istio ≥1.22) targets the Gateway proxy precisely,
+# without touching any other workload in the ns. action ALLOW + `rules: [{}]` =
+# "allow any inbound request to this proxy" (overrides the default-deny).
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:

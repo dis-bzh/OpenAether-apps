@@ -1,14 +1,14 @@
 # OpenAether 0.5.0 — OpenBao config (Shamir seal + raft 3)
-# Seal: Shamir 5/3 (défaut OpenBao quand aucun seal n'est configuré)
-# - Les 5 parts Shamir sont gérées par l'unsealer HA (apps/base/foundation/vault/unsealer.yaml)
-# - L'unsealer charge les 3 parts nécessaires en RAM-only et appelle /v1/sys/unseal
-# - Raft 3 répl: retry_join sur les 3 pods via svc headless openbao.
-# - TLS du listener : certificat cert-manager (tls.yaml), CA DÉDIÉE en selfSigned.
-#   Surtout pas la PKI d'OpenBao — il devrait être joignable pour émettre le
-#   certificat qui le rend joignable.
+# Seal: Shamir 5/3 (OpenBao's default when no seal is configured)
+# - The 5 Shamir shares are handled by the HA unsealer (apps/base/foundation/vault/unsealer.yaml)
+# - The unsealer loads the 3 required shares RAM-only and calls /v1/sys/unseal
+# - Raft, 3 replicas: retry_join across the 3 pods through the headless openbao svc.
+# - Listener TLS: a cert-manager certificate (tls.yaml), DEDICATED selfSigned CA.
+#   Definitely not OpenBao's own PKI — it would have to be reachable to issue
+#   the certificate that makes it reachable.
 #
 # NB OpenBao 2.x:
-#  - `disable_mlock` retiré (obsolète, cf. pki-root/configmap.yaml).
+#  - `disable_mlock` removed (obsolete).
 #  - `api_addr`/`cluster_addr` via env BAO_API_ADDR/BAO_CLUSTER_ADDR (POD_IP).
 apiVersion: v1
 kind: ConfigMap
@@ -28,17 +28,17 @@ data:
       cluster_address = "[::]:8201"
       tls_cert_file = "/bao/tls/tls.crt"
       tls_key_file  = "/bao/tls/tls.key"
-      # ⚠️ `tls_client_ca_file` n'est PAS posé : on ne fait pas de mTLS ici. Les
+      # ⚠️ `tls_client_ca_file` is NOT set: we do no mTLS here. TLS only
       # clients s'authentifient par token ou via auth/kubernetes ; TLS ne sert
-      # qu'à chiffrer le transport et à authentifier le SERVEUR.
+      # encrypts the transport and authenticates the SERVER.
     }
 
     storage "raft" {
       path = "/bao/data"
 
-      # ⚠️ https:// ET leader_ca_cert_file : sans la CA, chaque réplica refuse
-      # le certificat de ses pairs et le cluster raft ne se forme jamais — les
-      # pods restent 0/1 sans erreur explicite côté Kubernetes.
+      # ⚠️ https:// AND leader_ca_cert_file: without the CA each replica rejects
+      # its peers' certificate and the raft cluster never forms — the pods stay
+      # 0/1 with no explicit error on the Kubernetes side.
       retry_join {
         leader_api_addr = "https://openbao-0.openbao.foundation-vault.svc.cluster.local:8200"
         leader_ca_cert_file = "/bao/tls/ca.crt"
@@ -54,10 +54,10 @@ data:
     }
 
     # Seal = Shamir (default, no seal block needed)
-    # Les 3 parts nécessaires sont fournies à chaud par l'unsealer HA
+    # The 3 required shares are supplied at runtime by the HA unsealer
   entrypoint.sh: |
     #!/bin/sh
-    # Wrapper: Shamir seal — pas de transit token. L'unsealer HA gère l'unseal.
+    # Wrapper: Shamir seal — no transit token. The HA unsealer handles unsealing.
     # api_addr/cluster_addr via DNS stable (POD FQDN).
     set -e
     POD_FQDN="${HOSTNAME}.openbao.${POD_NAMESPACE}.svc.cluster.local"
