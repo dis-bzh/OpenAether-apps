@@ -1,37 +1,37 @@
 # Cible de sauvegarde des volumes Longhorn.
 #
-# ── Pourquoi des Setting CR et pas les values du HelmRelease ──────────────────
-# `defaultSettings` du chart n'est lu qu'au PREMIER déploiement : Longhorn
-# initialise ses réglages depuis là, puis la vérité vit dans ces CR. Les poser
-# ici les rend idempotents et survivants aux upgrades du chart.
+# ── API : BackupTarget, PAS le réglage `backup-target` ───────────────────────
+# Longhorn ≥ 1.6 a sorti la destination de sauvegarde des `Setting` pour lui
+# donner une CRD dédiée, `backuptargets.longhorn.io` (plusieurs destinations
+# possibles). Le webhook de validation REJETTE désormais explicitement l'ancien
+# nom :
+#   admission webhook "validator.longhorn.io" denied the request:
+#   setting backup-target is not supported
+# Constaté en cloud réel le 2026-07-28 sur Longhorn v1.9.2 — la version
+# précédente de ce fichier utilisait l'API supprimée. Schéma vérifié contre la
+# CRD servie : spec = {backupTargetURL, credentialSecret, pollInterval}.
+#
+# On patche l'objet `default` que Longhorn crée lui-même au démarrage, plutôt
+# que d'en ajouter un : c'est celui que les volumes utilisent sans annotation.
 #
 # ── Pourquoi une Kustomization séparée ───────────────────────────────────────
 # Ce dossier est substitué par Flux (${BACKUP_TARGET_URL} vient du ConfigMap
-# `cluster-identity` posé au bootstrap). La substitution s'applique à TOUT le
-# rendu d'une Kustomization : fusionnée avec `apps/base/storage`, elle viderait
-# les variables shell de `install.yaml` (`$VOL_DIR`). D'où l'isolement — même
-# raison que les briques `backup-*-identity`.
+# `cluster-identity`). La substitution s'applique à TOUT le rendu d'une
+# Kustomization : fusionnée avec `apps/base/storage`, elle viderait les
+# variables shell de son `install.yaml` (`$VOL_DIR`).
 #
-# Défaut VIDE : un cluster qui ne publie pas l'URL (enfant CAPI, qui ne pioche
-# pas `storage` aujourd'hui) garde Longhorn sans sauvegarde de volumes —
-# exactement le comportement d'avant, pas une régression silencieuse.
+# Défaut VIDE : un cluster qui ne publie pas l'URL garde Longhorn sans
+# sauvegarde de volumes — comportement d'avant, pas de régression silencieuse.
 ---
 apiVersion: longhorn.io/v1beta2
-kind: Setting
+kind: BackupTarget
 metadata:
-  name: backup-target
+  name: default
   namespace: longhorn-system
   labels:
     openaether.io/managed: "true"
     openaether.io/component: storage
-value: "${BACKUP_TARGET_URL:=}"
----
-apiVersion: longhorn.io/v1beta2
-kind: Setting
-metadata:
-  name: backup-target-credential-secret
-  namespace: longhorn-system
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: storage
-value: longhorn-backup-credentials
+spec:
+  backupTargetURL: "${BACKUP_TARGET_URL:=}"
+  credentialSecret: longhorn-backup-credentials
+  pollInterval: 5m0s
