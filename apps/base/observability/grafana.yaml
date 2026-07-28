@@ -89,18 +89,32 @@ spec:
         use_pkce: true
         client_id: "$__env{GF_AUTH_GENERIC_OAUTH_CLIENT_ID}"
         client_secret: "$__env{GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET}"
-        scopes: "openid profile email"
+        # ⚠️ `urn:zitadel:iam:org:projects:roles` est INDISPENSABLE : sans lui,
+        # Zitadel n'émet AUCUN claim de rôles et tout le monde retombe sur
+        # `auto_assign_org_role` (Viewer). Mesuré en réel le 2026-07-28 —
+        # avec « openid profile » seul, aucun claim `*:roles` dans
+        # /oidc/v1/userinfo ; il n'apparaît qu'avec ce scope.
+        scopes: "openid profile email urn:zitadel:iam:org:projects:roles"
         auth_url: "https://zitadel.openaether.local/oauth/v2/authorize"
         token_url: "https://zitadel.openaether.local/oauth/v2/token"
         api_url: "https://zitadel.openaether.local/oidc/v1/userinfo"
-        # Mapping de rôle depuis le claim projet de Zitadel. Le nom du claim
-        # (`urn:zitadel:iam:org:project:roles`) est confirmé par la doc, mais sa
-        # STRUCTURE exacte varie selon la configuration de l'application — à
-        # confirmer sur un vrai token au premier déploiement :
-        #   curl -H "Authorization: Bearer <token>" https://zitadel.../oidc/v1/userinfo
-        # `role_attribute_strict: false` est délibéré : si le mapping ne matche
-        # pas, l'utilisateur retombe sur Viewer au lieu de se voir refuser
-        # l'accès. On préfère un droit trop faible à un verrouillage.
+        # Mapping de rôle depuis le claim projet de Zitadel.
+        #
+        # STRUCTURE VÉRIFIÉE en réel (2026-07-28, Zitadel v4.14) : la valeur est
+        # un OBJET dont les CLÉS sont les rôles — `keys()` est donc la bonne
+        # approche :
+        #   {"grafana-admin": {"<orgId>": "<domaine>"}}
+        #
+        # ⚠️ NOM du claim : deux formes existent. Zitadel émet la forme
+        # PRÉFIXÉE PAR L'ID DE PROJET (`…:project:<projectId>:roles`) quand les
+        # rôles sont demandés pour d'autres projets ; la forme non préfixée
+        # ci-dessous vaut pour le projet auquel appartient le client — le cas de
+        # Grafana. Si après une vraie connexion tous les comptes restent Viewer,
+        # inspecter le token et, au besoin, substituer l'ID de projet ici :
+        #   curl -H "Authorization: Bearer <token>" https://zitadel.…/oidc/v1/userinfo
+        #
+        # `role_attribute_strict: false` est délibéré : un mapping qui ne matche
+        # pas laisse l'utilisateur en Viewer au lieu de lui refuser l'accès.
         role_attribute_path: >-
           contains(keys("urn:zitadel:iam:org:project:roles"), 'grafana-admin') && 'Admin' || 'Viewer'
         role_attribute_strict: false
