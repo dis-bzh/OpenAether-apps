@@ -1,27 +1,27 @@
-# Cible de sauvegarde des volumes Longhorn.
+# Backup target for Longhorn volumes.
 #
-# ── API : BackupTarget, PAS le réglage `backup-target` ───────────────────────
-# Longhorn ≥ 1.6 a sorti la destination de sauvegarde des `Setting` pour lui
-# donner une CRD dédiée, `backuptargets.longhorn.io` (plusieurs destinations
-# possibles). Le webhook de validation REJETTE désormais explicitement l'ancien
+# ── API: BackupTarget, NOT the `backup-target` setting ───────────────────────
+# Longhorn ≥ 1.6 moved the backup destination out of `Setting` into a dedicated
+# CRD, `backuptargets.longhorn.io` (several destinations are possible). The
+# validating webhook now explicitly REJECTS the old
 # nom :
 #   admission webhook "validator.longhorn.io" denied the request:
 #   setting backup-target is not supported
-# Constaté en cloud réel le 2026-07-28 sur Longhorn v1.9.2 — la version
-# précédente de ce fichier utilisait l'API supprimée. Schéma vérifié contre la
+# Observed on real cloud on 2026-07-28 with Longhorn v1.9.2 — the previous
+# version of this file used the removed API. Schema verified against the
 # CRD servie : spec = {backupTargetURL, credentialSecret, pollInterval}.
 #
-# On patche l'objet `default` que Longhorn crée lui-même au démarrage, plutôt
-# que d'en ajouter un : c'est celui que les volumes utilisent sans annotation.
+# We patch the `default` object Longhorn creates itself at startup, rather than
+# adding one: it is the one volumes use without an annotation.
 #
-# ── Pourquoi une Kustomization séparée ───────────────────────────────────────
-# Ce dossier est substitué par Flux (${BACKUP_TARGET_URL} vient du ConfigMap
-# `cluster-identity`). La substitution s'applique à TOUT le rendu d'une
-# Kustomization : fusionnée avec `apps/base/storage`, elle viderait les
-# variables shell de son `install.yaml` (`$VOL_DIR`).
+# ── Why a separate Kustomization ─────────────────────────────────────────────
+# This directory is substituted by Flux (${BACKUP_TARGET_URL} comes from the
+# `cluster-identity` ConfigMap). Substitution applies to the WHOLE render of a
+# Kustomization: merged with `apps/base/storage`, it would blank the shell
+# variables of its `install.yaml` (`$VOL_DIR`).
 #
-# Défaut VIDE : un cluster qui ne publie pas l'URL garde Longhorn sans
-# sauvegarde de volumes — comportement d'avant, pas de régression silencieuse.
+# EMPTY default: a cluster that does not publish the URL keeps Longhorn without
+# volume backups — the previous behaviour, no silent regression.
 ---
 apiVersion: longhorn.io/v1beta2
 kind: BackupTarget
