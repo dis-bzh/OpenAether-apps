@@ -1,0 +1,95 @@
+# Inventaire clusterctl — indispensable pour `clusterctl move`.
+#
+# POURQUOI CE FICHIER EXISTE
+# cluster-api-operator et clusterctl tiennent DEUX inventaires différents :
+#   - l'opérateur déclare ses providers en operator.cluster.x-k8s.io
+#     (CoreProvider/BootstrapProvider/…, cf. core-providers.yaml) ;
+#   - clusterctl, lui, ne lit QUE clusterctl.cluster.x-k8s.io/Provider, qu'il
+#     crée normalement lui-même au `clusterctl init`.
+# Un cluster équipé par l'opérateur a donc la CRD mais AUCUNE entrée, et
+# `clusterctl move` le refuse comme cible :
+#   Error: failed to check providers in target cluster: [provider
+#   bootstrap-talos not found in the target cluster, …]
+# alors que les contrôleurs tournent parfaitement. Le `--dry-run` ne fait PAS
+# cette vérification : il passe, et l'échec ne surgit qu'au move réel
+# (constaté le 2026-07-28 en pivotant un management amorcé par CAPI).
+#
+# ⚠️ Les versions DOIVENT rester alignées sur core-providers.yaml et
+# infra-providers.yaml — clusterctl compare source et cible. Toute montée de
+# version d'un provider se répercute ici.
+#
+# Namespaces = ceux où l'opérateur installe réellement les composants
+# (capi-system pour tous, sauf Outscale qui a le sien).
+---
+apiVersion: clusterctl.cluster.x-k8s.io/v1alpha3
+kind: Provider
+metadata:
+  name: cluster-api
+  namespace: capi-system
+  labels:
+    cluster.x-k8s.io/provider: cluster-api
+    clusterctl.cluster.x-k8s.io: ""
+    clusterctl.cluster.x-k8s.io/core: inventory
+providerName: cluster-api
+type: CoreProvider
+version: v1.13.2
+---
+apiVersion: clusterctl.cluster.x-k8s.io/v1alpha3
+kind: Provider
+metadata:
+  name: bootstrap-talos
+  namespace: capi-system
+  labels:
+    cluster.x-k8s.io/provider: bootstrap-talos
+    clusterctl.cluster.x-k8s.io: ""
+providerName: talos
+type: BootstrapProvider
+version: v0.6.12
+---
+apiVersion: clusterctl.cluster.x-k8s.io/v1alpha3
+kind: Provider
+metadata:
+  name: control-plane-talos
+  namespace: capi-system
+  labels:
+    cluster.x-k8s.io/provider: control-plane-talos
+    clusterctl.cluster.x-k8s.io: ""
+providerName: talos
+type: ControlPlaneProvider
+version: v0.5.13
+---
+apiVersion: clusterctl.cluster.x-k8s.io/v1alpha3
+kind: Provider
+metadata:
+  name: infrastructure-scaleway
+  namespace: capi-system
+  labels:
+    cluster.x-k8s.io/provider: infrastructure-scaleway
+    clusterctl.cluster.x-k8s.io: ""
+providerName: scaleway
+type: InfrastructureProvider
+version: v0.2.1
+---
+apiVersion: clusterctl.cluster.x-k8s.io/v1alpha3
+kind: Provider
+metadata:
+  name: infrastructure-openstack
+  namespace: capi-system
+  labels:
+    cluster.x-k8s.io/provider: infrastructure-openstack
+    clusterctl.cluster.x-k8s.io: ""
+providerName: openstack
+type: InfrastructureProvider
+version: v0.14.4
+---
+apiVersion: clusterctl.cluster.x-k8s.io/v1alpha3
+kind: Provider
+metadata:
+  name: infrastructure-outscale
+  namespace: capi-outscale-system
+  labels:
+    cluster.x-k8s.io/provider: infrastructure-outscale
+    clusterctl.cluster.x-k8s.io: ""
+providerName: outscale
+type: InfrastructureProvider
+version: v1.5.0
