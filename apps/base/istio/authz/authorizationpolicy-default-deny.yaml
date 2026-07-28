@@ -1,29 +1,16 @@
-# OpenAether 0.5.0 — Istio AuthorizationPolicy Default Deny (Zero Trust)
-# ──────────────────────────────────────────────────────────────────────────
-# AUTHORISATION MODEL (DISJOINT scopes, no duplication):
+# Istio AuthorizationPolicy default-deny (zero trust).
 #
-#   • Namespaces AMBIENT (label istio.io/dataplane-mode: ambient) :
-#       L4 authorisation carried by Istio/ztunnel through SPIFFE identity.
-#       Under ambient, pod→pod traffic is encapsulated in HBONE :15008 → the
-#       per-application-port CiliumNetworkPolicies DO NOT SEE that traffic.
-#       So in-mesh authz = THESE policies (here), not Cilium.
+# Scopes are DISJOINT, never duplicated:
+#   * ambient namespaces → authz belongs HERE. Under ambient, pod→pod traffic is
+#     encapsulated in HBONE :15008, so per-port CiliumNetworkPolicies do not see it.
+#   * out-of-mesh namespaces → NO AuthorizationPolicy: ztunnel does not
+#     intercept, so one would be inert (security theatre). Security there is
+#     L3/L4 CiliumNetworkPolicy + OpenBao k8s-auth.
 #
-#   • Namespaces HORS-MESH (cert-manager, kyverno, capi*, longhorn-system,
-#       flux-system, foundation-databases, foundation-vault/pki) :
-#       NO AuthorizationPolicy here. ztunnel does not intercept → they would
-#       be inert (security theatre). Their security =
-#       L3/L4 CiliumNetworkPolicy (SA identity) + OpenBao k8s-auth.
-#
-#   • Mesh-wide STRICT mTLS: see peerauthentication-strict.yaml (unchanged).
-#
-# THE CORRECT ISTIO DEFAULT-DENY: an AuthorizationPolicy with `spec: {}`
-# (implicit ALLOW action, ZERO rules) = "allows nothing", OVERRIDABLE by
-# les ALLOW explicites (authorizationpolicy-explicit-allows.yaml).
-# ⚠️ DO NOT use `action: DENY` + `rules: [{}]`: an empty DENY matches EVERYTHING
-# and wins over the ALLOWs (Istio eval order: CUSTOM → DENY → ALLOW) → every
-# allow becomes dead.
-# ──────────────────────────────────────────────────────────────────────────
-
+# The correct default-deny is `spec: {}` — implicit ALLOW with zero rules, i.e.
+# "allows nothing", overridable by authorizationpolicy-explicit-allows.yaml.
+# ⚠️ NOT `action: DENY` + `rules: [{}]`: an empty DENY matches everything and
+# wins over the ALLOWs (eval order CUSTOM → DENY → ALLOW), killing them all.
 # Mesh root namespace — default deny-all on istio-system.
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
