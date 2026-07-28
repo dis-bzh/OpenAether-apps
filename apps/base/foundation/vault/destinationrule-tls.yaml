@@ -1,21 +1,21 @@
-# TLS entre la gateway et OpenBao (accès à l'UI).
+# TLS between the gateway and OpenBao (UI access).
 #
-# Depuis que le listener d'OpenBao est en TLS, la gateway Istio doit parler
-# HTTPS à son backend — l'HTTPRoute, elle, ne décrit que le routage L7 et
-# enverrait du clair, ce qui donne un « TLS handshake error: client sent an
-# HTTP request to an HTTPS server » côté OpenBao et une UI inaccessible.
+# Since OpenBao's listener runs TLS, the Istio gateway must speak HTTPS to its
+# backend — the HTTPRoute only describes L7 routing and would send cleartext,
+# which yields a "TLS handshake error: client sent an HTTP request to an HTTPS
+# server" on the OpenBao side and an unreachable UI.
 #
-# ── Pourquoi un DestinationRule et pas un BackendTLSPolicy ───────────────────
-# `BackendTLSPolicy` serait la façon Gateway-API-native, mais sa CRD appartient
-# au canal EXPÉRIMENTAL de Gateway API, que ce socle n'installe pas (vérifié :
-# la CRD est absente du cluster). Le DestinationRule est l'équivalent Istio et
-# fonctionne ici même si `foundation-vault` est HORS du mesh : il configure le
-# CLIENT (l'Envoy de la gateway), pas la destination.
+# ── Why a DestinationRule rather than a BackendTLSPolicy ─────────────────────
+# `BackendTLSPolicy` would be the Gateway-API-native way, but its CRD belongs to
+# Gateway API's EXPERIMENTAL channel, which this foundation does not install
+# (verified: the CRD is absent from the cluster). The DestinationRule is Istio's
+# equivalent and works here even though `foundation-vault` is OUTSIDE the mesh:
+# it configures the CLIENT (the gateway's Envoy), not the destination.
 #
-# ⚠️ NON VALIDÉ en local : Istio n'est pas déployé sur le cluster Docker de test.
-# Le reste de la chaîne TLS l'a été (raft, init, bootstrap, unsealer, ESO). À
-# vérifier au premier déploiement cloud — repli disponible en attendant :
-# `scripts/ops/local-admin-portforward.sh`, qui court-circuite la gateway.
+# ⚠️ NOT VALIDATED locally: Istio is not deployed on the Docker test cluster.
+# The rest of the TLS chain was (raft, init, bootstrap, unsealer, ESO). To be
+# checked on the first cloud deployment — a fallback is available meanwhile:
+# `scripts/ops/local-admin-portforward.sh`, which bypasses the gateway.
 apiVersion: networking.istio.io/v1
 kind: DestinationRule
 metadata:
@@ -28,21 +28,21 @@ spec:
   host: openbao-ui.foundation-vault.svc.cluster.local
   trafficPolicy:
     tls:
-      # SIMPLE et non MUTUAL : OpenBao n'exige pas de certificat client
-      # (`tls_client_ca_file` n'est pas posé) — l'authentification se fait par
-      # token ou auth/kubernetes, TLS n'authentifie que le serveur.
+      # SIMPLE rather than MUTUAL: OpenBao requires no client certificate
+      # (`tls_client_ca_file` is not set) — authentication happens through a
+      # token or auth/kubernetes; TLS only authenticates the server.
       mode: SIMPLE
       sni: openbao-ui.foundation-vault.svc.cluster.local
-      # Vérification du certificat serveur par l'Envoy de la gateway.
+      # Server certificate verification by the gateway's Envoy.
       #
-      # `credentialName` lit un Secret dans le namespace du CLIENT — donc
-      # `services-gateway`, pas foundation-vault. La CA y est matérialisée par
+      # `credentialName` reads a Secret in the CLIENT's namespace — so
+      # `services-gateway`, not foundation-vault. The CA is materialised there by
       # le Certificate `openbao-ca-bundle`
-      # (apps/base/services-gateway/openbao-ca-bundle.yaml), signé par la même
-      # ClusterIssuer que le listener : seul son `ca.crt` est consommé.
+      # (apps/base/services-gateway/openbao-ca-bundle.yaml), signed by the same
+      # ClusterIssuer as the listener: only its `ca.crt` is consumed.
       #
-      # Remplace un `insecureSkipVerify: true` qui chiffrait sans authentifier
-      # le serveur. `caCertificates` n'était pas utilisable : il attend un
-      # CHEMIN DE FICHIER dans l'Envoy, que Istio génère et où l'on ne monte
+      # Replaces an `insecureSkipVerify: true` that encrypted without
+      # authenticating the server. `caCertificates` was unusable: it expects a
+      # FILE PATH inside the Envoy, which Istio generates and where we mount
       # rien facilement.
       credentialName: openbao-ca-bundle

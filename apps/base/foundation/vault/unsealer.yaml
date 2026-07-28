@@ -2,24 +2,24 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Remplace l'ancien sidecar transit + le Secret openbao-seal-token.
 #
-# Choix d'archi : on RÉUTILISE l'image officielle openbao/openbao:2.5.4 (déjà
-# présente sur chaque nœud, tirée par le StatefulSet). PAS de binaire custom, pas
-# de registre, pas de digest à pinner, aucune dépendance nouvelle — aligné avec le
+# Architecture choice: we REUSE the official openbao/openbao:2.5.4 image
+# (already on every node, pulled by the StatefulSet). NO custom binary, no
+# registry, no digest to pin, no new dependency — aligned with the
 # principe « fondation agnostique ».
 #
-# Sécurité (réponse à la réticence « shell + root ») :
+# Security (answering the "shell + root" objection):
 #   - Tourne en uid 100 (openbao), runAsNonRoot, JAMAIS root.
 #   - readOnlyRootFilesystem, drop ALL caps, allowPrivilegeEscalation=false,
 #     seccomp RuntimeDefault.
-#   - automountServiceAccountToken: false → aucun token API monté (l'unsealer ne
-#     parle PAS à l'API k8s ; il lit les parts depuis un volume monté en RO).
-#   - Surface = busybox sh + binaire `bao` officiel. Pas de curl/wget : on utilise
+#   - automountServiceAccountToken: false → no API token mounted (the unsealer
+#     does NOT talk to the k8s API; it reads the shares from an RO volume).
+#   - Surface = busybox sh + the official `bao` binary. No curl/wget: we use
 #     `bao status` (code de sortie 2 = sealed) et `bao operator unseal`.
 #
-# RAM-only : les parts ne sont JAMAIS écrites sur disque par l'unsealer ; elles
-# viennent d'un tmpfs (Secret monté = tmpfs en mémoire côté kubelet) et restent
-# dans l'environnement du process. Cible long terme : injection humaine (stdin)
-# au lieu du fichier — voir UNSEAL_SOURCE dans le bloc TODO ci-dessous.
+# RAM-only: the shares are NEVER written to disk by the unsealer; they come from
+# a tmpfs (a mounted Secret is an in-memory tmpfs on the kubelet side) and stay
+# in the process environment. Long-term target: human injection (stdin) instead
+# of the file — see UNSEAL_SOURCE in the TODO block below.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -66,9 +66,9 @@ spec:
                   fieldPath: metadata.namespace
             - name: HOME
               value: "/tmp"
-          # Boucle de surveillance : pour chaque pod raft, si `bao status` indique
-          # sealed (exit 2), on rejoue les parts jusqu'au seuil. `bao` gère le HTTP
-          # (BAO_ADDR), donc pas de curl. Une fois unsealed (exit 0), no-op.
+          # Watch loop: for each raft pod, if `bao status` reports sealed
+          # (exit 2), we replay the shares up to the threshold. `bao` handles
+          # the HTTP (BAO_ADDR), so no curl. Once unsealed (exit 0), it is a no-op.
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -80,17 +80,17 @@ spec:
 
               if [ ! -s "$KEYS_FILE" ]; then
                 echo "[unsealer] FATAL: fichier de parts vide/absent ($KEYS_FILE)"
-                # On ne tue pas le pod en boucle rapide : attendre que le Secret
-                # soit peuplé (init-Job) puis réessayer.
+                # We do not kill the pod in a tight loop: wait for the Secret to
+                # be populated (init-Job) then retry.
               fi
 
               unseal_pod() {
                 addr="$1"
                 export BAO_ADDR="$addr"
-                # CA interne d'OpenBao : sans elle, `bao status` échoue en
+                # OpenBao's internal CA: without it `bao status` fails and the
                 # « x509: certificate signed by unknown authority » et l'unsealer
-                # considère à tort le pod comme injoignable — il ne le descelle
-                # jamais et le cluster reste bloqué.
+                # unsealer wrongly considers the pod unreachable — it never
+                # unseals it and the cluster stays stuck.
                 export BAO_CACERT="/bao/tls/ca.crt"
                 # exit 0 = unsealed, 2 = sealed, autre = injoignable/erreur
                 bao status >/dev/null 2>&1
@@ -103,7 +103,7 @@ spec:
                   return 1
                 fi
                 echo "[unsealer] $addr sealed → application des parts"
-                # Rejouer les parts ligne à ligne ; s'arrêter dès unsealed.
+                # Replay the shares line by line; stop as soon as it is unsealed.
                 while IFS= read -r key; do
                   [ -z "$key" ] && continue
                   bao operator unseal "$key" >/dev/null 2>&1 || true
@@ -156,10 +156,10 @@ spec:
         - name: unseal-keys
           secret:
             secretName: openbao-unseal-keys
-            # optional: false → si le Secret n'existe pas encore (avant que l'init-Job
-            # l'ait créé), le pod attend en ContainerCreating puis démarre AVEC le
-            # fichier présent (lecture propre au mount). Évite la fenêtre ~60s de
-            # propagation kubelet d'un secret optionnel apparu après coup.
+            # optional: false → if the Secret does not exist yet (before the
+            # init-Job created it), the pod waits in ContainerCreating then starts
+            # WITH the file present (a clean read at mount time). Avoids the ~60s
+            # kubelet propagation window of an optional secret appearing later.
             optional: false
             items:
               - key: unseal_keys
@@ -179,7 +179,7 @@ spec:
 # ─────────────────────────────────────────────────────────────────────────────
 # TODO (cible souveraine, Wave 3) : remplacer UNSEAL_KEYS_FILE (Secret en etcd)
 # par une injection humaine RAM-only. Deux options :
-#   - UNSEAL_SOURCE=stdin : `kubectl attach` sur le pod, l'opérateur colle les
-#     parts → gardées en mémoire du process, jamais sur disque ni en etcd.
+#   - UNSEAL_SOURCE=stdin: `kubectl attach` on the pod, the operator pastes the
+#     shares → kept in the process's memory, never on disk nor in etcd.
 #   - UNSEAL_SOURCE=bitwarden : fetch direct Bitwarden EU (token court) au boot.
-# Le Secret openbao-unseal-keys reste le chemin DEV (destroy/rebuild fréquents).
+# The openbao-unseal-keys Secret remains the DEV path (frequent destroy/rebuild).
