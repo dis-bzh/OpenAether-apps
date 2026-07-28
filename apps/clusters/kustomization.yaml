@@ -6,9 +6,9 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - helmrepository-cilium.yaml   # source de chart partagée par TOUS les enfants
-  # - edge-1.yaml   # Scaleway — désactivé pour le run de validation OVH du
-  #   2026-07-28 (périmètre : management OVH + edge-2). Le réactiver demande les
-  #   secrets Scaleway et consomme 2 VMs de plus.
+  - edge-1.yaml   # Scaleway — réactivé le 2026-07-28 pour re-valider un enfant
+  #   sur un SECOND provider (le management, lui, est chez OVH : c'est donc
+  #   aussi un test de kubeception cross-provider).
   - edge-2.yaml   # OVH
   # - edge-3.yaml   # Outscale — DÉSACTIVÉ : quota RAM du compte (40 Go) déjà
   #   dépassé par le management HA (44 Go). Cf. docs/backlog.md.
