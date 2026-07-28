@@ -62,6 +62,7 @@ descriptions:
   platform-cilium-lb-ipam: Pool LB-IPAM Cilium (Service LoadBalancer)
   platform-network-policies: Default-deny + allow-dns/kube-api (CiliumNetworkPolicy)
   platform-metrics-server: metrics-server (kubectl top, HPA)
+  vault-ca: CA interne du listener OpenBao (ns cert-manager)
   foundation-vault: OpenBao HA raft 3 (seal Shamir 5/3, unsealer, PKI intermediate)
   external-secrets: External Secrets Operator
   external-secrets-stores: ClusterSecretStore openbao partagé

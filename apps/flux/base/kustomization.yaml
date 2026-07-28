@@ -11,6 +11,7 @@ resources:
   - 12-external-secrets.yaml
   - 13-cert-manager.yaml
   - 13b-cert-manager-issuers.yaml
+  - 13c-vault-ca.yaml
   - 14-istio.yaml
   - 14b-istio-authz.yaml
   - 14c-services-gateway.yaml
