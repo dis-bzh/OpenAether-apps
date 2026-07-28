@@ -38,6 +38,16 @@ traduire une chaîne, vérifier qu'aucun code ne la compare : `pick.py`
 identifiait ses profils générés par l'en-tête français, et la traduire a rendu
 `--check` aveugle en silence.
 
+## Concision et refacto
+
+Le dépôt ne doit pas grossir en lignes plus vite qu'en fonctionnalités.
+
+- **Commentaire = le pourquoi, en 1 à 3 lignes** ; le détail va dans le runbook
+  ou le backlog, référencé par chemin.
+- **Pas de recopie entre fichiers** : pointer vers celui qui fait autorité.
+- **Refactorer au fil de l'eau** — supprimer le code mort (cf. la brique `ccm`,
+  jamais déployée et qui ne construisait plus), fusionner les redondances.
+
 ## Backlog
 
 Les améliorations identifiées (SSO Zitadel↔Grafana, tokens OpenBao nominatifs,
