@@ -1,15 +1,15 @@
 # OpenAether 0.5.0 Sprint C — CNPG Cluster PostgreSQL pour Grafana
 # ──────────────────────────────────────────────────────────────────
-# Grafana HA (2 répliques) requiert un backend DB partagé pour la session,
-# les dashboards, les utilisateurs, les alertes.
+# Grafana HA (2 replicas) requires a shared DB backend for the session,
+# dashboards, users and alerts.
 # PostgreSQL CNPG: 2 instances (streaming replication) sur stockage local-path.
-# CNPG gère TOUTE la HA (réplication WAL transaction-aware + failover). Empiler
-# Longhorn (réplication bloc, aveugle aux transactions) = anti-pattern: write
+# CNPG handles ALL the HA (transaction-aware WAL replication + failover).
+# Stacking Longhorn (block replication, blind to transactions) = anti-pattern:
 # amplification, double failover concurrent (cause des volumes "faulted" 06/2026),
-# et x1-rwo n'apporte aucune HA stockage de toute façon. Voir openbao-workload qui
-# applique déjà ce principe (raft réplique → stockage local suffit).
+# and x1-rwo brings no storage HA anyway. See openbao-workload, which already
+# applies this principle (raft replicates → local storage is enough).
 #
-# Namespace: foundation-databases (même cluster CNPG existant).
+# Namespace: foundation-databases (the same existing CNPG cluster).
 # ExternalSecret: grafana-db-credentials (externalsecrets-grafana.yaml)
 # → OpenBao secret/grafana/db.password
 ---
@@ -27,13 +27,13 @@ spec:
   imageName: ghcr.io/cloudnative-pg/postgresql:16.3
   primaryUpdateStrategy: unsupervised
   storage:
-    # local-path-retain: stockage node-local, montage immédiat (pas de CSI
-    # attach/detach), Retain (données conservées si le PVC est supprimé).
-    # La HA vient des 2 instances CNPG, pas du stockage.
+    # local-path-retain: node-local storage, immediate mount (no CSI
+    # attach/detach), Retain (data kept if the PVC is deleted).
+    # HA comes from the 2 CNPG instances, not from the storage.
     storageClass: local-path-retain
     size: 5Gi
   # Connexion Grafana: user grafana, base grafana.
-  # Le superuser postgres est géré par CNPG (secret auto-généré).
+  # The postgres superuser is managed by CNPG (auto-generated secret).
   bootstrap:
     initdb:
       database: grafana
@@ -48,24 +48,24 @@ spec:
       cpu: 500m
       memory: 512Mi
   affinity:
-    # CNPG AffinityConfiguration (pas le type standard K8s)
+    # CNPG AffinityConfiguration (not the standard K8s type)
     podAntiAffinityType: preferred
     topologyKey: kubernetes.io/hostname
   monitoring:
     enablePodMonitor: false
 
   # ── PITR (Point-In-Time Recovery) ───────────────────────────────────────────
-  # Avant : le seul filet était le `pg_dump` quotidien de la brique backup, soit
-  # un RPO de 24 h. barmanObjectStore archive les WAL en continu → RPO de
-  # quelques minutes, et restauration à un instant précis.
+  # Before: the only net was the backup brick's daily `pg_dump`, i.e. a 24 h
+  # RPO. barmanObjectStore archives WAL continuously → an RPO of a few minutes,
+  # and restoration to a precise point in time.
   #
-  # `${BACKUP_S3_*}` vient du ConfigMap `cluster-identity` posé au bootstrap
-  # (substitution portée par la Kustomization `cnpg`). Si le cluster ne les
-  # publie pas, la destination est vide et le backup reste inactif — pas de
-  # régression silencieuse.
+  # `${BACKUP_S3_*}` comes from the `cluster-identity` ConfigMap laid down at
+  # bootstrap (substitution carried by the `cnpg` Kustomization). If the cluster
+  # does not publish them, the destination is empty and the backup stays
+  # inactive — no silent regression.
   #
-  # Le chemin inclut le nom de la base : les deux clusters partagent le bucket
-  # sans se marcher dessus, comme les dépôts restic.
+  # The path includes the database name: both clusters share the bucket without
+  # stepping on each other, like the restic repositories.
   backup:
     retentionPolicy: "30d"
     barmanObjectStore:
@@ -79,7 +79,7 @@ spec:
           name: cnpg-backup-s3
           key: ACCESS_SECRET_KEY
       wal:
-        # Les WAL sont volumineux et le stockage S3 se paie au volume.
+        # WAL are bulky and S3 storage is billed by volume.
         compression: gzip
       data:
         compression: gzip

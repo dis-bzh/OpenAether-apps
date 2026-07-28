@@ -1,30 +1,30 @@
 # OpenAether 0.5.0 — Istio AuthorizationPolicy Default Deny (Zero Trust)
 # ──────────────────────────────────────────────────────────────────────────
-# MODÈLE D'AUTORISATION (périmètres DISJOINTS, pas de duplication) :
+# AUTHORISATION MODEL (DISJOINT scopes, no duplication):
 #
 #   • Namespaces AMBIENT (label istio.io/dataplane-mode: ambient) :
-#       autorisation L4 portée par Istio/ztunnel via identité SPIFFE.
-#       En ambient le trafic pod→pod est encapsulé en HBONE :15008 → les
-#       CiliumNetworkPolicy par port applicatif NE VOIENT PAS ce trafic.
-#       Donc l'authz in-mesh = CES policies (ici), pas Cilium.
+#       L4 authorisation carried by Istio/ztunnel through SPIFFE identity.
+#       Under ambient, pod→pod traffic is encapsulated in HBONE :15008 → the
+#       per-application-port CiliumNetworkPolicies DO NOT SEE that traffic.
+#       So in-mesh authz = THESE policies (here), not Cilium.
 #
 #   • Namespaces HORS-MESH (cert-manager, kyverno, capi*, longhorn-system,
 #       flux-system, foundation-databases, foundation-vault/pki) :
-#       AUCUNE AuthorizationPolicy ici. ztunnel n'intercepte pas → elles
-#       seraient inertes (théâtre de sécurité). Leur sécurité =
-#       CiliumNetworkPolicy L3/L4 (identité SA) + OpenBao k8s-auth.
+#       NO AuthorizationPolicy here. ztunnel does not intercept → they would
+#       be inert (security theatre). Their security =
+#       L3/L4 CiliumNetworkPolicy (SA identity) + OpenBao k8s-auth.
 #
-#   • mTLS STRICT mesh-wide : voir peerauthentication-strict.yaml (inchangé).
+#   • Mesh-wide STRICT mTLS: see peerauthentication-strict.yaml (unchanged).
 #
-# DEFAULT-DENY CORRECT EN ISTIO : une AuthorizationPolicy avec `spec: {}`
-# (action ALLOW implicite, ZÉRO règle) = "n'autorise rien", SURCHARGEABLE par
+# THE CORRECT ISTIO DEFAULT-DENY: an AuthorizationPolicy with `spec: {}`
+# (implicit ALLOW action, ZERO rules) = "allows nothing", OVERRIDABLE by
 # les ALLOW explicites (authorizationpolicy-explicit-allows.yaml).
-# ⚠️ NE PAS utiliser `action: DENY` + `rules: [{}]` : un DENY vide matche TOUT
-# et l'emporte sur les ALLOW (ordre d'éval Istio : CUSTOM → DENY → ALLOW) →
-# tous les allows deviennent morts.
+# ⚠️ DO NOT use `action: DENY` + `rules: [{}]`: an empty DENY matches EVERYTHING
+# and wins over the ALLOWs (Istio eval order: CUSTOM → DENY → ALLOW) → every
+# allow becomes dead.
 # ──────────────────────────────────────────────────────────────────────────
 
-# Mesh root namespace — deny-all par défaut sur istio-system.
+# Mesh root namespace — default deny-all on istio-system.
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -44,14 +44,14 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "istio"
 spec: {}
-# NOTE: services-observability n'est PLUS ambient (probes kubelet droppées par
+# NOTE: services-observability is NO LONGER ambient (kubelet probes dropped by
 # HBONE → CrashLoop ; cf. namespaces.yaml). ztunnel n'y intercepte plus rien →
-# une AuthorizationPolicy y serait inerte ("théâtre de sécurité"). Sa sécurité
+# an AuthorizationPolicy would be inert there ("security theatre"). Its security
 # = CiliumNetworkPolicy L3/L4 (apps/base/observability/networkpolicy.yaml).
 ---
 # foundation-networking : ambient (futurs Gateway-API controllers). Sans policy
-# = allow-all → trou réel. Allow intra-ns à compléter quand des workloads y
-# seront déployés (aujourd'hui le namespace est vide).
+# = allow-all → a real hole. The intra-ns allow is to be completed once
+# workloads are deployed there (the namespace is empty today).
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -62,12 +62,12 @@ metadata:
     openaether.io/component: "platform"
 spec: {}
 ---
-# services-gateway : le ns n'est PAS ambient, MAIS le pod Gateway-API est un
-# proxy Envoy dédié (injecté par le déploiement Gateway) qui enforce lui-même
-# l'AuthZ — différent de ztunnel. On garde donc le deny-all ; il est surchargé
+# services-gateway: the ns is NOT ambient, BUT the Gateway-API pod is a
+# dedicated Envoy proxy (injected by the Gateway deployment) that enforces AuthZ
+# itself — different from ztunnel. So we keep the deny-all; it is overridden in
 # par `allow-gateway-ingress` (targetRefs Gateway, action ALLOW ouverte) dans
-# authorizationpolicy-explicit-allows.yaml. ⚠️ NE PAS gater l'entrée sur un
-# `source.principals` mTLS : l'ingress externe n'a pas d'identité SPIFFE → 403.
+# authorizationpolicy-explicit-allows.yaml. ⚠️ DO NOT gate the entry point on an
+# mTLS `source.principals`: external ingress has no SPIFFE identity → 403.
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
