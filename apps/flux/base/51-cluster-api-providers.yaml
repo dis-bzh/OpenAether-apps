@@ -1,5 +1,5 @@
 # Groupe 51 — CAPI Providers (CoreProvider, CABPT, CACPPT, CAPS, CAPO, CAPOSC)
-# Dépend de cluster-api-operator : les CRDs Provider n'existent qu'après l'operator.
+# Depends on cluster-api-operator: the Provider CRDs only exist after the operator.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

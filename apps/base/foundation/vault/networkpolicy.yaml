@@ -8,7 +8,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao
 spec:
-  description: "OpenBao (HA 3 répl, seal Shamir): ingress depuis Cilium
+  description: "OpenBao (HA, 3 replicas, Shamir seal): ingress from Cilium
     Gateway (sprint 3), external-secrets, csi-driver, cert-manager, istiod, unsealer
     HA, init-Job, peers raft, bootstrap-roles. Egress: kube-dns, k8s API, peers raft."
   endpointSelector:

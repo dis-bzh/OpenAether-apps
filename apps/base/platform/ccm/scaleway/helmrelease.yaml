@@ -20,8 +20,8 @@ spec:
       interval: 1h
   dependsOn:
     - name: cilium
-  # Filet d'idempotence : sans remediation, une install Helm qui échoue une
-  # fois reste bloquée définitivement (Flux ne la retente jamais).
+  # Idempotence net: without remediation, a Helm install that fails once stays
+  # blocked forever (Flux never retries it).
   install:
     remediation:
       retries: 3

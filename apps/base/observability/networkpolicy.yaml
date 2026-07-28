@@ -71,9 +71,9 @@ spec:
         - ports:
             - port: "8080"   # kube-state-metrics, nombreux operateurs
               protocol: TCP
-            - port: "8200"   # OpenBao métriques
+            - port: "8200"   # OpenBao metrics
               protocol: TCP
-            - port: "8428"   # VMSingle (si présent)
+            - port: "8428"   # VMSingle (if present)
               protocol: TCP
             - port: "8429"   # vmagent self-metrics (scrape des pairs)
               protocol: TCP
@@ -343,7 +343,7 @@ spec:
     # Locally: this rule is never reached (the internal MinIO :9000 is enough).
     - toFQDNs:
         - matchName: s3.fr-par.scw.cloud     # Scaleway Object Storage
-        - matchName: s3.eu-west-par.io.cloud.ovh.net  # OVH (aligné tfvars eu-west-par)
+        - matchName: s3.eu-west-par.io.cloud.ovh.net  # OVH (aligned with the eu-west-par tfvars)
         - matchName: oos.eu-west-2.outscale.com   # Outscale OSU
       toPorts:
         - ports:

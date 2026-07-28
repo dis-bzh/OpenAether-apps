@@ -1,5 +1,5 @@
-# Local-only: MinIO S3 compatible pour test local (pas de HelmRelease → dans minio/ séparé).
-# Actif en local car S3 est nécessaire pour tester Loki/Grafana config sans Longhorn.
+# Local-only: S3-compatible MinIO for local testing (no HelmRelease → in a separate minio/).
+# Active locally because S3 is needed to test the Loki/Grafana config without Longhorn.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

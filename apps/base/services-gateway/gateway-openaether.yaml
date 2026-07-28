@@ -13,7 +13,7 @@ spec:
     - name: http
       port: 80
       protocol: HTTP
-      # Par défaut, n'accepte aucune route HTTP en clair — redirect géré par une HTTPRoute
+      # By default accepts no cleartext HTTP route — the redirect is handled by an HTTPRoute
       allowedRoutes:
         namespaces:
           from: Same

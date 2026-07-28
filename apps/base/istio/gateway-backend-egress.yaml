@@ -16,7 +16,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "istio"
 spec:
-  description: "Egress du Gateway (services-gateway) vers tout pod labellisé networking.openaether.io/gateway-backend, port 8080."
+  description: "Gateway (services-gateway) egress to any pod labelled networking.openaether.io/gateway-backend, port 8080."
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: services-gateway

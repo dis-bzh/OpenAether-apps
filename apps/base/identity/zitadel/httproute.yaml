@@ -1,6 +1,6 @@
 # OpenAether — HTTPRoute Zitadel → openaether-gateway
 # parentRef: openaether-gateway (Istio, ns services-gateway, from: All).
-# Zitadel parle gRPC/HTTP2 en clair (h2c) ; TLS terminé à la Gateway.
+# Zitadel speaks cleartext gRPC/HTTP2 (h2c); TLS is terminated at the Gateway.
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

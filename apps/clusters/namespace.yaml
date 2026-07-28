@@ -1,4 +1,4 @@
-# Namespace des définitions de clusters clients (CRs CAPI) côté management.
+# Namespace holding the client cluster definitions (CAPI CRs) on the management side.
 ---
 apiVersion: v1
 kind: Namespace
@@ -9,8 +9,8 @@ metadata:
     openaether.io/component: capi-clusters
     pod-security.kubernetes.io/enforce: restricted
 ---
-# Marqueur inerte : garantit un build kustomize non-vide tant qu'aucun
-# cluster client n'est défini.
+# An inert marker: guarantees a non-empty kustomize build while no client
+# cluster is defined.
 apiVersion: v1
 kind: ConfigMap
 metadata:

@@ -1,6 +1,6 @@
 # OpenAether 0.5.0 — Restrict Privileged Containers
 # Interdit les pods privileged, hostNetwork, hostPID, hostIPC.
-# Exclusions: namespaces où des workloads légitimes en ont besoin
+# Exclusions: namespaces where legitimate workloads need it
 # (longhorn, istio-cni, capi, local-path, node-exporter).
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy

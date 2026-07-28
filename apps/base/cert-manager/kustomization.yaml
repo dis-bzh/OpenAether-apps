@@ -3,7 +3,7 @@ kind: Kustomization
 
 # OpenAether 0.5.0 Sprint B — cert-manager v1.15+
 # ClusterIssuers dans apps/base/cert-manager-issuers/ (Kustomization Flux 13b)
-# pour éviter le chicken-and-egg : dry-run échoue si CRDs cert-manager.io/v1 absentes.
+# to avoid the chicken-and-egg: the dry-run fails if the cert-manager.io/v1 CRDs are absent.
 resources:
   - namespace.yaml
   - helmrelease.yaml

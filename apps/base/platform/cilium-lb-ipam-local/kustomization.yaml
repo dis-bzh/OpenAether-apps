@@ -2,13 +2,13 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # Local overlay — cilium-lb-ipam sur le bridge Docker (Talos-in-Docker).
-# Le pool base (172.16.12.240-254) cible le VPC privé Scaleway, injoignable
-# en local : les nœuds vivent sur le bridge Docker openaether-local-dev-net
-# (10.5.0.0/24, cf. modules/talos). On patch juste le range du pool ; le
+# The base pool (172.16.12.240-254) targets the Scaleway private VPC, which is
+# unreachable locally: the nodes live on the openaether-local-dev-net Docker
+# bridge (10.5.0.0/24, see modules/talos). We only patch the pool's range;
 # CiliumL2AnnouncementPolicy (ARP, sans nodeSelector) reste valide tel quel.
 #
-# Sibling de cilium-lb-ipam/ (pas nested dessous) : un overlay sous le
-# dossier qu'il référence via `../` crée un cycle kustomize.
+# A sibling of cilium-lb-ipam/ (not nested under it): an overlay placed under
+# the directory it references through `../` creates a kustomize cycle.
 resources:
   - ../cilium-lb-ipam
 

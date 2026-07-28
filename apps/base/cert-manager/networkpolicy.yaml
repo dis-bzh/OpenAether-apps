@@ -15,8 +15,8 @@ spec:
       app.kubernetes.io/instance: cert-manager
   ingress:
     # kube-apiserver → webhook (ValidatingWebhookConfiguration)
-    # remote-node: sur Talos, le static pod kube-apiserver est identifié
-    # comme nœud (node identity) par Cilium, pas comme kube-apiserver entity.
+    # remote-node: on Talos the static kube-apiserver pod is identified by Cilium
+    # as a node (node identity), not as the kube-apiserver entity.
     - fromEntities:
         - kube-apiserver
         - remote-node
@@ -72,7 +72,7 @@ spec:
             - port: "10250"
               protocol: TCP
     # OpenBao PKI (signer pki/sign/openaether) — un seul OpenBao (seal Shamir).
-    # L'ancien foundation-pki-root (root OpenBao) a été supprimé.
+    # The former foundation-pki-root (OpenBao root) has been removed.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault

@@ -1,8 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# CAPI Operator — installe l'operator qui crée les CRDs Provider.
-# Doit être déployé AVANT apps/base/cluster-api-providers (via dependsOn Flux).
+# CAPI Operator — installs the operator that creates the Provider CRDs.
+# Must be deployed BEFORE apps/base/cluster-api-providers (through a Flux dependsOn).
 resources:
   - namespace.yaml
   - networkpolicy.yaml

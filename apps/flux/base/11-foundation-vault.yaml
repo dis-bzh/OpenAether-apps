@@ -29,5 +29,5 @@ spec:
     - name: vault-ca   # CA du certificat serveur (ns cert-manager)
     - name: platform-gateway-api
     - name: platform-local-path-provisioner  # PVC raft storageClassName local-path-retain
-    - name: platform-priority-classes        # priorityClassName platform-critical (pod rejeté à l'admission si absente)
+    - name: platform-priority-classes        # priorityClassName platform-critical (pod rejected at admission if absent)
     # - name: foundation-pki-root  # REMOVED: no more OpenBao root, the HA unsealer handles Shamir

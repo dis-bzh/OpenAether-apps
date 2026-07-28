@@ -37,11 +37,11 @@ spec:
             severity: critical
             component: backup
           annotations:
-            summary: "Sauvegarde en échec : {{ $labels.namespace }}/{{ $labels.job_name }}"
+            summary: "Backup failed: {{ $labels.namespace }}/{{ $labels.job_name }}"
             description: >-
-              Le Job a échoué et n'a pas été repris. Causes fréquentes : dépôt
+              The Job failed and was not retried. Common causes: repository
               restic illisible (RESTIC_PASSWORD d'un autre cluster), bucket
-              absent, creds S3 périmés. Logs : kubectl logs -n
+              missing, stale S3 credentials. Logs: kubectl logs -n
               {{ $labels.namespace }} job/{{ $labels.job_name }}
 
         # 2) The CronJob NO LONGER fires. The most dangerous case: there is no
@@ -57,11 +57,11 @@ spec:
             severity: critical
             component: backup
           annotations:
-            summary: "Sauvegarde non déclenchée depuis > 26 h : {{ $labels.namespace }}/{{ $labels.cronjob }}"
+            summary: "No backup triggered for > 26 h: {{ $labels.namespace }}/{{ $labels.cronjob }}"
             description: >-
-              Aucun Job créé depuis plus de 26 h pour un schedule quotidien.
-              Vérifier que le CronJob n'est pas suspendu et que l'ExternalSecret
-              backup-restic-env est Ready (destinations seedées dans OpenBao).
+              No Job created for more than 26 h on a daily schedule.
+              Check that the CronJob is not suspended and that the
+              backup-restic-env ExternalSecret is Ready (destinations seeded in OpenBao).
 
         # 3) The CronJob is suspended — often deliberate during an operation, but
         #    people forget to re-enable it. A warning, not a critical.

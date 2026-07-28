@@ -117,7 +117,7 @@ spec:
                   # enough to fail, but not to explain why.
                   if [ -z "${CLUSTER_NAME:-}" ]; then
                     echo "ERREUR: CLUSTER_NAME vide — le ConfigMap cluster-identity"
-                    echo "        du namespace est absent ou non substitué"
+                    echo "        of the namespace is missing or unsubstituted"
                     echo "        (cf. apps/flux/base/22a-backup-identity.yaml)."
                     exit 1
                   fi
@@ -125,7 +125,7 @@ spec:
                   push() {
                     ep="$1"; bucket="$2"; label="$3"
                     export RESTIC_REPOSITORY="s3:${ep}/${bucket}/${CLUSTER_NAME}/openbao"
-                    echo "── dépôt ${label}: ${ep}/${bucket}/${CLUSTER_NAME}/openbao"
+                    echo "── repository ${label}: ${ep}/${bucket}/${CLUSTER_NAME}/openbao"
                     # ⚠️ restic does NOT create the bucket (it MUST pre-exist —
                     # ensure-buckets on the infra side, the minio chart locally)
                     # and retries a NoSuchBucket for ~15 min silently → bounded probe.
@@ -140,11 +140,11 @@ spec:
                       init_err="$(restic init 2>&1)" || {
                         case "$init_err" in
                           *"already initialized"*)
-                            echo "ERREUR: le dépôt ${label} existe déjà mais n'est PAS lisible avec ce RESTIC_PASSWORD."
-                            echo "  → il appartient à un autre cluster. Soit purger s3://${bucket}/<préfixe>,"
-                            echo "    soit donner à ce cluster un bucket (ou un chemin) qui lui est propre." ;;
+                            echo "ERROR: repository ${label} already exists but is NOT readable with this RESTIC_PASSWORD."
+                            echo "  → it belongs to another cluster. Either purge s3://${bucket}/<prefix>,"
+                            echo "    or give this cluster a bucket (or path) of its own." ;;
                           *)
-                            echo "ERREUR: init du dépôt ${label} impossible — le bucket ${bucket} existe-t-il ?"
+                            echo "ERROR: cannot init repository ${label} — does bucket ${bucket} exist?"
                             echo "  $init_err" ;;
                         esac
                         exit 1
@@ -162,7 +162,7 @@ spec:
                   AWS_ACCESS_KEY_ID="$REPLICA_ACCESS_KEY" \
                     AWS_SECRET_ACCESS_KEY="$REPLICA_SECRET_KEY" \
                     push "$REPLICA_ENDPOINT" "$REPLICA_BUCKET" replica
-                  echo "✅ snapshot OpenBao poussé vers 2 destinations"
+                  echo "✅ OpenBao snapshot pushed to both destinations"
               envFrom:
                 - secretRef:
                     name: backup-restic-env

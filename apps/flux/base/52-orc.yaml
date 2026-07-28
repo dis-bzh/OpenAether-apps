@@ -1,7 +1,7 @@
-# Groupe 52 — ORC (openstack-resource-controller), dépendance de CAPO.
-# Sans ces CRDs, capi-openstack-controller ne démarre pas ses watchers et aucun
-# OpenStackCluster ne provisionne (constaté en cloud réel sur edge-2).
-# Compagnon de la pioche : tiré automatiquement avec cluster-api-providers.
+# Group 52 — ORC (openstack-resource-controller), a CAPO dependency.
+# Without these CRDs, capi-openstack-controller does not start its watchers and
+# no OpenStackCluster provisions (observed on real cloud with edge-2).
+# A pick companion: pulled in automatically with cluster-api-providers.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

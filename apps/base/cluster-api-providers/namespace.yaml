@@ -1,7 +1,7 @@
-# Namespace dédié au provider Outscale (CAPOSC) — isolation des collisions
-# de noms upstream avec CAPS/CAPO (Secret webhook-server-cert + lease
-# controller-leader-election-capo). Voir l'en-tête d'infra-providers.yaml.
-# PSA aligné sur capi-system.
+# A namespace dedicated to the Outscale provider (CAPOSC) — isolating the
+# upstream name collisions with CAPS/CAPO (the webhook-server-cert Secret and
+# the controller-leader-election-capo lease). See infra-providers.yaml's header.
+# PSA aligned with capi-system.
 apiVersion: v1
 kind: Namespace
 metadata:

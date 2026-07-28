@@ -2,9 +2,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # OpenAether 0.5.0 — fix P0 sync:
-# ESO install.yaml vendoré ne crée aucun Namespace, le kustomize
-# réécrit namespace sur tous les objets vers `foundation-pki-management`
-# (sémantique: PKI/secret material; on garde un ns dédié pour ESO)
+# The vendored ESO install.yaml creates no Namespace; the kustomize rewrites
+# the namespace of every object to `foundation-pki-management`
+# (semantics: PKI/secret material; we keep a dedicated ns for ESO)
 namespace: foundation-pki-management
 
 resources:

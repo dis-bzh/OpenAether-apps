@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# OpenAether 0.5.0 — lib de helpers pour les tests sprint 0
-# À sourcer dans les scripts de test: source $(dirname $0)/lib/test-helpers.sh
+# OpenAether 0.5.0 — helper library for the sprint 0 tests
+# To be sourced in the test scripts: source $(dirname $0)/lib/test-helpers.sh
 
 # Couleurs
 export RED='\033[0;31m'

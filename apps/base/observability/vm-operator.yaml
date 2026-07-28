@@ -58,7 +58,7 @@ spec:
       limits:
         cpu: 500m
         memory: 512Mi
-    # Plus de timeout sur les probes pour laisser le temps au reconcile
+    # More probe timeout to give the reconcile time to finish
     # initial (VMCluster 6 StatefulSets).
     probePath: /health
     livenessProbe:
@@ -76,6 +76,6 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: victoria-metrics-operator
               topologyKey: kubernetes.io/hostname
-    # Pas de webhook en mode simple (évite la complexité cert-manager pour l'operator lui-même).
+    # No webhook in simple mode (avoids cert-manager complexity for the operator itself).
     admissionWebhooks:
       enabled: false

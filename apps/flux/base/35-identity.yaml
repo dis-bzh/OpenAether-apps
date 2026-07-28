@@ -1,11 +1,11 @@
-# Groupe 35 — Identité (Zitadel)
+# Group 35 — identity (Zitadel)
 # ──────────────────────────────────────────────────────────────────────────
 # IAM souverain. Backend Postgres = CNPG zitadel-db (groupe 20). Secrets
-# (masterkey + password DB) via ESO/OpenBao (groupe 12). Exposé via la Gateway
-# Istio (groupe 14c) ; trafic in-mesh sécurisé par Istio (ambient).
-# Isolation : un crash Zitadel n'impacte ni la fondation ni l'observability.
+# (masterkey + DB password) through ESO/OpenBao (group 12). Exposed through the
+# Istio Gateway (group 14c); in-mesh traffic secured by Istio (ambient).
+# Isolation: a Zitadel crash affects neither the foundation nor observability.
 #
-# Zitadel ne livre PAS de CRD → pas besoin du split chicken-egg opérateur/CR.
+# Zitadel ships NO CRD → no need for the operator/CR chicken-and-egg split.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
