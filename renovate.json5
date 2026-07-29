@@ -1,0 +1,155 @@
+// Renovate (GitHub App). Every bump is a PR, never auto-merged — Flux only
+// reconciles what a human has already reviewed and merged to main.
+//
+// Native `flux` manager covers every HelmRelease/HelmRepository pair (Longhorn,
+// cert-manager, Istio, Zitadel, VictoriaMetrics, Grafana/Loki/Alloy, CAPI
+// operator...). Everything vendored as a full upstream manifest dump (kyverno,
+// CNPG operator, external-secrets, ORC, gateway-api CRDs, local-path-provisioner,
+// Flux's own gotk-components.yaml) is NOT auto-editable: bumping just the
+// version string would leave the CRDs/RBAC/Deployment specs on the old release,
+// which is worse than not tracking it at all (see kustomization.yaml's own
+// "To upgrade:" notes). Those get a tracking-only customManager instead — the
+// PR bumps a comment, a human re-vendors the file per its own instructions.
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+  automerge: false,
+  platformAutomerge: false,
+  schedule: ["before 6am on monday"],
+  timezone: "Europe/Paris",
+  labels: ["dependencies"],
+  flux: { enabled: true },
+
+  // Full upstream dumps: the version lives in a filename or a header comment,
+  // never a real editable field. Left to the customManagers below instead of
+  // the native `kubernetes` manager, which would otherwise bump individual
+  // `image:` lines inside them out of step with the rest of the file.
+  ignorePaths: [
+    "apps/base/kyverno/kyverno-1.12.1.yaml",
+    "apps/base/cnpg/cnpg-1.23.1.yaml",
+    "apps/base/external-secrets/install.yaml",
+    "apps/base/orc/install.yaml",
+    "apps/base/platform/gateway-api/standard-install.yaml",
+    "apps/base/platform/local-path-provisioner/local-path-storage.yaml",
+    "apps/base/cluster-api-clusters/flux-gotk/gotk-components.yaml",
+  ],
+
+  packageRules: [
+    {
+      description: "CAPI providers (operator.cluster.x-k8s.io CRs) — independent controllers, independent release cadence, kept as separate PRs.",
+      matchPackageNames: [
+        "kubernetes-sigs/cluster-api",
+        "siderolabs/cluster-api-bootstrap-provider-talos",
+        "siderolabs/cluster-api-control-plane-provider-talos",
+        "scaleway/cluster-api-provider-scaleway",
+        "kubernetes-sigs/cluster-api-provider-openstack",
+        "outscale/cluster-api-provider-outscale",
+      ],
+      labels: ["dependencies", "capi-provider"],
+    },
+    {
+      description: "CAPO's version is pinned in apps/base/orc/kustomization.yaml as 'the one in CAPO vX's go.mod' — check ORC compatibility before merging a CAPO bump alone.",
+      matchPackageNames: ["kubernetes-sigs/cluster-api-provider-openstack"],
+      prBodyNotes: ["⚠️ ORC (apps/base/orc) is version-pinned to CAPO's go.mod dependency. Bumping CAPO alone can desync it — check k-orc/openstack-resource-controller's release notes for the CAPO version it targets."],
+    },
+    {
+      description: "Reverse of the note above: ORC bumps should follow a CAPO bump, not run ahead of it.",
+      matchPackageNames: ["k-orc/openstack-resource-controller"],
+      prBodyNotes: ["⚠️ ORC is pinned to the version required by CAPO's go.mod (apps/base/cluster-api-providers/infra-providers.yaml, InfrastructureProvider/openstack) — verify compatibility before merging independently of a CAPO bump."],
+    },
+    {
+      description: "Vendored full-manifest trackers: this PR only bumps a tracking comment, never the manifest content.",
+      matchPackageNames: [
+        "kyverno/kyverno",
+        "k-orc/openstack-resource-controller",
+        "cloudnative-pg/cloudnative-pg",
+        "rancher/local-path-provisioner",
+        "kubernetes-sigs/gateway-api",
+        "external-secrets/external-secrets",
+      ],
+      labels: ["dependencies", "vendored-manifest"],
+      prBodyNotes: ["⚠️ This only bumps the tracking comment/label. Re-download the upstream manifest and replace the file per the kustomization.yaml's own 'To upgrade:' / 'Regenerate:' note before merging."],
+    },
+  ],
+
+  customManagers: [
+    {
+      customType: "regex",
+      description: "CAPI provider CRs: each block already carries '# https://github.com/<org>/<repo>' right above its own spec.version.",
+      fileMatch: ["^apps/base/cluster-api-providers/(core|infra)-providers\\.yaml$"],
+      matchStrings: [
+        "https://github\\.com/(?<depName>[\\w.-]+/[\\w.-]+)[\\s\\S]*?version:\\s*(?<currentValue>v[0-9.]+)",
+      ],
+      datasourceTemplate: "github-releases",
+    },
+    {
+      customType: "regex",
+      description: "kyverno + ORC share the same 'vendored from a releases/download URL' comment shape.",
+      fileMatch: [
+        "^apps/base/kyverno/kustomization\\.yaml$",
+        "^apps/base/orc/kustomization\\.yaml$",
+      ],
+      matchStrings: [
+        "github\\.com/(?<depName>[\\w.-]+/[\\w.-]+)/releases/download/(?<currentValue>v[0-9.]+)",
+      ],
+      datasourceTemplate: "github-releases",
+    },
+    {
+      customType: "regex",
+      description: "CNPG operator: vendored dump, short-form 'vendored from vX' comment (no repo URL in it).",
+      fileMatch: ["^apps/base/cnpg/kustomization\\.yaml$"],
+      matchStrings: [
+        "cnpg-[0-9.]+\\.yaml\\s+#\\s*vendored from (?<currentValue>v[0-9.]+)",
+      ],
+      datasourceTemplate: "github-releases",
+      depNameTemplate: "cloudnative-pg/cloudnative-pg",
+    },
+    {
+      customType: "regex",
+      description: "local-path-provisioner — used to have a 2nd vendored copy in apps/base/storage (v0.0.30, colliding with this one whenever both were picked); removed, apps/base/storage now depends on this brick instead.",
+      fileMatch: [
+        "^apps/base/platform/local-path-provisioner/kustomization\\.yaml$",
+      ],
+      matchStrings: [
+        "local-path-storage\\.yaml\\s+#\\s*vendored from (?<currentValue>v[0-9.]+)",
+      ],
+      datasourceTemplate: "github-releases",
+      depNameTemplate: "rancher/local-path-provisioner",
+    },
+    {
+      customType: "regex",
+      description: "Gateway API CRDs: vendored dump, short-form comment.",
+      fileMatch: ["^apps/base/platform/gateway-api/kustomization\\.yaml$"],
+      matchStrings: [
+        "standard-install\\.yaml\\s+#\\s*vendored from (?<currentValue>v[0-9.]+)",
+      ],
+      datasourceTemplate: "github-releases",
+      depNameTemplate: "kubernetes-sigs/gateway-api",
+    },
+    {
+      customType: "regex",
+      description: "external-secrets: vendored Helm-templated dump, version lives in the chart labels rather than a kustomization comment.",
+      fileMatch: ["^apps/base/external-secrets/install\\.yaml$"],
+      matchStrings: [
+        "app\\.kubernetes\\.io/version:\\s*\"(?<currentValue>[^\"]+)\"",
+      ],
+      datasourceTemplate: "github-releases",
+      depNameTemplate: "external-secrets/external-secrets",
+      // external-secrets/external-secrets interleaves two tag families
+      // ("v2.8.0" and "helm-chart-2.8.0"); anchor to the plain one or Renovate
+      // can surface a helm-chart-* string as the "latest version" (verified
+      // against the real repo — /releases/latest currently resolves to one).
+      extractVersionTemplate: "^(?<version>v\\d+\\.\\d+\\.\\d+)$",
+    },
+    {
+      customType: "regex",
+      description: "CNPG Cluster's own Postgres engine image — self-authored, single value, safe to bump directly (unlike the vendored operator dump above).",
+      fileMatch: ["^apps/base/cnpg/cluster\\.yaml$"],
+      matchStrings: [
+        "imageName:\\s*ghcr\\.io/cloudnative-pg/postgresql:(?<currentValue>[0-9.]+)",
+      ],
+      datasourceTemplate: "docker",
+      depNameTemplate: "ghcr.io/cloudnative-pg/postgresql",
+    },
+  ],
+}
