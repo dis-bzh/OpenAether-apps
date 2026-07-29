@@ -76,7 +76,9 @@ metadata:
   annotations: {}
 spec:
   backoffLimit: 5
-  activeDeadlineSeconds: 600
+  # 30 min: the wait loop above can legitimately spend 15 of them, and a
+  # deadline shorter than the wait turns a slow start into a hard failure.
+  activeDeadlineSeconds: 1800
   template:
     metadata:
       labels:
@@ -132,13 +134,24 @@ spec:
 
               # ── 1) Fetch root_token ──────────────────────────────
               set +x
-              echo "════ Lecture root_token ════"
-              if ! kubectl get secret openbao-recovery -n "$VAULT_NS" >/dev/null 2>&1; then
-                echo "⚠ Secret openbao-recovery missing — not initialised."
-                echo "  This Job will run again on the next Flux sync."
-                echo "  Pour forcer: kubectl delete job openbao-vault-bootstrap -n $VAULT_NS"
-                exit 1
-              fi
+              echo "════ Waiting for the root token ════"
+              # WAIT, do not exit. openbao-init needs several minutes to
+              # initialise and unseal; exiting here burns backoffLimit in under a
+              # minute and the Job ends Failed — permanently, because Flux
+              # re-applies the same spec and never restarts a finished Job. The
+              # cluster is then left with no `secret/` and no `pki/` mount, while
+              # the foundation-vault Kustomization still reports Ready.
+              # Observed on a real Scaleway bring-up 2026-07-29; the previous
+              # comment here claimed a retry that does not happen.
+              for i in $(seq 1 90); do
+                kubectl get secret openbao-recovery -n "$VAULT_NS" >/dev/null 2>&1 && break
+                [ "$i" = "90" ] && {
+                  echo "✗ openbao-recovery still absent after 15 min — openbao-init"
+                  echo "  never completed. Look there, not here."
+                  exit 1
+                }
+                sleep 10
+              done
               WL_TOKEN="$(kubectl get secret openbao-recovery -n "$VAULT_NS" \
                 -o jsonpath='{.data.root_token}' | base64 -d 2>/dev/null)"
               if [ -z "$WL_TOKEN" ]; then
@@ -147,8 +160,8 @@ spec:
               echo "  root_token retrieved"
               set -x; set +x
 
-              # ── 2) Attente API ─────────────────────────────────────
-              echo "════ Attente API ($WL_ADDR) ════"
+              # ── 2) Wait for the API ────────────────────────────────
+              echo "════ Waiting for the API ($WL_ADDR) ════"
               for i in $(seq 1 60); do
                 c="$(curl -s $CACERT -o /dev/null -w '%{http_code}' \
                   "${WL_ADDR}/v1/sys/health?uninitcode=200&sealedcode=200&standbyok=true" || true)"
