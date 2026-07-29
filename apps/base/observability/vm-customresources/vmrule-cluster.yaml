@@ -148,6 +148,37 @@ spec:
           annotations:
             summary: "etcd re-elected a leader more than 3 times in 15 min"
 
+    - name: openaether-watchdog
+      interval: 1m
+      rules:
+        # A dead man's switch. It fires forever, on purpose.
+        #
+        # Every other rule here reports something wrong INSIDE the cluster. None
+        # of them can report the cluster being gone: verified 2026-07-29 by
+        # killing etcd quorum — the metrics were all correct in hindsight and
+        # nothing was delivered at the time, because DNS and the write path died
+        # with the control plane.
+        #
+        # So this one inverts the question. It arrives on a schedule while the
+        # whole chain (rule -> VMAlert -> Alertmanager -> Slack -> egress) is
+        # alive. ITS ABSENCE IS THE ALARM. A silent day is not a quiet day.
+        #
+        # ⚠️ Absence only alarms someone if something outside the cluster is
+        # watching for it. Today that someone is a human noticing the daily
+        # message stopped, which is weak. The real fix is a dead-man's-switch
+        # service (healthchecks.io, PagerDuty DMS…) — see docs/backlog.md.
+        - alert: Watchdog
+          expr: vector(1)
+          for: 0s
+          labels:
+            severity: none
+            watchdog: "true"
+          annotations:
+            summary: "Alerting is alive end to end — you should see this daily"
+            description: >-
+              If this stops arriving, do not assume all is well: assume the
+              cluster, its alerting, or its egress is gone, and go look.
+
     - name: openaether-monitoring-itself
       interval: 1m
       rules:
