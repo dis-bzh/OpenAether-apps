@@ -105,6 +105,8 @@ spec:
         - ports:
             - port: "10250"  # kubelet metrics + cadvisor
               protocol: TCP
+            - port: "2381"   # etcd metrics (control-plane nodes)
+              protocol: TCP
 
 # ── VMCluster (vminsert + vmstorage + vmselect) ────────────────────
 # Labels set by VMOperator: app.kubernetes.io/name = vminsert|vmstorage|vmselect
