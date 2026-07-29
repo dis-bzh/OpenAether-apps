@@ -1,5 +1,7 @@
 # Groupe 21 — Storage (Longhorn HelmRelease + StorageClasses + ExternalSecret LUKS)
-# Depends on eso (the longhorn-encryption ExternalSecret).
+# Depends on eso (the longhorn-encryption ExternalSecret) and on
+# platform-local-path-provisioner (this brick used to vendor its own copy —
+# removed, it collided with that one whenever both were picked; see apps/base/storage/kustomization.yaml).
 # Isolation: a Longhorn problem does not affect the foundation stack.
 # MinIO: local overlay only (see apps/flux/local/21-storage.yaml).
 ---
@@ -20,3 +22,4 @@ spec:
   wait: true
   dependsOn:
     - name: external-secrets
+    - name: platform-local-path-provisioner
