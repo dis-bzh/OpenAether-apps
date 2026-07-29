@@ -42,10 +42,7 @@ spec:
               flux get all -A. If the object is suspended on purpose, that is
               the alert doing its job — resume it or remove it.
 
-    # ⚠️ Deliberately NOT alerting on cilium_unreachable_health_endpoints.
-    # That counter reported a false "cluster health 1/N" on every cluster here:
-    # the default-deny CCNP covers Cilium's own health endpoints, so the probes
-    # fail while the datapath is fine. Never conclude "datapath broken" from it.
+
     - name: openaether-cilium
       interval: 1m
       rules:

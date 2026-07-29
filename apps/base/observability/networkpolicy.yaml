@@ -29,10 +29,22 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: vmagent
 spec:
-  description: "VMAgent: egress scraping cluster-wide + remote_write vminsert."
+  description: "VMAgent: peer ingress :8429, egress scraping cluster-wide + remote_write vminsert."
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: vmagent
+  ingress:
+    # Sharded VMAgent pods scrape each other on :8429. Without this rule 7 of 8
+    # targets sit at `up == 0` on a real cluster — VMAgent's own health, the
+    # thing that would tell you scraping has stopped, is the one thing invisible.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "8429"
+              protocol: TCP
   egress:
     # DNS
     - toEndpoints:
