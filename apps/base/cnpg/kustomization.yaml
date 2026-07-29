@@ -8,7 +8,7 @@ kind: Kustomization
 # override cluster.yaml only.
 resources:
   - namespace.yaml
-  - cnpg-1.23.1.yaml  # vendored from v1.23.1 — avoids a remote fetch (DNS/IPv6)
+  - cnpg-1.23.1.yaml  # vendored from v1.30.0 — avoids a remote fetch (DNS/IPv6)
   - networkpolicy.yaml
   - networkpolicy-db-restricted.yaml
   - cluster.yaml
