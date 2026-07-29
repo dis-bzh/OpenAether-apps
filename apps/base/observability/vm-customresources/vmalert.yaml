@@ -91,7 +91,12 @@ spec:
             - alertname="Watchdog"
           receiver: deadmansswitch
           group_wait: 0s
-          group_interval: 5m
+          # repeat_interval MUST be strictly greater than group_interval.
+          # With both at 5m Alertmanager sent the ping ONCE and never again
+          # (verified: 1 notification in 11 min), which would trip the
+          # dead-man's switch on a perfectly healthy cluster — the exact false
+          # alarm this is meant to avoid.
+          group_interval: 1m
           repeat_interval: 5m
         - matchers:
             - severity="critical"
