@@ -20,16 +20,11 @@ spec:
     - name: openaether-flux
       interval: 1m
       rules:
-        # 1) An object Flux has STOPPED reconciling. Every Kustomization in the
-        #    DAG has an interval <= 10 min, so a flat counter over 30 min means
-        #    a wedged controller, a stuck finalizer, or an object left suspended
-        #    and forgotten — the cluster then runs the last good state forever,
-        #    which is exactly why nothing looks broken.
-        #
-        #    ⚠️ This does NOT catch "reconciling but failing": Flux 2.8 exposes
-        #    no per-object Ready condition (see backlog.md). Deliberately built
-        #    on gotk_reconcile_duration_seconds_count, which does carry
-        #    kind/name/namespace and is verified present.
+        # 1) An object Flux has STOPPED reconciling — wedged controller, stuck
+        #    finalizer, or suspended and forgotten. Every Kustomization has an
+        #    interval <= 10 min, so a flat counter over 30 min is a real stop.
+        #    Does NOT catch "reconciling but failing": Flux 2.8 exposes no
+        #    per-object Ready condition (backlog.md).
         - alert: FluxReconciliationStalled
           expr: |
             increase(gotk_reconcile_duration_seconds_count[30m]) == 0
@@ -73,20 +68,10 @@ spec:
 
         # 3) An agent not running on a LIVE node: bad rollout, crashloop,
         #    unschedulable. No CNI and no policy enforcement there.
-        #    Verified by rolling the DaemonSet onto a bad image: ready 4 < 6.
-        #
-        #    ⚠️ NOT `up{job=~".*cilium.*"} == 0`. That was the first version and
-        #    it cannot work: Cilium is discovered as PODS, and when a pod goes
-        #    away its target leaves service discovery — the series disappears
-        #    instead of going to 0, and an absent series matches nothing.
-        #    Verified by removing the agents: 0 pods left, expression still
-        #    empty. (etcd differs: discovered by NODE, and a node object
-        #    outlives the node, so there `up == 0` does fire.)
-        #
-        #    ⚠️ Says nothing about a DEAD node — DaemonSet pods tolerate
-        #    `unreachable` with no timeout, so they are never evicted and
-        #    numberReady does not move (verified: node stopped 9 min, still
-        #    6/6). That case is NodeUnreachable's, and it fires sooner.
+        #    NOT `up == 0`: Cilium is pod-discovered, so a removed pod takes its
+        #    target out of discovery and an absent series matches nothing.
+        #    Says nothing about a DEAD node either — DaemonSet pods are never
+        #    evicted, so numberReady does not move. That is NodeUnreachable's.
         - alert: CiliumAgentMissing
           expr: |
             kube_daemonset_status_number_ready{daemonset="cilium"}

@@ -42,6 +42,8 @@ resources:
   # Alertmanager's Slack webhook (the CRs live in vm-customresources/, but an
   # ExternalSecret needs no VM CRD so it belongs to this bundle).
   - externalsecret-alertmanager-slack.yaml
+  # Dead-man's switch: the only signal that survives this cluster dying.
+  - externalsecret-alertmanager-dms.yaml
   - httproute-grafana.yaml
   # Network
   - networkpolicy.yaml
