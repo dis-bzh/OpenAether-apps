@@ -1,5 +1,5 @@
 # OpenAether 0.5.0 — Flux Egress Restricted (Zero Trust)
-# Remplace flux-egress-allow-all.yaml (trop permissif: world + host + remote-node)
+# Replaces flux-egress-allow-all.yaml (far too permissive: world + host + remote-node)
 # Allows ONLY the required destinations:
 # - github.com (GitRepository + Helm charts GitHub Pages)
 # - Helm registries: charts.jetstack.io, charts.longhorn.io, charts.min.io, istio-release.storage.googleapis.com, victoriametrics.github.io, grafana.github.io, prometheus-community.github.io, kubernetes-sigs.github.io
@@ -14,8 +14,20 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: platform
 spec:
-  description: "Restrict Flux egress to specific FQDNs + cluster DNS/API"
+  description: "Restrict Flux egress to specific FQDNs + cluster DNS/API; allow VMAgent to scrape :8080"
   endpointSelector: {}
+  ingress:
+    # The cluster-wide default-deny leaves Flux with no ingress at all, so the
+    # controllers' metrics were unreachable. gotk_reconcile_condition comes from
+    # here: it is the only way to see a Kustomization that stopped reconciling.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
   egress:
     # 1. GitHub (GitRepository + Helm charts via GitHub Pages)
     - toFQDNs:

@@ -37,6 +37,17 @@ spec:
               protocol: TCP
             - port: "10250"
               protocol: TCP
+    # VMAgent scrapes the controller's metrics — that is where certificate
+    # expiry comes from, so without this rule CertificateExpiringSoon can never
+    # fire and the silence looks exactly like "no certificate is expiring".
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "9402"
+              protocol: TCP
   egress:
     # DNS
     - toEndpoints:

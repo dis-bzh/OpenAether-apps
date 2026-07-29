@@ -1,0 +1,70 @@
+# Platform alerting — GitOps delivery and the certificate chain.
+#
+# Both are silent failure modes: a Kustomization that stops reconciling leaves
+# the cluster running the LAST good state, so nothing looks broken until someone
+# wonders why a commit never landed. An expiring certificate breaks everything
+# at once, on a date nobody is watching.
+#
+# Sources: the Flux controllers (VMPodScrape `flux`) and the cert-manager
+# controller (VMServiceScrape `cert-manager`), both in vmscapes.yaml.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: platform-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: platform
+spec:
+  groups:
+    - name: openaether-flux
+      interval: 1m
+      rules:
+        # 1) An object Flux has STOPPED reconciling. Every Kustomization in the
+        #    DAG has an interval <= 10 min, so a flat counter over 30 min means
+        #    a wedged controller, a stuck finalizer, or an object left suspended
+        #    and forgotten — the cluster then runs the last good state forever,
+        #    which is exactly why nothing looks broken.
+        #
+        #    ⚠️ This does NOT catch "reconciling but failing": Flux 2.8 exposes
+        #    no per-object Ready condition (see backlog.md). Deliberately built
+        #    on gotk_reconcile_duration_seconds_count, which does carry
+        #    kind/name/namespace and is verified present.
+        - alert: FluxReconciliationStalled
+          expr: |
+            increase(gotk_reconcile_duration_seconds_count[30m]) == 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Flux: {{ $labels.kind }}/{{ $labels.name }} has not reconciled for 30 min"
+            description: >-
+              flux get all -A. If the object is suspended on purpose, that is
+              the alert doing its job — resume it or remove it.
+
+    - name: openaether-certificates
+      interval: 5m
+      rules:
+        # 2) Expiry. 21 days leaves room for the offline signing ceremony of the
+        #    PKI intermediate, which is not a five-minute operation.
+        - alert: CertificateExpiringSoon
+          expr: |
+            (certmanager_certificate_expiration_timestamp_seconds - time()) / 86400 < 21
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in less than 21 days"
+
+        # 3) Not renewing. Distinct from the above: a Certificate can be
+        #    not-Ready for weeks while the current one is still valid — the
+        #    failure only becomes visible once it expires, far too late.
+        - alert: CertificateNotReady
+          expr: |
+            certmanager_certificate_ready_status{condition="True"} == 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} not Ready for 1 h"
+            description: "kubectl describe certificate -n {{ $labels.namespace }} {{ $labels.name }}"
