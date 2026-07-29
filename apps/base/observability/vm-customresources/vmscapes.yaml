@@ -147,6 +147,36 @@ spec:
   endpoints:
     - port: http
 
+# ── Cilium (agent + operator) ──────────────────────────────────────
+# Enabled by prometheus.enabled / operator.prometheus.enabled in the render
+# script; check-cilium-parity.py keeps the CAPI children in step.
+# All Cilium workloads are hostNetwork, so these targets are node addresses:
+# VMAgent reaches them through its host/remote-node egress, and no ingress CNP
+# applies (a pod selector does not match the host namespace).
+# cilium-envoy (:9964) is deliberately left out — L7 is Istio's job here, and
+# Envoy metrics are high-cardinality for a component that stays idle.
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: cilium
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprintC"
+    openaether.io/component: vmagent-scrapes
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: cilium
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  podMetricsEndpoints:
+    # Both the agent and the operator name the port `prometheus`.
+    - port: prometheus
+      path: /metrics
+
 # ── etcd (control-plane nodes) ─────────────────────────────────────
 # Served on :2381 by the Talos config (modules/talos/main.tf, cluster.etcd
 # extraArgs). Control planes ONLY — a worker has no etcd, so scraping every node
