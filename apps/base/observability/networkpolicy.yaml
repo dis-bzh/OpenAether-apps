@@ -111,6 +111,60 @@ spec:
               protocol: TCP
             - port: "9963"   # cilium-operator (hostNetwork)
               protocol: TCP
+            # node-exporter is hostNetwork too, so the pod-scoped rule above
+            # (toEntities: cluster, :9100) never matches it — the traffic goes
+            # to the NODE. Verified on a real cluster: without this line
+            # node_* has zero series while the pods look perfectly healthy.
+            - port: "9100"   # node-exporter (hostNetwork)
+              protocol: TCP
+
+# ── kube-state-metrics + node-exporter ─────────────────────────────
+# ⚠️ These two were MISSING while the header above already advertised their
+# flows. Under the cluster-wide default-deny ingress, that means VMAgent could
+# never reach them: kube_node_status_condition had ZERO series on a real
+# cluster, so every node, pod, volume and backup rule silently evaluated to
+# nothing. Caught on 2026-07-29 by KubeStateMetricsAbsent, which exists for
+# exactly this — the alerting was blind and said so.
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kube-state-metrics
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: kube-state-metrics
+spec:
+  description: "kube-state-metrics: ingress VMAgent :8080, egress DNS + kube-apiserver."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # KSM's whole job is watching the API.
+    - toEntities:
+        - kube-apiserver
+# node-exporter needs NO CiliumNetworkPolicy: it runs hostNetwork, so it lives
+# in the host namespace where a pod selector does not reach. Its reachability is
+# governed by VMAgent's host/remote-node egress on :9100 (see above).
 
 # ── VMCluster (vminsert + vmstorage + vmselect) ────────────────────
 # Labels set by VMOperator: app.kubernetes.io/name = vminsert|vmstorage|vmselect
