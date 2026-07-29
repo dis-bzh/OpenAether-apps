@@ -69,6 +69,14 @@ spec:
   endpoints:
     - port: http
       path: /metrics
+      # ⚠️ MANDATORY for kube-state-metrics. KSM reports OTHER objects, so its
+      # series carry their namespace/pod/container. Without honorLabels the
+      # scraper's own labels win and KSM's get renamed exported_* — every series
+      # then reads namespace="services-observability", pod="kube-state-metrics-…".
+      # Any rule selecting on namespace or pod silently matches NOTHING
+      # (verified locally 2026-07-29: this is why BackupJobFailed, which selects
+      # namespace=~"foundation-.*", could never have fired).
+      honorLabels: true
 
 # ── node-exporter ──────────────────────────────────────────────────
 ---

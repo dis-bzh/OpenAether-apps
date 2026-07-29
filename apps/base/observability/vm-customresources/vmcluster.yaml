@@ -58,7 +58,7 @@ spec:
       volumeClaimTemplate:
         spec:
           # local-path: VMCluster handles its own replication (replicationFactor=2).
-          # Longhorn x2 + VMCluster x2 = 4× overhead inutile.
+          # Longhorn x2 + VMCluster x2 = 4× overhead for nothing.
           storageClassName: local-path
           accessModes:
             - ReadWriteOnce

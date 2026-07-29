@@ -1,16 +1,18 @@
 # OpenAether 0.5.0 Sprint C — NetworkPolicies Observability
 # ──────────────────────────────────────────────────────────────────
 # One CiliumNetworkPolicy per component in services-observability.
-# Principe: deny-all implicite Cilium + allow explicite par flux.
+# Principle: Cilium's implicit deny-all + an explicit allow per flow.
 #
-# Flux principaux:
-#   VMAgent      → vminsert :8480 (remote_write)
-#   Grafana      ← Istio gateway :3000 (UI)
-#   Grafana      → vmselect :8481 + Loki :3100 + CNPG :5432
-#   Loki         ← Alloy :3100 (push logs)
-#   Alloy        → Loki :3100 + k8s API :443 (discovery)
-#   node-exporter← VMAgent :9100
-#   KSM          ← VMAgent :8080
+# Main flows:
+#   VMAgent       → vminsert :8480 (remote_write)
+#   VMAlert       → vmselect :8481 (evaluate) + vminsert :8480 (alert state)
+#   VMAlert       → vmalertmanager :9093 (fire)
+#   Grafana       ← Istio gateway :3000 (UI)
+#   Grafana       → vmselect :8481 + Loki :3100 + CNPG :5432
+#   Loki          ← Alloy :3100 (push logs)
+#   Alloy         → Loki :3100 + k8s API :443 (discovery)
+#   node-exporter ← VMAgent :9100
+#   KSM           ← VMAgent :8080
 # ──────────────────────────────────────────────────────────────────
 
 # ── VMAgent ────────────────────────────────────────────────────────
@@ -62,20 +64,20 @@ spec:
     # Cluster-wide scraping: all pods on the usual metrics ports.
     # VMAgent uses a dynamic port per target; allow the standard scraping
     # ports for the known components.
-    # ⚠️ toPorts-SEUL = n'importe quelle destination (y compris world).
-    # we add toEntities: cluster to bound scraping to the cluster
-    # (stops a compromised VMAgent reaching OpenBao :8200 outside the cluster).
+    # ⚠️ toPorts ALONE means any destination, world included; toEntities: cluster
+    # bounds scraping to the cluster (stops a compromised VMAgent reaching an
+    # OpenBao :8200 outside it).
     - toEntities:
         - cluster
       toPorts:
         - ports:
-            - port: "8080"   # kube-state-metrics, nombreux operateurs
+            - port: "8080"   # kube-state-metrics, vmalert, many operators
               protocol: TCP
             - port: "8200"   # OpenBao metrics
               protocol: TCP
             - port: "8428"   # VMSingle (if present)
               protocol: TCP
-            - port: "8429"   # vmagent self-metrics (scrape des pairs)
+            - port: "8429"   # vmagent self-metrics (peer scrape)
               protocol: TCP
             - port: "8480"   # vminsert
               protocol: TCP
@@ -84,6 +86,8 @@ spec:
             - port: "8482"   # vmstorage self-metrics
               protocol: TCP
             - port: "9090"   # Prometheus compat
+              protocol: TCP
+            - port: "9093"   # vmalertmanager self-metrics
               protocol: TCP
             - port: "9100"   # node-exporter
               protocol: TCP
@@ -118,10 +122,15 @@ spec:
     matchLabels:
       app.kubernetes.io/name: vminsert
   ingress:
+    # VMAgent (scraped series) and VMAlert (ALERTS/ALERTS_FOR_STATE, which is
+    # what survives a restart and keeps the long `for:` windows armed).
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability
             app.kubernetes.io/name: vmagent
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmalert
       toPorts:
         - ports:
             - port: "8480"
@@ -156,11 +165,22 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: vmcluster
 spec:
-  description: "vmstorage: ingress vminsert :8400 + vmselect :8401 + peers :8401."
+  description: "vmstorage: ingress vminsert :8400 + vmselect :8401 + peers :8401 + VMAgent :8482."
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: vmstorage
   ingress:
+    # Self-metrics on 8482 (disk usage, ingestion rate, per-storage series
+    # counts). This rule was missing, so vmstorage was never scraped — invisible
+    # because a target that is never discovered produces no `up` series at all.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "8482"
+              protocol: TCP
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability
@@ -220,7 +240,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: vmcluster
 spec:
-  description: "vmselect: ingress Grafana :8481, egress vmstorage :8401."
+  description: "vmselect: ingress Grafana + VMAlert :8481, egress vmstorage :8401."
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: vmselect
@@ -233,8 +253,15 @@ spec:
         - ports:
             - port: "8481"
               protocol: TCP
-    # Also from VMAgent for alert queries (future Alertmanager).
+    # VMAlert reads here on every evaluation (datasource + remoteRead). Drop
+    # this rule and no rule in the cluster is ever evaluated again.
+    # VMAgent scrapes vmselect's OWN metrics on the same port — 8481 serves both
+    # queries and /metrics, so removing the VMAgent rule as "query-only" takes
+    # the self-scrape down with it (done on 2026-07-29, caught by `up == 0`).
     - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmalert
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability
             app.kubernetes.io/name: vmagent
@@ -261,6 +288,118 @@ spec:
         - ports:
             - port: "8401"
               protocol: TCP
+
+# ── VMAlert + VMAlertmanager ───────────────────────────────────────
+# Labels set by VMOperator: app.kubernetes.io/name = vmalert | vmalertmanager
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmalert
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmalert
+spec:
+  description: "VMAlert: egress vmselect :8481 + vminsert :8480 + alertmanager :9093, ingress VMAgent :8080."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmalert
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Read the rules' data (datasource + remoteRead).
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmselect
+      toPorts:
+        - ports:
+            - port: "8481"
+              protocol: TCP
+    # Persist ALERTS/ALERTS_FOR_STATE.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vminsert
+      toPorts:
+        - ports:
+            - port: "8480"
+              protocol: TCP
+    # Deliver the firing alerts. Without this rule they are evaluated and then
+    # dropped on the wire — the exact silence this whole stack exists to end.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmalertmanager
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmalertmanager
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmalertmanager
+spec:
+  description: "VMAlertmanager: ingress VMAlert + VMAgent :9093, egress DNS only."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmalertmanager
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmalert
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # The config-reloader INIT container reads the config Secret through the API
+    # and blocks the pod until it succeeds — with DNS-only egress, Alertmanager
+    # never starts (Init:CrashLoopBackOff, "dial 10.96.0.1:443: i/o timeout").
+    # toEntities and not toServices: the `kubernetes` Service DNATs 443→6443 and
+    # Cilium enforces on the post-DNAT port. Same trap as VMAgent above.
+    - toEntities:
+        - kube-apiserver
+    # No egress to the outside: the receiver is empty. Adding a real one (SMTP,
+    # Slack, webhook) means adding its egress here, or the notification is
+    # dropped on the wire with nothing to show for it.
 
 # ── Loki ──────────────────────────────────────────────────────────
 # ingress: Alloy (push logs) + Grafana (query)
