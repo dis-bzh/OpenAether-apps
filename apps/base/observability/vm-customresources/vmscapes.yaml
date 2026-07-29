@@ -60,6 +60,8 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: vmagent-scrapes
 spec:
+  # Matches BOTH kube-state-metrics releases: the main one and the Flux-only
+  # instance (same chart, same app.kubernetes.io/name).
   selector:
     matchLabels:
       app.kubernetes.io/name: kube-state-metrics
