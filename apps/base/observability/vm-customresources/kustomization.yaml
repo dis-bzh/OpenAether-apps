@@ -1,14 +1,13 @@
 # OpenAether 0.5.0 Sprint C — VictoriaMetrics Custom Resources
 # ──────────────────────────────────────────────────────────────────
 # Separated from the observability bundle to break the CRD→CR chicken-and-egg:
-# these objects (VMCluster, VMAgent, VMNodeScrape, VMServiceScrape) do not exist
-# these only exist as kinds AFTER the victoria-metrics-operator HelmRelease (in
-# apps/base/observability/) has installed its CRDs. Left in the same bundle,
-# Flux's validating dry-run fails ("no matches for kind VMAgent") and REJECTS
-# the whole bundle — including the operator → nothing installs, ever.
-# Same pattern as cert-manager-issuers.
+# these kinds (VMCluster, VMAgent, VMAlert, VM*Scrape, VMRule) only exist AFTER
+# the victoria-metrics-operator HelmRelease (in apps/base/observability/) has
+# installed its CRDs. Left in the same bundle, Flux's validating dry-run fails
+# ("no matches for kind VMAgent") and REJECTS the whole bundle — including the
+# operator → nothing installs, ever. Same pattern as cert-manager-issuers.
 #
-# La Kustomization Flux 'observability-vm-customresources' (apps/flux/base/
+# The Flux Kustomization 'observability-vm-customresources' (apps/flux/base/
 # 30-observability.yaml) applies this directory AFTER 'observability' is Ready.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -16,8 +15,10 @@ kind: Kustomization
 resources:
   - vmcluster.yaml
   - vmagent.yaml
+  - vmalert.yaml
   - vmscapes.yaml
   - vmrule-backup.yaml
+  - vmrule-cluster.yaml
 
 labels:
   - includeSelectors: false

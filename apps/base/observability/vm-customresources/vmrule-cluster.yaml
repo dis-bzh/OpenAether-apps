@@ -1,0 +1,103 @@
+# Cluster-health alerting — nodes, pods, volumes.
+#
+# Deliberately built ONLY on metrics that are actually scraped today
+# (kube-state-metrics and the kubelet, see vmscapes.yaml). Flux, cert-manager,
+# etcd and Cilium expose good signals but have no VMServiceScrape yet, so rules
+# on them would evaluate to nothing and read as "all clear" — see backlog.md.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: cluster-health-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cluster-health
+spec:
+  groups:
+    - name: openaether-nodes
+      interval: 1m
+      rules:
+        # 1) The kubelet stopped reporting. This is the signature of the OVH
+        #    failure where the node is dead while the hypervisor still shows it
+        #    ACTIVE: nothing in OpenTofu or the provider console says a word.
+        - alert: NodeUnreachable
+          expr: kube_node_status_condition{condition="Ready",status="unknown"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node {{ $labels.node }} unreachable (kubelet silent > 5 min)"
+            description: >-
+              The kubelet no longer reports. The VM may still be ACTIVE on the
+              hypervisor. Check the serial console BEFORE recovering, that trace
+              is the only way to learn why it died; recovery is a HARD reboot
+              through the provider API.
+
+        # 2) Node Ready=false — reported, but unhealthy (disk, runtime, CNI).
+        - alert: NodeNotReady
+          expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node {{ $labels.node }} NotReady for 10 min"
+            description: "talosctl -n <node> dmesg, and kubectl describe node {{ $labels.node }}."
+
+        # 3) Pressure: still Ready, already evicting. Precedes the DEV1-M OOM
+        #    cascade that took down two workers at once.
+        - alert: NodeUnderPressure
+          expr: kube_node_status_condition{condition=~"MemoryPressure|DiskPressure|PIDPressure",status="true"} == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node {{ $labels.node }}: {{ $labels.condition }} for 15 min"
+
+    - name: openaether-workloads
+      interval: 1m
+      rules:
+        # 4) A container restarting in a loop. Threshold > 3 in 15 min: below
+        #    that it is a slow start, not a loop.
+        - alert: PodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total[15m]) > 3
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} restarting in a loop"
+            description: "kubectl logs -n {{ $labels.namespace }} {{ $labels.pod }} --previous"
+
+        # 5) A volume filling up. 10% left is the last point at which growing it
+        #    is still a routine operation.
+        #    ⚠️ Silent on the LOCAL cluster: kubelet_volume_stats_* comes from
+        #    the CSI driver's NodeGetVolumeStats, and local-path-provisioner is
+        #    hostPath, not CSI. Longhorn does report them, so this only covers
+        #    the real clusters — an empty result locally is not a defect.
+        - alert: PersistentVolumeFillingUp
+          expr: |
+            kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes < 0.10
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} over 90% full"
+
+    - name: openaether-monitoring-itself
+      interval: 1m
+      rules:
+        # 6) Who watches the watchmen. Every rule above reads kube-state-metrics:
+        #    if it stops, they all evaluate empty and the cluster looks healthy.
+        #    `absent()` is the only thing that catches the absence of a metric.
+        - alert: KubeStateMetricsAbsent
+          expr: absent(kube_node_status_condition)
+          for: 10m
+          labels:
+            severity: critical
+            component: monitoring
+          annotations:
+            summary: "kube-state-metrics no longer reports — node alerting is BLIND"
+            description: >-
+              Every node, pod and backup rule is built on this metric. While it
+              is missing they evaluate to nothing, which is indistinguishable
+              from "nothing wrong".
