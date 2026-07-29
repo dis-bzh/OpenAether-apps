@@ -3,7 +3,7 @@ kind: Kustomization
 
 resources:
   - networkpolicy.yaml
-  # VENDORED from https://github.com/kyverno/kyverno/releases/download/v1.12.1/install.yaml
+  # VENDORED from https://github.com/kyverno/kyverno/releases/download/v1.18.2/install.yaml
   #   sha256 888e26a13fa34b72d6fc321e4b29af4857539f46f89b606f624fddb518db4ebf
   #
   # This resource was a remote URL until 2026-07-27: Flux reconciliation then
