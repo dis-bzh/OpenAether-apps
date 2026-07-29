@@ -19,7 +19,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: platform
 spec:
-  description: "CoreDNS ingress: autoriser tous les pods cluster sur port 53 UDP/TCP uniquement."
+  description: "CoreDNS ingress: allow every cluster pod on port 53 UDP/TCP only."
   endpointSelector:
     matchLabels:
       k8s-app: kube-dns

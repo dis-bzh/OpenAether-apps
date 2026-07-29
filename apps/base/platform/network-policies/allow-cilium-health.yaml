@@ -24,7 +24,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: platform
 spec:
-  description: "Autorise les sondes cilium-health (ICMP + TCP 4240) entre nœuds"
+  description: "Allow the cilium-health probes (ICMP + TCP 4240) between nodes"
   endpointSelector:
     matchLabels:
       "reserved:health": ""

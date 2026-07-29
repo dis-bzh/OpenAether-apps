@@ -10,7 +10,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: platform
 spec:
-  description: "Allow egress DNS UDP/TCP 53 vers kube-system/CoreDNS depuis tous les pods."
+  description: "Allow egress DNS UDP/TCP 53 to kube-system/CoreDNS from every pod."
   endpointSelector: {}
   egress:
     - toEndpoints:

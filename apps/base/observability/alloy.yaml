@@ -101,7 +101,7 @@ spec:
             forward_to = [loki.write.default.receiver]
           }
 
-          // ── Envoi vers Loki ─────────────────────────────────────────────
+          // ── Ship to Loki ────────────────────────────────────────────────
           loki.write "default" {
             endpoint {
               url = "http://loki.services-observability.svc.cluster.local:3100/loki/api/v1/push"

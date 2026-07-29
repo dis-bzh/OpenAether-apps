@@ -1,4 +1,4 @@
-# OpenAether 0.5.0 — Allow Kube API (TCP 443 vers API server)
+# OpenAether 0.5.0 — Allow Kube API (TCP 443 to the API server)
 # A CCNP allowing every pod to talk to the kube-apiserver.
 # Required by: cert-manager webhooks, Kyverno webhooks, Flux,
 # ESO, CNPG, OpenBao auth kubernetes, etc.
@@ -11,7 +11,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: platform
 spec:
-  description: "Allow egress TCP 443 vers kube-apiserver depuis tous les pods."
+  description: "Allow egress TCP 443 to kube-apiserver from every pod."
   endpointSelector: {}
   egress:
     - toServices:
