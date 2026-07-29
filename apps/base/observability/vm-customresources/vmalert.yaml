@@ -88,7 +88,9 @@ spec:
       - name: slack
         slack_configs:
           - api_url_file: /etc/vm/secrets/alertmanager-slack/webhook-url
-            channel: "#openaether-alerts"
+            # dis-bzh.slack.com, channel #openaether (C0BLJ223MU5). An incoming
+            # webhook already targets a channel; this only overrides it.
+            channel: "#openaether"
             send_resolved: true
             title: "[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}"
             text: >-

@@ -97,7 +97,11 @@ spec:
     matchNames:
       - services-observability
   endpoints:
-    - port: http-metrics
+    # ⚠️ The chart names this port `metrics`, not `http-metrics`. With the wrong
+    # name the target is never DISCOVERED — no `up` series at all, so even
+    # "is it down?" cannot be asked. Found on a real cluster 2026-07-29, after
+    # node_* had been silently absent since this scrape was written.
+    - port: metrics
       path: /metrics
 
 # ── VMCluster self-scrape ──────────────────────────────────────────
