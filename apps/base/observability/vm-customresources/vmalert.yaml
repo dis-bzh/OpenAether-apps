@@ -1,0 +1,106 @@
+# VMAlert + VMAlertmanager — what actually EVALUATES the VMRules.
+#
+# ⚠️ A VMRule alone is an INERT object: the operator stores it, nothing reads it,
+# and no component reports the gap. The three backup rules — the only alerting
+# this platform had — sat like that from the day they were written until
+# 2026-07-29. Deleting VMAlert silently disarms every alert in the cluster.
+#
+# Alerts are grouped and visible here, but NOT yet delivered anywhere: the
+# receiver is empty on purpose (a real one needs a provider secret). Wiring
+# email/Slack/webhook is a receivers[] change — see docs/backlog.md.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlert
+metadata:
+  name: vmalert
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmalert
+spec:
+  replicaCount: 2
+  # Pick up every VMRule in the cluster, as VMAgent does for the scrapes.
+  selectAllByDefault: true
+  evaluationInterval: 30s
+  datasource:
+    url: http://vmselect-victoria-metrics.services-observability:8481/select/0/prometheus
+  # remoteWrite persists ALERTS/ALERTS_FOR_STATE and remoteRead restores the
+  # pending state on restart. Without them a rolling update resets every `for:`
+  # timer, so the long-window rules (BackupCronJobStale, 26 h) would never fire.
+  remoteWrite:
+    url: http://vminsert-victoria-metrics.services-observability:8480/insert/0/prometheus
+  remoteRead:
+    url: http://vmselect-victoria-metrics.services-observability:8481/select/0/prometheus
+  notifiers:
+    - url: http://vmalertmanager-alertmanager.services-observability:9093
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: vmalert
+            topologyKey: kubernetes.io/hostname
+  podDisruptionBudget:
+    minAvailable: 1
+---
+# Single replica: an HA Alertmanager needs gossip between peers, which buys
+# nothing while there is no receiver to deduplicate towards.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlertmanager
+metadata:
+  name: alertmanager
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmalertmanager
+spec:
+  replicaCount: 1
+  configRawYaml: |
+    route:
+      receiver: blackhole
+      group_by: [alertname, namespace]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+    receivers:
+      # No integration: alerts stop here, visible through the API and Grafana.
+      - name: blackhole
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+---
+# Self-scrape: `vmalert_alerts_fired_total` and `vmalert_execution_errors_total`
+# are how you tell "no alert fired" from "the evaluator is broken".
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: vmalert
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmagent-scrapes
+spec:
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - vmalert
+          - vmalertmanager
+  namespaceSelector:
+    matchNames:
+      - services-observability
+  endpoints:
+    - port: http
