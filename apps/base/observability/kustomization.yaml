@@ -39,6 +39,9 @@ resources:
   - grafana.yaml
   - externalsecrets-grafana.yaml
   - externalsecret-grafana-oidc.yaml
+  # Alertmanager's Slack webhook (the CRs live in vm-customresources/, but an
+  # ExternalSecret needs no VM CRD so it belongs to this bundle).
+  - externalsecret-alertmanager-slack.yaml
   - httproute-grafana.yaml
   # Network
   - networkpolicy.yaml

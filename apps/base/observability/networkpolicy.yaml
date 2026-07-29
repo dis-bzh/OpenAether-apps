@@ -371,7 +371,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: vmalertmanager
 spec:
-  description: "VMAlertmanager: ingress VMAlert + VMAgent :9093, egress DNS only."
+  description: "VMAlertmanager: ingress VMAlert + VMAgent :9093, egress DNS + Slack webhook."
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: vmalertmanager
@@ -388,6 +388,9 @@ spec:
             - port: "9093"
               protocol: TCP
   egress:
+    # ⚠️ `rules.dns` is what makes toFQDNs work at all: without the DNS proxy
+    # observing the lookup, Cilium never learns the IP behind hooks.slack.com
+    # and the rule below matches nothing. Same trap as the CAPI policies.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -397,6 +400,17 @@ spec:
             - port: "53"
               protocol: UDP
             - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Slack webhook — the ONLY destination outside the cluster. An alert that
+    # cannot leave is the failure this whole stack exists to remove.
+    - toFQDNs:
+        - matchName: hooks.slack.com
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP
     # The config-reloader INIT container reads the config Secret through the API
     # and blocks the pod until it succeeds — with DNS-only egress, Alertmanager

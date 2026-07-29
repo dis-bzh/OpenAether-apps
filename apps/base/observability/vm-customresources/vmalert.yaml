@@ -5,9 +5,10 @@
 # this platform had — sat like that from the day they were written until
 # 2026-07-29. Deleting VMAlert silently disarms every alert in the cluster.
 #
-# Alerts are grouped and visible here, but NOT yet delivered anywhere: the
-# receiver is empty on purpose (a real one needs a provider secret). Wiring
-# email/Slack/webhook is a receivers[] change — see docs/backlog.md.
+# Alerts go to Slack. The webhook URL comes from OpenBao through ESO and is read
+# from a file, so it never touches git — see the ExternalSecret. Without it
+# seeded, Alertmanager does not start and nothing is alerted, which is the point:
+# an empty receiver looked healthy while every alert went nowhere.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMAlert
 metadata:
@@ -63,16 +64,37 @@ metadata:
     openaether.io/component: vmalertmanager
 spec:
   replicaCount: 1
+  # The webhook URL is mounted, never inlined — see
+  # observability/externalsecret-alertmanager-slack.yaml. Mount path is
+  # /etc/vm/secrets/<secret name>/<key>.
+  secrets:
+    - alertmanager-slack
   configRawYaml: |
     route:
-      receiver: blackhole
+      receiver: slack
       group_by: [alertname, namespace]
       group_wait: 30s
       group_interval: 5m
+      # 12 h between repeats for a warning; a critical repeats hourly, because
+      # the ones here (no etcd leader, node unreachable, policy not enforced)
+      # do not resolve on their own.
       repeat_interval: 12h
+      routes:
+        - matchers:
+            - severity="critical"
+          receiver: slack
+          repeat_interval: 1h
     receivers:
-      # No integration: alerts stop here, visible through the API and Grafana.
-      - name: blackhole
+      - name: slack
+        slack_configs:
+          - api_url_file: /etc/vm/secrets/alertmanager-slack/webhook-url
+            channel: "#openaether-alerts"
+            send_resolved: true
+            title: "[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}"
+            text: >-
+              {{ range .Alerts }}{{ .Annotations.summary }}
+              {{ with .Annotations.description }}{{ . }}{{ end }}
+              {{ end }}
   resources:
     requests:
       cpu: 25m
