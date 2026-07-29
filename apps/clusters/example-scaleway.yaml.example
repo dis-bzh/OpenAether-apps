@@ -61,24 +61,27 @@ spec:
   chart:
     spec:
       chart: cilium
-      version: "1.16.x"   # match the foundation version on the infra side
+      version: "1.19.2"   # match the foundation version on the infra side
       sourceRef: { kind: HelmRepository, name: cilium }
   values:
-    # Aligner sur bootstrap-manifests/cilium.yaml côté infra (kubeProxyReplacement,
-    # Talos: securityContext capabilities + cgroup, ipam kubernetes…).
+    # Align with bootstrap-manifests/cilium.yaml on the infra side
+    # (kubeProxyReplacement, Talos securityContext capabilities + cgroup,
+    # ipam kubernetes…). check-cilium-parity.py enforces the ones that matter.
     kubeProxyReplacement: true
     ipam: { mode: kubernetes }
-    # ⚠️ Obligatoires dès que le profil de l'enfant embarque Istio ambient :
-    # sans cni.exclusive=false, Cilium réécrit 05-cilium.conflist en boucle et en
-    # retire le plugin chaîné istio-cni → istio-cni jamais Ready → ztunnel,
-    # services-gateway et istio-authorizationpolicies bloqués en cascade.
-    # hostNamespaceOnly=true est l'autre moitié du couple ambient : le socket-LB
-    # ne doit pas court-circuiter la redirection in-pod. Il ne désactive le
-    # socket-LB que pour les netns NON-root, les process host-network gardent la
-    # traduction ClusterIP.
-    # Cf. apps/clusters/edge-1.yaml pour le jeu de values complet.
+    # ⚠️ Both are REQUIRED as soon as the child's profile carries Istio ambient:
+    # without cni.exclusive=false, Cilium rewrites 05-cilium.conflist in a loop
+    # and strips the chained istio-cni plugin → istio-cni never Ready → ztunnel,
+    # services-gateway and istio-authorizationpolicies stuck in cascade.
+    # hostNamespaceOnly=true is the other half of the ambient pair: socket-LB
+    # must not short-circuit the in-pod redirection. It only disables socket-LB
+    # for NON-root netns; host-network processes keep ClusterIP translation.
+    # See apps/clusters/edge-1.yaml for the complete set of values.
     socketLB: { enabled: true, hostNamespaceOnly: true }
     cni: { exclusive: false }
+    # Metrics: without these the child's CNI serves nothing and is invisible.
+    prometheus: { enabled: true }
+    operator: { prometheus: { enabled: true } }
 ---
 # providerID: Talos does not set one, so CAPI never resolves nodeRef and
 # MachineHealthCheck stays dead. The CCM fills it in from the Talos platform

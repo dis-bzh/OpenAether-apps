@@ -93,7 +93,11 @@ spec:
     k8sServiceHost: localhost      # KubePrism Talos
     k8sServicePort: 7445
     hubble: { enabled: false }
-    operator: { replicas: 1 }
+    # Metrics: without these the child's CNI serves nothing and is invisible,
+    # while the parent foundation is monitored — the mismatch is silent, hence
+    # both keys are in check-cilium-parity.py.
+    prometheus: { enabled: true }
+    operator: { replicas: 1, prometheus: { enabled: true } }
     encryption: { enabled: true, type: wireguard }
     securityContext:
       capabilities:

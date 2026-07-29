@@ -42,6 +42,67 @@ spec:
               flux get all -A. If the object is suspended on purpose, that is
               the alert doing its job — resume it or remove it.
 
+    # ⚠️ Deliberately NOT alerting on cilium_unreachable_health_endpoints.
+    # That counter reported a false "cluster health 1/N" on every cluster here:
+    # the default-deny CCNP covers Cilium's own health endpoints, so the probes
+    # fail while the datapath is fine. Never conclude "datapath broken" from it.
+    - name: openaether-cilium
+      interval: 1m
+      rules:
+        # 1) A policy that FAILED to import is an enforcement gap: the CNP is in
+        #    the API, kubectl shows it, and the datapath never applied it. The
+        #    only visible trace is this counter.
+        - alert: CiliumPolicyImportFailed
+          expr: |
+            increase(cilium_policy_change_total{outcome="failure"}[15m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Cilium rejected a policy change on {{ $labels.instance }}"
+            description: >-
+              A NetworkPolicy is present in the API but NOT enforced in the
+              datapath. cilium status --all-controllers on that node.
+
+        # 2) Endpoints whose policy could not be programmed — same gap, per pod.
+        - alert: CiliumEndpointRegenerationFailing
+          expr: |
+            increase(cilium_endpoint_regenerations_total{outcome="fail"}[15m]) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Cilium failing to regenerate endpoints on {{ $labels.instance }}"
+
+        # 3) An agent not running on a LIVE node: bad rollout, crashloop,
+        #    unschedulable. No CNI and no policy enforcement there.
+        #    Verified by rolling the DaemonSet onto a bad image: ready 4 < 6.
+        #
+        #    ⚠️ NOT `up{job=~".*cilium.*"} == 0`. That was the first version and
+        #    it cannot work: Cilium is discovered as PODS, and when a pod goes
+        #    away its target leaves service discovery — the series disappears
+        #    instead of going to 0, and an absent series matches nothing.
+        #    Verified by removing the agents: 0 pods left, expression still
+        #    empty. (etcd differs: discovered by NODE, and a node object
+        #    outlives the node, so there `up == 0` does fire.)
+        #
+        #    ⚠️ Says nothing about a DEAD node — DaemonSet pods tolerate
+        #    `unreachable` with no timeout, so they are never evicted and
+        #    numberReady does not move (verified: node stopped 9 min, still
+        #    6/6). That case is NodeUnreachable's, and it fires sooner.
+        - alert: CiliumAgentMissing
+          expr: |
+            kube_daemonset_status_number_ready{daemonset="cilium"}
+              < kube_daemonset_status_desired_number_scheduled{daemonset="cilium"}
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Cilium agent missing on at least one node"
+            description: >-
+              No CNI and no policy enforcement on the affected node.
+              kubectl -n kube-system get pods -l k8s-app=cilium -o wide.
+
     - name: openaether-certificates
       interval: 5m
       rules:
