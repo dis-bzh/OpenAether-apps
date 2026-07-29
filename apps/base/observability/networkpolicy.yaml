@@ -107,6 +107,10 @@ spec:
               protocol: TCP
             - port: "2381"   # etcd metrics (control-plane nodes)
               protocol: TCP
+            - port: "9962"   # cilium-agent (hostNetwork)
+              protocol: TCP
+            - port: "9963"   # cilium-operator (hostNetwork)
+              protocol: TCP
 
 # ── VMCluster (vminsert + vmstorage + vmselect) ────────────────────
 # Labels set by VMOperator: app.kubernetes.io/name = vminsert|vmstorage|vmselect
