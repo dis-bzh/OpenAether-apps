@@ -470,10 +470,14 @@ spec:
           rules:
             dns:
               - matchPattern: "*"
-    # Slack webhook — the ONLY destination outside the cluster. An alert that
-    # cannot leave is the failure this whole stack exists to remove.
+    # The two destinations outside the cluster: Slack for humans, and the
+    # dead-man's-switch ping. An alert that cannot leave is the failure this
+    # whole stack exists to remove.
+    # ⚠️ Change the DMS provider and this list must change with it, or the ping
+    # is dropped and the service pages you for an outage that is not happening.
     - toFQDNs:
         - matchName: hooks.slack.com
+        - matchName: hc-ping.com
       toPorts:
         - ports:
             - port: "443"
