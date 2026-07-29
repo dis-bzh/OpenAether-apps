@@ -69,6 +69,7 @@ spec:
   # /etc/vm/secrets/<secret name>/<key>.
   secrets:
     - alertmanager-slack
+    - alertmanager-deadmansswitch
   configRawYaml: |
     route:
       receiver: slack
@@ -81,18 +82,29 @@ spec:
       repeat_interval: 12h
       routes:
         # The watchdog FIRST: it must never be swallowed by another matcher.
-        # One message a day, whose ABSENCE is the signal — see the Watchdog rule.
+        # It goes to the dead-man's-switch service, NOT to Slack: a human
+        # noticing a daily message stopped is not a monitoring system. The
+        # service alarms when the ping stops — which is the only arrangement
+        # that survives this cluster dying.
+        # Every 5 min, because a DMS grace period is usually 15-60 min.
         - matchers:
             - alertname="Watchdog"
-          receiver: slack
+          receiver: deadmansswitch
           group_wait: 0s
           group_interval: 5m
-          repeat_interval: 24h
+          repeat_interval: 5m
         - matchers:
             - severity="critical"
           receiver: slack
           repeat_interval: 1h
     receivers:
+      # The dead-man's switch. Its URL is a ping endpoint (healthchecks.io,
+      # PagerDuty DMS, Better Stack…) that raises the alarm when pings STOP.
+      # send_resolved is off: a resolve would look like a ping and defeat it.
+      - name: deadmansswitch
+        webhook_configs:
+          - url_file: /etc/vm/secrets/alertmanager-deadmansswitch/url
+            send_resolved: false
       - name: slack
         slack_configs:
           - api_url_file: /etc/vm/secrets/alertmanager-slack/webhook-url

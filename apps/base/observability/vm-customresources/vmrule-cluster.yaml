@@ -1,9 +1,8 @@
 # Cluster-health alerting — nodes, pods, volumes.
 #
-# Deliberately built ONLY on metrics that are actually scraped today
-# (kube-state-metrics and the kubelet, see vmscapes.yaml). Flux, cert-manager,
-# etcd and Cilium expose good signals but have no VMServiceScrape yet, so rules
-# on them would evaluate to nothing and read as "all clear" — see backlog.md.
+# Built only on metrics something actually scrapes (vmscapes.yaml). A rule on a
+# metric nobody produces evaluates clean and reads as "all clear" —
+# `task check-alerts` is the guard against writing one.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:
@@ -70,10 +69,8 @@ spec:
 
         # 5) A volume filling up. 10% left is the last point at which growing it
         #    is still a routine operation.
-        #    ⚠️ Silent on the LOCAL cluster: kubelet_volume_stats_* comes from
-        #    the CSI driver's NodeGetVolumeStats, and local-path-provisioner is
-        #    hostPath, not CSI. Longhorn does report them, so this only covers
-        #    the real clusters — an empty result locally is not a defect.
+        #    Silent locally: kubelet_volume_stats_* comes from the CSI driver,
+        #    and local-path is hostPath. Longhorn reports them; empty is fine.
         - alert: PersistentVolumeFillingUp
           expr: |
             kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes < 0.10
@@ -83,23 +80,17 @@ spec:
           annotations:
             summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} over 90% full"
 
-    # ⚠️ The alert path degrades during the very outage these rules report.
-    # Verified 2026-07-29 by stopping 2 of 3 control planes: the metrics are all
-    # correct in hindsight (has_leader went to 0, the members went up=0) but
-    # nothing FIRED at the time — DNS and the write path were disrupted, so
-    # VMAgent buffered and only flushed on recovery. In-cluster alerting cannot
-    # report its own cluster dying; that needs an external receiver
-    # (docs/backlog.md).
+    # ⚠️ These rules are a post-mortem record, not a page: during a real quorum
+    # loss nothing fired at the time (DNS and the write path went with the
+    # control plane). The Watchdog above is what covers that.
     - name: openaether-etcd
       interval: 1m
       rules:
         # A) No leader = the cluster accepts no writes. Nothing else reports it:
         #    the kubelets keep saying Ready while every apply fails. This is the
         #    one failure a Talos cluster cannot recover from on its own.
-        #    `for: 1m` and not longer: writes are failing the whole time, so
-        #    waiting buys nothing, and the window in which a member still
-        #    ANSWERS while reporting no leader is short (verified on a real
-        #    quorum loss: ~3 min before it went unreachable too).
+        #    `for: 1m`: writes fail the whole time, and the window where a
+        #    member still ANSWERS while reporting no leader is ~3 min.
         - alert: EtcdNoLeader
           expr: etcd_server_has_leader == 0
           for: 1m
@@ -112,10 +103,9 @@ spec:
               etcd, and talosctl -n <cp> etcd members. Recovery goes through a
               snapshot — see docs/backup-restore.md.
 
-        # A-bis) Quorum by COUNT, which catches what (A) cannot: if every member
-        #    goes unreachable there is no has_leader series left to compare, and
-        #    an absent metric matches nothing. Counting reachable targets still
-        #    works. Fires when at most half the members answer.
+        # A-bis) Quorum by COUNT: if every member goes unreachable there is no
+        #    has_leader series left to compare, and an absent metric matches
+        #    nothing. Fires when at most half the members answer.
         - alert: EtcdQuorumLost
           expr: |
             2 * (count(up{job=~".*etcd.*"} == 1) or vector(0)) <= count(up{job=~".*etcd.*"})
@@ -151,22 +141,14 @@ spec:
     - name: openaether-watchdog
       interval: 1m
       rules:
-        # A dead man's switch. It fires forever, on purpose.
+        # A dead man's switch: it fires forever, on purpose.
         #
-        # Every other rule here reports something wrong INSIDE the cluster. None
-        # of them can report the cluster being gone: verified 2026-07-29 by
-        # killing etcd quorum — the metrics were all correct in hindsight and
-        # nothing was delivered at the time, because DNS and the write path died
-        # with the control plane.
-        #
-        # So this one inverts the question. It arrives on a schedule while the
-        # whole chain (rule -> VMAlert -> Alertmanager -> Slack -> egress) is
-        # alive. ITS ABSENCE IS THE ALARM. A silent day is not a quiet day.
-        #
-        # ⚠️ Absence only alarms someone if something outside the cluster is
-        # watching for it. Today that someone is a human noticing the daily
-        # message stopped, which is weak. The real fix is a dead-man's-switch
-        # service (healthchecks.io, PagerDuty DMS…) — see docs/backlog.md.
+        # No rule here can report the cluster being GONE — killing etcd quorum
+        # proved it: metrics right in hindsight, nothing delivered at the time.
+        # So this one inverts the question. It pings while the whole chain is
+        # alive, and ITS ABSENCE IS THE ALARM. Routed to a dead-man's-switch
+        # service, never to Slack: a human noticing a message stopped arriving
+        # is not a monitoring system.
         - alert: Watchdog
           expr: vector(1)
           for: 0s
@@ -174,10 +156,10 @@ spec:
             severity: none
             watchdog: "true"
           annotations:
-            summary: "Alerting is alive end to end — you should see this daily"
+            summary: "Alerting is alive end to end"
             description: >-
-              If this stops arriving, do not assume all is well: assume the
-              cluster, its alerting, or its egress is gone, and go look.
+              Pings the dead-man's-switch service every 5 min. If the pings stop,
+              the cluster, its alerting or its egress is gone.
 
     - name: openaether-monitoring-itself
       interval: 1m
