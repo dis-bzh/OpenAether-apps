@@ -83,6 +83,71 @@ spec:
           annotations:
             summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} over 90% full"
 
+    # ⚠️ The alert path degrades during the very outage these rules report.
+    # Verified 2026-07-29 by stopping 2 of 3 control planes: the metrics are all
+    # correct in hindsight (has_leader went to 0, the members went up=0) but
+    # nothing FIRED at the time — DNS and the write path were disrupted, so
+    # VMAgent buffered and only flushed on recovery. In-cluster alerting cannot
+    # report its own cluster dying; that needs an external receiver
+    # (docs/backlog.md).
+    - name: openaether-etcd
+      interval: 1m
+      rules:
+        # A) No leader = the cluster accepts no writes. Nothing else reports it:
+        #    the kubelets keep saying Ready while every apply fails. This is the
+        #    one failure a Talos cluster cannot recover from on its own.
+        #    `for: 1m` and not longer: writes are failing the whole time, so
+        #    waiting buys nothing, and the window in which a member still
+        #    ANSWERS while reporting no leader is short (verified on a real
+        #    quorum loss: ~3 min before it went unreachable too).
+        - alert: EtcdNoLeader
+          expr: etcd_server_has_leader == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "etcd has no leader on {{ $labels.instance }}"
+            description: >-
+              Quorum is lost or an election is stuck. talosctl -n <cp> service
+              etcd, and talosctl -n <cp> etcd members. Recovery goes through a
+              snapshot — see docs/backup-restore.md.
+
+        # A-bis) Quorum by COUNT, which catches what (A) cannot: if every member
+        #    goes unreachable there is no has_leader series left to compare, and
+        #    an absent metric matches nothing. Counting reachable targets still
+        #    works. Fires when at most half the members answer.
+        - alert: EtcdQuorumLost
+          expr: |
+            2 * (count(up{job=~".*etcd.*"} == 1) or vector(0)) <= count(up{job=~".*etcd.*"})
+          for: 2m
+          labels:
+            severity: critical
+            component: etcd
+          annotations:
+            summary: "etcd has lost quorum — the cluster accepts no writes"
+
+        # B) A member that stopped answering. Below quorum this becomes (A), so
+        #    it is the warning that precedes the outage.
+        - alert: EtcdMemberDown
+          expr: up{job=~".*etcd.*"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            component: etcd
+          annotations:
+            summary: "etcd member unreachable on {{ $labels.instance }}"
+
+        # C) Flapping elections: a cluster that keeps re-electing is usually
+        #    starved on disk or network, and degrades before it breaks.
+        - alert: EtcdLeaderFlapping
+          expr: |
+            increase(etcd_server_leader_changes_seen_total[15m]) > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "etcd re-elected a leader more than 3 times in 15 min"
+
     - name: openaether-monitoring-itself
       interval: 1m
       rules:
