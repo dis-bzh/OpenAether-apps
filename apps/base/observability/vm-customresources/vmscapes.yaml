@@ -147,6 +147,63 @@ spec:
   endpoints:
     - port: http
 
+# ── Flux controllers ───────────────────────────────────────────────
+# A VMPodScrape and not a VMServiceScrape: the Flux Services only expose :80
+# (artifacts, webhooks). The metrics port `http-prom` is on the POD only, so
+# service discovery would never find it.
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: flux
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprintC"
+    openaether.io/component: vmagent-scrapes
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: flux
+  namespaceSelector:
+    matchNames:
+      - flux-system
+  podMetricsEndpoints:
+    - port: http-prom
+      path: /metrics
+      # Same reason as kube-state-metrics: gotk_reconcile_condition carries the
+      # RECONCILED object's namespace, which would otherwise be overwritten by
+      # the controller pod's own (flux-system) and pushed to exported_namespace.
+      honorLabels: true
+
+# ── cert-manager ───────────────────────────────────────────────────
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: cert-manager
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprintC"
+    openaether.io/component: vmagent-scrapes
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: cert-manager
+      app.kubernetes.io/component: controller
+  namespaceSelector:
+    matchNames:
+      - cert-manager
+  endpoints:
+    # The chart still names this port `tcp-prometheus-servicemonitor` (v1.15.3),
+    # not the http-metrics you would expect. Verified with `helm template`.
+    - port: tcp-prometheus-servicemonitor
+      path: /metrics
+      # certmanager_certificate_* carries the CERTIFICATE's namespace, not the
+      # controller's — same reason as kube-state-metrics.
+      honorLabels: true
+
 # ── kube-apiserver ─────────────────────────────────────────────────
 ---
 apiVersion: operator.victoriametrics.com/v1beta1

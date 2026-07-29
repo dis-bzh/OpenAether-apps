@@ -91,6 +91,8 @@ spec:
               protocol: TCP
             - port: "9100"   # node-exporter
               protocol: TCP
+            - port: "9402"   # cert-manager controller
+              protocol: TCP
             - port: "9187"   # postgres-exporter
               protocol: TCP
     # Scrape kubelet/cadvisor on the nodes (:10250) — a host target, not a pod.
