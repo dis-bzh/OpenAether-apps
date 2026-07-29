@@ -80,6 +80,14 @@ spec:
       # do not resolve on their own.
       repeat_interval: 12h
       routes:
+        # The watchdog FIRST: it must never be swallowed by another matcher.
+        # One message a day, whose ABSENCE is the signal — see the Watchdog rule.
+        - matchers:
+            - alertname="Watchdog"
+          receiver: slack
+          group_wait: 0s
+          group_interval: 5m
+          repeat_interval: 24h
         - matchers:
             - severity="critical"
           receiver: slack
