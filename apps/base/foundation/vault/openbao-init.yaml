@@ -136,7 +136,7 @@ spec:
                   echo "  API up (health=$c)"; break
                 fi
                 echo "  waiting... ${i}/60 (code=$c)"; sleep 5
-                [ "$i" = "60" ] && { echo "ERREUR: API openbao-0 injoignable"; exit 1; }
+                [ "$i" = "60" ] && { echo "ERROR: openbao-0 API unreachable"; exit 1; }
               done
 
               # ── 2) Initialisation state ─────────────────────────────────────
@@ -161,7 +161,7 @@ spec:
 
               # ── 3) Init (generates shares + root_token) — secrets, no trace ──
               set +x
-              echo "════ operator init (${KEY_SHARES} parts, seuil ${KEY_THRESHOLD}) ════"
+              echo "════ operator init (${KEY_SHARES} shares, threshold ${KEY_THRESHOLD}) ════"
               RESP="$(curl -s $CACERT -X POST "${ADDR}/v1/sys/init" \
                 -d "{\"secret_shares\":${KEY_SHARES},\"secret_threshold\":${KEY_THRESHOLD}}")"
               if ! echo "$RESP" | jq -e '.keys_base64 and .root_token' >/dev/null 2>&1; then
@@ -184,10 +184,10 @@ spec:
               # ── 5) ESCROW (printed ONCE — copy into Bitwarden EU) ────
               echo ""
               echo "╔══════════════════════════════════════════════════════════════════╗"
-              echo "║  ESCROW MANUEL REQUIS — copie ces valeurs dans Bitwarden EU MAINTENANT"
+              echo "║  MANUAL ESCROW REQUIRED — copy these values into Bitwarden EU NOW"
               echo "║  puis : kubectl delete job openbao-init -n ${VAULT_NS}  (purge logs)"
               echo "╠══════════════════════════════════════════════════════════════════╣"
-              echo "║  PARTS SHAMIR (${KEY_SHARES}, seuil ${KEY_THRESHOLD}) :"
+              echo "║  SHAMIR SHARES (${KEY_SHARES}, threshold ${KEY_THRESHOLD}):"
               echo "$KEYS_NL" | nl -ba -w2 -s'. ' | sed 's/^/║    /'
               echo "║"
               echo "║  ROOT TOKEN :"

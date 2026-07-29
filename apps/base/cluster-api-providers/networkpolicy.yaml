@@ -12,7 +12,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: cluster-api-providers
 spec:
-  description: "Managers CAPI: webhooks 9443 + egress DNS + API Scaleway (+ enfants :6443)"
+  description: "CAPI managers: webhooks 9443 + egress DNS + Scaleway API (+ children :6443)"
   endpointSelector: {}
   ingress:
     # kube-apiserver → provider webhooks (core/CABPT/CACPPT/CAPS…, :9443).

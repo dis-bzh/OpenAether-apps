@@ -1,6 +1,6 @@
 # OpenBao's CA bundle, materialised IN the gateway's namespace.
 #
-# ── Pourquoi ce Certificate ─────────────────────────────────────────────────
+# ── Why this Certificate ───────────────────────────────────────────────────
 # The openbao-tls `DestinationRule` (apps/base/foundation/vault) must have the
 # gateway's Envoy verify OpenBao's certificate. Istio allows this through
 # `trafficPolicy.tls.credentialName`, which reads a Secret — but in the CLIENT's

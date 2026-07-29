@@ -58,7 +58,7 @@ spec:
                 - |
                   set -eu
                   if [ -z "${CLUSTER_NAME:-}" ]; then
-                    echo "ERREUR: CLUSTER_NAME vide — ConfigMap cluster-identity absent."
+                    echo "ERROR: CLUSTER_NAME empty — ConfigMap cluster-identity is missing."
                     exit 1
                   fi
                   export RESTIC_CACHE_DIR=/tmp/restic-cache
@@ -74,7 +74,7 @@ spec:
                     # A "successful" but empty restore = an unusable repository.
                     if [ -z "$(find "$target" -type f -print -quit)" ]; then
                       echo "ERROR: EMPTY restore from repository ${label} —"
-                      echo "        le backup n'est PAS exploitable."
+                      echo "        the backup is NOT usable."
                       exit 1
                     fi
                     echo "   ✓ ${label}: $(find "$target" -type f | wc -l) file(s) restored"

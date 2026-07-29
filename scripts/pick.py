@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""pick.py — pioche modulaire OpenAether.
+"""pick.py — OpenAether modular brick picker.
 
 Selects bricks from the Flux DAG (apps/flux/base) and generates a profile
 (a kustomize overlay) holding the transitive closure of their dependencies.
 
-The source of truth for dependencies is the Kustomizations' `spec.dependsOn`
-Flux de apps/flux/base/*.yaml. Le catalogue apps/flux/bricks.yaml n'apporte
-only UX metadata (aliases, baseline, companions, descriptions).
+The source of truth for dependencies is the `spec.dependsOn` of the Flux
+Kustomizations in apps/flux/base/*.yaml. The apps/flux/bricks.yaml catalogue
+only adds UX metadata (aliases, baseline, companions, descriptions).
 
 The generated profile references the whole of ../base and REMOVES
 ($patch: delete) the unselected Kustomizations: the base stays the single
-et la fermeture transitive garantit qu'aucune Kustomization retenue ne
+source, and the transitive closure guarantees that no retained Kustomization
 depends on a removed one.
 
-Usage :
-  python3 scripts/pick.py --list                 # briques disponibles
+Usage:
+  python3 scripts/pick.py --list                 # available bricks
   python3 scripts/pick.py --validate             # DAG + catalogue health
   python3 scripts/pick.py vault gateway          # plan (dry-run)
   python3 scripts/pick.py vault gateway -o apps/flux/edge   # generate the profile
@@ -42,10 +42,10 @@ FLUX_GROUP = "kustomize.toolkit.fluxcd.io"
 
 class Brick:
     def __init__(self, name, deps, path, source_file, order):
-        self.name = name          # metadata.name de la Kustomization Flux
-        self.deps = deps          # noms dependsOn
+        self.name = name          # the Flux Kustomization's metadata.name
+        self.deps = deps          # dependsOn names
         self.path = path          # spec.path (./apps/base/…)
-        self.source_file = source_file  # fichier de apps/flux/base
+        self.source_file = source_file  # file under apps/flux/base
         self.order = order        # (file, doc index) for sorted display
 
 
@@ -81,10 +81,10 @@ def load_catalog(bricks):
     for key in ("baseline", "companions"):
         for n in cat.get(key) or []:
             if n not in bricks:
-                errors.append(f"{key}: '{n}' inconnu du DAG")
+                errors.append(f"{key}: '{n}' unknown to the DAG")
     for alias, target in (cat.get("aliases") or {}).items():
         if target not in bricks:
-            errors.append(f"alias '{alias}' → '{target}' inconnu du DAG")
+            errors.append(f"alias '{alias}' → '{target}' unknown to the DAG")
         if alias in bricks:
             errors.append(f"alias '{alias}' shadows a Kustomization of the same name")
     if errors:
@@ -142,7 +142,7 @@ def resolve_names(requested, bricks, aliases):
         name = aliases.get(r, r)
         if name not in bricks:
             hint = difflib.get_close_matches(r, known, n=3)
-            msg = f"brique inconnue : '{r}'"
+            msg = f"unknown brick: '{r}'"
             if hint:
                 msg += f" — vouliez-vous dire : {', '.join(hint)} ?"
             sys.exit(msg + "\n(full list: scripts/pick.py --list)")
@@ -260,7 +260,7 @@ PICK_RE = re.compile(r"^# Pick: (.*)$", re.M)
 def cmd_check(bricks, cat):
     """Checks that the generated profiles on disk are up to date with the DAG.
 
-    Un profil fige la liste des Kustomizations EXCLUES : ajouter une brique au
+    A profile freezes the list of EXCLUDED Kustomizations: adding a brick to the
     DAG (or changing a dependsOn) makes every already-generated profile stale —
     the new brick is then inherited from ../base without having been picked, and
     stays stuck if its own dependencies are excluded (real case: orc inherited
@@ -317,11 +317,11 @@ def cmd_list(bricks, cat):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Pioche modulaire OpenAether")
+    p = argparse.ArgumentParser(description="OpenAether modular brick picker")
     p.add_argument("bricks", nargs="*", help="bricks or aliases to install")
     p.add_argument("-o", "--output", metavar="DIR",
                    help="generate the profile into DIR (e.g. apps/flux/edge)")
-    p.add_argument("--list", action="store_true", help="liste les briques")
+    p.add_argument("--list", action="store_true", help="list the bricks")
     p.add_argument("--validate", action="store_true", help="valide DAG + catalogue")
     p.add_argument("--check", action="store_true",
                    help="check that the generated profiles are up to date (CI; exits 1 on drift)")

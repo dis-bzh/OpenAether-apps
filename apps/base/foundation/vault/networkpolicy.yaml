@@ -241,7 +241,7 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # TODO Wave 3 (UNSEAL_SOURCE=bitwarden) : egress 443 vers Bitwarden EU (FQDN/CIDR).
+    # TODO Wave 3 (UNSEAL_SOURCE=bitwarden): egress 443 to Bitwarden EU (FQDN/CIDR).
 ---
 # Egress init-Job (one-shot) : DNS + kube-apiserver (kubectl) + API OpenBao (init).
 apiVersion: cilium.io/v2

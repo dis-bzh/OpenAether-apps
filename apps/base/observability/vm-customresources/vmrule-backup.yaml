@@ -39,9 +39,9 @@ spec:
           annotations:
             summary: "Backup failed: {{ $labels.namespace }}/{{ $labels.job_name }}"
             description: >-
-              The Job failed and was not retried. Common causes: repository
-              restic illisible (RESTIC_PASSWORD d'un autre cluster), bucket
-              missing, stale S3 credentials. Logs: kubectl logs -n
+              The Job failed and was not retried. Common causes: unreadable
+              restic repository (RESTIC_PASSWORD from another cluster), missing
+              bucket, stale S3 credentials. Logs: kubectl logs -n
               {{ $labels.namespace }} job/{{ $labels.job_name }}
 
         # 2) The CronJob NO LONGER fires. The most dangerous case: there is no
@@ -75,5 +75,5 @@ spec:
             severity: warning
             component: backup
           annotations:
-            summary: "Sauvegarde suspendue depuis > 6 h : {{ $labels.namespace }}/{{ $labels.cronjob }}"
+            summary: "Backup suspended for > 6 h: {{ $labels.namespace }}/{{ $labels.cronjob }}"
             description: "kubectl patch cronjob -n {{ $labels.namespace }} {{ $labels.cronjob }} -p '{\"spec\":{\"suspend\":false}}'"

@@ -9,7 +9,7 @@
 # does not come up:
 #   1. le Service stable  → clients (ESO, cert-manager, backup) ;
 #   2. the headless PER-POD names → `retry_join` between raft replicas;
-#   3. `127.0.0.1` / `localhost` → probes et scripts du conteneur.
+#   3. `127.0.0.1` / `localhost` → the container's probes and scripts.
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
