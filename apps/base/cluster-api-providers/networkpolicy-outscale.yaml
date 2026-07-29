@@ -12,7 +12,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: cluster-api-providers
 spec:
-  description: "Manager CAPOSC: webhooks 9443 + egress DNS + API Outscale (+ enfants :6443)"
+  description: "CAPOSC manager: webhooks 9443 + egress DNS + Outscale API (+ children :6443)"
   endpointSelector: {}
   ingress:
     # kube-apiserver → provider webhooks (core/CABPT/CACPPT/CAPS…, :9443).

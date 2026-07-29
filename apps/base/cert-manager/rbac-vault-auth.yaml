@@ -1,4 +1,4 @@
-# cert-manager Kubernetes auth vers OpenBao/Vault
+# cert-manager Kubernetes auth against OpenBao/Vault
 # cert-manager must create a token for its own SA in order to authenticate
 # against OpenBao through the Kubernetes auth method.
 # Ref: https://cert-manager.io/docs/configuration/vault/#secretless-authentication

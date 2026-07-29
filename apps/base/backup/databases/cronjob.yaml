@@ -111,7 +111,7 @@ spec:
                   # since RESTIC_PASSWORD is not shared). `set -u` would be
                   # enough to fail, but not to explain why.
                   if [ -z "${CLUSTER_NAME:-}" ]; then
-                    echo "ERREUR: CLUSTER_NAME vide — le ConfigMap cluster-identity"
+                    echo "ERROR: CLUSTER_NAME empty — the ConfigMap cluster-identity"
                     echo "        of the namespace is missing or unsubstituted"
                     echo "        (cf. apps/flux/base/22a-backup-identity.yaml)."
                     exit 1

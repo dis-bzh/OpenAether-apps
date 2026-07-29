@@ -14,7 +14,7 @@
 # ──────────────────────────────────────────────────────────────────
 
 # ── VMAgent ────────────────────────────────────────────────────────
-# egress: DNS + k8s API (SD) + tous pods scrape ports + vminsert
+# egress: DNS + k8s API (SD) + every pod's scrape ports + vminsert
 # ingress: none (VMAgent serves no external requests)
 ---
 apiVersion: cilium.io/v2
@@ -50,7 +50,7 @@ spec:
     # fallback toEntities → k8s SD (Alloy/vmagent/Grafana sidecar) breaks.
     - toEntities:
         - kube-apiserver
-    # remote_write vers vminsert
+    # remote_write to vminsert
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability
@@ -395,7 +395,7 @@ spec:
               protocol: TCP
 
 # ── Grafana ────────────────────────────────────────────────────────
-# ingress: Istio gateway :80 (HTTPRoute redirige vers :80/3000)
+# ingress: Istio gateway :80 (the HTTPRoute redirects to :80/3000)
 # egress: DNS + vmselect :8481 + Loki :3100 + CNPG :5432 + k8s API (sidecar)
 ---
 apiVersion: cilium.io/v2

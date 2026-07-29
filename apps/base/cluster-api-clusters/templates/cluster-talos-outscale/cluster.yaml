@@ -261,8 +261,8 @@ spec:
       node:
         vm:
           # role: worker by default (OscVm.GetRole()). Without "controlplane":
-          # mauvais subnet, mauvais SG, et surtout AUCUN enregistrement en
-          # LBU backend (oscmachine_vm.go only calls
+          # wrong subnet, wrong SG, and above all NO registration as an LBU
+          # backend (oscmachine_vm.go only calls
           # LinkLoadBalancerBackendMachines when role==controlplane).
           role: controlplane
           # TRAP #8 — the image: node.vm.imageId (ami-…) OR node.image.name.

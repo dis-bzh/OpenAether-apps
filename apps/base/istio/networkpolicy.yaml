@@ -9,7 +9,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "istio"
 spec:
-  description: "istiod: ingress depuis proxies (15012 xDS/CA, 15010 xDS plaintext, 443 webhook, 15014 debug), egress DNS + kube-api."
+  description: "istiod: ingress from proxies (15012 xDS/CA, 15010 xDS plaintext, 443 webhook, 15014 debug), egress DNS + kube-api."
   endpointSelector:
     matchLabels:
       app: istiod
@@ -65,7 +65,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "istio"
 spec:
-  description: "ztunnel: egress istiod (15012 CA+xDS, 15010), kube-api, DNS. Ingress HBONE (15008) depuis tous pods."
+  description: "ztunnel: egress istiod (15012 CA+xDS, 15010), kube-api, DNS. Ingress HBONE (15008) from every pod."
   endpointSelector:
     matchLabels:
       app: ztunnel
@@ -148,7 +148,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "istio"
 spec:
-  description: "istio-waypoint: egress vers istiod (xDS/CA) + DNS + kube-api."
+  description: "istio-waypoint: egress to istiod (xDS/CA) + DNS + kube-api."
   endpointSelector:
     matchLabels:
       gateway.networking.k8s.io/gateway-name: istio-waypoint
@@ -197,7 +197,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "gateway"
 spec:
-  description: "openaether-gateway: ingress 80/443/15021 depuis world+lb+nœuds, egress istiod xDS/CA + DNS + kube-api."
+  description: "openaether-gateway: ingress 80/443/15021 from world+lb+nodes, egress istiod xDS/CA + DNS + kube-api."
   endpointSelector:
     matchLabels:
       service.istio.io/canonical-name: openaether-gateway-istio

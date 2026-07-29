@@ -33,10 +33,11 @@ messages de commit et documentation. Le français est une **traduction**, jamais
 la source. README : `README.md` = anglais (canonique), `README.fr.md` = français.
 Échange avec l'utilisateur : en français.
 
-⚠️ Le dépôt est **entièrement en anglais depuis le 2026-07-28**. Avant de
-traduire une chaîne, vérifier qu'aucun code ne la compare : `pick.py`
-identifiait ses profils générés par l'en-tête français, et la traduire a rendu
-`--check` aveugle en silence.
+⚠️ Avant de traduire une chaîne, vérifier qu'aucun code ne la compare :
+`pick.py` identifiait ses profils générés par l'en-tête français, et la traduire
+a rendu `--check` aveugle en silence. La bascule du 2026-07-28 n'était pas
+complète (~50 lignes retrouvées le 2026-07-29) : passer le détecteur plutôt que
+supposer.
 
 ## Concision et refacto
 

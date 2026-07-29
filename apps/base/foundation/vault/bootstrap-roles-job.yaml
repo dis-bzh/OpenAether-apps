@@ -142,7 +142,7 @@ spec:
               WL_TOKEN="$(kubectl get secret openbao-recovery -n "$VAULT_NS" \
                 -o jsonpath='{.data.root_token}' | base64 -d 2>/dev/null)"
               if [ -z "$WL_TOKEN" ]; then
-                echo "ERREUR: root_token vide dans le Secret"; exit 1
+                echo "ERROR: root_token empty in the Secret"; exit 1
               fi
               echo "  root_token retrieved"
               set -x; set +x
@@ -416,7 +416,7 @@ spec:
                 kv_seed "backup/restic" \
                   "$(jq -nc --arg p "$RESTIC_PASS" '{password:$p}')"
                 echo ""
-                echo "  >>> ESCROW OBLIGATOIRE (une seule fois — Bitwarden EU) :"
+                echo "  >>> ESCROW MANDATORY (once only — Bitwarden EU):"
                 echo "  >>> password restic des backups (backup/restic) :"
                 echo "  ----- BEGIN RESTIC PASSWORD -----"
                 echo "  ${RESTIC_PASS}"

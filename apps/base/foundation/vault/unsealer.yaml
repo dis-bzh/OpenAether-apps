@@ -52,7 +52,7 @@ spec:
             - name: UNSEAL_THRESHOLD
               value: "3"
             - name: UNSEAL_INTERVAL
-              value: "15"   # secondes entre deux passes de surveillance
+              value: "15"   # seconds between two watch passes
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:
@@ -72,7 +72,7 @@ spec:
               PODS="openbao-0 openbao-1 openbao-2"
 
               if [ ! -s "$KEYS_FILE" ]; then
-                echo "[unsealer] FATAL: fichier de parts vide/absent ($KEYS_FILE)"
+                echo "[unsealer] FATAL: key-share file empty or missing ($KEYS_FILE)"
                 # We do not kill the pod in a tight loop: wait for the Secret to
                 # be populated (init-Job) then retry.
               fi
@@ -85,7 +85,7 @@ spec:
                 # unsealer wrongly considers the pod unreachable — it never
                 # unseals it and the cluster stays stuck.
                 export BAO_CACERT="/bao/tls/ca.crt"
-                # exit 0 = unsealed, 2 = sealed, autre = injoignable/erreur
+                # exit 0 = unsealed, 2 = sealed, anything else = unreachable/error
                 bao status >/dev/null 2>&1
                 rc=$?
                 if [ "$rc" = "0" ]; then
@@ -95,7 +95,7 @@ spec:
                   echo "[unsealer] $addr injoignable (rc=$rc) — skip"
                   return 1
                 fi
-                echo "[unsealer] $addr sealed → application des parts"
+                echo "[unsealer] $addr sealed → applying the key shares"
                 # Replay the shares line by line; stop as soon as it is unsealed.
                 while IFS= read -r key; do
                   [ -z "$key" ] && continue
