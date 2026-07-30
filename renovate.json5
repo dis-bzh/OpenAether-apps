@@ -171,5 +171,13 @@
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*GITLEAKS_VERSION:\\s*\"(?<currentValue>[^\"]+)\"",
       ],
     },
+    {
+      customType: "regex",
+      description: "zitadel helmrelease.yaml: tools.kubectl.image.tag pinned explicitly (chart default auto-derives from the cluster's Kubernetes version, which broke live when running ahead of what alpine/k8s has published — see the comment in the file).",
+      fileMatch: ["^apps/base/identity/zitadel/helmrelease\\.yaml$"],
+      matchStrings: [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s*\\n\\s*tag:\\s*\"(?<currentValue>[^\"]+)\"",
+      ],
+    },
   ],
 }
