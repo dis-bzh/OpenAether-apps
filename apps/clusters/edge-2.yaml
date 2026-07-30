@@ -28,7 +28,11 @@ spec:
       # Glance image (openstack platform) rebuilt as v1.13.4 with the current
       # schematic — the module's in-place rename is fixed.
       OS_IMAGE_NAME: talos-ovh-amd64-v1.13.4
-      OS_FLAVOR: b3-8            # 8 Go — au-dessus du seuil OOM Talos
+      # b3-8 (2 vCPU/8GB) ran out of CPU (not RAM) on the full workload
+      # profile (Istio+Kyverno+CNPG+Longhorn+observability): worker hit 108%
+      # CPU requests, several pods stuck Pending/OutOfcpu (kyverno,
+      # istio-waypoint, gateway). b3-16 doubles both — found live 2026-07-30.
+      OS_FLAVOR: b3-16
       OS_EXTERNAL_NETWORK: Ext-Net
       OS_NODE_CIDR: 10.20.0.0/24  # distinct du management OVH
       # Pre-allocated CP FIP: must appear in the Talos certSANs (the OpenStack
