@@ -20,6 +20,10 @@
 #   ${OS_CREDENTIALS_SECRET:=ovh-capi-credentials} ${OS_CLOUD_NAME:=ovh}
 #   ${OS_EXTERNAL_NETWORK:=Ext-Net} ${OS_NODE_CIDR:=10.20.0.0/24}
 #   ${OS_FLAVOR:=b3-8} ${OS_IMAGE_NAME}
+#   ${MACHINE_REV:=v1} — bump (v2, v3…) pour faire tourner les machines sans
+#   toucher au FloatingIPPool ni à l'IP pré-allouée (même pattern que le
+#   template Outscale). Trouvé en marche 2026-07-30 : sans ceci, changer
+#   OS_IMAGE_NAME nécessitait task edge-down + recréation complète.
 ---
 apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster
@@ -90,9 +94,12 @@ spec:
   infrastructureTemplate:
     apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
     kind: OpenStackMachineTemplate
-    # ⚠️ IMMUTABLE spec: to change the template (flavor, image, FIP…), create a
-    # NEW name and reference it here — CAPI then rolls the control planes.
-    name: ${CLUSTER_NAME}-cp-fip3
+    # ⚠️ IMMUTABLE spec: to change the template (flavor, image…), a NEW name
+    # is required — ${MACHINE_REV} (bump v2, v3…) makes CAPI roll the control
+    # planes, same pattern as the Outscale template. Decoupled from the
+    # OpenStackFloatingIPPool's OWN name below (${CLUSTER_NAME}-cp-fip3,
+    # stable): the pre-allocated FIP must survive a machine-template rev.
+    name: ${CLUSTER_NAME}-cp-${MACHINE_REV:=v1}
     namespace: capi-clusters
   controlPlaneConfig:
     controlplane:
@@ -181,7 +188,7 @@ spec:
       infrastructureRef:
         apiGroup: infrastructure.cluster.x-k8s.io
         kind: OpenStackMachineTemplate
-        name: ${CLUSTER_NAME}-workers
+        name: ${CLUSTER_NAME}-workers-${MACHINE_REV:=v1}
 ---
 # ⚠️ CACPPT (etcd bootstrap + kubeconfig retrieval) connects to the Talos API
 # on the MACHINE ADDRESSES (machine.Status.Addresses), NOT on the
@@ -209,7 +216,7 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: OpenStackMachineTemplate
 metadata:
-  name: ${CLUSTER_NAME}-cp-fip3
+  name: ${CLUSTER_NAME}-cp-${MACHINE_REV:=v1}
   namespace: capi-clusters
 spec:
   template:
@@ -230,7 +237,7 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: OpenStackMachineTemplate
 metadata:
-  name: ${CLUSTER_NAME}-workers
+  name: ${CLUSTER_NAME}-workers-${MACHINE_REV:=v1}
   namespace: capi-clusters
 spec:
   template:
