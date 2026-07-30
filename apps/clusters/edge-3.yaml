@@ -44,14 +44,18 @@ spec:
       OSC_SUBNET_PUBLIC: 10.30.2.0/24
       OSC_SUBNET_WORKER: 10.30.3.0/24
       OSC_SUBNET_CP: 10.30.4.0/24
-      # tinav6.c2r8p1 does not exist in this account's real catalog (verified
-      # live via ReadVmTypes 2026-07-30 — filtered lookups on tinav4/5/6 all
-      # return an empty VmTypes array; this account only sees the classic
-      # EC2-style names). m4.xlarge (4 vCPU / 16 GB) mirrors the OVH b3-16
-      # fix for edge-2: 2 vCPU/8 GB ran out of CPU under the full profile.
+      # CAPOSC's voscmachinetemplate webhook only accepts vmType matching
+      # ^tinav([3-9]|[1-9][0-9]).c[1-9][0-9]*r[1-9][0-9]*p[1-3]$ (real EC2-
+      # style names like m4.xlarge are REJECTED at admission, even though
+      # this account's generic ReadVmTypes catalog doesn't list any tinav*
+      # type either — found live 2026-07-30, both facts confirmed against
+      # the real API/cluster). tinav6.c2r8p1 (2 vCPU/8 GB, the template's
+      # own doc comment calls tinav6.c4r8p2 "equivalent b3-8") is the same
+      # undersized class that made edge-2 run out of CPU under the full
+      # profile. tinav6.c4r16p2 doubles both, mirroring the b3-16 fix.
       # Preflight quota confirmed clean (0/20 vCPU) — 1 CP + 2 workers @ 4
       # vCPU = 12, well inside it.
-      OSC_VM_TYPE: m4.xlarge
+      OSC_VM_TYPE: tinav6.c4r16p2
       # Bump on every size/image change: the OscMachineTemplate spec is
       # immutable, and a new name makes the machines roll.
       MACHINE_REV: v3
