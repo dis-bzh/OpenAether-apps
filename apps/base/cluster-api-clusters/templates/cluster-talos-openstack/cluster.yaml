@@ -24,6 +24,9 @@
 #   toucher au FloatingIPPool ni à l'IP pré-allouée (même pattern que le
 #   template Outscale). Trouvé en marche 2026-07-30 : sans ceci, changer
 #   OS_IMAGE_NAME nécessitait task edge-down + recréation complète.
+#   ${OS_CP_FLOATING_IPS} ${OS_CP_FLOATING_IPS_SURGE} — 2 FIP pré-allouées
+#   (task ensure-capo-fip.py <cluster> --count 2), la 2e réservée pour le
+#   surge d'un rolling upgrade (CP_REPLICAS+1 le temps du cutover).
 ---
 apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster
@@ -115,8 +118,18 @@ spec:
             # private IP and CACPPT fails TLS on <FIP>:50000 ("certificate is
             # valid for 10.x, not <FIP>") → control plane stuck. The IPs are
             # therefore PRE-ALLOCATED (preAllocatedFloatingIPs pool) and listed here.
+            # ⚠️ A rolling upgrade (MACHINE_REV bump) SURGES to CP_REPLICAS+1
+            # while the new machine joins — the pool then auto-claims an EXTRA
+            # FIP beyond the pre-allocated one, uncovered by this SAN, and the
+            # new node hangs forever on "waiting for boot sequence" (a TLS
+            # failure surfaced as a generic timeout). Found live 2026-07-30
+            # upgrading edge-2 (CP_REPLICAS=1): reserve ONE extra "surge" FIP
+            # up front so it's always already in the cert. Not general for
+            # CP_REPLICAS>1 (would need N+1 slots) — not needed today, both
+            # OpenStack edges run non-HA (1 CP).
             certSANs:
               - ${OS_CP_FLOATING_IPS}
+              - ${OS_CP_FLOATING_IPS_SURGE}
           cluster:
             network:
               cni:
@@ -208,9 +221,12 @@ spec:
     filter:
       name: ${OS_EXTERNAL_NETWORK:=Ext-Net}
   # Pre-allocated IPs: they must be known BEFORE boot to enter the certSANs
-  # (see TalosControlPlane). Retain = we keep the anchor stable.
+  # (see TalosControlPlane). Retain = we keep the anchor stable. The surge
+  # slot (see certSANs comment) is ALSO pre-allocated, not left to the pool's
+  # auto-claim — an auto-claimed FIP has no certSAN and hangs the rollout.
   preAllocatedFloatingIPs:
     - ${OS_CP_FLOATING_IPS}
+    - ${OS_CP_FLOATING_IPS_SURGE}
   reclaimPolicy: Retain
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
