@@ -28,7 +28,11 @@ spec:
     substitute:
       CLUSTER_NAME: edge-3
       CP_REPLICAS: "1"
-      WORKER_REPLICAS: "1"
+      # 1 worker isn't enough for the full profile (Istio+Kyverno+CNPG+
+      # Longhorn+observability) — same lesson as edge-2 (2026-07-30): the CP
+      # is tainted, so a single worker gets 100% of it and starves. 2 spreads
+      # it instead of inflating one node further.
+      WORKER_REPLICAS: "2"
       K8S_VERSION: v1.35.3
       TALOS_CONTRACT: v1.13
       POD_CIDR: 10.244.0.0/16
@@ -40,14 +44,17 @@ spec:
       OSC_SUBNET_PUBLIC: 10.30.2.0/24
       OSC_SUBNET_WORKER: 10.30.3.0/24
       OSC_SUBNET_CP: 10.30.4.0/24
-      # 2 vCPU / 8 GB: RAM stays above the Talos OOM threshold, but the cores
-      # count against the Outscale `core_limit` quota (20 on this account). An
-      # HA management already uses 14 → c4 workers would overflow it
-      # (CreateVms → 10042 TooManyResources/QuotaExceeded).
-      OSC_VM_TYPE: tinav6.c2r8p1
+      # tinav6.c2r8p1 does not exist in this account's real catalog (verified
+      # live via ReadVmTypes 2026-07-30 — filtered lookups on tinav4/5/6 all
+      # return an empty VmTypes array; this account only sees the classic
+      # EC2-style names). m4.xlarge (4 vCPU / 16 GB) mirrors the OVH b3-16
+      # fix for edge-2: 2 vCPU/8 GB ran out of CPU under the full profile.
+      # Preflight quota confirmed clean (0/20 vCPU) — 1 CP + 2 workers @ 4
+      # vCPU = 12, well inside it.
+      OSC_VM_TYPE: m4.xlarge
       # Bump on every size/image change: the OscMachineTemplate spec is
       # immutable, and a new name makes the machines roll.
-      MACHINE_REV: v2
+      MACHINE_REV: v3
       OSC_KEYPAIR_NAME: openaether-capi
       OSC_IMAGE_NAME: talos-outscale-amd64-v1.13.4
       OSC_IMAGE_ACCOUNT_ID: "185209522342"
@@ -55,8 +62,11 @@ spec:
       WORKER_DATA_DISK_GB: "50"
       # The Talos port 50000 cannot go through the LBU (a single listener):
       # direct access to the CPs' public IPs, restricted to the management's
-      # egress (Outscale NAT — the management now runs on Outscale) and to admin.
-      MGMT_EGRESS_CIDR: 171.33.93.64/32  # NAT service Outscale (management)
+      # egress and to admin. Management is Scaleway (fixed 2026-07-30 — this
+      # used to say Outscale, stale from before the Scaleway pivot): its NAT
+      # gateway's public IP (tofu output nat_gateway_ip, cluster/), not the
+      # nodes themselves (they're private, behind it).
+      MGMT_EGRESS_CIDR: 51.15.198.181/32
       ADMIN_CIDR: 80.14.185.25/32
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
@@ -191,3 +201,11 @@ spec:
       CHILD_PROFILE: workload
       CHILD_NAME: edge-3   # prefix of this child's restic repositories
       # CHILD_BRANCH deliberately absent → defaults to `main` (see child-gitops).
+      # Reuses the management's own backup bucket (Scaleway) — shared, path
+      # distinguished by CLUSTER_NAME, same pattern as the restic repos.
+      # REQUIRED as soon as CHILD_PROFILE picks the cnpg brick, see
+      # child-gitops/gitrepository.yaml's header for why there's no default.
+      CHILD_BACKUP_S3_BUCKET: s3-openaether-scaleway-backups-dev
+      CHILD_BACKUP_S3_ENDPOINT: https://s3.fr-par.scw.cloud
+      # Same bucket, Longhorn's own URL syntax (storage brick's BackupTarget).
+      CHILD_BACKUP_TARGET_URL: s3://s3-openaether-scaleway-backups-dev@fr-par/
