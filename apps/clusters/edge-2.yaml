@@ -28,11 +28,17 @@ spec:
       # 2 workers spreads it instead of inflating a single node further.
       # Found live 2026-07-30.
       WORKER_REPLICAS: "2"
-      K8S_VERSION: v1.35.3
+      # Phase 5 (1.0.0): real version upgrade, matching management's own
+      # v1.13.7/v1.36.3 — found live 2026-07-30, edges were still on the
+      # v1.13.4/v1.35.3 they were first deployed with. Rolling, zero-downtime:
+      # MACHINE_REV bump makes CAPI create new machines from the new
+      # OpenStackMachineTemplate and cut over one at a time (see the
+      # template's own header for why this needed a fix first — the CP
+      # template had no rev mechanism, only a hardcoded name).
+      K8S_VERSION: v1.36.3
       TALOS_VERSION: v1.13
-      # Glance image (openstack platform) rebuilt as v1.13.4 with the current
-      # schematic — the module's in-place rename is fixed.
-      OS_IMAGE_NAME: talos-ovh-amd64-v1.13.4
+      OS_IMAGE_NAME: talos-ovh-amd64-v1.13.7
+      MACHINE_REV: v2
       # b3-8 (2 vCPU/8GB) ran out of CPU (not RAM) on the full workload
       # profile (Istio+Kyverno+CNPG+Longhorn+observability): worker hit 108%
       # CPU requests, several pods stuck Pending/OutOfcpu (kyverno,
