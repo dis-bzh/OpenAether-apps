@@ -97,7 +97,8 @@ spec:
   # Symptom observed outside the mesh: replica join dropped on cross-node egress
   # :5432, Cluster stuck on "Instance Status Extraction Error".
   egress:
-    # DNS
+    # DNS — rules.dns is MANDATORY for the toFQDNs rule below to match (DNS
+    # proxy), cf. backup/databases/networkpolicy.yaml.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -108,6 +109,9 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
     # Kubernetes API (instance-manager watch Cluster/config)
     - toServices:
         - k8sService:
@@ -119,6 +123,23 @@ spec:
               protocol: TCP
     - toEntities:
         - kube-apiserver
+    # Cloud S3 (HTTPS) — barmanObjectStore continuous archiving (WAL push from
+    # the primary, WAL/history restore for a joining replica). Missing this
+    # silently degrades: a single-instance cluster never notices (no
+    # restore_command calls), and archive-push failures don't block Ready —
+    # only a replica JOIN actually blocks on it, hanging on restore_command
+    # instead of failing fast. Found live on edge-3 2026-07-30 (zitadel-db/
+    # grafana-db replicas stuck "Waiting for the instances to become active"
+    # for 15+ minutes; same gap as backup/databases/networkpolicy.yaml,
+    # narrowed to FQDNs, no toEntities:world).
+    - toFQDNs:
+        - matchName: s3.fr-par.scw.cloud          # Scaleway Object Storage
+        - matchName: s3.eu-west-par.io.cloud.ovh.net  # OVH (aligned with the eu-west-par tfvars)
+        - matchName: oos.eu-west-2.outscale.com   # Outscale OSU
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
     # INTERNAL foundation-databases traffic (streaming replication +
     # instance-manager peer + join pods). Namespace-only selector — same reason as
     # ingress #3+4: `cnpg.io/cluster: ""` does not match the instances (non-empty
