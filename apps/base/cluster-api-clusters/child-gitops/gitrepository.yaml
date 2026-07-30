@@ -25,6 +25,19 @@
 #                      "variable not found" than this silent-until-CRD-
 #                      validation failure mode. See docs/backlog.md if this
 #                      needs a NOT-a-required-Postgres-backup-yet path later.
+#   ${CHILD_BACKUP_TARGET_URL} — REQUIRED if the child picks the storage
+#                      (Longhorn) brick, same failure mode as above but for
+#                      Longhorn's BackupTarget.spec.backupTargetURL (also
+#                      found live 2026-07-30, same "whole field is the bare
+#                      substitution" shape). Distinct from BACKUP_S3_* above —
+#                      Longhorn wants its own `s3://bucket@region/` URL, not
+#                      an endpoint+bucket pair.
+#
+# Whichever cluster (management or gitception child) picks cnpg and/or
+# storage needs its OWN backup destination seeded into ITS OWN OpenBao too
+# (`bao kv put secret/backup/s3-primary ...`, docs/admin-access.md step 3 on
+# the infra side) — the ConfigMap here only wires the URL/endpoint into the
+# manifests, not the S3 credentials the ExternalSecret actually reads.
 ---
 # The child cluster's identity — the exact counterpart of the ConfigMap laid
 # down by the parent's bootstrap (flux-bootstrap.yaml.tftpl, infra side). The
@@ -46,6 +59,7 @@ data:
   CLUSTER_NAME: ${CHILD_NAME}
   BACKUP_S3_BUCKET: ${CHILD_BACKUP_S3_BUCKET}
   BACKUP_S3_ENDPOINT: ${CHILD_BACKUP_S3_ENDPOINT}
+  BACKUP_TARGET_URL: ${CHILD_BACKUP_TARGET_URL}
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
