@@ -72,10 +72,15 @@ spec:
   # RPO. barmanObjectStore archives WAL continuously → an RPO of a few minutes,
   # and restoration to a precise point in time.
   #
-  # `${BACKUP_S3_*}` comes from the `cluster-identity` ConfigMap laid down at
-  # bootstrap (substitution carried by the `cnpg` Kustomization). If the cluster
-  # does not publish them, the destination is empty and the backup stays
-  # inactive — no silent regression.
+  # `${BACKUP_S3_*}` comes from the `cluster-identity` ConfigMap — laid down by
+  # the management's own bootstrap, or (gitception children) by
+  # child-gitops/gitrepository.yaml's ${CHILD_BACKUP_S3_*} substitution.
+  # ⚠️ NOT optional in practice: found live 2026-07-30 that an unset
+  # BACKUP_S3_ENDPOINT doesn't degrade to "" here (unlike destinationPath,
+  # where the empty substitution lands inside a larger string) — endpointURL's
+  # entire value IS the substitution, so it renders as YAML `null` and CNPG's
+  # CRD rejects the whole Cluster at dry-run. Any profile picking cnpg needs
+  # real values from its cluster-identity source.
   #
   # The path includes the database name: both clusters share the bucket without
   # stepping on each other, like the restic repositories.
