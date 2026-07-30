@@ -5,7 +5,7 @@
 # start its watchers without these CRDs ("no matches for kind Image in version
 # openstack.k-orc.cloud/v1alpha1") → no OpenStackCluster ever provisions.
 # Version pinned to the one in CAPO v0.14.4's go.mod (k-orc/…/v2 v2.4.0).
-# Regenerate: curl -sL https://github.com/k-orc/openstack-resource-controller/releases/download/v2.4.0/install.yaml
+# Regenerate: curl -sL https://github.com/k-orc/openstack-resource-controller/releases/download/v2.6.0/install.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
