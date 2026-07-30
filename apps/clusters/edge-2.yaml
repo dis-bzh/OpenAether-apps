@@ -173,3 +173,9 @@ spec:
       CHILD_PROFILE: workload
       CHILD_NAME: edge-2   # prefix of this child's restic repositories
       # CHILD_BRANCH deliberately absent → defaults to `main` (see child-gitops).
+      # Reuses the management's own backup bucket (Scaleway) — shared, path
+      # distinguished by CLUSTER_NAME, same pattern as the restic repos.
+      # REQUIRED as soon as CHILD_PROFILE picks the cnpg brick, see
+      # child-gitops/gitrepository.yaml's header for why there's no default.
+      CHILD_BACKUP_S3_BUCKET: s3-openaether-scaleway-backups-dev
+      CHILD_BACKUP_S3_ENDPOINT: https://s3.fr-par.scw.cloud

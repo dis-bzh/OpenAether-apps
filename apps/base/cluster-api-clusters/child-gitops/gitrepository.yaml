@@ -10,6 +10,21 @@
 #                      useful to test a branch end to end)
 #   ${CHILD_NAME}    — the child's UNIQUE identity (e.g. edge-2), used as the
 #                      prefix of its restic repositories
+#   ${CHILD_BACKUP_S3_BUCKET} / ${CHILD_BACKUP_S3_ENDPOINT} — REQUIRED if the
+#                      child picks the cnpg brick. Found live (2026-07-30,
+#                      edge-2): CNPG's Cluster.spec.backup.barmanObjectStore.
+#                      endpointURL is written as `"${BACKUP_S3_ENDPOINT:=}"` —
+#                      the WHOLE field is just the substitution, and when the
+#                      variable resolves to an EMPTY string (undefined, no
+#                      real default), Flux/kustomize renders the field as YAML
+#                      `null`, not `""` — CNPG's CRD then rejects the Cluster
+#                      outright (dry-run fails), unlike destinationPath, where
+#                      the same empty substitution lands INSIDE a larger
+#                      string and stays a valid (if bucket-less) string. No
+#                      empty default here on purpose — better a clear
+#                      "variable not found" than this silent-until-CRD-
+#                      validation failure mode. See docs/backlog.md if this
+#                      needs a NOT-a-required-Postgres-backup-yet path later.
 ---
 # The child cluster's identity — the exact counterpart of the ConfigMap laid
 # down by the parent's bootstrap (flux-bootstrap.yaml.tftpl, infra side). The
@@ -29,6 +44,8 @@ metadata:
     openaether.io/managed: "true"
 data:
   CLUSTER_NAME: ${CHILD_NAME}
+  BACKUP_S3_BUCKET: ${CHILD_BACKUP_S3_BUCKET}
+  BACKUP_S3_ENDPOINT: ${CHILD_BACKUP_S3_ENDPOINT}
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
