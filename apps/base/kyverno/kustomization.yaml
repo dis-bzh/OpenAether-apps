@@ -41,6 +41,12 @@ patches:
       - op: replace
         path: /spec/jobTemplate/spec/template/spec/containers/0/image
         value: alpine:3.19
+      # The vendored manifest's image (bitnami/kubectl) has bash; alpine
+      # doesn't ship it by default. The script below is plain POSIX sh
+      # (no bashisms) — just needed the interpreter swapped to match.
+      - op: replace
+        path: /spec/jobTemplate/spec/template/spec/containers/0/command/0
+        value: /bin/sh
       - op: replace
         path: /spec/jobTemplate/spec/template/spec/containers/0/command/2
         value: |
@@ -75,6 +81,12 @@ patches:
       - op: replace
         path: /spec/jobTemplate/spec/template/spec/containers/0/image
         value: alpine:3.19
+      # The vendored manifest's image (bitnami/kubectl) has bash; alpine
+      # doesn't ship it by default. The script below is plain POSIX sh
+      # (no bashisms) — just needed the interpreter swapped to match.
+      - op: replace
+        path: /spec/jobTemplate/spec/template/spec/containers/0/command/0
+        value: /bin/sh
       - op: replace
         path: /spec/jobTemplate/spec/template/spec/containers/0/command/2
         value: |
