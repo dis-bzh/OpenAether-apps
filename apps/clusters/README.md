@@ -41,10 +41,23 @@ kubectl create secret generic <enfant>-substitutes -n flux-system \
 ```
 
 OpenStack / OVH — un seul Secret, la région vit DANS `clouds.yaml`
-(surtout pas dans `identityRef`, cf. en-tête du template) :
+(surtout pas dans `identityRef`, cf. en-tête du template). ⚠️ La clé sous
+`clouds:` DOIT s'appeler `ovh` (= `${OS_CLOUD_NAME:=ovh}` dans le template,
+`apps/base/cluster-api-clusters/templates/cluster-talos-openstack/cluster.yaml`)
+— un autre nom (ex. `openstack`) fait échouer CAPO en silence côté status
+(`OpenStackCluster` sans status du tout) avec dans les logs du
+`capo-controller-manager` : `auth option failed for cloud : Missing input
+for argument [auth_url]` (constaté en réel, 2026-07-30) :
 ```bash
 kubectl -n capi-clusters create secret generic ovh-capi-credentials \
   --from-file=clouds.yaml=./clouds.yaml
+# clouds.yaml:
+#   clouds:
+#     ovh:                    # <- pas "openstack", le template lit ce nom précis
+#       auth: { auth_url: …, username: …, password: …, project_id: …, project_name: …, user_domain_name: …, project_domain_name: … }
+#       region_name: …
+#       interface: …
+#       identity_api_version: …
 ```
 
 Outscale : Secret `outscale-capi-credentials` (clés **minuscules**
