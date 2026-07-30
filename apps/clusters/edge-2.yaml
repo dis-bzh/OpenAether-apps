@@ -183,3 +183,5 @@ spec:
       # child-gitops/gitrepository.yaml's header for why there's no default.
       CHILD_BACKUP_S3_BUCKET: s3-openaether-scaleway-backups-dev
       CHILD_BACKUP_S3_ENDPOINT: https://s3.fr-par.scw.cloud
+      # Same bucket, Longhorn's own URL syntax (storage brick's BackupTarget).
+      CHILD_BACKUP_TARGET_URL: s3://s3-openaether-scaleway-backups-dev@fr-par/
