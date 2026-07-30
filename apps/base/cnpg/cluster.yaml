@@ -13,7 +13,7 @@ metadata:
     openaether.io/component: cnpg-zitadel-db
 spec:
   instances: 3
-  imageName: ghcr.io/cloudnative-pg/postgresql:16.14
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4
 
   # HA Configuration
   postgresql:
