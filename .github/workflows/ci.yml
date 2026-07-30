@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# All jobs here are read-only validation — always safe to cancel a superseded run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: yamllint
+        run: yamllint -c .yamllint apps/
+
+      - name: Validate Renovate config
+        run: npx --yes -p renovate -- renovate-config-validator renovate.json5
+
+  dag:
+    name: Flux DAG
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: "pick.py --validate (DAG health: unknown deps, cycles, dead paths)"
+        run: python3 scripts/pick.py --validate
+
+      - name: pick.py --check (generated profiles up to date with the DAG)
+        run: python3 scripts/pick.py --check
+
+  build:
+    name: Kustomize Build + Collision Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install kubectl (pinned + checksum-verified)
+        env:
+          # Kept at the same version as OpenAether-infra's kubernetes_version
+          # so the client/server skew stays inside what upstream supports.
+          # renovate: datasource=github-releases depName=kubernetes/kubernetes
+          KUBECTL_VERSION: "v1.36.3"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          expected="$(curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256")"
+          echo "${expected}  kubectl" | sha256sum -c -
+          chmod +x kubectl
+          sudo install -m 0755 kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Cross-brick object collision check (builds every DAG path with kubectl kustomize)
+        run: python3 scripts/check-object-collisions.py

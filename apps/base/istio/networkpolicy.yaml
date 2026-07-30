@@ -9,7 +9,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "istio"
 spec:
-  description: "istiod: ingress from proxies (15012 xDS/CA, 15010 xDS plaintext, 443 webhook, 15014 debug), egress DNS + kube-api."
+  description: "istiod: ingress from proxies (15012 xDS/CA, 15010 xDS plaintext, 443 webhook, 15014 debug), egress DNS + kube-api."  # yamllint disable-line rule:line-length
   endpointSelector:
     matchLabels:
       app: istiod

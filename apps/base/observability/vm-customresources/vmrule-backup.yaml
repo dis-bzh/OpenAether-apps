@@ -76,4 +76,4 @@ spec:
             component: backup
           annotations:
             summary: "Backup suspended for > 6 h: {{ $labels.namespace }}/{{ $labels.cronjob }}"
-            description: "kubectl patch cronjob -n {{ $labels.namespace }} {{ $labels.cronjob }} -p '{\"spec\":{\"suspend\":false}}'"
+            description: "kubectl patch cronjob -n {{ $labels.namespace }} {{ $labels.cronjob }} -p '{\"spec\":{\"suspend\":false}}'"  # yamllint disable-line rule:line-length

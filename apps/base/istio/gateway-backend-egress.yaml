@@ -16,7 +16,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "istio"
 spec:
-  description: "Gateway (services-gateway) egress to any pod labelled networking.openaether.io/gateway-backend, port 8080."
+  description: "Gateway (services-gateway) egress to any pod labelled networking.openaether.io/gateway-backend, port 8080."  # yamllint disable-line rule:line-length
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: services-gateway

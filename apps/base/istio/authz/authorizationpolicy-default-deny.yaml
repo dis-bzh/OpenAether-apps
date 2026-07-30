@@ -20,7 +20,7 @@ metadata:
   labels:
     openaether.io/managed: "true"
     openaether.io/component: "istio"
-spec: {} # implicit ALLOW, 0 rules → deny by default, overridden by the ALLOWs
+spec: {}  # implicit ALLOW, 0 rules → deny by default, overridden by the ALLOWs
 ---
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
