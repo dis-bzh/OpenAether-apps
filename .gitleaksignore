@@ -1,0 +1,12 @@
+# Known findings from the repo's very first commit (cc2b265): a self-signed
+# linkerd mTLS trust-anchor + identity-issuer key pair from `linkerd install`.
+# linkerd was replaced by Istio; base/linkerd/linkerd-control-plane.yaml no
+# longer exists in the tree and nothing deployed today trusts this key — but
+# the repo is public, so the fingerprints stay acknowledged here rather than
+# silently re-flagged (and re-ignored) on every run. New leaks still fail.
+cc2b26547293ec889041af0e395f96dad4465a27:base/linkerd/linkerd-control-plane.yaml:kubernetes-secret-yaml:1945
+cc2b26547293ec889041af0e395f96dad4465a27:base/linkerd/linkerd-control-plane.yaml:private-key:127
+cc2b26547293ec889041af0e395f96dad4465a27:base/linkerd/linkerd-control-plane.yaml:private-key:172
+cc2b26547293ec889041af0e395f96dad4465a27:base/linkerd/linkerd-control-plane.yaml:private-key:466
+cc2b26547293ec889041af0e395f96dad4465a27:base/linkerd/linkerd-control-plane.yaml:private-key:781
+cc2b26547293ec889041af0e395f96dad4465a27:base/linkerd/linkerd-control-plane.yaml:private-key:1946
