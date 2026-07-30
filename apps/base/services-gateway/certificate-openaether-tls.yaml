@@ -12,7 +12,7 @@ metadata:
 spec:
   secretName: openaether-tls
   duration: 2160h   # 90 jours
-  renewBefore: 360h # 15 jours
+  renewBefore: 360h  # 15 jours
   issuerRef:
     kind: ClusterIssuer
     name: openbao

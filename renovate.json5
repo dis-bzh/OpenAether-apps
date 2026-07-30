@@ -12,13 +12,17 @@
 // PR bumps a comment, a human re-vendors the file per its own instructions.
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
-  extends: ["config:recommended"],
+  extends: ["config:recommended", "helpers:pinGitHubActionDigests"],
   automerge: false,
   platformAutomerge: false,
   schedule: ["before 6am on monday"],
   timezone: "Europe/Paris",
   labels: ["dependencies"],
   flux: { enabled: true },
+
+  // CI actions are pinned to a commit SHA (tag kept as a trailing comment),
+  // not a mutable tag — see OpenAether-infra/renovate.json5's header for why.
+  // `helpers:pinGitHubActionDigests` keeps them current.
 
   // Full upstream dumps: the version lives in a filename or a header comment,
   // never a real editable field. Left to the customManagers below instead of
@@ -150,6 +154,14 @@
       ],
       datasourceTemplate: "docker",
       depNameTemplate: "ghcr.io/cloudnative-pg/postgresql",
+    },
+    {
+      customType: "regex",
+      description: "ci.yml: kubectl is downloaded + checksum-verified directly (not via an action), kept at the same version as OpenAether-infra's kubernetes_version so client/server stay in the same skew window.",
+      fileMatch: ["^\\.github/workflows/ci\\.yml$"],
+      matchStrings: [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*KUBECTL_VERSION:\\s*\"(?<currentValue>[^\"]+)\"",
+      ],
     },
   ],
 }

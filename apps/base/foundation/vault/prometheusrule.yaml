@@ -21,7 +21,7 @@ spec:
             component: openbao
           annotations:
             summary: "OpenBao sealed > 2min"
-            description: "OpenBao (ns foundation-vault) is sealed. The HA unsealer is inoperative (Shamir shares not loaded, network policy, or unsealer down). Check the unsealer logs and the OpenBao status."
+            description: "OpenBao (ns foundation-vault) is sealed. The HA unsealer is inoperative (Shamir shares not loaded, network policy, or unsealer down). Check the unsealer logs and the OpenBao status."  # yamllint disable-line rule:line-length
             runbook_url: "https://github.com/dis-bzh/OpenAether/blob/main/docs/runbooks/openbao-unseal.md"
         # Raft no leader = critical
         - alert: OpenBaoRaftNoLeader

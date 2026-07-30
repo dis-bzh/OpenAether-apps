@@ -19,4 +19,4 @@ spec:
   description: "Default deny all INGRESS traffic cluster-wide"
   endpointSelector: {}
   ingress:
-    - {} # Empty ingress rule acts as a default deny
+    - {}  # Empty ingress rule acts as a default deny

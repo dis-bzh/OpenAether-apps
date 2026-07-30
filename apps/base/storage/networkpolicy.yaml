@@ -11,7 +11,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: "storage"
 spec:
-  description: "longhorn: allow all intra-ns traffic + webhook ports 9501-9502 + instance manager 8500-8503 + egress DNS + kube-api."
+  description: "longhorn: allow all intra-ns traffic + webhook ports 9501-9502 + instance manager 8500-8503 + egress DNS + kube-api."  # yamllint disable-line rule:line-length
   endpointSelector:
     matchLabels: {}
   ingress:

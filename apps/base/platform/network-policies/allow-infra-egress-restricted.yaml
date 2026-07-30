@@ -71,7 +71,7 @@ spec:
         - "51.158.0.0/16"  # OVH cloud endpoints range
         - "54.38.0.0/16"   # OVH cloud endpoints range
         - "158.69.0.0/16"  # OVH cloud endpoints range
-        - "147.135.0.0/16" # OVH cloud endpoints range
+        - "147.135.0.0/16"  # OVH cloud endpoints range
       toPorts:
         - ports:
             - port: "443"
@@ -91,7 +91,7 @@ spec:
         - "51.158.0.0/16"  # OVH cloud endpoints range
         - "54.38.0.0/16"   # OVH cloud endpoints range
         - "158.69.0.0/16"  # OVH cloud endpoints range
-        - "147.135.0.0/16" # OVH cloud endpoints range
+        - "147.135.0.0/16"  # OVH cloud endpoints range
       toPorts:
         - ports:
             - port: "443"
@@ -112,7 +112,7 @@ spec:
         - "51.158.0.0/16"  # OVH cloud endpoints range
         - "54.38.0.0/16"   # OVH cloud endpoints range
         - "158.69.0.0/16"  # OVH cloud endpoints range
-        - "147.135.0.0/16" # OVH cloud endpoints range
+        - "147.135.0.0/16"  # OVH cloud endpoints range
       toPorts:
         - ports:
             - port: "443"

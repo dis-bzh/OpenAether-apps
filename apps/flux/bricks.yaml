@@ -18,9 +18,9 @@ companions:
   - external-secrets-stores          # openbao ClusterSecretStore (if ESO + OpenBao picked)
   - cert-manager-issuers             # openbao ClusterIssuer (if cert-manager + OpenBao picked)
   - istio-authorizationpolicies      # mesh AuthorizationPolicies (if istio picked)
-  - istio-authorizationpolicies-storage # foundation-storage policies (if istio AND storage picked)
+  - istio-authorizationpolicies-storage  # foundation-storage policies (if istio AND storage picked)
   - kyverno-policies                 # policies (if kyverno picked)
-  - observability-vm-customresources # VMCluster/VMAgent (if observability picked)
+  - observability-vm-customresources  # VMCluster/VMAgent (if observability picked)
   - storage-backup-target            # S3 target for volume backups (if storage + ESO picked)
   - backup-openbao-identity          # CLUSTER_NAME ConfigMap (restic repository prefix)
   - backup-databases-identity        # same, on the CNPG side

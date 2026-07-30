@@ -52,4 +52,4 @@ spec:
   dependsOn:
     - name: external-secrets-stores
     - name: cnpg                     # <cluster>-app Secrets + the instances to dump
-    - name: backup-databases-identity # CLUSTER_NAME ConfigMap (repository prefix)
+    - name: backup-databases-identity  # CLUSTER_NAME ConfigMap (repository prefix)

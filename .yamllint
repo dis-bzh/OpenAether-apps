@@ -1,0 +1,36 @@
+extends: default
+
+# Vendored upstream dumps — see renovate.json5's ignorePaths for why these
+# aren't hand-edited (the version lives in a filename/comment, not a field).
+ignore: |
+  **/kyverno/kyverno-*.yaml
+  **/cnpg/cnpg-*.yaml
+  **/external-secrets/install.yaml
+  **/orc/install.yaml
+  **/platform/gateway-api/standard-install.yaml
+  **/platform/local-path-provisioner/local-path-storage.yaml
+  **/flux-gotk/gotk-components.yaml
+  # Embedded generated content (Grafana dashboard JSON, embedded bash
+  # scripts) — genuinely long by nature, not sloppy formatting. A line-length
+  # disable/enable pair would have to straddle a block scalar without ever
+  # landing inside it; not worth the risk on a production backup script.
+  **/observability/dashboards/*.yaml
+  **/foundation/vault/bootstrap-roles-job.yaml
+  **/backup/*/cronjob.yaml
+
+rules:
+  document-start: disable
+  # Flux Kustomizations write inline sourceRef as `{ kind: ..., name: ... }` —
+  # padded braces, consistently, across the whole repo.
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+  line-length:
+    max: 120
+    allow-non-breakable-words: true
+  comments-indentation: disable
+  # Kubernetes manifests use both indented and non-indented block sequences.
+  indentation:
+    spaces: 2
+    indent-sequences: whatever
+    check-multi-line-strings: false
