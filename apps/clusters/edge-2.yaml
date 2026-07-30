@@ -22,7 +22,12 @@ spec:
     substitute:
       CLUSTER_NAME: edge-2
       CP_REPLICAS: "1"
-      WORKER_REPLICAS: "1"
+      # 1 worker (even at b3-16, 4 vCPU) couldn't fit the full profile's
+      # replicated observability stack (2x VictoriaMetrics storage, 2x Loki,
+      # vmalert/vmagent) — the CP is tainted, so it's ALL on one node.
+      # 2 workers spreads it instead of inflating a single node further.
+      # Found live 2026-07-30.
+      WORKER_REPLICAS: "2"
       K8S_VERSION: v1.35.3
       TALOS_VERSION: v1.13
       # Glance image (openstack platform) rebuilt as v1.13.4 with the current
