@@ -55,6 +55,17 @@ spec:
     # is only reported, not refused — exactly like openbao-init/bootstrap
     # (docker.io/alpine/k8s), which already run. If Kyverno ever goes Enforce,
     # mirror those 2 images to an allowed registry through tools.{kubectl,wait4x}.image.
+    #
+    # tools.kubectl.image.tag left empty defaults to the cluster's own
+    # Kubernetes version (chart default) — broke live 2026-07-30 on v1.36.3:
+    # alpine/k8s had only published up to 1.36.2, so the setup Job's kubectl
+    # helper went ImagePullBackOff on a tag that doesn't exist yet upstream.
+    # Pinned explicitly instead of auto-derived.
+    tools:
+      kubectl:
+        image:
+          # renovate: datasource=docker depName=alpine/k8s
+          tag: "1.36.2"
 
     # ── securityContext conforme Kyverno (global / fallback) ─────────────────
     # Used as-is by the initJob/setupJob containers (a direct reference to
