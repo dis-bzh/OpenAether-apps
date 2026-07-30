@@ -7,9 +7,10 @@ resources:
   - namespace.yaml
   - helmrepository-cilium.yaml   # chart source shared by ALL children
   - helmrepository-talos-ccm.yaml   # idem — providerID/CCM chart
-  - edge-1.yaml   # Scaleway — re-enabled 2026-07-28 to re-validate a child
-  #   on a SECOND provider (the management itself is on OVH, so this is also
-  #   a cross-provider kubeception test).
-  - edge-2.yaml   # OVH
-  # - edge-3.yaml   # Outscale — DISABLED: the account's RAM quota (40 GB) is
-  #   already exceeded by the HA management (44 GB). See docs/backlog.md.
+  # 2026-07-30 1.0.0 push: management itself is now on Scaleway (not OVH as
+  # the old comment said), so edge-1 (also Scaleway) wouldn't be a real
+  # cross-provider test — left disabled. edge-2 (OVH) and edge-3 (Outscale)
+  # get enabled one at a time for the phased fleet rollout instead.
+  # - edge-1.yaml   # Scaleway — same provider as management, skipped for now
+  # - edge-2.yaml   # OVH — Phase 2
+  # - edge-3.yaml   # Outscale — Phase 3 (was RAM-quota blocked, re-check)
