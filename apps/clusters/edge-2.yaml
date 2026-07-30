@@ -37,7 +37,7 @@ spec:
       # not survive a full teardown. Re-allocate it (idempotently) with
       #   source .env.sh && python3 scripts/ops/ensure-capo-fip.py edge-2
       # (infra repo) then carry the address back here.
-      OS_CP_FLOATING_IPS: 57.130.71.216
+      OS_CP_FLOATING_IPS: 57.130.72.62
 ---
 # The child's CNI, applied REMOTELY (CAPI kubeConfig), values aligned with
 # the parent foundation (render-bootstrap-manifests.sh).

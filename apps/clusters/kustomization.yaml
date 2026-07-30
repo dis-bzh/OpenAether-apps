@@ -12,5 +12,5 @@ resources:
   # cross-provider test — left disabled. edge-2 (OVH) and edge-3 (Outscale)
   # get enabled one at a time for the phased fleet rollout instead.
   # - edge-1.yaml   # Scaleway — same provider as management, skipped for now
-  # - edge-2.yaml   # OVH — Phase 2
+  - edge-2.yaml   # OVH — Phase 2
   # - edge-3.yaml   # Outscale — Phase 3 (was RAM-quota blocked, re-check)
