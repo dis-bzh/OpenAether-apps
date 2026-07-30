@@ -18,7 +18,7 @@ metadata:
   name: cluster-api
   namespace: capi-system
 spec:
-  version: v1.13.2
+  version: v1.13.4
   deployment:
     containers:
       - name: manager
