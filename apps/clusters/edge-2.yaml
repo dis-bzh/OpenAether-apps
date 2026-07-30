@@ -46,13 +46,17 @@ spec:
       OS_FLAVOR: b3-16
       OS_EXTERNAL_NETWORK: Ext-Net
       OS_NODE_CIDR: 10.20.0.0/24  # distinct du management OVH
-      # Pre-allocated CP FIP: must appear in the Talos certSANs (the OpenStack
-      # IMDS does not reveal it). One IP per control-plane replica.
-      # The only child resource created outside both OpenTofu AND CAPI: it does
-      # not survive a full teardown. Re-allocate it (idempotently) with
-      #   source .env.sh && python3 scripts/ops/ensure-capo-fip.py edge-2
-      # (infra repo) then carry the address back here.
+      # Pre-allocated CP FIPs: must appear in the Talos certSANs (the
+      # OpenStack IMDS does not reveal them). One per control-plane replica,
+      # plus one surge slot for a rolling upgrade's temporary CP_REPLICAS+1
+      # (found live 2026-07-30 — an auto-claimed, uncovered FIP hangs the
+      # rollout instead of failing fast, see the template's own comment).
+      # The only child resources created outside both OpenTofu AND CAPI: they
+      # do not survive a full teardown. Re-allocate them (idempotently) with
+      #   source .env.sh && python3 scripts/ops/ensure-capo-fip.py edge-2 --count 2
+      # (infra repo) then carry the addresses back here.
       OS_CP_FLOATING_IPS: REDACTED-FIP
+      OS_CP_FLOATING_IPS_SURGE: REDACTED-FIP
 ---
 # The child's CNI, applied REMOTELY (CAPI kubeConfig), values aligned with
 # the parent foundation (render-bootstrap-manifests.sh).
