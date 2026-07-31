@@ -4,6 +4,17 @@ Manifests **communs / plateforme** (OpenBao, ESO, cert-manager, istio gateway,
 CNPG, storage, observability…) + **wiring Flux** qui référence les repos applicatifs.
 Réconcilié par Flux depuis `apps/flux/*` (voir `apps/flux/base/gitrepository.yaml`).
 
+## Dépôt public — aucune donnée réelle
+
+Ce dépôt est **public**. N'y committer que du code et des exemples — jamais une
+IP, un ID de compte cloud, ou toute autre donnée propre à un environnement ou un
+test réels, même dans un fichier de démonstration comme `apps/clusters/`. Les
+valeurs compte-spécifiques passent par `postBuild.substituteFrom` référençant un
+Secret créé via `kubectl` (jamais en git) — même motif que les credentials CAPI.
+Incident du 2026-07-31 : IP réelles (FIP OVH, egress management, IP admin) et un
+ID de compte Outscale avaient fui dans `apps/clusters/edge-{2,3}.yaml` et
+l'historique git, purgés depuis.
+
 ## Objectif — socle figé + pioche modulaire
 
 **Seul socle figé : CNI (Cilium) + Flux.** Tout le reste (mesh Istio, Zitadel,
