@@ -2,6 +2,12 @@
 # The multi-cloud fleet's second provider (edge-1 = Scaleway, edge-3 = Outscale).
 # kubectl prerequisites (never in git):
 #   Secret capi-clusters/ovh-capi-credentials (clouds.yaml key, region inside)
+#   Secret flux-system/edge-2-env — the account-specific floating IPs (never
+#   commit real ones, this file is public): allocate with
+#   `python3 scripts/ops/ensure-capo-fip.py edge-2 --count 2` (infra repo), then
+#     kubectl -n flux-system create secret generic edge-2-env \
+#       --from-literal=OS_CP_FLOATING_IPS=<fip1> \
+#       --from-literal=OS_CP_FLOATING_IPS_SURGE=<fip2>
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -52,11 +58,12 @@ spec:
       # (found live 2026-07-30 — an auto-claimed, uncovered FIP hangs the
       # rollout instead of failing fast, see the template's own comment).
       # The only child resources created outside both OpenTofu AND CAPI: they
-      # do not survive a full teardown. Re-allocate them (idempotently) with
-      #   source .env.sh && python3 scripts/ops/ensure-capo-fip.py edge-2 --count 2
-      # (infra repo) then carry the addresses back here.
-      OS_CP_FLOATING_IPS: REDACTED-FIP
-      OS_CP_FLOATING_IPS_SURGE: REDACTED-FIP
+      # do not survive a full teardown. Real values come from the
+      # flux-system/edge-2-env Secret (see header) — never hardcoded here,
+      # this file is public.
+    substituteFrom:
+      - kind: Secret
+        name: edge-2-env
 ---
 # The child's CNI, applied REMOTELY (CAPI kubeConfig), values aligned with
 # the parent foundation (render-bootstrap-manifests.sh).

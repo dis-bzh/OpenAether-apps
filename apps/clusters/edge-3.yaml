@@ -8,6 +8,12 @@
 #   Secret capi-clusters/outscale-capi-credentials — LOWERCASE keys
 #     access_key / secret_key / region (≠ convention SCW_* de Scaleway)
 #   Outscale keypair `openaether-capi` (node.vm.keypairName, required + immutable)
+#   Secret flux-system/edge-3-env — account-specific values (never commit real
+#   ones, this file is public):
+#     kubectl -n flux-system create secret generic edge-3-env \
+#       --from-literal=OSC_IMAGE_ACCOUNT_ID=<outscale account id> \
+#       --from-literal=MGMT_EGRESS_CIDR=<management's NAT gateway IP>/32 \
+#       --from-literal=ADMIN_CIDR=<your public IP>/32
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -61,17 +67,17 @@ spec:
       MACHINE_REV: v3
       OSC_KEYPAIR_NAME: openaether-capi
       OSC_IMAGE_NAME: talos-outscale-amd64-v1.13.4
-      OSC_IMAGE_ACCOUNT_ID: "REDACTED-ACCOUNT-ID"
       OSC_IMAGE_ID: "ami-16d2bedd"       # talos-outscale-amd64-v1.13.4 (variante aws)
       WORKER_DATA_DISK_GB: "50"
-      # The Talos port 50000 cannot go through the LBU (a single listener):
-      # direct access to the CPs' public IPs, restricted to the management's
-      # egress and to admin. Management is Scaleway (fixed 2026-07-30 — this
-      # used to say Outscale, stale from before the Scaleway pivot): its NAT
-      # gateway's public IP (tofu output nat_gateway_ip, cluster/), not the
-      # nodes themselves (they're private, behind it).
-      MGMT_EGRESS_CIDR: REDACTED-MGMT-EGRESS-IP/32
-      ADMIN_CIDR: REDACTED-ADMIN-IP/32
+      # OSC_IMAGE_ACCOUNT_ID, MGMT_EGRESS_CIDR (management's NAT gateway
+      # public IP — tofu output nat_gateway_ip, cluster/) and ADMIN_CIDR are
+      # account-specific and come from the flux-system/edge-3-env Secret (see
+      # header) — never hardcoded here, this file is public. The Talos port
+      # 50000 cannot go through the LBU (a single listener): direct access to
+      # the CPs' public IPs, restricted to the management's egress and admin.
+    substituteFrom:
+      - kind: Secret
+        name: edge-3-env
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
