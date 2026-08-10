@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: A security problem
+    url: https://github.com/dis-bzh/OpenAether-apps/security/advisories/new
+    about: Never in a public issue. Private vulnerability reporting.
+  - name: Provisioning, Talos, OpenTofu, providers
+    url: https://github.com/dis-bzh/OpenAether-infra/issues/new
+    about: Anything below Kubernetes lives in OpenAether-infra.

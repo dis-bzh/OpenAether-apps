@@ -1,5 +1,22 @@
 # Contributing
 
+## Issues, and what they are not
+
+**Issues are for what you hit** — a brick that will not reconcile, a dependency
+that resolves wrong. Reports from outside are welcome and outrank our own list:
+the order in the backlog is a guess about what matters, something that broke on
+somebody is a fact.
+
+**Our own work is not in issues.** It lives in
+[`OpenAether-infra/docs/backlog.md`](https://github.com/dis-bzh/OpenAether-infra/blob/main/docs/backlog.md),
+one list for both repositories, where every entry names the command that would
+close it. A working list wants to be read offline at the start of a session; an
+intake wants to be where a stranger can reach it. Duplicating one into the other
+would give us two records that disagree.
+
+Never put a real IP, a cloud account id or a bucket name in an issue. The
+repository is public and has had to purge its history once for that.
+
 ## Setup
 
 Requires `kubectl` (with the built-in Kustomize) and Python 3 with PyYAML. See
