@@ -1,7 +1,7 @@
 # Egress for the CAPI provider managers (capi-system, default-deny posture).
 # - Cloud APIs to provision the client clusters (Scaleway today; add the
 #   OpenStack/Outscale endpoints when they are first used).
-# - kube-apiserver : couvert par le CCNP allow-kube-api.
+# - kube-apiserver: covered by the allow-kube-api CCNP.
 # - rules.dns: required for toFQDNs (the Cilium DNS proxy).
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy

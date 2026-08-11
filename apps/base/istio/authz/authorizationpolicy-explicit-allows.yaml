@@ -2,7 +2,7 @@
 # ──────────────────────────────────────────────────────────────────────────
 # LEGITIMATE L7 allows between workloads, ONLY in AMBIENT namespaces (where
 # ztunnel actually enforces the policy). Eval order: DENY → ALLOW;
-# le default-deny (authorizationpolicy-default-deny.yaml, forme `spec: {}`)
+# the default-deny (authorizationpolicy-default-deny.yaml, the `spec: {}` form)
 # allows nothing, so these ALLOWs reopen the required flows.
 #
 # The flows of OUT-OF-MESH namespaces (cert-manager→OpenBao, grafana→CNPG,

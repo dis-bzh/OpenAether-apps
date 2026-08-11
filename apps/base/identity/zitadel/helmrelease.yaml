@@ -51,7 +51,7 @@ spec:
     # goes ImagePullBackOff → the Helm install hangs. The chart defaults pull:
     #   ghcr.io/zitadel/zitadel(-login)  (OK), docker.io/alpine/k8s (helper kubectl),
     #   docker.io/wait4x/wait4x:3.6      (initContainer wait-for-zitadel).
-    # Kyverno restrict-image-registries est en Audit (non bloquant) → docker.io/*
+    # Kyverno restrict-image-registries is in Audit (non-blocking) → docker.io/*
     # is only reported, not refused — exactly like openbao-init/bootstrap
     # (docker.io/alpine/k8s), which already run. If Kyverno ever goes Enforce,
     # mirror those 2 images to an allowed registry through tools.{kubectl,wait4x}.image.

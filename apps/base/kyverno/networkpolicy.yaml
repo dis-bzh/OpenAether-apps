@@ -1,6 +1,6 @@
 # OpenAether 0.5.0 — Kyverno NetworkPolicy
 # The Kyverno webhook listens on port 9443 (kubebuilder standard).
-# Le Service kyverno-webhook expose 443 → 9443.
+# The kyverno-webhook Service exposes 443 → 9443.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:

@@ -185,7 +185,7 @@ spec:
             toPortRange: 50001
             ipRanges:
               - ${OSC_NET_CIDR}
-          # KubePrism (7445) est en loopback -> rien a ouvrir. Cilium WireGuard
+          # KubePrism (7445) is loopback-only -> nothing to open. Cilium WireGuard
           # 51871/udp and health 4240 are already in the "-node" SG by default.
 
     # allowFromIPRanges DELIBERATELY left unset: it restricts inbound
@@ -326,7 +326,7 @@ metadata:
 spec:
   version: ${K8S_VERSION}
   replicas: ${CP_REPLICAS}
-  # ObjectReference PLEIN (v1alpha3) : apiVersion ET namespace obligatoires ici,
+  # FULL ObjectReference (v1alpha3): apiVersion AND namespace are required here,
   # unlike the v1beta2 Cluster refs.
   infrastructureTemplate:
     apiVersion: infrastructure.cluster.x-k8s.io/v1beta1

@@ -9,7 +9,7 @@ metadata:
     pod-security.kubernetes.io/enforce: privileged
 
 ---
-# CRDs Istio (wave 0 - avant istiod)
+# Istio CRDs (wave 0 — before istiod)
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

@@ -20,13 +20,13 @@
 #   ${OS_CREDENTIALS_SECRET:=ovh-capi-credentials} ${OS_CLOUD_NAME:=ovh}
 #   ${OS_EXTERNAL_NETWORK:=Ext-Net} ${OS_NODE_CIDR:=10.20.0.0/24}
 #   ${OS_FLAVOR:=b3-8} ${OS_IMAGE_NAME}
-#   ${MACHINE_REV:=v1} — bump (v2, v3…) pour faire tourner les machines sans
-#   toucher au FloatingIPPool ni à l'IP pré-allouée (même pattern que le
-#   template Outscale). Trouvé en marche 2026-07-30 : sans ceci, changer
+#   ${MACHINE_REV:=v1} — bump it (v2, v3…) to roll the machines without
+#   touching the FloatingIPPool or the pre-allocated IP (same pattern as the
+#   Outscale template). Found live 2026-07-30: without it, changing
 #   OS_IMAGE_NAME nécessitait task edge-down + recréation complète.
 #   ${OS_CP_FLOATING_IPS} ${OS_CP_FLOATING_IPS_SURGE} — 2 FIP pré-allouées
-#   (task ensure-capo-fip.py <cluster> --count 2), la 2e réservée pour le
-#   surge d'un rolling upgrade (CP_REPLICAS+1 le temps du cutover).
+#   (task ensure-capo-fip.py <cluster> --count 2); the 2nd is held for the
+#   surge of a rolling upgrade (CP_REPLICAS+1 for the length of the cutover).
 ---
 apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster

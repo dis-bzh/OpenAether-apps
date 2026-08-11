@@ -5,7 +5,7 @@
 # IPAM) to avoid clashing with the IPs auto-assigned to nodes (.2-.6).
 #
 # This pool is for the PRIVATE network (admin, observability). Public traffic
-# arrive via le Scaleway LB externe (opentofu lb.tf → worker NodePorts).
+# arrives through the external Scaleway LB (opentofu lb.tf → worker NodePorts).
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool

@@ -306,7 +306,7 @@ spec:
               echo "  policy openaether-admin: HTTP=$(WH)"
 
               # Read-only — audit, on-call, checking a secret without being able
-              # le modifier.
+              # change it.
               READER_POLICY="$(printf 'path \"secret/data/*\" {\n  capabilities = [\"read\"]\n}\npath \"secret/metadata/*\" {\n  capabilities = [\"read\", \"list\"]\n}\npath \"pki/cert/*\" {\n  capabilities = [\"read\", \"list\"]\n}\npath \"sys/mounts\" {\n  capabilities = [\"read\"]\n}\npath \"sys/policies/acl\" {\n  capabilities = [\"list\"]\n}\npath \"sys/health\" {\n  capabilities = [\"read\"]\n}\npath \"auth/token/lookup-self\" {\n  capabilities = [\"read\"]\n}\n')"
               wlapi PUT /v1/sys/policies/acl/openaether-reader \
                 "$(jq -nc --arg p "$READER_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null

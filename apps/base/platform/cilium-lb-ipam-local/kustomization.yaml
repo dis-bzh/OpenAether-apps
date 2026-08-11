@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Local overlay — cilium-lb-ipam sur le bridge Docker (Talos-in-Docker).
+# Local overlay — cilium-lb-ipam on the Docker bridge (Talos-in-Docker).
 # The base pool (172.16.12.240-254) targets the Scaleway private VPC, which is
 # unreachable locally: the nodes live on the openaether-local-dev-net Docker
 # bridge (10.5.0.0/24, see modules/talos). We only patch the pool's range;
