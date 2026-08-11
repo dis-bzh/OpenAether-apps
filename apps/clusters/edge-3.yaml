@@ -67,7 +67,9 @@ spec:
       MACHINE_REV: v3
       OSC_KEYPAIR_NAME: openaether-capi
       OSC_IMAGE_NAME: talos-outscale-amd64-v1.13.4
-      OSC_IMAGE_ID: "ami-16d2bedd"       # talos-outscale-amd64-v1.13.4 (variante aws)
+      OSC_IMAGE_ID: "TALOS_OMI_ID"       # your talos-outscale-amd64-<version> OMI;
+      # account-specific like the line below, and it is public here. Same
+      # convention as infra's envs/*-outscale.tfvars.example.
       WORKER_DATA_DISK_GB: "50"
       # OSC_IMAGE_ACCOUNT_ID, MGMT_EGRESS_CIDR (management's NAT gateway
       # public IP — tofu output nat_gateway_ip, cluster/) and ADMIN_CIDR are
@@ -210,12 +212,14 @@ spec:
     substitute:
       CHILD_PROFILE: workload
       CHILD_NAME: edge-3   # prefix of this child's restic repositories
-      # CHILD_BRANCH deliberately absent → defaults to `main` (see child-gitops).
+      # CHILD_REF deliberately absent → defaults to refs/heads/main (see child-gitops).
+      # A real bucket name lived here until 1.0.1 — this file is public and the
+      # repository has purged its history once for that. Substitute your own.
       # Reuses the management's own backup bucket (Scaleway) — shared, path
       # distinguished by CLUSTER_NAME, same pattern as the restic repos.
       # REQUIRED as soon as CHILD_PROFILE picks the cnpg brick, see
       # child-gitops/gitrepository.yaml's header for why there's no default.
-      CHILD_BACKUP_S3_BUCKET: s3-openaether-scaleway-backups-dev
+      CHILD_BACKUP_S3_BUCKET: s3-<your-bucket>-backups-dev
       CHILD_BACKUP_S3_ENDPOINT: https://s3.fr-par.scw.cloud
       # Same bucket, Longhorn's own URL syntax (storage brick's BackupTarget).
-      CHILD_BACKUP_TARGET_URL: s3://s3-openaether-scaleway-backups-dev@fr-par/
+      CHILD_BACKUP_TARGET_URL: s3://s3-<your-bucket>-backups-dev@fr-par/

@@ -4,9 +4,13 @@
 # GITCEPTION TRAP: this file reapplies Flux's own source from git.
 # A hard-coded branch here OVERWRITES the GitRepository laid down at bootstrap
 # (the infra inline manifest) on the first reconcile → testing a branch becomes
-# impossible. Hence ${GIT_BRANCH:=main}: the root Kustomization
-# (openaether-platform, infra-side flux-bootstrap.yaml.tftpl) injects GIT_BRANCH
-# through postBuild.substitute — production stays on main by default.
+# impossible. Hence ${GIT_REF}: the root Kustomization (openaether-platform,
+# infra-side flux-bootstrap.yaml.tftpl) injects it through postBuild.substitute.
+#
+# `ref.name` rather than `ref.branch`, because one field has to express both: a
+# release pins `refs/tags/<version>`, a test tracks `refs/heads/<branch>`, and a
+# branch-only field cannot carry the first. Substituting the VALUE keeps the YAML
+# parseable at build time, which substituting the KEY would not.
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
@@ -17,5 +21,5 @@ spec:
   interval: 1m
   url: https://github.com/dis-bzh/OpenAether-apps.git
   ref:
-    branch: ${GIT_BRANCH:=main}
+    name: ${GIT_REF:=refs/heads/main}
   timeout: 60s

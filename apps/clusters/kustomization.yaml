@@ -7,10 +7,14 @@ resources:
   - namespace.yaml
   - helmrepository-cilium.yaml   # chart source shared by ALL children
   - helmrepository-talos-ccm.yaml   # idem — providerID/CCM chart
-  # 2026-07-30 1.0.0 push: management itself is now on Scaleway (not OVH as
-  # the old comment said), so edge-1 (also Scaleway) wouldn't be a real
-  # cross-provider test — left disabled. edge-2 (OVH) and edge-3 (Outscale)
-  # get enabled one at a time for the phased fleet rollout instead.
-  # - edge-1.yaml   # Scaleway — same provider as management, skipped for now
-  - edge-2.yaml   # OVH — Phase 2
-  - edge-3.yaml   # Outscale — Phase 3
+  # No child cluster is enabled by default, and that is the point: this file is
+  # read by every management cluster that tracks this repo, so a name listed
+  # here is a name a STRANGER's cluster tries to reconcile — ten permanently red
+  # Flux objects on a Secret they cannot have. Enable your own by renaming
+  # example-scaleway.yaml.example and listing it.
+  # The DIS fleet ran with edge-2 (OVH) and edge-3 (Outscale) enabled here
+  # during the 1.0.0 rollout; it is torn down, and they belong in a branch of
+  # your own rather than in the default anyone gets.
+  # - edge-1.yaml   # Scaleway — same provider as the management, no cross-provider signal
+  # - edge-2.yaml   # OVH
+  # - edge-3.yaml   # Outscale

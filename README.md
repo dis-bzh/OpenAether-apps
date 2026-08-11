@@ -58,7 +58,7 @@ depends on a removed one.
 
 ```bash
 python3 scripts/pick.py --list                      # catalogue
-python3 scripts/pick.py vault eso certs gateway \
+python3 scripts/pick.py vault eso certs gateway cnpg storage observability identity kyverno metrics \
         -o apps/flux/workload                        # generate a profile
 python3 scripts/pick.py --validate                   # DAG + catalogue consistent
 python3 scripts/pick.py --check                      # profiles up to date (CI)
@@ -91,8 +91,14 @@ OpenAether-infra: tofu apply -var talos_bootstrap=true
    own profile — from there the child reconciles autonomously.
 
 ⚠️ **Two management clusters must never read the same `apps/clusters`**: they
-would fight over the same CAPI CRs. Isolate by branch (`CHILD_BRANCH`) or by
-path.
+would fight over the same CAPI CRs. Isolate them with the management's own
+`git_ref` (infra side — point each at its own `refs/heads/<branch>`), or by
+path. Not with `CHILD_REF`, which selects what a *child* follows, not what the
+management reads.
+
+No child is enabled by default, for the same reason: `apps/clusters` is read by
+every management tracking this repo, so a name listed there is a name a
+stranger's cluster tries to reconcile.
 
 ## Adding a brick
 

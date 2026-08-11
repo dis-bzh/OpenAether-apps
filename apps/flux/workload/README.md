@@ -3,7 +3,7 @@
 `kustomization.yaml` est **généré** par la pioche (ne pas éditer à la main) :
 
 ```bash
-python3 scripts/pick.py vault eso certs gateway -o apps/flux/workload
+python3 scripts/pick.py vault eso certs gateway cnpg storage observability identity kyverno metrics -o apps/flux/workload
 ```
 
 Socle sécurité + OpenBao + ESO + PKI + gateway (+ backup-openbao en

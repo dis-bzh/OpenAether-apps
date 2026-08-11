@@ -169,7 +169,7 @@ spec:
     substitute:
       CHILD_PROFILE: workload
       CHILD_NAME: edge-1   # prefix of this child's restic repositories
-      # CHILD_BRANCH deliberately absent → defaults to `main` (see child-gitops).
+      # CHILD_REF deliberately absent → defaults to refs/heads/main (see child-gitops).
       # Only override it to test a branch end to end, and remember to remove it
       # afterwards: a deleted branch leaves the child pointing at a source that
       # cannot be found, and it stops reconciling anything.
