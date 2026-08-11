@@ -31,6 +31,11 @@ jobs:
       - name: Validate Renovate config
         run: npx --yes -p renovate -- renovate-config-validator renovate.json5
 
+      # English is canonical here too, and a French comment in a manifest reaches
+      # a user's cluster. .languageignore lists what is French on purpose.
+      - name: Language
+        run: ./scripts/dev/check-language.sh
+
   dag:
     name: Flux DAG
     runs-on: ubuntu-latest
