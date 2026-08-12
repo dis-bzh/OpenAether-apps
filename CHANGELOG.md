@@ -16,6 +16,12 @@ la source de vérité du « pourquoi ».
 
 ## [Unreleased]
 
+### Changed
+
+- **Relicence de l'AGPLv3 vers Apache 2.0.** Le copyleft dissuadait la seule
+  chose que ce projet recherche : des gens qui le font tourner. Assouplissement,
+  donc ce qui a déjà été obtenu sous AGPLv3 le reste.
+
 ## [1.0.1] — 2026-08-11
 
 **The first tag of this repository.** Numbered 1.0.1 rather than 1.0.0 so that it
