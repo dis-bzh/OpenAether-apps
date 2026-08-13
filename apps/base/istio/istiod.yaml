@@ -27,7 +27,12 @@ spec:
       retries: 3
   values:
     pilot:
-      replicaCount: 1
+      # Two, not one. The chart gives istiod a PodDisruptionBudget requiring one
+      # available replica, so at replicaCount 1 the budget permits no eviction at
+      # all and the node carrying it can never be drained — a rolling upgrade
+      # reboots it with istiod still aboard. Costs a second 512Mi request; the
+      # alternative is a mesh control plane that pins a node forever.
+      replicaCount: 2
       autoscaleEnabled: false
       env:
         PILOT_ENABLE_AMBIENT: "true"
