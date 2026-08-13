@@ -57,7 +57,7 @@ dépend d'une brique supprimée.
 
 ```bash
 python3 scripts/pick.py --list                      # catalogue
-python3 scripts/pick.py vault eso certs gateway \
+python3 scripts/pick.py vault eso certs gateway cnpg storage observability identity kyverno metrics \
         -o apps/flux/workload                        # générer un profil
 python3 scripts/pick.py --validate                   # DAG + catalogue cohérents
 python3 scripts/pick.py --check                      # profils à jour (CI)
@@ -90,8 +90,14 @@ OpenAether-infra: tofu apply -var talos_bootstrap=true
    propre profil — l'enfant réconcilie ensuite en autonomie.
 
 ⚠️ **Deux clusters de management ne doivent jamais lire le même
-`apps/clusters`** : ils se disputeraient les mêmes CR CAPI. Isoler par branche
-(`CHILD_BRANCH`) ou par chemin.
+`apps/clusters`** : ils se disputeraient les mêmes CR CAPI. Les isoler par le
+`git_ref` du management (côté infra — chacun sur son `refs/heads/<branche>`) ou
+par chemin. Pas avec `CHILD_REF`, qui choisit ce que suit un *enfant*, pas ce
+que lit le management.
+
+Aucun enfant n'est activé par défaut, pour la même raison : `apps/clusters` est
+lu par tout management qui suit ce dépôt, donc un nom listé là est un nom qu'un
+cluster inconnu tente de réconcilier.
 
 ## Ajouter une brique
 
@@ -120,3 +126,11 @@ task local-test    # Flux SUSPENDU, déploiement via kubectl apply -k du working
 
 En local, Flux est volontairement un no-op : on applique depuis l'arbre de
 travail, ce qui permet de tester une modification **avant** de la pousser.
+
+## Licence
+
+**OpenAether** est distribué sous [licence Apache 2.0](LICENSE). Le projet était
+sous AGPLv3 jusqu'aux versions 0.x ; le changement est un assouplissement, donc ce que
+vous déteniez déjà sous AGPLv3 le reste.
+
+Source : **https://github.com/dis-bzh/OpenAether-apps**

@@ -2,9 +2,14 @@
 # parentRef: openaether-gateway (Istio, ns services-gateway, from: All).
 # Longhorn UI (longhorn-frontend:80) — distributed storage management.
 #
-# ⚠️ AUTH: the Longhorn UI has NO native authN. Protection relies for now on
-# l'instant sur l'ACL du LB (admin_ip, niveau infra). Durcissement futur :
-# basicAuth through the Gateway or Zitadel OIDC. See the admin access README.
+# ⚠️ OPT-IN, and it must stay that way until something authenticates in front of
+# it. The Longhorn UI has NO authentication of its own. This comment used to say
+# the LB ACL (admin_ip) protected it — that ACL does not exist: on Scaleway,
+# OVH and Outscale alike the app LB is open on 80/443 and only the k8s API
+# frontend carries admin_ip. So exposing this route publishes volume
+# administration — delete a volume, delete a backup, repoint the BackupTarget —
+# to anyone who sets the Host header. Put basicAuth on the Gateway or Zitadel
+# OIDC in front of it first.
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

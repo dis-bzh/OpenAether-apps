@@ -12,6 +12,10 @@ resources:
   - namespace.yaml
   - networkpolicy.yaml
   - longhorn.yaml
-  - httproute-longhorn.yaml
+  # httproute-longhorn.yaml is deliberately NOT here: the Longhorn UI has no
+  # authentication of its own, and the app LB fronting the gateway is open on
+  # 80/443 on all three providers (only the k8s API carries the admin_ip ACL).
+  # Publishing it by default put an unauthenticated volume-admin UI on the
+  # internet. Add the line yourself once something in front of it authenticates.
   - storageclasses.yaml
   - longhorn-encryption-secret.yaml

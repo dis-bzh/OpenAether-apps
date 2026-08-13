@@ -16,7 +16,7 @@ spec:
       app: openbao
   ingress:
     # 1. Istio Gateway (Gateway API) — vault.openaether.local
-    #    ⚠️ Le pod Envoy Gateway-API porte `service.istio.io/canonical-name:
+    #    ⚠️ The Envoy Gateway-API pod carries `service.istio.io/canonical-name:
     #    openaether-gateway-istio`, PAS `k8s-app: cilium-gateway` (label legacy
     #    Cilium Gateway, never set here) → the old selector never matched
     #    → the vault UI timed out. We target the real Istio label.

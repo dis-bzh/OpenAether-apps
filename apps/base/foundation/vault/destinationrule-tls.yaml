@@ -37,7 +37,7 @@ spec:
       #
       # `credentialName` reads a Secret in the CLIENT's namespace — so
       # `services-gateway`, not foundation-vault. The CA is materialised there by
-      # le Certificate `openbao-ca-bundle`
+      # the `openbao-ca-bundle` Certificate
       # (apps/base/services-gateway/openbao-ca-bundle.yaml), signed by the same
       # ClusterIssuer as the listener: only its `ca.crt` is consumed.
       #

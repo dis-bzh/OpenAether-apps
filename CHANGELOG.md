@@ -16,6 +16,78 @@ la source de vérité du « pourquoi ».
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-08-13
+
+**The first tag of this repository.** It moves in lockstep with
+`OpenAether-infra`: infra 1.0.0 pins `refs/tags/1.0.0` here, and one version
+identifies one deployable system. Until now infra tracked the `main` branch of
+this repo, so a commit here could change a running cluster within the reconcile
+interval, and no version named anything reproducible.
+
+Drafted as 1.0.1, to match an infra 1.0.1 that was never tagged. Infra's 1.0.0 has
+since been re-cut — it had been tagged before deploy, idempotency and upgrade were
+ever exercised on the three cloud providers, which is what the number was meant to
+certify — so both repositories are 1.0.0 and mean the same thing by it.
+
+Written in English, as the repository's own rule requires. The entries below it stay
+French, unrewritten.
+
+### Changed
+
+- **Relicensed from AGPLv3 to Apache 2.0.** The copyleft was deterring the one
+  thing this project wants — people running it. A relaxation, so anything already
+  obtained under AGPLv3 remains available under it.
+
+### Security
+
+- **The Longhorn UI is no longer published by default.** `apps/base/storage` shipped
+  `httproute-longhorn.yaml` unconditionally, attaching a volume-administration UI with
+  **no authentication of its own** to the public gateway, in the default `workload`
+  profile. Both the route and the gateway's `AuthorizationPolicy` justified it by an
+  app-LB ACL on `admin_ip` — that ACL does not exist: on Scaleway, OVH and Outscale
+  alike only the k8s API frontend carries `admin_ip`, and the app LB listens on 80/443
+  unrestricted (`modules/providers/{scw,ovh,outscale}/lb.tf`). Anyone setting the Host
+  header could delete volumes, delete backups or repoint the BackupTarget. The route is
+  now opt-in and both comments say what is actually true: there is no perimeter in
+  front of that Gateway, so nothing may be attached to it that does not authenticate
+  its own callers.
+
+### Changed
+
+- **The Flux source is pinned by ref, not by branch.** `apps/flux/base/gitrepository.yaml`
+  reapplies Flux's own source from git (the gitception loop), and its hardcoded
+  `branch: ${GIT_BRANCH:=main}` overwrote whatever infra laid down at bootstrap on the
+  first reconcile — so a tag pinned on the infra side silently became `main` within a
+  minute. It now uses `ref.name: ${GIT_REF:=refs/heads/main}`, one field that carries a
+  tag or a branch, and `CHILD_BRANCH` becomes `CHILD_REF` for the child loop.
+  Substituting the value rather than the YAML key is what keeps the manifest parseable
+  at build time.
+  Rung: statically validated — yamllint, `pick.py --validate` / `--check`. **Not
+  exercised on a live cluster.**
+- **No CAPI child cluster is enabled by default.** `apps/clusters/kustomization.yaml`
+  listed `edge-2` (OVH) and `edge-3` (Outscale) — the DIS fleet, torn down since — so
+  every management tracking this repo tried to reconcile them and inherited ten
+  permanently failing Flux objects. Nothing provisioned in anyone's account (the
+  non-optional `substituteFrom` fails first), but it was a broken out-of-the-box
+  experience. Enable your own by renaming `example-scaleway.yaml.example`.
+
+### Fixed
+
+- **The documented way to regenerate the `workload` profile shrank it.** Three files
+  told the reader to run `pick.py vault eso certs gateway`, four bricks, against a
+  profile picked with ten — which would have pruned `cnpg`, `storage`, `identity`,
+  `observability`, `kyverno` and more from what every spoke and every CAPI child
+  reconciles, with `prune: true`. `--check` could not catch it: it re-derives the
+  expected content from the file's own `# Pick:` header, which the stale command
+  rewrites. The documented command now reproduces the committed profile byte for byte
+  (verified).
+- **Environment-specific values removed from tracked manifests** — a real backup bucket
+  name in `apps/clusters/edge-{2,3}.yaml`, a real OMI id in `edge-3.yaml`, and a real
+  Slack workspace and channel in the Alertmanager config. The last one is simply gone:
+  an incoming webhook already posts to its own channel, so the override bought nothing.
+- `apps/clusters` isolation guidance named `CHILD_BRANCH`, which selects what a child
+  follows, not what a management reads.
+
 ### Added
 
 - **Préfixe par cluster sur les dépôts restic** — le chemin devient

@@ -1,0 +1,63 @@
+name: Something did not behave
+description: >-
+  A brick that will not reconcile, a dependency that resolves wrong, a manifest
+  that does not do what it says. Reports from outside are welcome.
+labels: [report]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Our own work is not tracked here — it lives in
+        [`OpenAether-infra/docs/backlog.md`](https://github.com/dis-bzh/OpenAether-infra/blob/main/docs/backlog.md),
+        one list for both repositories. Issues are for what **you** hit.
+
+        Say what you ran and what it printed rather than what you think the
+        cause is: the diagnosis is often wrong when an issue is opened, and the
+        report outlives it.
+
+        Never paste a real IP, a cloud account id, a bucket name or a token.
+        This repository is public and has had to purge its history once for
+        exactly that.
+
+  - type: input
+    id: brick
+    attributes:
+      label: Which brick
+      description: The Kustomization or the path under `apps/`.
+      placeholder: apps/flux/base/30-openbao.yaml
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: What it printed
+      description: >-
+        Verbatim, redacted. `flux get all -A`, or the events of the object that
+        will not become Ready.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: "`flux version`, the Kubernetes version, and the commit you are on."
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: profile
+    attributes:
+      label: Profile
+      description: Which `scripts/pick.py` profile, or which subset of the DAG you enabled.
+      placeholder: workload

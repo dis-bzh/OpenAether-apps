@@ -2,7 +2,7 @@
 # ──────────────────────────────────────────────────────────────────────────
 # LEGITIMATE L7 allows between workloads, ONLY in AMBIENT namespaces (where
 # ztunnel actually enforces the policy). Eval order: DENY → ALLOW;
-# le default-deny (authorizationpolicy-default-deny.yaml, forme `spec: {}`)
+# the default-deny (authorizationpolicy-default-deny.yaml, the `spec: {}` form)
 # allows nothing, so these ALLOWs reopen the required flows.
 #
 # The flows of OUT-OF-MESH namespaces (cert-manager→OpenBao, grafana→CNPG,
@@ -76,9 +76,14 @@ spec:
 # The Gateway Envoy receives EXTERNAL unauthenticated traffic (browsers) → it
 # has NO source SPIFFE identity. Gating the entry on `principals` (mTLS) blocked
 # it (403 on every UI: the only allowed principal was the Gateway itself, never
-# the external client). So we ALLOW the ingress; the perimeter protection is the
-# Scaleway app-LB ACL (admin_ip, see
-# modules/providers/scw/lb.tf). Zero-trust is still enforced DOWNSTREAM: the
+# the external client). So we ALLOW the ingress.
+#
+# ⚠️ This used to say the perimeter was the app-LB admin_ip ACL. There is no such
+# ACL: on Scaleway, OVH and Outscale the app LB listens on 80/443 unrestricted,
+# and admin_ip guards only the k8s API frontend. So there is NO perimeter here —
+# every route attached to this Gateway is reachable by anyone who resolves the
+# host. Attach nothing to it that does not authenticate its own callers.
+# Zero-trust is still enforced DOWNSTREAM: the
 # meshed backends accept only the Gateway's SPIFFE principal, through their own
 # AuthorizationPolicy / CiliumNetworkPolicy in their namespaces.
 #
@@ -100,4 +105,4 @@ spec:
       name: openaether-gateway
   action: ALLOW
   rules:
-    - {}  # allows all ingress to the Envoy Gateway (perimeter = the LB's admin_ip ACL)
+    - {}  # allows all ingress to the Envoy Gateway — there is no perimeter in front

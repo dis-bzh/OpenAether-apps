@@ -1,0 +1,21 @@
+# Files this repository has decided are French on purpose, or has not translated
+# yet. Everything else is checked. A path here needs a reason above it — an
+# entry with no reason is a silenced defect, which is what this file exists NOT
+# to become.
+
+# The instructions an AI assistant reads; the exchange language is French by the
+# rule inside it.
+CLAUDE.md
+
+# Historical release entries. 1.0.1 onward is English — see its own note.
+CHANGELOG.md
+
+# NOT translated yet, and each one is a runbook someone may need under pressure.
+# Tracked in OpenAether-infra/docs/backlog.md with what closes it; this list
+# shrinks as they are translated, and must never grow.
+apps/clusters/README.md
+apps/base/foundation/vault/README.md
+apps/base/foundation/vault/pki-root-offline-runbook.md
+apps/base/backup/README.md
+apps/flux/README.md
+apps/flux/workload/README.md

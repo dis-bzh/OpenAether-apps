@@ -4,7 +4,7 @@ metadata:
   name: kyverno
   labels:
     # NO istio.io/dataplane-mode: ambient — an admission webhook control plane.
-    # Le kube-apiserver appelle kyverno-svc:443 (mutate/validate). En ambient,
+    # The kube-apiserver calls kyverno-svc:443 (mutate/validate). In ambient mode,
     # ztunnel wants HBONE/15008, blocked by CiliumNetworkPolicy → Cilium DROP =
     # "operation not permitted" (EPERM) → every object creation subject to the
     # webhook fails (dry-run included). An admission webhook MUST be reachable

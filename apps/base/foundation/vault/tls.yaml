@@ -7,7 +7,7 @@
 #
 # ⚠️ The SANs cover THREE families of names, and missing one means the cluster
 # does not come up:
-#   1. le Service stable  → clients (ESO, cert-manager, backup) ;
+#   1. the stable Service → clients (ESO, cert-manager, backup);
 #   2. the headless PER-POD names → `retry_join` between raft replicas;
 #   3. `127.0.0.1` / `localhost` → the container's probes and scripts.
 ---

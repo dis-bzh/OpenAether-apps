@@ -18,9 +18,9 @@ l'historique git, purgés depuis.
 ## Objectif — socle figé + pioche modulaire
 
 **Seul socle figé : CNI (Cilium) + Flux.** Tout le reste (mesh Istio, Zitadel,
-OpenBao, Harbor, CNPG, observability…) est **optionnel et composable** : un cluster
+OpenBao, CNPG, observability…) est **optionnel et composable** : un cluster
 pioche dans ces bases selon ses dépendances (mesh ou non, Zitadel sans OpenBao,
-Harbor + OpenBao, etc.). Le DAG Flux (`apps/flux/base/*.yaml`, numéroté + `dependsOn`)
+observability sans mesh, etc.). Le DAG Flux (`apps/flux/base/*.yaml`, numéroté + `dependsOn`)
 doit rester **décomposable** — activer un sous-ensemble sans casser les dépendances.
 
 - `apps/flux/base` = socle commun ; `management/` = surcouche CAPI (cluster de

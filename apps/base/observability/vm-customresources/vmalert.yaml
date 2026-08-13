@@ -113,9 +113,10 @@ spec:
       - name: slack
         slack_configs:
           - api_url_file: /etc/vm/secrets/alertmanager-slack/webhook-url
-            # dis-bzh.slack.com, channel #openaether (C0BLJ223MU5). An incoming
-            # webhook already targets a channel; this only overrides it.
-            channel: "#openaether"
+            # No `channel:` on purpose. An incoming webhook already posts to the
+            # channel it was created for, so overriding it here bought nothing and
+            # named a real workspace in a public repository. Set one only if you
+            # need to redirect a webhook, and take it from a Secret if you do.
             send_resolved: true
             title: "[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}"
             text: >-
