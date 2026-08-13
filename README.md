@@ -131,7 +131,7 @@ lets you test a change **before** pushing it.
 ## License
 
 **OpenAether** is licensed under the [Apache License 2.0](LICENSE). It was
-AGPLv3 until 1.1.0; the change is a relaxation, so anything you already had
+AGPLv3 through the 0.x releases; the change is a relaxation, so anything you already had
 under AGPLv3 stays yours under it.
 
 Source: **https://github.com/dis-bzh/OpenAether-apps**

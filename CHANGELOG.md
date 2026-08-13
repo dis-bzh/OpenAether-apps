@@ -16,22 +16,27 @@ la source de vérité du « pourquoi ».
 
 ## [Unreleased]
 
-### Changed
+## [1.0.0] — 2026-08-13
 
-- **Relicence de l'AGPLv3 vers Apache 2.0.** Le copyleft dissuadait la seule
-  chose que ce projet recherche : des gens qui le font tourner. Assouplissement,
-  donc ce qui a déjà été obtenu sous AGPLv3 le reste.
+**The first tag of this repository.** It moves in lockstep with
+`OpenAether-infra`: infra 1.0.0 pins `refs/tags/1.0.0` here, and one version
+identifies one deployable system. Until now infra tracked the `main` branch of
+this repo, so a commit here could change a running cluster within the reconcile
+interval, and no version named anything reproducible.
 
-## [1.0.1] — 2026-08-11
-
-**The first tag of this repository.** Numbered 1.0.1 rather than 1.0.0 so that it
-moves in lockstep with `OpenAether-infra`: infra 1.0.1 pins `refs/tags/1.0.1` here,
-and one version identifies one deployable system. Until now infra tracked the `main`
-branch of this repo, so a commit here could change a running cluster within the
-reconcile interval and no version named anything reproducible.
+Drafted as 1.0.1, to match an infra 1.0.1 that was never tagged. Infra's 1.0.0 has
+since been re-cut — it had been tagged before deploy, idempotency and upgrade were
+ever exercised on the three cloud providers, which is what the number was meant to
+certify — so both repositories are 1.0.0 and mean the same thing by it.
 
 Written in English, as the repository's own rule requires. The entries below it stay
 French, unrewritten.
+
+### Changed
+
+- **Relicensed from AGPLv3 to Apache 2.0.** The copyleft was deterring the one
+  thing this project wants — people running it. A relaxation, so anything already
+  obtained under AGPLv3 remains available under it.
 
 ### Security
 
