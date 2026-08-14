@@ -43,11 +43,29 @@ spec:
               # the chart allows it (Grafana can run non-root) rather than excluding.
               - services-observability
       validate:
-        message: "Running as root is not allowed."
-        pattern:
-          spec:
-            securityContext:
-              runAsNonRoot: true
-            containers:
-            - securityContext:
+        # EITHER form, not both. Kubernetes' own "restricted" Pod Security
+        # Standard is satisfied when runAsNonRoot is set on the pod OR on every
+        # container — the pod-level field is only a default for containers that
+        # say nothing. Requiring both rejected workloads that are exactly as
+        # safe, and the namespace exclusion list above is what that cost: every
+        # entry is the same over-strict pattern worked around once more.
+        #
+        # It also hid a failure that only appears on the SECOND scheduling.
+        # external-secrets sets runAsNonRoot on each container and nothing on the
+        # pod. Its pods were admitted at bootstrap, before Kyverno enforced, and
+        # were denied when the nodes rebooted during a Talos upgrade — taking
+        # twelve Kustomizations down with them. Measured on Scaleway 2026-08-14.
+        # A cluster that cannot survive a reboot is not a working cluster.
+        #
+        # ⚠️ initContainers are not covered, here or before this change.
+        message: >-
+          Running as root is not allowed. Set runAsNonRoot: true on the pod
+          securityContext, or on every container's.
+        anyPattern:
+          - spec:
+              securityContext:
                 runAsNonRoot: true
+          - spec:
+              containers:
+              - securityContext:
+                  runAsNonRoot: true
