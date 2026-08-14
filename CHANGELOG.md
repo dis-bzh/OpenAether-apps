@@ -14,7 +14,36 @@ la source de vérité du « pourquoi ».
 
 ---
 
-## [Unreleased]
+## [Unreleased] — 1.1.0, in lockstep with infra
+
+One version identifies one deployable system, so this repository takes the number
+`OpenAether-infra` takes. Infra's next tag is **1.1.0**, not 1.0.1: it grew an
+unattended lane covering deploy, idempotency and upgrade on three providers.
+
+### Removed
+
+- **`clusterctl-inventory`, a brick that claimed a fix it never delivered.** It
+  writes `Provider` objects (`clusterctl.cluster.x-k8s.io/v1alpha3`), a CRD that
+  `cluster-api-operator` does not install — only the imperative `clusterctl init`
+  does. So it sat permanently `ReconciliationFailed` in every management
+  deployment while `capi-bootstrap.md` recorded it as the fix for
+  `clusterctl move` rejecting an operator-equipped target. Nothing depended on
+  it, and it was the single Kustomization keeping a healthy cluster from ever
+  reporting a converged DAG — which is how it was found, on 2026-08-14, by a
+  check that waits for convergence instead of asserting it. Open since
+  2026-07-30; dropped rather than carried as a permanent red reconcile.
+  **Consequence: pivoting a management cluster onto itself with `clusterctl move`
+  needs that inventory installed some other way first.**
+
+### Fixed
+
+- **`istiod` ran a single replica under a PodDisruptionBudget requiring one
+  available, so a node could never be fully drained.** Two replicas now. Measured
+  after the fix on a real Scaleway cluster: `kubectl drain` on a worker, exit 0,
+  zero non-DaemonSet pods left. The six other zero-disruption budgets in the stack
+  are correct and transient — this was the only one pinning a node. Infra's 1.0.0
+  release note blamed all seven and has been corrected in place.
+- **The release skill linked a file this repository does not have.**
 
 ## [1.0.0] — 2026-08-13
 
