@@ -293,6 +293,14 @@ def cmd_check(bricks, cat):
         for f, why in stale:
             print(f"  - {f.parent.name} : {why}", file=sys.stderr)
         sys.exit(1)
+    # A floor, because zero is the answer this check gives when it has gone
+    # blind rather than when everything is fine. It identifies its own output by
+    # a header literal; translating that literal in 2026-07-28 made --check
+    # announce "0 profile" instead of 1, and the mitigation shipped then was a
+    # comment. One layout change would do it again, silently, in green CI.
+    if checked == 0:
+        sys.exit("✗ no generated profile found — --check verified nothing. "
+                 "Has the profile layout or the generated-header literal moved?")
     print(f"OK — {checked} generated profile(s) up to date with the DAG.")
 
 
