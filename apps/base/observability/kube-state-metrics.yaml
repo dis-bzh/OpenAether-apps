@@ -1,7 +1,7 @@
 # OpenAether 0.5.0 Sprint C — kube-state-metrics
 # ──────────────────────────────────────────────────────────────────
 # Exposes the metrics of Kubernetes objects (Deployments, Pods, Nodes,
-# PersistentVolumes, etc.) au format Prometheus.
+# PersistentVolumes, etc.) in the Prometheus format.
 # Scraping is handled by the kube-state-metrics VMServiceScrape (vmscapes.yaml).
 ---
 apiVersion: source.toolkit.fluxcd.io/v1

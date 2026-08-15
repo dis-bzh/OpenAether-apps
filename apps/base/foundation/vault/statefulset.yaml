@@ -1,6 +1,6 @@
 # OpenAether 0.5.0 — OpenBao StatefulSet (3 replicas, Shamir seal + HA unsealer)
 # - Raft cluster 3/3
-# - Seal: Shamir 5/3 (auto-unseal via unsealer HA externe)
+# - Seal: Shamir 5/3 (auto-unseal through an external HA unsealer)
 # - PSS privileged (PKI system-level)
 # - PriorityClass platform-critical
 # - Storage: local-path-retain (local-path provisioner, Retain policy)

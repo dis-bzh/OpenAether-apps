@@ -1,4 +1,4 @@
-# Groupe 14 — Istio ambient (4 HelmReleases : base, istiod, cni, ztunnel)
+# Group 14 — Istio ambient (4 HelmReleases : base, istiod, cni, ztunnel)
 # Depends on cert-manager (the CONTROLLER, for CRDs/webhook) — NOT on
 # cert-manager-issuers: istiod uses its OWN self-signed CA
 # (istio-ca-root-cert, trustDomain openaether.local), it does not need OpenBao.

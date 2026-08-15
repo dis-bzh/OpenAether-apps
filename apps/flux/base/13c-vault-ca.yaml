@@ -1,4 +1,4 @@
-# Groupe 13c — CA interne d'OpenBao (TLS du listener).
+# Group 13c — OpenBao's own internal CA (the listener's TLS).
 #
 # WHY A KUSTOMIZATION SEPARATE FROM `foundation-vault`
 #   The vault brick's kustomization carries `namespace: foundation-vault`, and

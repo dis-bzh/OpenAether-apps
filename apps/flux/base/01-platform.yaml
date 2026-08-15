@@ -1,4 +1,4 @@
-# Groupe 01 — Platform (priority classes + network policies de base)
+# Group 01 — Platform (priority classes + network policies de base)
 ---
 # local-path-provisioner: installed by OpenTofu at cluster init, managed here by Flux
 # to keep the StorageClasses consistent (local-path + local-path-retain).

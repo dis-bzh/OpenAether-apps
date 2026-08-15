@@ -1,4 +1,4 @@
-# Groupe 21b — AuthorizationPolicies du namespace foundation-storage (MinIO).
+# Group 21b — AuthorizationPolicies for the foundation-storage namespace (MinIO).
 #
 # Deliberately SEPARATE from 14b: its policies target a namespace created by the
 # `storage` brick. Merged into 14b they left any "istio without storage" profile

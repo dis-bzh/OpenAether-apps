@@ -1,4 +1,4 @@
-# Groupe 50 — CAPI Operator (HelmRelease + CRDs)
+# Group 50 — CAPI Operator (HelmRelease + CRDs)
 # Depends on cert-manager (the operator's webhooks).
 # Must be Ready BEFORE 51-cluster-api-providers (through wait: true).
 ---

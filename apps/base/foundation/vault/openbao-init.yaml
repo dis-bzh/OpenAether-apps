@@ -38,7 +38,7 @@ metadata:
     openaether.io/component: openbao-init
 rules:
   # Create/update the 2 seal/recovery Secrets (create does not support
-  # resourceNames ; get/update/patch restreints aux 2 noms).
+  # resourceNames; get/update/patch are restricted to the 2 names).
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["create"]
@@ -185,7 +185,7 @@ spec:
               echo ""
               echo "╔══════════════════════════════════════════════════════════════════╗"
               echo "║  MANUAL ESCROW REQUIRED — copy these values into Bitwarden EU NOW"
-              echo "║  puis : kubectl delete job openbao-init -n ${VAULT_NS}  (purge logs)"
+              echo "║  then: kubectl delete job openbao-init -n ${VAULT_NS}  (purges the logs)"
               echo "╠══════════════════════════════════════════════════════════════════╣"
               echo "║  SHAMIR SHARES (${KEY_SHARES}, threshold ${KEY_THRESHOLD}):"
               echo "$KEYS_NL" | nl -ba -w2 -s'. ' | sed 's/^/║    /'

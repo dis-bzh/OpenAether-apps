@@ -14,7 +14,7 @@ resources:
   # The render was verified IDENTICAL before and after the switch.
   #
   #
-  # v1.12.1 : fix upstream du panic reports-controller backReconcile
+  # v1.12.1: upstream fix for the reports-controller backReconcile panic
   # "index out of range [0] with length 0" (kyverno#10123, PR #10148).
   # v1.12.0 → reports-controller CrashLoop (cpolr aggregation only,
   # admission/enforce unaffected, but noisy and cluster reports missing).

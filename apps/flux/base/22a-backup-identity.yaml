@@ -6,8 +6,8 @@
 #   (`$PRIMARY_ENDPOINT`, `$LEADER`, `$init_err`…): Flux substitution would
 #   replace them all with empty strings, silently breaking the backups.
 #   Substitution is therefore confined here, to manifests containing nothing
-#   but a ConfigMap. The CronJobs then read it as a variable
-#   d'environnement ordinaire, au runtime.
+#   but a ConfigMap. The CronJobs then read it as an ordinary environment
+#   variable, at runtime.
 #
 #   ⚠️ Never merge these resources into `apps/base/backup/*`.
 #

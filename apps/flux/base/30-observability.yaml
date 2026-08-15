@@ -1,4 +1,4 @@
-# Groupe 30 — Observability (VMCluster, Loki, Grafana, Alloy, exporters)
+# Group 30 — Observability (VMCluster, Loki, Grafana, Alloy, exporters)
 # Key isolation: a broken Grafana affects neither OpenBao, Istio nor storage.
 # Depends on storage (volumes), cert-manager (Grafana certs), istio (mTLS), cnpg (grafana-db).
 ---
@@ -25,7 +25,7 @@ spec:
     - name: external-secrets
     - name: platform-local-path-provisioner  # Loki + VMCluster en storageClass local-path
 ---
-# Groupe 30b — VictoriaMetrics Custom Resources (VMCluster/VMAgent/VM*Scrape)
+# Group 30b — VictoriaMetrics Custom Resources (VMCluster/VMAgent/VM*Scrape)
 # Separated from 'observability' to break the CRD→CR chicken-and-egg: these kinds
 # only exist after the victoria-metrics-operator HelmRelease has installed its
 # CRDs. In the same bundle the dry-run fails ("no matches for kind VMAgent") and

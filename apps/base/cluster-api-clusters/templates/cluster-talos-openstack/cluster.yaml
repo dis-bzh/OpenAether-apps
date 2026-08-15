@@ -2,10 +2,10 @@
 #
 # apiVersions aligned with the CRDs ACTUALLY installed (verified 2026-07-25):
 #   CAPI   v1.13.2 → cluster.x-k8s.io/v1beta2: refs are {apiGroup, kind,
-#                    name} — plus d'apiVersion ni de namespace.
-#   CAPO   v0.14.4 → infrastructure.cluster.x-k8s.io/v1beta1 (seule version servie)
+#                    name} — no apiVersion and no namespace.
+#   CAPO   v0.14.4 → infrastructure.cluster.x-k8s.io/v1beta1 (the only version served)
 #   CACPPT v0.5.13 → controlplane…/v1alpha3: infrastructureTemplate is still a
-#                    ObjectReference PLEINE (apiVersion + namespace).
+#                    FULL ObjectReference (apiVersion + namespace).
 #   CABPT  v0.6.12 → bootstrap…/v1alpha3
 #
 # PREREQUISITE outside git — an Opaque Secret in capi-clusters (the SAME ns as
@@ -71,7 +71,7 @@ spec:
     filter:
       name: ${OS_EXTERNAL_NETWORK:=Ext-Net}
   # CAPO creates network + subnet + router (gw = externalNetwork) — the
-  # modules/providers/ovh/network.tf. CIDR distinct du management.
+  # equivalent of modules/providers/ovh/network.tf, on its own CIDR.
   managedSubnets:
     - cidr: ${OS_NODE_CIDR:=10.20.0.0/24}
       dnsNameservers: ["1.1.1.1", "8.8.8.8"]

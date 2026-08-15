@@ -10,7 +10,7 @@
 #
 # Security: set +x wherever secrets travel; no key or token is ever logged.
 #
-# SA: openbao-vault-bootstrap (ns foundation-vault) — droits lecture-seule Secret
+# SA: openbao-vault-bootstrap (ns foundation-vault) — read-only rights on Secret
 # openbao-recovery (root_token) + OpenBao API access.
 # RBAC defined in this file (same kustomization → same namespace).
 # ───────────────────────────────────────────────────────────────────────────────────
@@ -430,7 +430,7 @@ spec:
                   "$(jq -nc --arg p "$RESTIC_PASS" '{password:$p}')"
                 echo ""
                 echo "  >>> ESCROW MANDATORY (once only — Bitwarden EU):"
-                echo "  >>> password restic des backups (backup/restic) :"
+                echo "  >>> restic password for the backups (backup/restic):"
                 echo "  ----- BEGIN RESTIC PASSWORD -----"
                 echo "  ${RESTIC_PASS}"
                 echo "  ----- END RESTIC PASSWORD -----"

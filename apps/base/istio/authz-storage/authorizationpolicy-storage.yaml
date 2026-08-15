@@ -1,4 +1,4 @@
-# AuthorizationPolicies du namespace foundation-storage (MinIO).
+# AuthorizationPolicies for the foundation-storage namespace (MinIO).
 #
 # ⚠️ They lived in apps/base/istio/authz until 2026-07-27. But that directory is
 # applied as soon as Istio is picked, whereas foundation-storage only exists if

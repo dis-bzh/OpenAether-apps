@@ -5,9 +5,9 @@ kind: Kustomization
 # dry-run chicken-and-egg: the cert-manager.io/v1 CRDs only exist after the Helm install.
 # This kustomization is deployed by the 13b-cert-manager-issuers Flux Kustomization,
 # which depends on cert-manager (HelmRelease ready).
-# Single OpenBao (foundation-vault) : un seul issuer signant via
+# Single OpenBao (foundation-vault): one issuer only, signing through
 # pki/sign/openaether. The former openbao-pki-root issuers /
-# openbao-pki-intermediate (mounts pki-root/pki-intermediate de l'archi 2-OpenBao)
+# openbao-pki-intermediate (pki-root/pki-intermediate mounts, from the two-OpenBao design)
 # have been removed — referenced by no Certificate.
 resources:
   - clusterissuer-openbao.yaml

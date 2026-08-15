@@ -82,7 +82,7 @@ spec:
               protocol: TCP
             - port: "10250"
               protocol: TCP
-    # OpenBao PKI (signer pki/sign/openaether) — un seul OpenBao (seal Shamir).
+    # OpenBao PKI (signer pki/sign/openaether) — one OpenBao only (Shamir seal).
     # The former foundation-pki-root (OpenBao root) has been removed.
     - toEndpoints:
         - matchLabels:
