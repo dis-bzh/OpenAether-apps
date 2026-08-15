@@ -29,7 +29,7 @@ spec:
         - ports:
             - port: "10250"
               protocol: TCP
-    # intra-namespace: cert-controller → webhook (rotation certificat TLS webhook)
+    # intra-namespace: cert-controller → webhook (rotating the webhook's TLS certificate)
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-pki-management

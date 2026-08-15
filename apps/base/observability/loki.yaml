@@ -122,7 +122,7 @@ spec:
         type: s3
         # bucketNames and endpoint are OVERWRITTEN by the `valuesFrom` above,
         # from the loki-s3-credentials Secret. These values only act as
-        # documentation du format attendu.
+        # documentation of the expected format.
         bucketNames:
           chunks: loki
           ruler: loki

@@ -1,4 +1,4 @@
-# Groupe 21 — Storage (Longhorn HelmRelease + StorageClasses + ExternalSecret LUKS)
+# Group 21 — Storage (Longhorn HelmRelease + StorageClasses + ExternalSecret LUKS)
 # Depends on eso (the longhorn-encryption ExternalSecret) and on
 # platform-local-path-provisioner (this brick used to vendor its own copy —
 # removed, it collided with that one whenever both were picked; see apps/base/storage/kustomization.yaml).

@@ -1,6 +1,6 @@
 # OpenAether 0.5.0 — OpenBao (3 raft replicas, Shamir seal + HA unsealer)
 # A refactor of the former apps/base/openbao/ — a single HA OpenBao, no root.
-# Seal: Shamir 5/3 (auto-unseal via unsealer HA externe)
+# Seal: Shamir 5/3 (auto-unseal through an external HA unsealer)
 # HA unsealer: 2-3 RAM-only replicas, configurable source (file/bitwarden/manual).
 # Removed: foundation-pki-root, transit seal, openbao-seal-token, openbao-root-recovery.
 apiVersion: kustomize.config.k8s.io/v1beta1

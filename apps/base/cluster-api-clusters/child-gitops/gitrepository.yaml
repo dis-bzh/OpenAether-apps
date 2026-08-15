@@ -1,7 +1,7 @@
 # GitOps wiring of the CHILD cluster (gitception) — applied remotely through
 # kubeConfig by the management, after which the child's Flux is autonomous.
 # Same names as the parent bootstrap (flux-bootstrap.yaml.tftpl on the infra side):
-# GitRepository `openaether`, Kustomization racine `openaether-platform`.
+# GitRepository `openaether`, root Kustomization `openaether-platform`.
 #
 # Variables (postBuild.substitute of the management Kustomization):
 #   ${CHILD_PROFILE} — the child's Flux profile, e.g. workload (default) or a

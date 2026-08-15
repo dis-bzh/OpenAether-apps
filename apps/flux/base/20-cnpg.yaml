@@ -1,4 +1,4 @@
-# Groupe 20 — CloudNative-PG (operator + clusters)
+# Group 20 — CloudNative-PG (operator + clusters)
 # Depends on eso (ExternalSecrets for grafana-db-credentials).
 # Isolation: a CNPG crash affects neither the foundation stack nor the storage layer.
 ---

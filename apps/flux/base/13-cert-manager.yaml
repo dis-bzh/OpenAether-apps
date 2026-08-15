@@ -1,4 +1,4 @@
-# Groupe 13 — cert-manager (HelmRelease)
+# Group 13 — cert-manager (HelmRelease)
 # Depends on vault (OpenBao PKI ClusterIssuers) and eso (ExternalSecrets).
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1

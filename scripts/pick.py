@@ -362,7 +362,7 @@ def main():
         outdir = emit_profile(args.output, selected, args.bricks, bricks)
         print(f"Profile written: {outdir}/kustomization.yaml")
         print("Check the render: kubectl kustomize " + str(outdir) + " | head")
-        print("Pointer Flux dessus : spec.path de la Kustomization racine "
+        print("Point Flux at it: spec.path of the root Kustomization "
               "(on the OpenAether-infra side, see bootstrap-manifests).")
     else:
         print("(dry-run — add -o apps/flux/<profile> to generate the overlay)")

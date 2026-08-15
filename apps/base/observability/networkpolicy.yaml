@@ -568,7 +568,7 @@ spec:
             - port: "9000"
               protocol: TCP
     # Cloud S3 (HTTPS) — for the cloud overlay.
-    # ⚠️ toEntities:world :443 = n'importe quelle IP publique → exfiltration possible.
+    # ⚠️ toEntities:world :443 = any public IP at all → exfiltration is possible.
     # Narrowed to the provider's cloud S3 FQDNs. Cloud overlays may add other
     # providers if needed.
     # Locally: this rule is never reached (the internal MinIO :9000 is enough).
@@ -646,7 +646,7 @@ spec:
   ingress:
     # Gateway Envoy (services-gateway, outside ambient) → Grafana :3000 directly.
     # Observability outside the mesh: no more ztunnel/waypoint, Envoy connects
-    # directement au pod Grafana → source = namespace services-gateway.
+    # straight to the Grafana pod → source = the services-gateway namespace.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-gateway

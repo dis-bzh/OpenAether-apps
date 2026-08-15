@@ -1,4 +1,4 @@
-# Certificat TLS du listener OpenBao.
+# TLS certificate for the OpenBao listener.
 #
 # The CA CHAIN lives in `apps/base/foundation/vault-ca` (a separate brick, in
 # the `cert-manager` namespace) — see the detailed explanation there. It cannot

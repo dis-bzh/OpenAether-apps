@@ -1,6 +1,6 @@
 # Group 35 — identity (Zitadel)
 # ──────────────────────────────────────────────────────────────────────────
-# IAM souverain. Backend Postgres = CNPG zitadel-db (groupe 20). Secrets
+# Self-hosted IAM. Postgres backend = CNPG zitadel-db (group 20). Secrets
 # (masterkey + DB password) through ESO/OpenBao (group 12). Exposed through the
 # Istio Gateway (group 14c); in-mesh traffic secured by Istio (ambient).
 # Isolation: a Zitadel crash affects neither the foundation nor observability.

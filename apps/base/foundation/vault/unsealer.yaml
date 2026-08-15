@@ -137,7 +137,7 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
-            # CA interne d'OpenBao (TLS du listener).
+            # OpenBao's own internal CA (the listener's TLS).
             - name: tls
               mountPath: /bao/tls
               readOnly: true
@@ -174,5 +174,5 @@ spec:
 # by a RAM-only human injection. Two options:
 #   - UNSEAL_SOURCE=stdin: `kubectl attach` on the pod, the operator pastes the
 #     shares → kept in the process's memory, never on disk nor in etcd.
-#   - UNSEAL_SOURCE=bitwarden : fetch direct Bitwarden EU (token court) au boot.
+#   - UNSEAL_SOURCE=bitwarden: fetched straight from Bitwarden EU at boot,
 # The openbao-unseal-keys Secret remains the DEV path (frequent destroy/rebuild).

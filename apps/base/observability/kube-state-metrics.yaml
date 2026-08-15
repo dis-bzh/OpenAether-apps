@@ -1,7 +1,7 @@
 # OpenAether 0.5.0 Sprint C — kube-state-metrics
 # ──────────────────────────────────────────────────────────────────
 # Exposes the metrics of Kubernetes objects (Deployments, Pods, Nodes,
-# PersistentVolumes, etc.) au format Prometheus.
+# PersistentVolumes, etc.) in the Prometheus format.
 # Scraping is handled by the kube-state-metrics VMServiceScrape (vmscapes.yaml).
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
@@ -44,16 +44,13 @@ spec:
     remediation:
       retries: 3
   values:
-    replicaCount: 2
-    affinity:
-      podAntiAffinity:
-        preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app.kubernetes.io/name: kube-state-metrics
-              topologyKey: kubernetes.io/hostname
+    # ⚠️ ONE replica, deliberately. `replicaCount: 2` used to sit here and this
+    # chart's key is `replicas` — Helm ignored the value in silence and the
+    # Deployment ran at 1 for as long as anyone had been reading it as HA.
+    # Two is also the wrong answer: without sharding, both pods export the same
+    # series under different `pod` labels, so every `sum()` in the alert rules
+    # would double. A brief gap while a node drains is the cheaper failure.
+    replicas: 1
     resources:
       requests:
         cpu: 10m
@@ -67,5 +64,12 @@ spec:
         enabled: false
     # podDisruptionBudget: the kube-state-metrics 5.25.1 chart expects the raw PDB spec
     # (minAvailable/maxUnavailable), WITHOUT an `enabled` field, which breaks the schema.
+    #
+    # maxUnavailable, NOT minAvailable. `minAvailable: 1` on a one-replica
+    # Deployment means disruptionsAllowed=0 for ever: the pod can never be
+    # evicted, so no node carrying it can ever be drained. It blocked every
+    # Talos node roll that reached it (2026-08-14, three runs; 2026-08-15 again),
+    # and it is the wrong promise for a stateless exporter — losing it for a
+    # minute costs a gap in the graphs, not availability.
     podDisruptionBudget:
-      minAvailable: 1
+      maxUnavailable: 1
