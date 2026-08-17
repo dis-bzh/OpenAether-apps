@@ -330,13 +330,13 @@ def main():
     p.add_argument("-o", "--output", metavar="DIR",
                    help="generate the profile into DIR (e.g. apps/flux/edge)")
     p.add_argument("--list", action="store_true", help="list the bricks")
-    p.add_argument("--validate", action="store_true", help="valide DAG + catalogue")
+    p.add_argument("--validate", action="store_true", help="validate the DAG and the catalogue")
     p.add_argument("--check", action="store_true",
                    help="check that the generated profiles are up to date (CI; exits 1 on drift)")
     p.add_argument("--no-baseline", action="store_true",
                    help="do not add the security baseline (not recommended)")
     p.add_argument("--no-companions", action="store_true",
-                   help="n'ajoute pas les compagnons automatiques")
+                   help="do not add the automatic companions")
     args = p.parse_args()
 
     bricks = load_dag()

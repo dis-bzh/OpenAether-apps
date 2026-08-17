@@ -30,8 +30,8 @@ spec:
               protocol: TCP
     # 2. ESO (pull ExternalSecret)
     #    NB: the external-secrets chart does NOT set a bare `app:` label — so
-    #    utilise `app.kubernetes.io/name`. Un selector `app: external-secrets`
-    #    it blocked ESO→OpenBao PERMANENTLY (cloud included), not just locally.
+    #    select on `app.kubernetes.io/name`. A selector `app: external-secrets`
+    #    blocked ESO→OpenBao PERMANENTLY (cloud included), not just locally.
     #    Always select on the canonical label.
     - fromEndpoints:
         - matchLabels:
@@ -165,7 +165,7 @@ spec:
               protocol: TCP
 ---
 # Egress policy for the bootstrap-roles Job (foundation-vault).
-# Permet: DNS + kube-apiserver (kubectl) + API OpenBao.
+# Allows: DNS + kube-apiserver (kubectl) + the OpenBao API.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
