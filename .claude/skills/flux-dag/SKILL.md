@@ -25,6 +25,18 @@ have already been found, and they only bite an ad-hoc pick — the default profi
 happened to order them correctly by accident. When you add a component, ask what
 it reads at startup, not what it reads eventually.
 
+**Four ways the DAG has bitten, each once.**
+
+- **Flux substitution applies to the whole Kustomization render** — it blanks bare
+  shell variables. Isolate `substituteFrom` in a brick that contains no script.
+- **An operator and its own CRs need two Kustomizations.** A bundle carrying both
+  is rejected at dry-run, because the CRDs do not exist yet.
+- **A failed Job is permanent under Flux.** It re-applies the same spec and never
+  restarts a finished Job, so a bootstrap Job must WAIT for its dependency rather
+  than fail and rely on a retry.
+- **A Kustomize `namespace:` overrides every resource**, including those of a
+  referenced base. Validate the directory (`kubectl apply -k`), never a file.
+
 ## Two formats, one value
 
 Cilium's settings exist twice: as `--set` flags in the infra render script, and
