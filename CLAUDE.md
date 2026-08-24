@@ -60,11 +60,19 @@ Le dépôt ne doit pas grossir en lignes plus vite qu'en fonctionnalités.
 - **Refactorer au fil de l'eau** — supprimer le code mort (cf. la brique `ccm`,
   jamais déployée et qui ne construisait plus), fusionner les redondances.
 
-## Backlog
+## Suivi du travail — issues GitHub
 
-Les améliorations identifiées (SSO Zitadel↔Grafana, tokens OpenBao nominatifs,
-alerting backups, fix namespaces CAPI…) vivent dans
-**`OpenAether-infra/docs/backlog.md`** — le consulter avant d'ouvrir un chantier.
+Toute amélioration identifiée ouvre une **issue GitHub dans ce dépôt** — les
+sujets applicatifs ici, les sujets d'infrastructure dans `OpenAether-infra`. Une
+issue nomme ce qui cloche, **ce qui la ferme** (l'observation qui le prouve) et le
+**barreau** visé. Un constat sans changement à proposer est une issue, pas une PR.
+
+Elles vivaient dans `OpenAether-infra/docs/backlog.md`, un tracker tenu à la main
+devenu illisible ; les entrées applicatives ont été converties en issues ici.
+
+Les **pièges** que ce dépôt a payés une fois sont dans `docs/traps.md`, et ceux
+qui concernent le DAG dans le skill `flux-dag`. Ce n'est pas du travail ouvert :
+c'est ce qu'on relit avant de refaire l'erreur.
 
 ## Règle de découpage
 
