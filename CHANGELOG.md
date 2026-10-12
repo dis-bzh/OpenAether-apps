@@ -30,7 +30,7 @@ real cluster that this file records (July and August 2026, Scaleway and OVH) are
 real cluster is recorded since, and `OpenAether-infra` 0.2.0 validated its three clouds with Flux off. Read Known limits before
 pulling this onto a cluster that matters.
 
-`OpenAether-infra` 0.2.0 names this tag as its companion. The tag replaces the withdrawn 1.0.0 below, whose entries are the
+`OpenAether-infra` 0.2.0 pins this tag in its `envs/*.tfvars.example` (`git_ref = "refs/tags/0.1.0"`). The tag replaces the withdrawn 1.0.0 below, whose entries are the
 record of how the repository got here and are part of what this tag contains.
 
 ### Removed
