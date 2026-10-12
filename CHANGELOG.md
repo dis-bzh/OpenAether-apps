@@ -9,16 +9,19 @@ dépôts, les entrées se répondent alors.
 
 Ce fichier démarre au 2026-07-27 : les 200 commits antérieurs ne sont pas
 rétro-documentés, l'historique git faisant foi. Les décisions structurantes de
-cette période sont consignées dans `OpenAether-infra/docs/backlog.md`, qui reste
-la source de vérité du « pourquoi ».
+cette période étaient consignées dans `OpenAether-infra/docs/backlog.md`, retiré
+depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont dans
+`docs/traps.md`.
 
 ---
 
-## [Unreleased] — 1.1.0, in lockstep with infra
+## [Unreleased]
 
-One version identifies one deployable system, so this repository takes the number
-`OpenAether-infra` takes. Infra's next tag is **1.1.0**, not 1.0.1: it grew an
-unattended lane covering deploy, idempotency and upgrade on three providers.
+This repository carries no tag. The 1.0.0 described below was deleted, with infra's
+1.x tags, because none of them ever worked (see `OpenAether-infra`'s `CHANGELOG.md`),
+and the `1.1.0` this section once announced was never cut. `OpenAether-infra`'s
+examples follow `refs/heads/main` here and pin no tag; the first tag will say what
+it measured, as infra's 0.1.0 does.
 
 ### Removed
 
@@ -45,7 +48,7 @@ unattended lane covering deploy, idempotency and upgrade on three providers.
   release note blamed all seven and has been corrected in place.
 - **The release skill linked a file this repository does not have.**
 
-## [1.0.0] — 2026-08-13
+## 1.0.0 — 2026-08-13 — withdrawn, the tag no longer exists
 
 **The first tag of this repository.** It moves in lockstep with
 `OpenAether-infra`: infra 1.0.0 pins `refs/tags/1.0.0` here, and one version

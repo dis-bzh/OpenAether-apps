@@ -24,7 +24,7 @@ spec:
         #    finalizer, or suspended and forgotten. Every Kustomization has an
         #    interval <= 10 min, so a flat counter over 30 min is a real stop.
         #    Does NOT catch "reconciling but failing": Flux 2.8 exposes no
-        #    per-object Ready condition (backlog.md).
+        #    per-object Ready condition (OpenAether-infra CHANGELOG, Known limits).
         - alert: FluxReconciliationStalled
           expr: |
             increase(gotk_reconcile_duration_seconds_count[30m]) == 0
