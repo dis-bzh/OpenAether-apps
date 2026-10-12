@@ -2,17 +2,13 @@
 
 ## Issues, and what they are not
 
-**Issues are for what you hit** — a brick that will not reconcile, a dependency
-that resolves wrong. Reports from outside are welcome and outrank our own list:
-the order in the backlog is a guess about what matters, something that broke on
-somebody is a fact.
-
-**Our own work is not in issues.** It lives in
-[`OpenAether-infra/docs/backlog.md`](https://github.com/dis-bzh/OpenAether-infra/blob/main/docs/backlog.md),
-one list for both repositories, where every entry names the command that would
-close it. A working list wants to be read offline at the start of a session; an
-intake wants to be where a stranger can reach it. Duplicating one into the other
-would give us two records that disagree.
+**Issues are where you report what you hit** — a brick that will not reconcile, a
+dependency that resolves wrong — **and where we track our own work**: the
+application-side tasks in [the open issues here](https://github.com/dis-bzh/OpenAether-apps/issues),
+the rest in [OpenAether-infra's](https://github.com/dis-bzh/OpenAether-infra/issues).
+Each one names the command that would close it. Reports from outside are welcome
+and outrank our own list: its order is a guess about what matters, something that
+broke on somebody is a fact.
 
 Never put a real IP, a cloud account id or a bucket name in an issue. The
 repository is public and has had to purge its history once for that.
@@ -44,8 +40,8 @@ checks on `main`).
 - Business/app-specific manifests belong in each application's own repo
   (`deploy/k8s/`), not here — this repo provides the common platform plus the
   Flux pointers to those repos.
-- Open work items live in `OpenAether-infra/docs/backlog.md` — read it before
-  starting non-trivial work.
+- Open work items live in the GitHub issues of this repository and of
+  OpenAether-infra — read them before starting non-trivial work.
 - Dependency bumps (CAPI providers, Helm charts, vendored manifests, CI actions)
   are proposed by Renovate and never auto-merged. Anything labeled
   `vendored-manifest` only bumps a tracking comment — re-download and replace

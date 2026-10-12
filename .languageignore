@@ -11,7 +11,7 @@ CLAUDE.md
 CHANGELOG.md
 
 # NOT translated yet, and each one is a runbook someone may need under pressure.
-# Tracked in OpenAether-infra/docs/backlog.md with what closes it; this list
+# Tracked in OpenAether-apps#40 with what closes it; this list
 # shrinks as they are translated, and must never grow.
 apps/clusters/README.md
 apps/base/foundation/vault/README.md

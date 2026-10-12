@@ -24,8 +24,8 @@
 #                      string and stays a valid (if bucket-less) string. No
 #                      empty default here on purpose — better a clear
 #                      "variable not found" than this silent-until-CRD-
-#                      validation failure mode. See docs/backlog.md if this
-#                      needs a NOT-a-required-Postgres-backup-yet path later.
+#                      validation failure mode. If this needs a
+#                      NOT-a-required-Postgres-backup-yet path later, open an issue.
 #   ${CHILD_BACKUP_TARGET_URL} — REQUIRED if the child picks the storage
 #                      (Longhorn) brick, same failure mode as above but for
 #                      Longhorn's BackupTarget.spec.backupTargetURL (also

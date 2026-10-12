@@ -7,9 +7,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        Our own work is not tracked here — it lives in
-        [`OpenAether-infra/docs/backlog.md`](https://github.com/dis-bzh/OpenAether-infra/blob/main/docs/backlog.md),
-        one list for both repositories. Issues are for what **you** hit.
+        Reports are for what **you** hit. Our own work is tracked in issues too
+        (application-side here, the rest in
+        [OpenAether-infra](https://github.com/dis-bzh/OpenAether-infra/issues));
+        a report from outside outranks it.
 
         Say what you ran and what it printed rather than what you think the
         cause is: the diagnosis is often wrong when an issue is opened, and the

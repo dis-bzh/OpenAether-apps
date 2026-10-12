@@ -12,7 +12,8 @@
 #
 # Istio's Service cannot be pinned (istiod generates it, and neither Kustomize
 # nor `spec.infrastructure` can force a nodePort), and a CCM was ruled out —
-# see the "Public ingress" decision in docs/backlog.md.
+# see the "Public ingress" decision in OpenAether-infra's retired docs/backlog.md
+# (`git show c876b6a^:docs/backlog.md`).
 ---
 apiVersion: v1
 kind: Service

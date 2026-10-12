@@ -9,16 +9,29 @@ dépôts, les entrées se répondent alors.
 
 Ce fichier démarre au 2026-07-27 : les 200 commits antérieurs ne sont pas
 rétro-documentés, l'historique git faisant foi. Les décisions structurantes de
-cette période sont consignées dans `OpenAether-infra/docs/backlog.md`, qui reste
-la source de vérité du « pourquoi ».
+cette période étaient consignées dans `OpenAether-infra/docs/backlog.md`, retiré
+depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont dans
+`docs/traps.md`.
 
 ---
 
-## [Unreleased] — 1.1.0, in lockstep with infra
+## [Unreleased]
 
-One version identifies one deployable system, so this repository takes the number
-`OpenAether-infra` takes. Infra's next tag is **1.1.0**, not 1.0.1: it grew an
-unattended lane covering deploy, idempotency and upgrade on three providers.
+---
+
+## [0.1.0] — 2026-10-12
+
+**The common platform bricks and the Flux wiring that `OpenAether-infra` can point a cluster at, validated statically and
+not reconciled on a real cluster at this tag.** This is the first number the repository puts on something it measured, and
+what it measured is static: `yamllint`, `pick.py --validate` (the DAG is healthy) and `pick.py --check` (the generated
+profile matches it), a `kubectl kustomize` build of every brick with no object claimed by two bricks, and the Cilium
+settings of the CAPI children agreeing with the foundation's (`task apps-validate` from `OpenAether-infra`). The runs on a
+real cluster that this file records (July and August 2026, Scaleway and OVH) are on earlier commits. No run on a
+real cluster is recorded since, and `OpenAether-infra` 0.2.0 validated its three clouds with Flux off. Read Known limits before
+pulling this onto a cluster that matters.
+
+`OpenAether-infra` 0.2.0 pins this tag in its `envs/*.tfvars.example` (`git_ref = "refs/tags/0.1.0"`). The tag replaces the withdrawn 1.0.0 below, whose entries are the
+record of how the repository got here and are part of what this tag contains.
 
 ### Removed
 
@@ -45,7 +58,28 @@ unattended lane covering deploy, idempotency and upgrade on three providers.
   release note blamed all seven and has been corrected in place.
 - **The release skill linked a file this repository does not have.**
 
-## [1.0.0] — 2026-08-13
+### Known limits
+
+Read these before deploying something that matters. Open items:
+[the open issues](https://github.com/dis-bzh/OpenAether-apps/issues).
+
+- **No profile has been reconciled on a real cluster at this tag.** The statements above name the gates that ran. A real
+  reconcile of the `management` or `workload` profile, `deploy_flux = true` in `OpenAether-infra`, is the next thing to
+  measure and is not recorded anywhere.
+- **The pinned Flux source has never been exercised on a live cluster.** `ref.name: ${GIT_REF:=refs/heads/main}` carries a
+  tag or a branch (entry 1.0.0, Changed); only static validation ran.
+- **The CAPI child clusters in `apps/clusters` are scaffolding, and none is enabled by default.** Two management clusters
+  must never read the same `apps/clusters` (README).
+- **The public Gateway has no perimeter in front of it.** Nothing may be attached to it that does not authenticate its own
+  callers; the Longhorn UI route is opt-in for that reason.
+- **Pivoting a management cluster onto itself with `clusterctl move` needs the provider inventory installed some other
+  way** (the `clusterctl-inventory` brick is gone, above).
+- **Seven runbooks and READMEs are still French at an English-canonical name** (#40); the language check lists them in
+  `.languageignore` and the list must not grow.
+
+---
+
+## 1.0.0 — 2026-08-13 — withdrawn, the tag no longer exists
 
 **The first tag of this repository.** It moves in lockstep with
 `OpenAether-infra`: infra 1.0.0 pins `refs/tags/1.0.0` here, and one version

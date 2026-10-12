@@ -55,7 +55,7 @@ supposer.
 Le dépôt ne doit pas grossir en lignes plus vite qu'en fonctionnalités.
 
 - **Commentaire = le pourquoi, en 1 à 3 lignes** ; le détail va dans le runbook
-  ou le backlog, référencé par chemin.
+  ou l'issue, référencée par son numéro.
 - **Pas de recopie entre fichiers** : pointer vers celui qui fait autorité.
 - **Refactorer au fil de l'eau** — supprimer le code mort (cf. la brique `ccm`,
   jamais déployée et qui ne construisait plus), fusionner les redondances.
