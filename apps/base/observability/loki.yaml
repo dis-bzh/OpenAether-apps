@@ -120,15 +120,12 @@ spec:
         replication_factor: 2
       storage:
         type: s3
-        # bucketNames and endpoint are OVERWRITTEN by the `valuesFrom` above,
-        # from the loki-s3-credentials Secret. These values only act as
-        # documentation of the expected format.
-        bucketNames:
-          chunks: loki
-          ruler: loki
-          admin: loki
+        # The endpoint and the three bucket names are NOT set here: they come from the
+        # loki-s3-credentials Secret through `valuesFrom` above. `spec.values` is merged AFTER
+        # `valuesFrom` and wins, so a literal here silently replaced the seeded destination: on a
+        # cloud cluster Loki wrote to a MinIO that does not exist and refused every push (500,
+        # "at least 2 live replicas required"), measured 2026-10-13.
         s3:
-          endpoint: http://minio.foundation-storage:9000
           region: us-east-1
           s3ForcePathStyle: true
           insecure: true
