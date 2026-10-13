@@ -97,12 +97,12 @@ openssl ca -config openssl-root.cnf \
 ### 4. Import dans OpenBao (étape MANUELLE)
 
 Le `bootstrap-roles-job` ne fait QUE générer + afficher le CSR (non bloquant). L'import du
-certificat signé est manuel (le root reste hors-ligne). Récupérer le root_token, puis importer :
+certificat signé est manuel (le root reste hors-ligne). Il n'y a plus de root token dans le cluster : l'import se fait
+avec l'identité `openaether-admin` (helper `bao_admin` du README, qui échange le token du ServiceAccount contre un token
+OpenBao DANS le pod) :
 ```bash
-RT=$(kubectl get secret openbao-recovery -n foundation-vault -o jsonpath='{.data.root_token}' | base64 -d)
-kubectl cp intermediate-signed.crt foundation-vault/openbao-0:/tmp/int.crt
-kubectl exec -n foundation-vault openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN="$RT" \
-  bao write pki/intermediate/set-signed certificate=@/tmp/int.crt
+kubectl -n foundation-vault exec -i openbao-0 -- sh -c 'cat > /tmp/int.crt' < intermediate-signed.crt
+bao_admin write pki/intermediate/set-signed certificate=@/tmp/int.crt
 ```
 Après import, l'issuer cert-manager `openbao` (`pki/sign/openaether`) passe Ready.
 

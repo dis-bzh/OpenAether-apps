@@ -8,9 +8,9 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao
 spec:
-  description: "OpenBao (HA, 3 replicas, Shamir seal): ingress from Cilium
-    Gateway (sprint 3), external-secrets, csi-driver, cert-manager, istiod, unsealer
-    HA, init-Job, peers raft, bootstrap-roles. Egress: kube-dns, k8s API, peers raft."
+  description: "OpenBao (HA, 3 replicas, static seal): ingress from Cilium
+    Gateway, external-secrets, csi-driver, cert-manager, istiod, the snapshot
+    CronJob, the init and bootstrap Jobs, peers raft. Egress: kube-dns, k8s API, peers raft."
   endpointSelector:
     matchLabels:
       app: openbao
@@ -69,7 +69,6 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # 6. (removed) OpenBao root — no more foundation-pki-root (Shamir seal).
     # 6b. Backup (openbao-snapshot CronJob, same ns): sys/leader, login
     #     auth/kubernetes, raft snapshot. Mirrored egress in
     #     apps/base/backup/openbao/networkpolicy.yaml.
@@ -113,16 +112,7 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # 10. HA unsealer (route A) → /v1/sys/unseal + /v1/sys/health on all 3 pods.
-    - fromEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: foundation-vault
-            app: openbao-unsealer
-      toPorts:
-        - ports:
-            - port: "8200"
-              protocol: TCP
-    # 11. Init-Job (operator init one-time, cible openbao-0).
+    # 10. Init-Job (the one-time `sys/init` against openbao-0, then the hand-over to the bootstrap identity).
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault
@@ -151,7 +141,6 @@ spec:
     # (ESO/cert-manager) → ClusterSecretStore InvalidProviderConfig.
     - toEntities:
         - kube-apiserver
-    # (removed) egress to foundation-pki-root — no more root (Shamir seal).
     # Raft between the 3 replicas: join challenge on the 8200 API + cluster 8201.
     - toEndpoints:
         - matchLabels:
@@ -165,7 +154,8 @@ spec:
               protocol: TCP
 ---
 # Egress policy for the bootstrap-roles Job (foundation-vault).
-# Allows: DNS + kube-apiserver (kubectl) + OpenBao API.
+# Allows: DNS + the OpenBao API. No Kubernetes API: this Job logs in to OpenBao with its ServiceAccount token
+# and OpenBao itself does the TokenReview.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -176,7 +166,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao-vault-bootstrap
 spec:
-  description: "Job bootstrap-roles egress: DNS + k8s API + OpenBao API."
+  description: "Job bootstrap-roles egress: DNS + OpenBao API."
   endpointSelector:
     matchLabels:
       app: openbao-vault-bootstrap
@@ -191,12 +181,6 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # kube-apiserver through toEntities (NOT toServices:kubernetes): the
-    # `kubernetes` Service DNATs 443→6443, and `toServices` only opens 443 → the
-    # post-DNAT packet to 6443 is dropped. Breaks the Job's `kubectl apply`
-    # (writing the seal Secrets) → unsealer deadlock. See the openbao block above.
-    - toEntities:
-        - kube-apiserver
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault
@@ -205,43 +189,6 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
----
-# HA unsealer egress (route A): DNS (resolving the openbao-N FQDNs) + OpenBao API.
-# Pas d'API k8s (automountServiceAccountToken=false). Bitwarden 443 = Wave 3.
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: openbao-unsealer
-  namespace: foundation-vault
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/sprint: "0.5.0-sprint0"
-    openaether.io/component: openbao-unsealer
-spec:
-  description: "Unsealer HA egress: DNS + OpenBao API (unseal des 3 pods)."
-  endpointSelector:
-    matchLabels:
-      app: openbao-unsealer
-  egress:
-    - toEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: kube-system
-            k8s-app: kube-dns
-      toPorts:
-        - ports:
-            - port: "53"
-              protocol: UDP
-            - port: "53"
-              protocol: TCP
-    - toEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: foundation-vault
-            app: openbao
-      toPorts:
-        - ports:
-            - port: "8200"
-              protocol: TCP
-    # TODO Wave 3 (UNSEAL_SOURCE=bitwarden): egress 443 to Bitwarden EU (FQDN/CIDR).
 ---
 # Egress init-Job (one-shot) : DNS + kube-apiserver (kubectl) + API OpenBao (init).
 apiVersion: cilium.io/v2
@@ -272,7 +219,7 @@ spec:
     # kube-apiserver through toEntities (NOT toServices:kubernetes): the
     # `kubernetes` Service DNATs 443→6443, and `toServices` only opens 443 → the
     # post-DNAT packet to 6443 is dropped. Breaks the Job's `kubectl apply`
-    # (writing the seal Secrets) → unsealer deadlock. See the openbao block above.
+    # (writing the seal key and the recovery shares). See the openbao block above.
     - toEntities:
         - kube-apiserver
     - toEndpoints:

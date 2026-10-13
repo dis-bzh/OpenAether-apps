@@ -1,5 +1,4 @@
-# Group 11 — OpenBao Workload (raft HA 3 nodes, auto-unseal via pki-root)
-# Isolation: a workload crash affects neither pki-root nor eso.
+# Group 11 — OpenBao (raft HA 3 nodes, static auto-unseal). See apps/base/foundation/vault/README.md.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -30,4 +29,3 @@ spec:
     - name: platform-gateway-api
     - name: platform-local-path-provisioner  # PVC raft storageClassName local-path-retain
     - name: platform-priority-classes        # priorityClassName platform-critical (pod rejected at admission if absent)
-    # - name: foundation-pki-root  # REMOVED: no more OpenBao root, the HA unsealer handles Shamir

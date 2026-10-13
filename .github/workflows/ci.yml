@@ -79,3 +79,21 @@ jobs:
 
       - name: Cross-brick object collision check (builds every DAG path with kubectl kustomize)
         run: python3 scripts/check-object-collisions.py
+
+  openbao-bootstrap:
+    name: OpenBao bootstrap (real OpenBao)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      # The real entrypoint, init.sh and configure.sh against an OpenBao container (root revoked, nothing secret in any
+      # output, policies enforced, break-glass, snapshot restore, key rotation). A skip is not a pass: the script exits
+      # 0 when Docker or gpg is missing, so the step demands the tools and the "0 failed" line.
+      - name: Test the bootstrap
+        run: |
+          set -euo pipefail
+          command -v docker gpg jq openssl curl
+          out="$(./scripts/dev/test-openbao-bootstrap.sh)"
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -qE '^[0-9]+ passed, 0 failed$'

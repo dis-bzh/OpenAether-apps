@@ -13,7 +13,7 @@
 # it configures the CLIENT (the gateway's Envoy), not the destination.
 #
 # ⚠️ NOT VALIDATED locally: Istio is not deployed on the Docker test cluster.
-# The rest of the TLS chain was (raft, init, bootstrap, unsealer, ESO). To be
+# The rest of the TLS chain was (raft, init, bootstrap, ESO). To be
 # checked on the first cloud deployment — a fallback is available meanwhile:
 # `scripts/ops/local-admin-portforward.sh`, which bypasses the gateway.
 apiVersion: networking.istio.io/v1

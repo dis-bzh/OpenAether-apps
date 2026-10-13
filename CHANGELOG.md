@@ -17,6 +17,30 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+### Security
+
+- **OpenBao bootstrap redesigned: no root token and no unseal key kept in the cluster.** The former design printed the five
+  Shamir shares and the root token in the `openbao-init` log (shipped to Loki and kept), stored the shares and the root token
+  in plain Secrets, and ran an unsealer that held the shares in memory. Now: `seal "static"` (a 32-byte key in the Secret
+  `openbao-seal-key`, created once and never printed) unseals the pods by themselves; `sys/init` returns *recovery* shares,
+  PGP-encrypted to the operators' keys in production (ConfigMap `openbao-operator-keys`) or a single labelled plaintext share in
+  development; the root token lives seconds in memory and is **revoked** after the hand-over to a Kubernetes-auth bootstrap
+  identity (15 minute tokens, no seal/rekey/raw/raft/audit/token-minting). The unsealer, `openbao-unseal-keys`,
+  `openbao-recovery` and `bitwarden-unseal-creds` are gone. The audit device is declared in the configuration (stdout, values
+  HMAC-ed). Application secrets are generated create-only (`cas=0`) and never printed. Eight least-privilege policies, with
+  explicit denies; `openaether-admin` can no longer write policies, roles or mounts (git does) or mint tokens.
+  Image `openbao:2.7.1` (the 2.5.4 it replaces predates published advisories: rate-limit bypass, k8s-auth renewals, PKI ACME).
+  **Limit, stated in the README: the static key sits next to the data it protects**; escrow it (Day 0) or lose the data with the cluster.
+  Tested against a real OpenBao by `scripts/dev/test-openbao-bootstrap.sh` (CI job `openbao-bootstrap`): both modes, root revocation,
+  no secret in any output, idempotence, create-only, policy enforcement, PGP shares, break-glass, snapshot restore with the
+  right and a wrong key, seal-key rotation. Not yet run on a real cluster at this entry: the Kubernetes-auth login, the 3-replica join.
+- The `backup/openbao` snapshot job uses `openbao:2.7.1` (was 2.5.4).
+
+### Removed
+
+- `scripts/test-sprint0-openbao.sh` and `scripts/lib/test-helpers.sh`: an end-to-end test of the two-OpenBao design that no
+  longer exists (`foundation-pki-root`).
+
 ---
 
 ## [0.1.0] — 2026-10-12

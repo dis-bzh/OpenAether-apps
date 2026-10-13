@@ -63,7 +63,7 @@ spec:
             #    leader resolution (the snapshot must target the active node),
             #    saved into the shared emptyDir.
             - name: snapshot
-              image: docker.io/openbao/openbao:2.5.4
+              image: docker.io/openbao/openbao:2.7.1
               command:
                 - /bin/sh
                 - -c
