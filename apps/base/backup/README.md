@@ -20,11 +20,13 @@ de clair —, déduplication, rétention (14 j / 8 sem / 12 mois) et `restic che
 
 ## Seed des secrets (une fois par cluster)
 
-1. `backup/restic` — **seedé automatiquement** par le Job
-   `openbao-vault-bootstrap` (password aléatoire, affiché UNE FOIS dans ses
-   logs). **ESCROW OFFLINE OBLIGATOIRE** (Bitwarden EU) : sans ce password,
-   les backups sont indéchiffrables le jour où OpenBao est perdu — c'est
-   précisément le scénario DR principal.
+1. `backup/restic` — **seedé automatiquement** par le Job de configuration
+   OpenBao (`foundation/vault/scripts/configure.sh`, password aléatoire,
+   **dans aucun log**). L'opérateur le lit UNE FOIS avec l'identité
+   `openaether-admin` (commande dans `foundation/vault/README.md`, Day-0) et
+   le met en **ESCROW OFFLINE** : sans ce password, les backups sont
+   indéchiffrables le jour où OpenBao est perdu — c'est précisément le
+   scénario DR principal. Rien ne vérifie que l'escrow a été fait.
 2. `backup/s3-primary` et `backup/s3-replica` — **seedés par l'opérateur**
    (creds provider inconnues in-cluster). `endpoint` inclut le schéma :
 
@@ -73,11 +75,13 @@ métadonnées).
 
 ## Limites connues / upgrades
 
-- **CNPG PITR** : les dumps sont quotidiens (RPO 24 h). Pour du PITR, activer
-  `barmanObjectStore` (bloc commenté dans `cnpg/cluster.yaml`) dans un overlay
-  cloud — valeurs provider en dur dans le CR, d'où le choix restic en base.
+- **CNPG PITR** : les dumps restic sont quotidiens (RPO 24 h). Le PITR par
+  `barmanObjectStore` est un bloc **actif** de `cnpg/cluster.yaml` (valeurs
+  `${BACKUP_S3_*}` du ConfigMap `cluster-identity`, `cnpg/scheduledbackups.yaml`) :
+  il vit à côté de ce moteur, sans le remplacer.
 - **Longhorn** : volumes LUKS (backups Longhorn de volumes chiffrés restent
   chiffrés) ; `backupTarget` est un Setting par environnement, non câblé en
   base — voir `storage/longhorn.yaml`.
-- **Alerting** : pas encore de VMRule sur l'échec des CronJobs (suivre
-  `kube_job_status_failed` namespace foundation-*).
+- **Alerting** : `BackupJobFailed` et les règles voisines sont dans
+  `observability/vm-customresources/vmrule-backup.yaml` (échec de Job, CronJob
+  qui ne tire plus).

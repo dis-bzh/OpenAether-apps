@@ -97,6 +97,12 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   `external-secrets-stores`; the Istio `DestinationRule` of the OpenBao UI moved from `foundation-vault`, which is applied
   before Istio and fails its dry-run on a missing CRD, to `services-gateway`, which depends on Istio.
 - The two OpenBao Jobs run `alpine/k8s:1.36.5` (was 1.31.1, five minors behind the cluster's Kubernetes).
+- **Comments and a README that contradicted the code now say what the code does (ANSSI hardening B01, text only).** The backup README
+  no longer says the restic password is printed in a log (`configure.sh` prints nothing; the operator reads it once and escrows it),
+  that the CNPG PITR block is commented (it is active) or that no `VMRule` covers backups (`vmrule-backup.yaml` does); the Loki
+  header and ExternalSecret no longer claim a bucket separate from `backup/s3-primary` (the infra seed reuses it today, infra #302);
+  the Kyverno namespace comment no longer claims `hostPID`; four seeding comments point at `configure.sh` instead of a step that no
+  longer exists. Rung: static (`kubectl kustomize` output unchanged). It changes no behaviour and fixes none of the gaps it now states.
 
 ### Removed
 

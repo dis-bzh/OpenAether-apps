@@ -1,16 +1,15 @@
 # OpenAether 0.5.0 Sprint C — Loki HA (stockage logs)
 # ──────────────────────────────────────────────────────────────────
 # Mode: SingleBinary x2 (simple to operate, HA through Loki replication).
-# Backend: S3 (MinIO en local, S3 natif en cloud via overlay).
+# Backend: S3 (local MinIO or the provider's S3, chosen by the seeded endpoint).
 # replication_factor=2: every chunk is replicated across both instances.
 #
 # Destination S3 : ExternalSecret loki-s3-credentials (externalsecret-loki.yaml),
 # fed from `secret/observability/loki-s3` in OpenBao. Credentials AND location
 # (endpoint + bucket) travel through that Secret, injected with `valuesFrom`:
 # moving from the internal MinIO to the provider's S3 therefore requires NO
-# code change at all, only a reseed. The destination is deliberately distinct
-# from `backup/s3-primary` — Loki has no business writing into the
-# backup bucket.
+# code change at all, only a reseed. It should be distinct from `backup/s3-primary`,
+# but the infra seed currently reuses the backup bucket and keys (infra #302).
 #
 # schemaConfig v13 (tsdb): the recommended schema since Loki 2.8+.
 # auth_enabled=false: no multi-tenant auth (private cluster).
