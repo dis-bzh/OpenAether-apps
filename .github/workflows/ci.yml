@@ -129,6 +129,24 @@ jobs:
           ./scripts/dev/test-loki-render.sh | tee loki-render.out
           grep -qE '^0 failed$' loki-render.out
 
+  observability-rbac:
+    name: Observability RBAC (least privilege)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      # The pinned charts with the shipped values plus the kustomize build: no role of these service
+      # accounts reads Secrets or nodes/proxy, and every binding points at a role that exists.
+      - name: Test the observability roles
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-observability-rbac.sh | tee observability-rbac.out
+          grep -qE '^0 failed$' observability-rbac.out
+
   openbao-bootstrap:
     name: OpenBao bootstrap (real OpenBao)
     runs-on: ubuntu-latest

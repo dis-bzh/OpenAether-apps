@@ -35,6 +35,7 @@ resources:
   - loki.yaml
   - externalsecret-loki.yaml
   - alloy.yaml
+  - rbac-alloy.yaml
   # Grafana HA (CNPG DB in apps/base/cnpg/)
   - grafana.yaml
   - externalsecrets-grafana.yaml

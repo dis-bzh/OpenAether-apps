@@ -51,6 +51,16 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Security
 
+- **Alloy no longer reads every Secret and ConfigMap in the cluster.** The chart's ClusterRole (`rbac.create: true`) also granted
+  `secrets`, `configmaps`, `nodes/proxy`, events and replicasets for components this config does not use. It is now off, and
+  `rbac-alloy.yaml` ships `alloy-pod-logs`: `pods` and `namespaces` (get/list/watch) and `pods/log` (get), which is what
+  `loki.source.kubernetes` and `discovery.kubernetes role=pod` call (read in Alloy v1.6.1's `tailer.go`). Named differently from the
+  chart's `alloy` so Helm's cleanup on upgrade cannot delete it. `scripts/dev/test-observability-rbac.sh` (new CI job) renders the
+  chart and the brick and fails if any role of these service accounts reads Secrets or `nodes/proxy`. Addresses ANSSI PA-012 R19.
+  Rung: chart render and kustomize build, not run on a cluster. Does not remove the accepted residual (Alloy reads pod specs and
+  logs of every namespace), and does not prove that discovery still works without `namespaces`: lab check, watch the Alloy log for
+  `forbidden` and that Loki still receives streams from every node.
+
 - **Loki no longer reads ConfigMaps and Secrets cluster-wide.** The chart bound a ClusterRole on both to the Loki ServiceAccount for
   its rules sidecar (`loki_rule` ConfigMaps), which nothing here uses (no ruler). `sidecar.rules.enabled: false` and
   `rbac.namespaced: true` remove the sidecar container, the ClusterRole and its binding; `scripts/dev/test-loki-render.sh` now fails
