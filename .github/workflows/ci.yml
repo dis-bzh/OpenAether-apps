@@ -80,6 +80,24 @@ jobs:
       - name: Cross-brick object collision check (builds every DAG path with kubectl kustomize)
         run: python3 scripts/check-object-collisions.py
 
+  loki-render:
+    name: Loki chart render
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      # The shipped values through the pinned chart: compactor, retention, PDB, no canary, S3 scheme.
+      # helm and kubectl are on the runner image. The script exits 2 when one is missing.
+      - name: Test the Loki values
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-loki-render.sh | tee loki-render.out
+          grep -qE '^0 failed$' loki-render.out
+
   openbao-bootstrap:
     name: OpenBao bootstrap (real OpenBao)
     runs-on: ubuntu-latest

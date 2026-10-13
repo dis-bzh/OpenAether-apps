@@ -97,6 +97,21 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   `external-secrets-stores`; the Istio `DestinationRule` of the OpenBao UI moved from `foundation-vault`, which is applied
   before Istio and fails its dry-run on a missing CRD, to `services-gateway`, which depends on Istio.
 - The two OpenBao Jobs run `alpine/k8s:1.36.5` (was 1.31.1, five minors behind the cluster's Kubernetes).
+- **Loki can reach the provider's S3, enforces its retention and no longer rejects pushes when one pod is down (ANSSI hardening B02;
+  addresses PA-012 R9, R10, R25 and hygiene M36; refs #53).** The Loki network policy gains `rules.dns` on its DNS rule (without it
+  Cilium never learns the S3 addresses and the FQDN rule matches nothing), and the Loki-to-Loki egress it lacked (memberlist
+  7946 tcp/udp, gRPC 9095, 3100; 9095 and 7946/udp were also missing on ingress): by reading, that alone keeps the ring from forming,
+  which fits the "at least 2 live replicas required" error of 2026-10-13, but it was not observed. The hard-coded `s3.insecure: true`
+  is gone (the seeded endpoint's scheme decides). The compactor is on (`retention_enabled`, `delete_request_store: s3`) with
+  `retention_period: 8760h`, so nothing is deleted for a year; the 30d value was never applied. Three replicas with `replication_factor: 2`
+  (was two with RF 2, where a single pod down rejects every push), a PodDisruptionBudget `minAvailable: 1`, and the canary turned off
+  at the key the chart reads (`lokiCanary`, plus `test.enabled: false`, without which the chart refuses to render). A local
+  overlay (`apps/base/observability-local`, selected by `apps/flux/local`) keeps one replica, RF 1, plain http and 168h.
+  Rung: mocked/static (`scripts/dev/test-loki-render.sh` renders chart 6.25.0 with the shipped values and asserts the above; CI job
+  `loki-render`), not run on a cluster. **It does not:** give Loki its own bucket and key (B16, infra #302: it still holds the backup
+  bucket's key and the compactor can delete in it), set a per-stream or identity-log retention, add log-flow alerts or an Alloy buffer,
+  or prove one compactor runs among three replicas. Anti-affinity stays preferred (clusters have 1 to 3 workers) and there is no
+  topology spread (the chart exposes none for the single binary).
 - **Comments and a README that contradicted the code now say what the code does (ANSSI hardening B01, text only).** The backup README
   no longer says the restic password is printed in a log (`configure.sh` prints nothing; the operator reads it once and escrows it),
   that the CNPG PITR block is commented (it is active) or that no `VMRule` covers backups (`vmrule-backup.yaml` does); the Loki

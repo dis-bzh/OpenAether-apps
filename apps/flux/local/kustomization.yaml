@@ -33,6 +33,13 @@ patches:
       name: storage
     patch: |-
       - { op: replace, path: /spec/path, value: ./apps/base/storage/local }
+  # Loki locally: plain http to the MinIO, one replica, one-week retention (see the overlay).
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: observability
+    patch: |-
+      - { op: replace, path: /spec/path, value: ./apps/base/observability-local }
   # LB-IPAM pool repointed at the local overlay (Docker bridge range 10.5.0.0/24
   # instead of the Scaleway private VPC 172.16.12.0/22) — otherwise every
   # LoadBalancer Service (including the openaether Gateway) stays <pending> locally.
