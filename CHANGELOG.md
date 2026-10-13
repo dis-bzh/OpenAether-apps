@@ -193,6 +193,11 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   `N passed, 0 failed`, so a registry rate limit left the main check unrun and green. The pull is retried once; with `CI=true` or
   `REQUIRE_PG_RESTORE=1` a skip is a failure, and the CI step also fails on the word `SKIPPED`. Locally the skip stays a notice.
   Rung: mocked/static (run with an unpullable image tag: skipped locally, failed with `CI=true`).
+- **`test-loki-render.sh` now asserts Loki's network policy (follow-up of ANSSI hardening B02).** The B02 entry said the test covered
+  the network fix; it read only the chart render, so deleting `rules.dns`, the 9095/7946 rules or the peer egress passed every gate.
+  It now builds the base and fails when the DNS rule loses `rules.dns`, when the peer rules lose 3100/9095/7946 tcp+udp (ingress
+  or egress), when Alloy or Grafana lose 3100, when the S3 egress is not FQDN-scoped on 443 or loses a provider host, or the MinIO
+  9000 rule goes (mutation-checked on four of them). Rung: static. It cannot show Cilium enforcing the policy (lab check).
 - **Comments and a README that contradicted the code now say what the code does (ANSSI hardening B01, text only).** The backup README
   no longer says the restic password is printed in a log (`configure.sh` prints nothing; the operator reads it once and escrows it),
   that the CNPG PITR block is commented (it is active) or that no `VMRule` covers backups (`vmrule-backup.yaml` does); the Loki

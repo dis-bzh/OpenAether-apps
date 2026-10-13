@@ -123,7 +123,8 @@ jobs:
       - name: Install PyYAML
         run: pip install pyyaml
 
-      # The shipped values through the pinned chart: compactor, retention, PDB, no canary, S3 scheme.
+      # The shipped values through the pinned chart: compactor, retention, PDB, no canary, S3 scheme, region, and
+      # the Loki network policy (DNS proxy rule, ring ports, S3 FQDNs).
       # helm and kubectl are on the runner image. The script exits 2 when one is missing.
       - name: Test the Loki values
         run: |

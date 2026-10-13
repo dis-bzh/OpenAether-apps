@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Render the Loki chart with the values the repository ships (base and local overlay) and assert
 # what the manifests only claim: the compactor enforces retention, the S3 link is not forced to
-# http, a PDB exists, no canary DaemonSet, no ClusterRole. Needs kubectl, helm and python3 with PyYAML (network
+# http, a PDB exists, no canary DaemonSet, no ClusterRole, and the CiliumNetworkPolicy lets the ring
+# form and the S3 FQDN rule learn its addresses. Needs kubectl, helm and python3 with PyYAML (network
 # for the chart). Rung: mocked/static, nothing runs on a cluster.
 #   Usage: scripts/dev/test-loki-render.sh
 set -euo pipefail
@@ -96,6 +97,39 @@ for env, replicas, rf, retention, insecure, pdb in (("base", 3, 2, 8760, False, 
         check("base: a replica can be down and a write still reaches RF (replicas > RF)", replicas > rf)
         check("base: the shipped retention is the one-year baseline", hours(got) >= 8760)
         check("base: s3 endpoint is https in the render", s3["endpoint"].startswith("https://"))
+
+# The network policy (kustomize output of the base): the 2026-10-13 failure was a missing rule, so
+# deleting one of these must fail the gate.
+policy = next((d for d in yaml.safe_load_all(open(f"{work}/base.yaml"))
+               if d and d.get("kind") == "CiliumNetworkPolicy" and d["metadata"]["name"] == "loki"), None)
+check("netpol: CiliumNetworkPolicy loki exists", policy is not None)
+if policy:
+    spec = policy["spec"]
+    def ports(rule):
+        return {(p["port"], p["protocol"]) for tp in rule.get("toPorts", []) for p in tp.get("ports", [])}
+    def peers(rule, key):
+        return any(e.get("matchLabels", {}).get("app.kubernetes.io/name") == "loki" for e in rule.get(key, []))
+    def from_app(app):
+        return [r for r in spec["ingress"]
+                if any(e.get("matchLabels", {}).get("app.kubernetes.io/name") == app for e in r.get("fromEndpoints", []))]
+    ring = {("3100", "TCP"), ("9095", "TCP"), ("7946", "TCP"), ("7946", "UDP")}
+    dns = [r for r in spec["egress"] if any(e.get("matchLabels", {}).get("k8s-app") == "kube-dns" for e in r.get("toEndpoints", []))]
+    check("netpol: DNS egress carries rules.dns (Cilium learns the S3 addresses from the lookup)",
+          bool(dns) and all(tp.get("rules", {}).get("dns") for r in dns for tp in r["toPorts"]))
+    check("netpol: Loki egress to Loki peers on 3100, 9095, 7946/tcp and 7946/udp",
+          any(peers(r, "toEndpoints") and ring <= ports(r) for r in spec["egress"]))
+    check("netpol: Loki ingress from Loki peers on 3100, 9095, 7946/tcp and 7946/udp",
+          any(peers(r, "fromEndpoints") and ring <= ports(r) for r in spec["ingress"]))
+    check("netpol: ingress from Alloy and Grafana on 3100",
+          all(any(("3100", "TCP") in ports(r) for r in from_app(a)) for a in ("alloy", "grafana")))
+    fq = [r for r in spec["egress"] if r.get("toFQDNs")]
+    check("netpol: S3 egress is FQDN-scoped on 443/tcp, not toEntities world",
+          len(fq) == 1 and ports(fq[0]) == {("443", "TCP")} and not any("world" in r.get("toEntities", []) for r in spec["egress"]))
+    check("netpol: FQDN list names the Scaleway, OVH and Outscale S3 hosts",
+          {"s3.fr-par.scw.cloud", "s3.eu-west-par.io.cloud.ovh.net", "oos.eu-west-2.outscale.com"}
+          <= {f.get("matchName") for r in fq for f in r["toFQDNs"]})
+    check("netpol: local MinIO egress on 9000/tcp",
+          any(("9000", "TCP") in ports(r) for r in spec["egress"] if any(e.get("matchLabels", {}).get("io.kubernetes.pod.namespace") == "foundation-storage" for e in r.get("toEndpoints", []))))
 
 print(f"{fails} failed")
 sys.exit(1 if fails else 0)
