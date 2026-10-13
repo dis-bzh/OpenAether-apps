@@ -146,6 +146,78 @@ spec:
               SSL:
                 Mode: disable
 
+        # ── Authentication policy (ANSSI PA-079, PG-078, docs/zitadel-hardening.md) ─────────────────────────────
+        # TWO scopes, and the difference is the whole risk of this block:
+        #   * FirstInstance and DefaultInstance.* are read ONCE, when the instance is created (the setup Job on
+        #     an empty database). On a cluster whose Zitadel is already initialised they change NOTHING:
+        #     docs/zitadel-hardening.md has the Admin API calls (scripts/zitadel-apply-policies.sh) that apply
+        #     the same policies to a running instance.
+        #   * SystemDefaults.* and Log* are read at every start, so they apply to a running instance at the next
+        #     rollout.
+        # The first admin's PASSWORD is not here: it comes from OpenBao (zitadel-secret-config), merged on top.
+        FirstInstance:
+          Org:
+            Human:
+              # The upstream default is Password1!. Forced to change at the first login, which also enrols MFA.
+              PasswordChangeRequired: true
+        DefaultInstance:
+          PasswordComplexityPolicy:
+            # ANSSI PA-079 R21: at least 15 characters for a strong-to-very-strong level (admin accounts).
+            MinLength: 15
+            HasLowercase: true
+            HasUppercase: true
+            HasNumber: true
+            HasSymbol: true
+          LockoutPolicy:
+            # R10. The default is 0 (no limit). The break-glass if the only human admin is locked out is the
+            # iam-admin machine user (secret iam-admin-pat), see docs/zitadel-hardening.md.
+            MaxPasswordAttempts: 5
+            MaxOTPAttempts: 5
+          LoginPolicy:
+            # No self-registration: with the default (true) anyone who reaches the login page can create an
+            # account, and Grafana turns every account into a Viewer of all logs.
+            AllowRegister: false
+            # R1/R2: a second factor for everybody. OTP or WebAuthn (no SMS provider is configured; R8).
+            ForceMFA: true
+            # No identity provider is configured; adding one is a decision, not a default.
+            AllowExternalIDP: false
+            # R12: a password / federated login counts for 12 h (default 10 days), not for a week and a half.
+            PasswordCheckLifetime: 12h
+            ExternalLoginCheckLifetime: 12h
+          OIDCSettings:
+            # R12. All four are required together (Zitadel refuses a partial block). Grafana opens its own
+            # session at login and does not use the refresh token.
+            AccessTokenLifetime: 1h
+            IdTokenLifetime: 1h
+            RefreshTokenIdleExpiration: 168h
+            RefreshTokenExpiration: 720h
+        # Applies to a RUNNING instance at the next rollout. ANSSI PA-079 R29 asks for a memory-hard function
+        # (scrypt or Argon2) for stored passwords; the default is bcrypt. Existing bcrypt hashes keep verifying
+        # through `Verifiers` (without it nobody could log in after the switch) and are re-hashed at the next
+        # successful login. 32 MiB x 3 passes x 4 threads is Zitadel's own argon2 default: above OWASP's minimum
+        # (19 MiB, 2 passes), below RFC 9106's 64 MiB, kept for the 1Gi memory limit (each concurrent hash
+        # holds 32 MiB). Raise Memory together with the limit.
+        SystemDefaults:
+          PasswordHasher:
+            Hasher:
+              Algorithm: argon2id
+              Time: 3
+              Memory: 32768
+              Threads: 4
+            Verifiers:
+              - bcrypt
+        # Structured logs, and the HTTP access log on stdout (Alloy ships both to Loki): who hit the login and
+        # the API, with which status. Authorization, Cookie and Set-Cookie headers are redacted by Zitadel
+        # (internal/logstore/record/access.go). Authentication EVENTS (success, failure, role grants) stay in
+        # the eventstore: they are NOT in Loki, see docs/zitadel-hardening.md.
+        Log:
+          Formatter:
+            Format: json
+        LogStore:
+          Access:
+            Stdout:
+              Enabled: true
+
     # init/setup Jobs (schema + key creation). Enabled by default.
     # Images at the chart defaults (see the Images block at the top of the values).
     initJob:

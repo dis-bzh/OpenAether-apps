@@ -51,6 +51,32 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Security
 
+- **Zitadel no longer installs with its public admin password, and its authentication policy is written down.** A new instance used to
+  get `zitadel-admin` / `Password1!` (upstream's default, reproduced: it logs in as IAM_OWNER, and Grafana's admin role hangs off that
+  account) and Zitadel's open defaults: 8-character passwords, no lockout, no MFA, self-registration open, 12 h tokens. Now `configure.sh`
+  creates `secret/zitadel/admin` (create only; 28 random characters and `Aa1!` so Zitadel's policy accepts it), External Secrets merges
+  it into `zitadel-secret-config`, and `DefaultInstance` sets 15 characters, lockout at 5 (password and OTP), MFA forced, no
+  self-registration, no external IdP, 12 h check lifetimes and 1 h tokens. Password hashing moves to argon2id (ANSSI PA-079 R29 asks
+  for a memory-hard function; the audit's PBKDF2 reading was R29-, the fallback) with the `bcrypt` verifier, applied to running
+  instances at the next rollout. Logs are JSON and the HTTP access log goes to stdout. **What an existing cluster needs, said
+  plainly:** `FirstInstance` and `DefaultInstance` are read once, at instance creation, so on a running Zitadel they change nothing:
+  `zitadel-admin` may still have `Password1!` (`docs/zitadel-hardening.md` has the check), and
+  `scripts/zitadel-apply-policies.py` (dry run by default, same values as the HelmRelease) applies the policies through the Admin
+  API. The OpenBao value is the initial password, not the current one. Grafana: sessions 2 h idle / 12 h (were 7 / 30 days),
+  request log as JSON; the SSO-only mode (local form hidden, strict role mapping with a `grafana-viewer` role) is the overlay
+  `apps/base/observability-sso-only`, **off**. Addresses ANSSI PA-079 R10, R12, R21, R23, R29, PG-078, PA-012 R27, BP-028 R51 in
+  part. Rung: **a real Zitadel v4.14.0 against PostgreSQL in containers** (`scripts/dev/test-zitadel-config.sh`, 31 checks, 1 min:
+  the default admin logs in before and not after, the generated password is accepted, the policies land on a new instance and not
+  on an old one, the apply script and the values agree, lockout at 5 and the PAT unlock, argon2id with and without the verifier
+  (without it nobody logs in), JSON and access logs, no token in them) and a real Grafana 11.3.1 on the rendered ini; the
+  bootstrap test (127 checks) covers the generated password. Not run on a cluster, with OpenBao, External Secrets or Istio.
+  **Not done, on purpose:** the Vault and Grafana routes stay on the shared Gateway (removing them takes the Grafana UI away
+  from operators; the load-balancer ACL is infrastructure), no password expiry (Zitadel's enforcement unchecked), no breached-password
+  check, no per-audience Loki tenant, no export of authentication events to Loki (the access log says a login page was hit, not by
+  whom), and the chart's `iam-admin` key and PAT stay valid to 2029 (they are the break-glass). Lab check: a fresh cluster's setup
+  Job completes with the generated password, and the `zitadel-secret-config` ExternalSecret on an existing cluster before the key
+  is seeded.
+
 - **An inventory of what is deployed, a scan of it, and the image pins checked.** `scripts/dev/gen-sbom.py` writes a CycloneDX 1.5 file from
   the rendered DAG: the 15 Helm charts, 14 images from the manifests and, with `--helm`, about 38 images with those the charts render
   (`valuesFrom` targets get a placeholder). The new `SBOM` workflow runs weekly and on each release, attaches it as

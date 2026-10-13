@@ -396,3 +396,43 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: 1
           trivyignores: .trivyignore.yaml
+
+  # The Zitadel and Grafana settings, run through the real thing: Zitadel (the chart's appVersion) in a container
+  # against PostgreSQL, Grafana's ini through the chart. Mocked rung: no Kubernetes, no OpenBao, no Istio.
+  identity-auth:
+    name: Zitadel and Grafana authentication (real Zitadel)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Install kubectl (pinned + checksum-verified)
+        env:
+          # Same version as the build job and OpenAether-infra's kubernetes_version.
+          # renovate: datasource=github-releases depName=kubernetes/kubernetes
+          KUBECTL_VERSION: "v1.36.3"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          expected="$(curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256")"
+          echo "${expected}  kubectl" | sha256sum -c -
+          sudo install -m 0755 kubectl /usr/local/bin/kubectl
+
+      - name: Install PyYAML and jmespath
+        run: pip install -r scripts/ci-requirements.txt
+
+      # docker, helm, curl and jq are on the runner image. A skipped part is not a pass: the script exits 2 when
+      # a tool is missing, and the step demands the "0 failed" line.
+      - name: Zitadel configuration against a real Zitadel
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-zitadel-config.sh | tee zitadel-config.out
+          grep -qE '^[0-9]+ passed, 0 failed$' zitadel-config.out
+
+      - name: Grafana authentication settings (base and SSO-only overlay)
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-grafana-auth.sh | tee grafana-auth.out
+          grep -qE '^0 failed$' grafana-auth.out

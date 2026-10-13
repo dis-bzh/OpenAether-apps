@@ -69,6 +69,8 @@ kubectl -n foundation-vault get secret openbao-seal-key -o jsonpath='{.data.key}
 for i in 1 2 3; do kubectl -n foundation-vault get secret openbao-recovery-shares -o jsonpath="{.data.share-$i}" | base64 -d > openbao-share-$i.b64; done
 # 3. Escrow the restic password: without it the backups are unreadable the day OpenBao is lost.
 bao_admin kv get -mount=secret -field=password backup/restic          # helper below
+# 4. A NEW cluster only: read Zitadel's first-admin password once, to log in and enrol (docs/zitadel-hardening.md).
+bao_admin kv get -mount=secret -field=password zitadel/admin
 ```
 
 Operator access (`bao_admin`): a token for the ServiceAccount is exchanged for an OpenBao token **inside the pod**, so no
