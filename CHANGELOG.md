@@ -168,7 +168,9 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   `retention_period: 8760h`, so nothing is deleted for a year; the 30d value was never applied. Three replicas with `replication_factor: 2`
   (was two with RF 2, where a single pod down rejects every push), a PodDisruptionBudget `minAvailable: 1`, and the canary turned off
   at the key the chart reads (`lokiCanary`, plus `test.enabled: false`, without which the chart refuses to render). A local
-  overlay (`apps/base/observability-local`, selected by `apps/flux/local`) keeps one replica, RF 1, plain http and 168h.
+  overlay (`apps/base/observability-local`) sets one replica, RF 1, plain http and 168h, but only when it is applied: locally every
+  Flux Kustomization is suspended and the documented flow is `kubectl apply -k`, so the repoint in `apps/flux/local` alone does
+  nothing and `apps/base/observability` applied by hand is the production Loki (the comments of both files now say so).
   Rung: mocked/static (`scripts/dev/test-loki-render.sh` renders chart 6.25.0 with the shipped values and asserts the above; CI job
   `loki-render`), not run on a cluster. **It does not:** give Loki its own bucket and key (B16, infra #302: it still holds the backup
   bucket's key and the compactor can delete in it), set a per-stream or identity-log retention, add log-flow alerts or an Alloy buffer,
