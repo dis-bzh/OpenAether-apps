@@ -159,14 +159,17 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   `external-secrets-stores`; the Istio `DestinationRule` of the OpenBao UI moved from `foundation-vault`, which is applied
   before Istio and fails its dry-run on a missing CRD, to `services-gateway`, which depends on Istio.
 - The two OpenBao Jobs run `alpine/k8s:1.36.5` (was 1.31.1, five minors behind the cluster's Kubernetes).
-- **Loki can reach the provider's S3, enforces its retention and no longer rejects pushes when one pod is down (ANSSI hardening B02;
+- **Loki can reach the provider's S3, enforces its retention and tolerates one pod down (ANSSI hardening B02;
   addresses PA-012 R9, R10, R25 and hygiene M36; refs #53).** The Loki network policy gains `rules.dns` on its DNS rule (without it
   Cilium never learns the S3 addresses and the FQDN rule matches nothing), and the Loki-to-Loki egress it lacked (memberlist
   7946 tcp/udp, gRPC 9095, 3100; 9095 and 7946/udp were also missing on ingress): by reading, that alone keeps the ring from forming,
   which fits the "at least 2 live replicas required" error of 2026-10-13, but it was not observed. The hard-coded `s3.insecure: true`
   is gone (the seeded endpoint's scheme decides). The compactor is on (`retention_enabled`, `delete_request_store: s3`) with
   `retention_period: 8760h`, so nothing is deleted for a year; the 30d value was never applied. Three replicas with `replication_factor: 2`
-  (was two with RF 2, where a single pod down rejects every push), a PodDisruptionBudget `minAvailable: 1`, and the canary turned off
+  (was two with RF 2, where a single pod down rejects every push: with three, one pod can be down and a write still reaches two). The
+  PodDisruptionBudget `minAvailable: 1` is **not** a quorum guarantee: it only stops the last replica being evicted, so two
+  drains in a row can proceed and leave one pod, which rejects pushes (`minAvailable: 2` would keep the quorum, but local-path pins
+  each pod to its node and a drain of a node holding two of them would block forever). The canary is turned off
   at the key the chart reads (`lokiCanary`, plus `test.enabled: false`, without which the chart refuses to render). A local
   overlay (`apps/base/observability-local`) sets one replica, RF 1, plain http and 168h, but only when it is applied: locally every
   Flux Kustomization is suspended and the documented flow is `kubectl apply -k`, so the repoint in `apps/flux/local` alone does
@@ -186,8 +189,9 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   value, for the local MinIO) and the HelmRelease injects it with `valuesFrom`; no seed change is needed on an existing cluster
   and `bao kv put ... region=` overrides it. The template was run against sprig, the library External Secrets uses, for the three
   providers' hosts, the MinIO and a look-alike host; `test-loki-render.sh` now fails if a literal region comes back in `spec.values`.
-  Rung: mocked/static. **Not observed:** a push accepted by a provider's S3 (needs the lab: Loki must report no 4xx/403 and the
-  `loki_boltdb_shipper`/chunk uploads must show up in the bucket), nor the ExternalSecret reconciling on a cluster.
+  Rung: mocked/static. **Not observed:** a push accepted by a provider's S3 (lab: no 403 in the Loki logs and objects appearing in
+  the bucket), nor the ExternalSecret reconciling on a cluster. Another region than the three FQDNs of Loki's network policy
+  also needs that policy edited.
 - **The backup checks can no longer pass in CI with the `pg_restore` tests unrun (follow-up of ANSSI hardening B03).**
   `test-backup-checks.sh` skipped that part with exit 0 when the Postgres 18.4 image could not be pulled, and CI only grepped
   `N passed, 0 failed`, so a registry rate limit left the main check unrun and green. The pull is retried once; with `CI=true` or
