@@ -20,15 +20,15 @@ policies at L3/L4 + OpenBao's own authentication).
 1. `init.sh` creates the Secret `openbao-seal-key` **once** (`kubectl create`, never `apply`: an existing key is never overwritten)
    and the pods start.
 2. `sys/init` with *recovery* shares. The root token lives in a file on a memory-backed volume. With it: the bootstrap policy,
-   the Kubernetes auth method, the role `openbao-bootstrap`. It then checks that this role can log in **and revokes the root
-   token**. From here on nothing in the cluster holds a root token.
+   the Kubernetes auth method, the role `openbao-bootstrap`. It then checks that this role can log in (from the Job's own
+   ServiceAccount) **and revokes the root token**, also when anything in the window fails. From here on nothing in the cluster holds a root token.
 3. `configure.sh` logs in as `openbao-bootstrap` and creates the engines (`pki`, KV v2 `secret/`), the 8 policies, the
    Kubernetes-auth roles and the application secrets (random, **create-only**: `cas=0`, so a re-run can not rotate one).
    Nothing secret is ever printed: pod logs are shipped to Loki and kept.
 
 | Kubernetes-auth role | ServiceAccount (ns) | Policy | Can |
 |---|---|---|---|
-| `openbao-bootstrap` | `openbao-vault-bootstrap` | `openaether-bootstrap` | configure engines/auth/policies/secrets; **not** mint tokens, seal, rekey, rotate, touch raw storage, raft or the audit device |
+| `openbao-bootstrap` | `openbao-vault-bootstrap`, `openbao-init` | `openaether-bootstrap` | configure engines/auth/policies/secrets; **not** mint tokens, seal, rekey, rotate, touch raw storage, raft or the audit device |
 | `external-secrets-operator` | `external-secrets` (foundation-pki-management) | `external-secrets-read` | read `secret/` |
 | `cert-manager-issuer` | `cert-manager` | `cert-manager-pki` | sign with `pki/sign/*` |
 | `backup-snapshot` | `openbao-snapshot` | `backup-snapshot` | read the raft snapshot |
@@ -108,8 +108,10 @@ initialises an empty cluster; (3) restore the snapshot with a break-glass root t
 With any other key the data does not come back (tested). If standbys do not follow the restored leader, delete `openbao-1` and
 `openbao-2` (the PVCs stay).
 
-**Interrupted first run.** A Job that dies between `sys/init` and the root revocation leaves an initialised OpenBao that nobody
-can configure (the root token is gone by design). On a cluster that holds nothing yet: delete the Job, the `data-openbao-*`
+**Interrupted first run.** A failure inside the root window (between `sys/init` and the hand-over) revokes the root token on the
+way out, whatever the cause, and leaves an initialised OpenBao that nobody can configure (the root token is gone by design; the
+calls in the window are retried, and the hand-over is proven from the init Job's own identity before the token goes). On a cluster
+that holds nothing yet: delete the Job, the `data-openbao-*`
 PVCs and the Secrets `openbao-recovery-*`, keep `openbao-seal-key` (or delete it too) and re-sync. Otherwise use the break-glass.
 
 ## Alerts and network

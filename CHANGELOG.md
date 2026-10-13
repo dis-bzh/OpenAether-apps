@@ -34,6 +34,10 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   Tested against a real OpenBao by `scripts/dev/test-openbao-bootstrap.sh` (CI job `openbao-bootstrap`): both modes, root revocation,
   no secret in any output, idempotence, create-only, policy enforcement, PGP shares, break-glass, snapshot restore with the
   right and a wrong key, seal-key rotation. Not yet run on a real cluster at this entry: the Kubernetes-auth login, the 3-replica join.
+- Found by the first run on a cluster (Scaleway, 2026-10-13) and fixed: the init Job proved the hand-over with its own
+  ServiceAccount, which the bootstrap role did not accept, so a fresh cluster ended with the root token not revoked and the
+  Job failing. The role now binds both ServiceAccounts, the calls of the root window are retried, and the root token is revoked
+  on **any** exit from it. The mocked harness could not see this: it replaces the Kubernetes-auth login with a test seam.
 - The `backup/openbao` snapshot job uses `openbao:2.7.1` (was 2.5.4).
 
 ### Fixed

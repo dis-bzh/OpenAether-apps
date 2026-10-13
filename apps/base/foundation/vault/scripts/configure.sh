@@ -73,6 +73,8 @@ policies_and_roles() {
     put_policy "$p" "$HDR"
   done
   configure_k8s_auth "$HDR"
+  # The bootstrap role itself, kept in step with init.sh's (which created it): this is how an existing cluster gets a changed binding.
+  put_k8s_role openbao-bootstrap         "$BOOTSTRAP_SAS"  "$VAULT_NS"               openaether-bootstrap  15m 30m "$HDR"
   put_k8s_role external-secrets-operator external-secrets  foundation-pki-management external-secrets-read 1h 4h  "$HDR"
   put_k8s_role cert-manager-issuer       cert-manager      cert-manager              cert-manager-pki      1h 4h  "$HDR"
   put_k8s_role backup-snapshot           openbao-snapshot  "$VAULT_NS"               backup-snapshot       30m 1h "$HDR"
