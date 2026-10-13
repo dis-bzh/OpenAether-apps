@@ -16,7 +16,7 @@ de clair —, déduplication, rétention (14 j / 8 sem / 12 mois) et `restic che
 | Ressources K8s | — | oui : GitOps (Flux ré-applique tout) |
 | tfstate, kube/talosconfig | OpenAether-infra (PBKDF2/AES-GCM + gpg, 2 buckets) | — |
 | etcd | OpenAether-infra `task etcd-snapshot` | oui (GitOps) — bretelle RTO |
-| Volumes Longhorn | LUKS at-rest ; `backupTarget` par env (voir bas de page) | selon l'app |
+| Volumes Longhorn | LUKS at-rest ; `backupTarget` par env + RecurringJob opt-in (voir « What is not backed up ») | selon l'app |
 
 ## Seed des secrets (une fois par cluster)
 
@@ -72,6 +72,67 @@ pg_restore -h zitadel-db-rw -U zitadel -d zitadel --clean --if-exists /tmp/r/bac
 Test périodique conseillé : `restic snapshots` + `restic restore latest` vers
 un volume jetable (les `restic check` de chaque run ne lisent que les
 métadonnées).
+
+Monthly restore tests (the `*-restore-test` CronJobs) go one step past
+restic: the CNPG one runs `pg_restore --list` on every restored dump (the
+archive must be readable by a client at least as recent as the server), the
+OpenBao one unpacks the raft snapshot and checks its `SHA256SUMS`. Neither loads
+the data into a live database or OpenBao: a real restore is still a manual
+exercise (this section, and the OpenBao runbook in `foundation/vault/README.md`).
+
+CNPG point-in-time recovery (barman archive, RPO of minutes). Restore into a
+NEW Cluster next to the original, in `foundation-databases` (the only namespace
+the S3 credentials Secret `cnpg-backup-s3` and the egress policy exist in), and
+never reuse the original's name or its `backup:` block (CNPG refuses to archive
+into a non-empty path):
+
+```yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: zitadel-db-restore
+  namespace: foundation-databases
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4   # same major as the origin
+  storage: { size: 5Gi, storageClass: local-path-retain }
+  bootstrap:
+    recovery:
+      source: zitadel-db-origin
+      # Omit recoveryTarget to replay to the end of the archive.
+      recoveryTarget:
+        targetTime: "2026-01-01 12:00:00+00"   # UTC, inside the archive range
+  externalClusters:
+    - name: zitadel-db-origin
+      # The archive lives under <destinationPath>/<serverName>.
+      serverName: zitadel-db
+      barmanObjectStore:
+        destinationPath: s3://<bucket>/cnpg/zitadel-db   # as in cnpg/cluster.yaml
+        endpointURL: <endpoint>
+        s3Credentials:
+          accessKeyId: { name: cnpg-backup-s3, key: ACCESS_KEY_ID }
+          secretAccessKey: { name: cnpg-backup-s3, key: ACCESS_SECRET_KEY }
+```
+
+Check with `kubectl cnpg status zitadel-db-restore` and a `SELECT` on the data,
+then delete the scratch Cluster (its PVC is `Retain`: delete it too). This
+procedure is written from the CNPG 1.23 documentation and has NOT been run on
+a cluster: treat the first run as the test. The PITR chain lives on the
+cluster's own provider only (one destination in CNPG 1.23); the second
+provider holds the daily `pg_dump` (RPO 24 h). The barman objects carry no
+client-side encryption (CNPG 1.23 offers server-side AES256/KMS only, unset
+here): they rely on the bucket's own protection.
+
+## What is not backed up
+
+By decision, not by omission: VictoriaMetrics data (local-path, 30 d
+retention), Loki chunks, and any other telemetry are reconstructible and are not
+backed up (no `vmbackup`). Kubernetes resources come back through GitOps.
+Longhorn volumes are backed up only when the `storage-backup-target` brick has a
+`BACKUP_TARGET_URL` AND the volume belongs to the `oa-backup` recurring-job
+group (or `LONGHORN_BACKUP_GROUP=default`, see
+`storage/backup-target/recurringjob.yaml`); no platform component uses Longhorn
+today.
 
 ## Limites connues / upgrades
 

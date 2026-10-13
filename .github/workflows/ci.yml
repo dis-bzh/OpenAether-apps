@@ -80,6 +80,29 @@ jobs:
       - name: Cross-brick object collision check (builds every DAG path with kubectl kustomize)
         run: python3 scripts/check-object-collisions.py
 
+  backup-checks:
+    name: Backup brick checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      # pg_dump cannot dump a server newer than itself: a Cluster bump that leaves
+      # the backup client image behind silently stops the daily dumps.
+      - name: Postgres client majors vs Cluster majors
+        run: ./scripts/dev/check-pg-dump-version.sh
+
+      # The restore-test scripts accept an intact dump / raft snapshot and reject a
+      # damaged one (docker is on the runner image; the pg part pulls the CNPG image).
+      - name: Test the restore-test checks
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-backup-checks.sh | tee backup-checks.out
+          grep -qE '^[0-9]+ passed, 0 failed$' backup-checks.out
+
   loki-render:
     name: Loki chart render
     runs-on: ubuntu-latest

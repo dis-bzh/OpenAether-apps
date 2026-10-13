@@ -8,8 +8,13 @@
 # This Job, against EACH of the 2 destinations:
 #   1. `restic check --read-data-subset` — actually re-reads and decrypts a
 #      fraction of the data (5 %, naturally rotating month over month);
-#   2. `restic restore latest` into a throwaway volume, then checks that the
-#      result is NOT EMPTY — that is the end-to-end test.
+#   2. `restic restore latest` into a throwaway volume (init container), then
+#      checks that the result is NOT EMPTY — that is the end-to-end test;
+#   3. `pg_restore --list` on every restored dump (main container, Postgres
+#      image): a dump that restic hands back byte for byte but that Postgres
+#      cannot read is as lost as a missing one. It reads the archive TOC only;
+#      the data itself is never loaded into a database (nothing in this Job
+#      holds a database credential).
 # A failure here is as serious as a missing backup: it shows through the alert
 # BackupJobFailed (apps/base/observability/vm-customresources/vmrule-backup.yaml).
 ---
@@ -49,8 +54,9 @@ spec:
             runAsUser: 1000
             fsGroup: 1000
             seccompProfile: { type: RuntimeDefault }
-          containers:
-            - name: restore-test
+          initContainers:
+            # 1) restic: check + restore of BOTH repositories into /restore.
+            - name: restic-restore
               image: docker.io/restic/restic:0.18.0
               command:
                 - /bin/sh
@@ -68,7 +74,7 @@ spec:
                     echo "── repository ${label}: ${RESTIC_REPOSITORY}"
                     # A real re-read of a fraction of the data (decryption included).
                     restic check --read-data-subset=5%
-                    target="/tmp/restore-${label}"
+                    target="/restore/${label}"
                     rm -rf "$target"; mkdir -p "$target"
                     restic restore latest --host cnpg --target "$target"
                     # A "successful" but empty restore = an unusable repository.
@@ -78,7 +84,6 @@ spec:
                       exit 1
                     fi
                     echo "   ✓ ${label}: $(find "$target" -type f | wc -l) file(s) restored"
-                    rm -rf "$target"
                   }
                   AWS_ACCESS_KEY_ID="$PRIMARY_ACCESS_KEY" \
                     AWS_SECRET_ACCESS_KEY="$PRIMARY_SECRET_KEY" \
@@ -86,7 +91,6 @@ spec:
                   AWS_ACCESS_KEY_ID="$REPLICA_ACCESS_KEY" \
                     AWS_SECRET_ACCESS_KEY="$REPLICA_SECRET_KEY" \
                     verify "$REPLICA_ENDPOINT" "$REPLICA_BUCKET" replica
-                  echo "✅ CNPG dumps: restore verified on both destinations"
               envFrom:
                 - secretRef:
                     name: backup-restic-env
@@ -102,10 +106,57 @@ spec:
                 seccompProfile: { type: RuntimeDefault }
               volumeMounts:
                 - { name: tmp, mountPath: /tmp }
+                - { name: restore, mountPath: /restore }
               resources:
                 requests: { cpu: 100m, memory: 256Mi }
                 limits: { cpu: "1", memory: 1Gi }
+          containers:
+            # 2) Postgres: every restored dump must be readable by pg_restore.
+            #    The client major must be >= the one that wrote the dump (same
+            #    rule as cronjob.yaml, enforced by scripts/dev/check-pg-dump-version.sh).
+            - name: pg-restore-list
+              image: ghcr.io/cloudnative-pg/postgresql:18.4
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  for label in primary replica; do
+                    for db in zitadel-db grafana-db; do
+                      f="$(find "/restore/${label}" -type f -name "${db}.dump" | head -n 1)"
+                      if [ -z "$f" ]; then
+                        echo "ERROR: ${db}.dump is missing from repository ${label}:"
+                        echo "        the latest snapshot is incomplete."
+                        exit 1
+                      fi
+                      # Archive TOC only: fails on a truncated or corrupt dump,
+                      # and on a dump newer than this pg_restore.
+                      pg_restore --list "$f" > /tmp/toc
+                      n="$(grep -c '^[0-9][0-9]*;' /tmp/toc || true)"
+                      if [ "$n" -lt 1 ]; then
+                        echo "ERROR: ${db}.dump from ${label} lists no entry."
+                        exit 1
+                      fi
+                      echo "   ✓ ${label}/${db}: pg_restore reads the archive (${n} TOC entries)"
+                    done
+                  done
+                  echo "✅ CNPG dumps: restore verified on both destinations"
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: tmp, mountPath: /tmp }
+                - { name: restore, mountPath: /restore, readOnly: true }
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: "1", memory: 512Mi }
           volumes:
             # Throwaway: the restore must leave NOTHING behind.
             - name: tmp
+              emptyDir: { sizeLimit: 1Gi }
+            - name: restore
               emptyDir: { sizeLimit: 2Gi }

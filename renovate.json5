@@ -157,6 +157,16 @@
     },
     {
       customType: "regex",
+      description: "Backup brick's Postgres client images (pg_dump, pg_restore): must stay >= the Cluster majors, which scripts/dev/check-pg-dump-version.sh enforces in CI.",
+      fileMatch: ["^apps/base/backup/databases/(restore-test-)?cronjob\\.yaml$"],
+      matchStrings: [
+        "image:\\s*ghcr\\.io/cloudnative-pg/postgresql:(?<currentValue>[0-9.]+)",
+      ],
+      datasourceTemplate: "docker",
+      depNameTemplate: "ghcr.io/cloudnative-pg/postgresql",
+    },
+    {
+      customType: "regex",
       description: "ci.yml: kubectl is downloaded + checksum-verified directly (not via an action), kept at the same version as OpenAether-infra's kubernetes_version so client/server stay in the same skew window.",
       fileMatch: ["^\\.github/workflows/ci\\.yml$"],
       matchStrings: [

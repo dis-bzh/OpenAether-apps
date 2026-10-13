@@ -118,6 +118,24 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   header and ExternalSecret no longer claim a bucket separate from `backup/s3-primary` (the infra seed reuses it today, infra #302);
   the Kyverno namespace comment no longer claims `hostPID`; four seeding comments point at `configure.sh` instead of a step that no
   longer exists. Rung: static (`kubectl kustomize` output unchanged). It changes no behaviour and fixes none of the gaps it now states.
+- **The daily database dump matches the server's Postgres major, and the monthly restore tests read what they restore (ANSSI hardening
+  B03; addresses RW-SAUV-1, GH-M37-7, GH-M37-9 for the dump path, and PG-083 RecoPQTailleCleSym for Longhorn LUKS).**
+  `cnpg-dump` ran `pg_dump` 16.3 against `zitadel-db` on 18.4; `pg_dump` refuses a newer server, so by reading the first dump failed
+  under `set -eu` and nothing reached restic (not observed on a cluster; only the `BackupJobFailed` alert would have shown it). The dump
+  init container and the new restore-test container run `postgresql:18.4`, Renovate now tracks them, and
+  `scripts/dev/check-pg-dump-version.sh` (CI job `backup-checks`) fails when a backup client image is below any Cluster major. The
+  databases restore-test restores both repositories in an init container, then runs `pg_restore --list` on every dump in a Postgres
+  image; the OpenBao one unpacks the raft snapshot and runs `sha256sum -c` on its `SHA256SUMS`
+  (`scripts/dev/test-backup-checks.sh`, run against fixtures and real `pg_dump -Fc` archives, includes damaged ones). A
+  `RecurringJob oa-backup-daily` (backup, 14 kept) exists for Longhorn volumes but is **opt-in**: its group is `oa-backup`, which no
+  volume carries, until a volume is labelled or `LONGHORN_BACKUP_GROUP=default` is set (a recurring backup with no target URL would only pile up
+  snapshots; deviation from the plan's group `default`). The README now says metrics and logs are deliberately not backed up and
+  documents a CNPG point-in-time recovery Cluster. The `longhorn-encryption` Secret carries `CRYPTO_KEY_SIZE 512`, `argon2id`, `sha256`
+  and `aes-xts-plain64` explicitly (Longhorn's defaults are 256 and argon2i): applied at format time only, no platform volume uses an
+  encrypted class yet. Rung: mocked/static (kustomize builds, the two scripts above), not run on a cluster. **It does not:** restore a
+  dump into a database, an OpenBao snapshot into an OpenBao or a PITR on a cluster (the recovery manifest is written from the CNPG docs,
+  untested), encrypt or re-prefix the barman archive (it would orphan the existing WAL chain), add CNPG archiver alerts, or give
+  Longhorn volumes their own passphrase. Refs F-BKP-02, F-BKP-06, F-BKP-13, F-BKP-03, TLS-18 of the audit.
 
 ### Removed
 

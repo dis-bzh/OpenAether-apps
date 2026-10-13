@@ -9,7 +9,12 @@
 #   1. `restic check --read-data-subset` — actually re-reads and decrypts a
 #      fraction of the data (5 %, naturally rotating month over month);
 #   2. `restic restore latest` into a throwaway volume, then checks that the
-#      result is NOT EMPTY — that is the end-to-end test.
+#      result is NOT EMPTY — that is the end-to-end test;
+#   3. integrity of the raft snapshot itself: it is a gzip'd tar whose
+#      SHA256SUMS covers meta.json and state.bin. The snapshot is never loaded
+#      into an OpenBao here (that needs the seal key; CI proves the mechanism in
+#      scripts/dev/test-openbao-bootstrap.sh, a production snapshot is not
+#      restored anywhere — see docs of foundation/vault, Disaster recovery).
 # A failure here is as serious as a missing backup: it shows through the alert
 # BackupJobFailed (apps/base/observability/vm-customresources/vmrule-backup.yaml).
 ---
@@ -78,6 +83,23 @@ spec:
                       exit 1
                     fi
                     echo "   ✓ ${label}: $(find "$target" -type f | wc -l) file(s) restored"
+                    snap="$(find "$target" -type f -name '*.snap' | head -n 1)"
+                    if [ -z "$snap" ]; then
+                      echo "ERROR: no raft snapshot (*.snap) in the restore from ${label}."
+                      exit 1
+                    fi
+                    # gzip + tar structure, then the checksums the snapshot ships.
+                    tar -tzf "$snap" >/dev/null
+                    mkdir "$target/unpacked"
+                    tar -xzf "$snap" -C "$target/unpacked"
+                    for part in meta.json state.bin SHA256SUMS; do
+                      [ -s "$target/unpacked/$part" ] || {
+                        echo "ERROR: ${part} missing or empty in the snapshot from ${label}."
+                        exit 1
+                      }
+                    done
+                    (cd "$target/unpacked" && sha256sum -c SHA256SUMS)
+                    echo "   ✓ ${label}: snapshot archive and its SHA256SUMS are intact"
                     rm -rf "$target"
                   }
                   AWS_ACCESS_KEY_ID="$PRIMARY_ACCESS_KEY" \
