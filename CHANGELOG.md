@@ -188,6 +188,11 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   providers' hosts, the MinIO and a look-alike host; `test-loki-render.sh` now fails if a literal region comes back in `spec.values`.
   Rung: mocked/static. **Not observed:** a push accepted by a provider's S3 (needs the lab: Loki must report no 4xx/403 and the
   `loki_boltdb_shipper`/chunk uploads must show up in the bucket), nor the ExternalSecret reconciling on a cluster.
+- **The backup checks can no longer pass in CI with the `pg_restore` tests unrun (follow-up of ANSSI hardening B03).**
+  `test-backup-checks.sh` skipped that part with exit 0 when the Postgres 18.4 image could not be pulled, and CI only grepped
+  `N passed, 0 failed`, so a registry rate limit left the main check unrun and green. The pull is retried once; with `CI=true` or
+  `REQUIRE_PG_RESTORE=1` a skip is a failure, and the CI step also fails on the word `SKIPPED`. Locally the skip stays a notice.
+  Rung: mocked/static (run with an unpullable image tag: skipped locally, failed with `CI=true`).
 - **Comments and a README that contradicted the code now say what the code does (ANSSI hardening B01, text only).** The backup README
   no longer says the restic password is printed in a log (`configure.sh` prints nothing; the operator reads it once and escrows it),
   that the CNPG PITR block is commented (it is active) or that no `VMRule` covers backups (`vmrule-backup.yaml` does); the Loki

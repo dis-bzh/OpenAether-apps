@@ -4,7 +4,9 @@
 # accept an intact dump / raft snapshot and reject a damaged one. The scripts are
 # extracted from the manifests, so what is tested is what ships; restic is a stub that
 # "restores" a fixture. Needs python3 with PyYAML; docker for the pg_restore part
-# (skipped with a notice without it). Rung: mocked/static, nothing runs on a cluster.
+# (skipped with a notice without it, unless REQUIRE_PG_RESTORE=1 or CI=true: then a skip is a
+# failure, so an image pull that fails on a runner cannot leave the main check unrun and green).
+# Rung: mocked/static, nothing runs on a cluster.
 #   Usage: scripts/dev/test-backup-checks.sh
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -91,7 +93,14 @@ rm -rf "$W/restore"; mkdir "$W/restore"
 expect "restic-restore step restores both repositories" 0 run_script "$W/dbr.sh"
 if [ -f "$W/restore/primary/backup/zitadel-db.dump" ] && [ -f "$W/restore/replica/backup/zitadel-db.dump" ]; then ok "both repositories land under /restore/<label>"; else bad "restore layout"; fi
 
-if command -v docker >/dev/null && docker image inspect "$IMG" >/dev/null 2>&1 || { command -v docker >/dev/null && docker pull -q "$IMG" >/dev/null 2>&1; }; then
+# One retry: a registry rate limit or a blip is the usual reason for a missing image on a runner.
+have_image() {
+  command -v docker >/dev/null || return 1
+  docker image inspect "$IMG" >/dev/null 2>&1 && return 0
+  docker pull -q "$IMG" >/dev/null 2>&1 && return 0
+  sleep 5; docker pull -q "$IMG" >/dev/null 2>&1
+}
+if have_image; then
   # Real dumps from a throwaway server of the same image, as the cnpg-dump init container writes them.
   mkdir -p "$W/dumps"; chmod 777 "$W/dumps"
   docker run --rm -v "$W/dumps:/out" --entrypoint sh "$IMG" -c '
@@ -110,7 +119,10 @@ if command -v docker >/dev/null && docker image inspect "$IMG" >/dev/null 2>&1 |
   layout; echo garbage > "$W/p/primary/backup/grafana-db.dump"
   expect "a non-archive dump fails" fail docker_run "$W/p"
 else
-  echo "  skip pg_restore part: docker or the image $IMG is not available"
+  echo "  SKIPPED pg_restore part: docker or the image $IMG is not available"
+  if [ "${REQUIRE_PG_RESTORE:-}" = 1 ] || [ "${CI:-}" = true ]; then
+    bad "pg_restore part not run (docker or $IMG unavailable) but required here (CI / REQUIRE_PG_RESTORE=1)"
+  fi
 fi
 
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"

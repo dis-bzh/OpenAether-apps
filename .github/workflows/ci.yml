@@ -108,8 +108,10 @@ jobs:
       - name: Test the restore-test checks
         run: |
           set -euo pipefail
-          ./scripts/dev/test-backup-checks.sh | tee backup-checks.out
+          REQUIRE_PG_RESTORE=1 ./scripts/dev/test-backup-checks.sh | tee backup-checks.out
           grep -qE '^[0-9]+ passed, 0 failed$' backup-checks.out
+          # The pg_restore tests are the main check: a skipped part must not pass.
+          ! grep -q 'SKIPPED' backup-checks.out
 
   loki-render:
     name: Loki chart render
