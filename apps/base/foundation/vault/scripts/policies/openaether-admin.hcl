@@ -2,11 +2,26 @@
 # foundation-vault/openaether-admin, tokens up to 8 hours): read and rotate application secrets, import the signed
 # intermediate CA, revoke leases, read the configuration.
 #
-# What it can NOT do, on purpose: write policies, auth roles or mounts (whoever can write a policy can grant themselves
+# What it can NOT do, on purpose: write policies, auth roles, PKI roles or mounts (whoever can write a policy can grant themselves
 # anything, so the configuration changes only through git, the Flux-run configure Job); mint tokens; seal, rekey,
 # rotate, generate a root token, touch raw storage, the raft cluster or the audit trail (recovery-share holders).
 path "secret/*"               { capabilities = ["create", "read", "update", "delete", "list"] }
-path "pki/*"                  { capabilities = ["create", "read", "update", "delete", "list"] }
+# PKI: import the signed intermediate, issue from the one role git defines, read what exists. Roles, issuers' configuration and
+# the root are not writable here: a role with allow_any_name would let this identity issue certificates for anything.
+path "pki/intermediate/generate/*" { capabilities = ["create", "update"] }
+path "pki/intermediate/set-signed" { capabilities = ["create", "update"] }
+path "pki/issue/openaether"        { capabilities = ["create", "update"] }
+path "pki/sign/openaether"         { capabilities = ["create", "update"] }
+path "pki/revoke"                  { capabilities = ["create", "update"] }
+path "pki/tidy"                    { capabilities = ["create", "update"] }
+path "pki/cert/*"                  { capabilities = ["read", "list"] }
+path "pki/certs"                   { capabilities = ["list"] }
+path "pki/issuers"                 { capabilities = ["list"] }
+path "pki/issuer/*"                { capabilities = ["read"] }
+path "pki/keys"                    { capabilities = ["list"] }
+path "pki/roles"                   { capabilities = ["list"] }
+path "pki/roles/*"                 { capabilities = ["read"] }
+path "pki/root*"                   { capabilities = ["deny"] }
 path "sys/leases/*"           { capabilities = ["create", "read", "update", "delete", "list"] }
 path "sys/policies/acl"       { capabilities = ["list"] }
 path "sys/policies/acl/*"     { capabilities = ["read", "list"] }

@@ -42,7 +42,11 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get"]
-    resourceNames: ["openbao-operator-keys"]
+    resourceNames: ["openbao-operator-keys", "openbao-init-state"]
+  # The marker "this cluster has been initialised, a seal key is expected to exist" (create only, like the Secrets).
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

@@ -64,6 +64,10 @@ case "${args[0]} ${args[1]:-}" in
      if [ -n "${STUB_CM_ERROR:-}" ]; then echo "Error from server (Forbidden): configmaps \"${args[2]}\" is forbidden" >&2; exit 1; fi
      [ -f "$D/cm/${args[2]}.json" ] && { cat "$D/cm/${args[2]}.json"; exit 0; }
      echo "Error from server (NotFound): configmaps \"${args[2]}\" not found" >&2; exit 1 ;;
+  "create configmap")
+     name="${args[2]}"
+     [ -f "$D/cm/$name.json" ] && { echo "Error from server (AlreadyExists): configmaps \"$name\" already exists" >&2; exit 1; }
+     printf '{"data":{}}' > "$D/cm/$name.json" ;;
   "create secret")
      name="${args[3]}"
      [ -d "$D/secret/$name" ] && { echo "Error from server (AlreadyExists): secrets \"$name\" already exists" >&2; exit 1; }
@@ -90,6 +94,7 @@ run_bao() { # NAME PORT — (re)start the container for NAME on its existing dat
   docker run -d --user "$(id -u):$(id -g)" --name "bao-test-$name" --hostname openbao-0 -p "127.0.0.1:$port:8200" \
     -e POD_NAMESPACE=foundation-vault \
     -v "$T/conf:/bao/config:ro" -v "$T/$name/seal:/bao/seal:ro" -v "$T/tls:/bao/tls:ro" -v "$T/$name/data:/bao/data" \
+    -v "$T/sa:/var/run/secrets/kubernetes.io/serviceaccount:ro" \
     --entrypoint /bin/sh "$IMAGE" /bao/config/entrypoint.sh >/dev/null 2>&1
   local _; for _ in $(seq 1 40); do
     curl -s --cacert "$T/tls/ca.crt" -o /dev/null "https://127.0.0.1:$port/v1/sys/health?uninitcode=200&sealedcode=200" && return 0; sleep 1
@@ -124,7 +129,7 @@ run_script() { # NAME PORT SCRIPT [extra env...] — runs one of the real script
   local name="$1" port="$2" script="$3"; shift 3
   local envs=(STUB_DIR="$T/$name/k8s" PATH="$T/stub/bin:/usr/local/bin:/usr/bin:/bin:/sbin" OA_KUBECTL=kubectl OA_TMP="$T/$name/tmp"
               OA_SA_DIR="$T/sa" BAO_ADDR="https://127.0.0.1:$port" BAO_CACERT="$T/tls/ca.crt" OA_INIT_ADDR="https://127.0.0.1:$port"
-              OA_NO_LEADER_REDIRECT=1 OA_POLICY_DIR="$V/scripts/policies" VAULT_NS=foundation-vault "$@")
+              OA_NO_LEADER_REDIRECT=1 OA_POLICY_DIR="$V/scripts/policies" VAULT_NS=foundation-vault OA_POD_URLS="https://127.0.0.1:$port" OA_PROOF_TRIES=2 "$@")
   if [ -n "${OA_TEST_HOST_TOOLS:-}" ]; then
     env "${envs[@]}" bash "$V/scripts/$script" > "$T/$name/$script.out" 2>&1
   else
@@ -145,6 +150,35 @@ mkdir -p "$T/dev/tmp" "$T/dev/k8s"
 echo "=== init.sh refuses to guess: a ConfigMap it can not read is not 'development' ==="
 if run_script dev 18211 init.sh STUB_CM_ERROR=1; then bad "init.sh went ahead although it could not read openbao-operator-keys"; else ok "init.sh stops when reading the ConfigMap is forbidden"; fi
 [ "$(curl -s --cacert "$T/tls/ca.crt" https://127.0.0.1:18211/v1/sys/init | jq -r .initialized)" = false ] && ok "…and OpenBao was not initialised" || bad "OpenBao was initialised in spite of it"
+
+echo "=== production mode refuses, BEFORE sys/init, what would leave a half-initialised cluster ==="
+start_bao pre 18218 && ok "OpenBao for the refusals started" || bad "pre instance did not start"
+mkdir -p "$T/pre/tmp" "$T/pre/k8s/cm"
+mkpgp_cm() { # THRESHOLD — a production ConfigMap with the three test keys
+  jq -nc --rawfile a "$T/pub1" --rawfile b "$T/pub2" --rawfile c "$T/pub3" --arg t "$1" '{data:({"pgp-1":$a,"pgp-2":$b,"pgp-3":$c} + (if $t == "" then {} else {threshold:$t} end))}' > "$T/pre/k8s/cm/openbao-operator-keys.json"
+}
+not_initialised() { [ "$(curl -s --cacert "$T/tls/ca.crt" https://127.0.0.1:18218/v1/sys/init | jq -r .initialized)" = false ]; }
+mkpgp_cm two
+if run_script pre 18218 init.sh; then bad "init.sh accepted threshold 'two'"; else ok "a non-numeric threshold is refused"; fi
+not_initialised && ok "…and OpenBao was not initialised (the guard used to error, not fail, and let sys/init run with an empty body)" || bad "OpenBao was initialised"
+jq -nc --arg a "not base64 !!" --rawfile b "$T/pub2" --rawfile c "$T/pub3" '{data:{"pgp-1":$a,"pgp-2":$b,"pgp-3":$c}}' > "$T/pre/k8s/cm/openbao-operator-keys.json"
+if run_script pre 18218 init.sh; then bad "init.sh accepted a key that is not base64"; else ok "a key that is not base64 is refused"; fi
+not_initialised && ok "…and OpenBao was not initialised" || bad "OpenBao was initialised"
+mkpgp_cm 2; mkdir -p "$T/pre/k8s/secret/openbao-recovery-shares"
+if run_script pre 18218 init.sh; then bad "init.sh went ahead over a leftover shares Secret"; else ok "a leftover recovery-shares Secret stops the run"; fi
+not_initialised && ok "…before OpenBao was initialised" || bad "OpenBao was initialised with its shares about to be swallowed"
+rm -rf "$T/pre/k8s/secret/openbao-recovery-shares"
+
+echo "=== a root token left by a killed run is revoked at the next start ==="
+PRE_INIT="$(curl -s --cacert "$T/tls/ca.crt" -X PUT -d '{"recovery_shares":1,"recovery_threshold":1}' https://127.0.0.1:18218/v1/sys/init)"
+wait_active_port 18218
+printf 'X-Vault-Token: %s\n' "$(jq -r .root_token <<<"$PRE_INIT")" > "$T/pre/tmp/root.hdr"
+run_script pre 18218 init.sh >/dev/null 2>&1 || true
+grep -q "left by a killed run" "$T/pre/init.sh.out" && ok "init.sh notices the leftover" || bad "no 'left by a killed run' line"
+[ ! -e "$T/pre/tmp/root.hdr" ] && ok "…removes the file" || bad "root.hdr is still there"
+printf 'X-Vault-Token: %s\n' "$(jq -r .root_token <<<"$PRE_INIT")" > "$T/pre.hdr"
+[ "$(curl -s --cacert "$T/tls/ca.crt" -H "@$T/pre.hdr" -o /dev/null -w '%{http_code}' https://127.0.0.1:18218/v1/auth/token/lookup-self)" = 403 ] \
+  && ok "…and the token no longer works" || bad "the leftover root token is still valid"
 
 echo "=== a failure inside the root window: the root token is revoked on the way out, not left in the pod ==="
 start_bao fail 18217 && ok "OpenBao for the failing run started" || bad "fail instance did not start"
@@ -180,11 +214,25 @@ if [ -n "$SHARE" ] && ! grep -qF "$SHARE" "$T/dev/init.sh.out"; then ok "the rec
 SEAL_B64="$(base64 -w0 "$T/dev/k8s/secret/openbao-seal-key/key" 2>/dev/null)"
 ! grep -qF "$SEAL_B64" "$T/dev/init.sh.out" && ok "the seal key is not in the output" || bad "the seal key reached stdout"
 BOOT="$T/dev/boot.hdr"
+LEFT=""; for g in body root.hdr 'share-*'; do compgen -G "$T/dev/tmp/$g" >/dev/null && LEFT="$LEFT $g"; done
+[ -z "$LEFT" ] && ok "no response body, root token or share file is left behind" || bad "left in the pod's memory volume:$LEFT"
+[ -f "$T/dev/k8s/cm/openbao-init-state.json" ] && ok "the 'initialised' marker ConfigMap was written" || bad "no marker ConfigMap"
+RB="$(curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X LIST https://127.0.0.1:18211/v1/auth/kubernetes/role | jq -r '.data.keys[]?' | tr '\n' ' ')"
+grep -qw openbao-breakglass <<<"$RB" && ok "the break-glass role exists right after init.sh, before configure.sh ever ran" || bad "break-glass role missing after init ($RB)"
+KC_CFG="$(curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" https://127.0.0.1:18211/v1/auth/kubernetes/config | jq -c '.data')"
+[ "$(jq -r '.kubernetes_ca_cert' <<<"$KC_CFG")" = "" ] && [ "$(jq -r '.kubernetes_host' <<<"$KC_CFG")" = "https://kubernetes.default.svc.cluster.local" ] \
+  && ok "the Kubernetes auth config pins no CA (a restore onto a rebuilt cluster keeps logging in)" || bad "k8s auth config: $KC_CFG"
 echo "--- a second run changes nothing"
 cp -r "$T/dev/k8s" "$T/dev/k8s.before"
 if run_script dev 18211 init.sh OA_TEST_TOKEN_FILE="$BOOT"; then ok "second init.sh exits 0"; else bad "second init.sh failed: $(tail -3 "$T/dev/init.sh.out")"; fi
 diff -r "$T/dev/k8s.before" "$T/dev/k8s" >/dev/null && ok "no Secret changed" || bad "a Secret changed on the second run"
 grep -q "nothing to do" "$T/dev/init.sh.out" && ok "it says so" || bad "no 'nothing to do' line"
+echo "--- a deleted seal key on an initialised cluster is never replaced by a fresh one"
+mv "$T/dev/k8s/secret/openbao-seal-key" "$T/dev/seal-key.away"
+if run_script dev 18211 init.sh OA_TEST_TOKEN_FILE="$BOOT"; then bad "init.sh went on without the seal key"; else ok "init.sh stops when the seal key is missing on an initialised cluster"; fi
+grep -q "has been initialised" "$T/dev/init.sh.out" && ok "…and says why" || bad "$(tail -2 "$T/dev/init.sh.out")"
+[ ! -e "$T/dev/k8s/secret/openbao-seal-key" ] && ok "…without creating a new key" || bad "a new seal key was created"
+mv "$T/dev/seal-key.away" "$T/dev/k8s/secret/openbao-seal-key"
 
 echo "=== configure.sh under the bootstrap identity: engines, policies, roles, application secrets ==="
 if run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT"; then ok "configure.sh exits 0"; else bad "configure.sh failed: $(tail -6 "$T/dev/configure.sh.out")"; fi
@@ -272,6 +320,10 @@ expect "admin writes a secret"                   '200|204' "$(rq "$T/tok-openaet
 expect "admin reads a policy"                    '200'     "$(rq "$T/tok-openaether-admin" GET  /v1/sys/policies/acl/secret-seeder)"
 expect "admin can not write a policy"            '403'     "$(rq "$T/tok-openaether-admin" PUT  /v1/sys/policies/acl/evil '{"policy":"path \"*\" { capabilities = [\"sudo\",\"create\",\"read\",\"update\",\"delete\",\"list\"] }"}')"
 expect "admin can not mount an engine"           '403'     "$(rq "$T/tok-openaether-admin" POST /v1/sys/mounts/evil '{"type":"kv"}')"
+expect "admin can not write a PKI role (allow_any_name would issue for anything)" '403' "$(rq "$T/tok-openaether-admin" POST /v1/pki/roles/evil '{"allow_any_name":true}')"
+expect "admin can not touch the PKI root"        '403'     "$(rq "$T/tok-openaether-admin" DELETE /v1/pki/root)"
+allowed "admin may import a signed intermediate"          "$(rq "$T/tok-openaether-admin" POST /v1/pki/intermediate/set-signed '{"certificate":"x"}')"
+expect "admin can list the PKI roles"            '200|404' "$(rq "$T/tok-openaether-admin" LIST /v1/pki/roles)"
 expect "admin can not mint a token"              '403'     "$(rq "$T/tok-openaether-admin" POST /v1/auth/token/create '{"policies":["root"]}')"
 expect "admin can not write an auth role"        '403'     "$(rq "$T/tok-openaether-admin" POST /v1/auth/kubernetes/role/evil '{"bound_service_account_names":"*"}')"
 expect "admin can not seal"                      '403'     "$(rq "$T/tok-openaether-admin" PUT  /v1/sys/seal)"

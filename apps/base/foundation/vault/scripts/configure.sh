@@ -24,7 +24,11 @@ login_bootstrap() { # wait for init.sh: its Job may still be waiting for the Sta
 
 mount_engine() { # PATH JSON
   printf '%s' "$2" | api POST "/v1/sys/mounts/$1" "$HDR" || true
-  case "$(code)" in 200|204) log "  mounted $1" ;; 400) log "  $1 already mounted" ;; *) die "mount $1: HTTP $(code) $(body | jq -c '.errors // empty')" ;; esac
+  case "$(code)" in
+    200|204) log "  mounted $1" ;;
+    400) if body | grep -q "already in use"; then log "  $1 already mounted"; else die "mount $1: HTTP 400 $(body | jq -c '.errors // empty')"; fi ;;
+    *) die "mount $1: HTTP $(code) $(body | jq -c '.errors // empty')" ;;
+  esac
 }
 
 # One application secret, created if absent. VALUE_JSON is read from the environment variable named in $2,

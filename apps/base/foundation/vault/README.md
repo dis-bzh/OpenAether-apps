@@ -19,21 +19,24 @@ policies at L3/L4 + OpenBao's own authentication).
 
 1. `init.sh` creates the Secret `openbao-seal-key` **once** (`kubectl create`, never `apply`: an existing key is never overwritten)
    and the pods start.
-2. `sys/init` with *recovery* shares. The root token lives in a file on a memory-backed volume. With it: the bootstrap policy,
-   the Kubernetes auth method, the role `openbao-bootstrap`. It then checks that this role can log in (from the Job's own
-   ServiceAccount) **and revokes the root token**, also when anything in the window fails. From here on nothing in the cluster holds a root token.
+2. `sys/init` with *recovery* shares. The root token lives in a file on a memory-backed volume. With it: the bootstrap and
+   break-glass policies, the Kubernetes auth method (no CA pinned: it uses the OpenBao pod's own, so a snapshot restored onto a
+   rebuilt cluster still logs in), the roles `openbao-bootstrap` and `openbao-breakglass`. It then checks that the bootstrap role can
+   log in (from the Job's own ServiceAccount) **and revokes the root token**, also when anything in the window fails or the Job is killed
+   (a token left by a killed run is revoked at the next start). Before `sys/init` it refuses what would leave a half-initialised cluster:
+   a bad threshold, a key that is not base64, a leftover shares Secret. From here on nothing in the cluster holds a root token.
 3. `configure.sh` logs in as `openbao-bootstrap` and creates the engines (`pki`, KV v2 `secret/`), the 8 policies, the
    Kubernetes-auth roles and the application secrets (random, **create-only**: `cas=0`, so a re-run can not rotate one).
    Nothing secret is ever printed: pod logs are shipped to Loki and kept.
 
 | Kubernetes-auth role | ServiceAccount (ns) | Policy | Can |
 |---|---|---|---|
-| `openbao-bootstrap` | `openbao-vault-bootstrap`, `openbao-init` | `openaether-bootstrap` | configure engines/auth/policies/secrets; **not** mint tokens, seal, rekey, rotate, touch raw storage, raft or the audit device |
+| `openbao-bootstrap` | `openbao-vault-bootstrap`, `openbao-init` | `openaether-bootstrap` | configure engines/auth/policies/secrets. **Root-equivalent in practice** (it writes policies and roles, so it can grant itself anything); the control is who may run as those ServiceAccounts |
 | `external-secrets-operator` | `external-secrets` (foundation-pki-management) | `external-secrets-read` | read `secret/` |
 | `cert-manager-issuer` | `cert-manager` | `cert-manager-pki` | sign with `pki/sign/*` |
 | `backup-snapshot` | `openbao-snapshot` | `backup-snapshot` | read the raft snapshot |
 | `secret-seeder` | `openbao-seeder` | `secret-seeder` | **create** the Day-1 secrets listed in the policy; never overwrite, never read a value |
-| `openaether-admin` | `openaether-admin` | `openaether-admin` | read/write secrets, `pki/`, leases; read the configuration. **Not** write policies/roles/mounts (those change through git), mint tokens or touch the seal |
+| `openaether-admin` | `openaether-admin` | `openaether-admin` | read/write secrets, import the signed intermediate, issue from the `openaether` PKI role, leases; read the configuration. **Not** write policies/roles/PKI roles/mounts (those change through git), mint tokens or touch the seal |
 | `openaether-reader` | `openaether-reader` | `openaether-reader` | read secrets |
 | `openbao-breakglass` | `openbao-breakglass` | `openaether-breakglass` | start a root-token generation (still needs the recovery quorum) |
 
@@ -50,7 +53,9 @@ short token with `kubectl -n foundation-vault create token <sa> --duration=15m` 
 The ConfigMap holds `pgp-1 … pgp-N` (each an operator's *public* key, `gpg --export <id> | base64 -w0`; N ≥ 3) and optionally
 `threshold` (default ⌊N/2⌋+1, at least 2). Create it **before** the first reconcile of this brick (`OpenAether-infra` does,
 from `openbao_recovery_pgp_keys`). The shares in the Secret are useless without the operators' private keys, so they can be copied
-anywhere. A development cluster works and says it is not production; do not put anything that matters on one.
+anywhere. A development cluster works and says it is not production; do not put anything that matters on one, and know that
+**it can not be turned into a production one**: re-initialise it. Check every key before you paste it: `gpg --list-keys <id>` must
+show an `[E]` (a signing-only or expired key makes `sys/init` fail *after* it has initialised the cluster: re-init).
 
 ## Day 0 — what an operator must do once (a production cluster)
 
@@ -61,7 +66,7 @@ The cluster can not do these for you, and **losing the seal key loses every secr
 kubectl -n foundation-vault get secret openbao-seal-key -o jsonpath='{.data.key}' | base64 -d \
   | gpg --encrypt --recipient <ops-key> --output openbao-seal-key.gpg
 # 2. Keep a copy of the (already PGP-encrypted) recovery shares: the Secret dies with the cluster.
-kubectl -n foundation-vault get secret openbao-recovery-shares -o yaml > openbao-recovery-shares.yaml
+for i in 1 2 3; do kubectl -n foundation-vault get secret openbao-recovery-shares -o jsonpath="{.data.share-$i}" | base64 -d > openbao-share-$i.b64; done
 # 3. Escrow the restic password: without it the backups are unreadable the day OpenBao is lost.
 bao_admin kv get -mount=secret -field=password backup/restic          # helper below
 ```
@@ -73,7 +78,7 @@ OpenBao token ever crosses your terminal:
 bao_admin() {
   kubectl -n foundation-vault create token openaether-admin --duration=15m \
   | kubectl -n foundation-vault exec -i openbao-0 -- sh -c \
-      'BAO_TOKEN="$(bao write -field=token auth/kubernetes/login role=openaether-admin jwt="$(cat)")" exec bao "$@"' sh "$@"
+      'BAO_TOKEN="$(bao write -field=token auth/kubernetes/login role=openaether-admin jwt=-)" exec bao "$@"' sh "$@"
 }
 ```
 
@@ -113,12 +118,21 @@ kubectl -n foundation-vault rollout restart statefulset/openbao && kubectl -n fo
 
 (Measured on a 3-replica cluster, 2026-10-13, twice: about 70 s per roll, every pod unsealed with the new key, the data stayed readable.)
 
-**Disaster recovery.** The raft snapshot (backup brick) is encrypted by the seal key, so a restore needs the **escrowed key**:
-(1) once the namespace exists and before the pods start, create `openbao-seal-key` from the escrow; (2) let Flux deploy: `init.sh`
-initialises an empty cluster; (3) restore the snapshot with a break-glass root token (`bao operator raft snapshot restore -force`);
-(4) from then on the *source* cluster's recovery shares and policies apply: put your saved `openbao-recovery-shares.yaml` back.
-With any other key the data does not come back (tested). If standbys do not follow the restored leader, delete `openbao-1` and
-`openbao-2` (the PVCs stay).
+**Disaster recovery.** The raft snapshot (backup brick) is encrypted by the seal key, so a restore needs the **escrowed key**, and
+the recovery shares that apply afterwards are the SOURCE cluster's:
+
+1. Once the namespace exists and before the vault pods start, create `openbao-seal-key` from the escrow
+   (`gpg -d openbao-seal-key.gpg > key && kubectl -n foundation-vault create secret generic openbao-seal-key --from-file=key=key`, then
+   delete `key`). Suspend the Flux Kustomizations that consume secrets until step 4, so that nothing picks up the throw-away values the
+   fresh bootstrap generates. The init Job refuses to invent a key on a cluster that was initialised before.
+2. Let `foundation-vault` deploy: `init.sh` initialises an empty cluster.
+3. Restore with a break-glass root token of the fresh cluster (its shares are encrypted to the same operators):
+   `bao operator raft snapshot restore -force <file>`. The Kubernetes auth config in the snapshot pins no CA, so logins keep working on a
+   rebuilt cluster. If standbys do not follow the restored leader, delete `openbao-1` and `openbao-2` (the PVCs stay).
+4. Put the source's shares back (delete the fresh `openbao-recovery-shares`, then
+   `kubectl create secret generic openbao-recovery-shares --from-file=share-1=openbao-share-1.b64 …`), then resume Flux.
+
+With any other key the data does not come back (tested on a real OpenBao). Not drilled on a cluster.
 
 **Interrupted first run.** A failure inside the root window (between `sys/init` and the hand-over) revokes the root token on the
 way out, whatever the cause, and leaves an initialised OpenBao that nobody can configure (the root token is gone by design; the
@@ -134,7 +148,9 @@ kubectl -n foundation-vault delete secret openbao-recovery-shares     # or openb
 kubectl -n flux-system patch kustomization foundation-vault --type merge -p '{"spec":{"suspend":false}}'
 ```
 
-Otherwise use the break-glass.
+If the cluster already holds data, use the break-glass instead (its role and policy exist from the first seconds of the root window;
+a failure *before* the window ends has nothing to fall back on).
+
 **A re-init regenerates every generated secret** (database passwords, Longhorn's passphrase, restic's password…). Anything that already
 used the previous values (a database initialised with them, a volume encrypted with the passphrase) no longer matches: do it only on a
 cluster that holds nothing yet, as above.
@@ -148,15 +164,21 @@ kube-apiserver, to create the Secrets).
 
 ## Limits, stated plainly
 
-- **The static key sits next to the data it protects**: a Secret in the cluster (etcd, encrypted at rest on Talos) and the raft
-  PVCs on the node. It removes what the former design leaked (unseal shares and root token in logs and in plain Secrets) and gives
-  hands-free restarts; it does **not** separate the key from the cluster. Someone who can read Secrets in `foundation-vault` and the
-  node's disk can open the data. Closing this means a key held outside the cluster (a transit seal on another OpenBao, or a KMS);
-  until then RBAC on this namespace is part of the security boundary.
-- Anyone who can create Pods running as `openbao-vault-bootstrap` gets the bootstrap identity, which can write policies.
-- The Kubernetes-auth login itself is only exercised on a cluster; `scripts/dev/test-openbao-bootstrap.sh` replaces that one call.
-- The 3-replica raft join, the restore with standbys and the runbooks above that use `kubectl` have not been drilled on a cluster
-  at this version.
+- **The static key sits next to the data it protects**: a Secret in the cluster (etcd) and the raft PVCs on the node, and every
+  snapshot in the backup store is barrier-encrypted by this key alone (its restic password is another Kubernetes-held secret). It
+  removes what the former design leaked (unseal shares and root token in logs and in plain Secrets) and gives hands-free restarts; it does
+  **not** separate the key from the cluster. Whoever can read Secrets in `foundation-vault` can open the data; so can whoever reads a
+  backup and that Secret. Closing this means a key held outside the cluster (a transit seal on another OpenBao, or a KMS); until then
+  RBAC on this namespace is part of the security boundary, and "encrypted at rest" depends on the provider's etcd encryption, which this
+  repository does not verify.
+- **The bootstrap identity is root-equivalent**, and so is the init Job (it can create Secrets, including service-account-token Secrets
+  for any ServiceAccount of the namespace). Both are reachable by whoever can create Pods in `foundation-vault`, exec into them, or change
+  what Flux applies, i.e. Git write access. That group is the real root of trust.
+- **The break-glass depends on Kubernetes auth working** (and on the recovery quorum). A first run that fails before the root window ends,
+  a PGP key that `sys/init` rejects, or a bad hand-over end in a re-init, only possible on a cluster that holds nothing yet.
+- A development bootstrap can not be upgraded to production; nothing monitors that the seal key has been escrowed.
+- The Kubernetes-auth login is only exercised on a cluster; the harness replaces that one call. The 3-replica join, the seal-key
+  rotation and the start-over were run on a cluster; the restore with standbys and the other runbooks were not.
 - **Nested PKI mounts are forbidden**: never mount `pki/` and `pki/<x>/` (the second fails with HTTP 400, sub-paths 404).
 
 ## Tests

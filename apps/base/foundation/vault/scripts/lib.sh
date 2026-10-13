@@ -12,6 +12,7 @@
 # Everything environment-specific is overridable (OA_*), so the same code runs
 # unchanged against a real OpenBao in a container in scripts/dev/test-openbao-bootstrap.sh.
 set -euo pipefail
+umask 077   # every file this creates (response bodies, header files) is for this process alone
 
 : "${VAULT_NS:=foundation-vault}"
 : "${BAO_ADDR:=https://openbao.${VAULT_NS}.svc.cluster.local:8200}"
@@ -20,6 +21,8 @@ set -euo pipefail
 : "${OA_KUBECTL:=kubectl}"
 : "${OA_SA_DIR:=/var/run/secrets/kubernetes.io/serviceaccount}"
 : "${OA_POLICY_DIR:=/scripts}"
+# The three pods, asked one by one whether they are initialised (a Service address would answer for whichever pod is Ready).
+: "${OA_POD_URLS:=https://openbao-0.openbao.${VAULT_NS}.svc.cluster.local:8200 https://openbao-1.openbao.${VAULT_NS}.svc.cluster.local:8200 https://openbao-2.openbao.${VAULT_NS}.svc.cluster.local:8200}"
 
 # The ServiceAccounts that may take the `openbao-bootstrap` role: the configure Job, and the init Job, which must prove
 # that the hand-over works from its own identity before it revokes the root token.
@@ -57,7 +60,7 @@ header_file() { # TOKEN OUTFILE
 retry3() {
   local i
   for i in 1 2 3; do
-    ( "$@" ) && return 0
+    ( "$@" ) && return 0   # no `set -e` inside the subshell of an `&&`: the helpers check their own answers
     [ "$i" = 3 ] || sleep 5
   done
   die "$1 failed 3 times"
@@ -89,7 +92,16 @@ resolve_leader() {
   die "no raft leader after 3 minutes"
 }
 
-initialized() { curl -s "${CURL_CA[@]}" "${BAO_ADDR}/v1/sys/init" | jq -r '.initialized // false' 2>/dev/null || echo false; }
+# true when ANY pod says it is initialised, false when every pod says it is not, unknown when a pod could not be asked: a
+# failed request is not "not initialised" (that would let sys/init run against a node that merely did not answer).
+cluster_state() {
+  local u r seen_false=0 unknown=0
+  for u in $OA_POD_URLS; do
+    r="$(curl -s --max-time 5 "${CURL_CA[@]}" "$u/v1/sys/init" | jq -r '.initialized' 2>/dev/null || true)"
+    case "$r" in true) echo true; return 0 ;; false) seen_false=1 ;; *) unknown=1 ;; esac
+  done
+  if [ "$unknown" = 0 ] && [ "$seen_false" = 1 ]; then echo false; else echo unknown; fi
+}
 
 # Log in with the Job's own ServiceAccount token (Kubernetes auth). Writes the client
 # token header to $2. In the test harness a pre-made token file replaces it (OA_TEST_TOKEN_FILE):
@@ -100,7 +112,7 @@ login_k8s() { # ROLE TOKEN_HEADER_FILE
   if [ -n "${OA_TEST_TOKEN_FILE:-}" ]; then cp "$OA_TEST_TOKEN_FILE" "$out"; return 0; fi
   [ -r "$OA_SA_DIR/token" ] || return 1
   jwt="$(cat "$OA_SA_DIR/token")"
-  jq -nc --arg r "$role" --arg j "$jwt" '{role:$r,jwt:$j}' | api POST /v1/auth/kubernetes/login ""
+  J="$jwt" jq -nc --arg r "$role" '{role:$r,jwt:$ENV.J}' | api POST /v1/auth/kubernetes/login ""
   ok || return 1
   local tok; tok="$(body | jq -r '.auth.client_token // empty')"
   [ -n "$tok" ] || return 1
@@ -127,11 +139,13 @@ put_k8s_role() {
 }
 
 configure_k8s_auth() { # TOKEN_FILE — enable + configure the Kubernetes auth method (idempotent)
-  local tok="$1" ca
+  local tok="$1"
   printf '{"type":"kubernetes"}' | api POST /v1/sys/auth/kubernetes "$tok" || true
   case "$(code)" in 200|204|400) : ;; *) die "enable auth/kubernetes: HTTP $(code)" ;; esac   # 400 = already mounted
-  ca="$(cat "$OA_SA_DIR/ca.crt")"
-  jq -nc --arg ca "$ca" '{kubernetes_host:"https://kubernetes.default.svc.cluster.local",kubernetes_ca_cert:$ca,disable_iss_validation:true}' \
+  # NO kubernetes_ca_cert and NO token_reviewer_jwt: the method then uses the CA and the ServiceAccount token of the OpenBao
+  # pod itself, re-read as they rotate. A pinned CA would be copied into every snapshot, and a restore onto a rebuilt
+  # cluster (another CA) could then never log in again, the break-glass included.
+  printf '%s' '{"kubernetes_host":"https://kubernetes.default.svc.cluster.local","disable_iss_validation":true}' \
     | api POST /v1/auth/kubernetes/config "$tok"
   ok || die "auth/kubernetes/config: HTTP $(code) $(body | jq -c '.errors // empty' 2>/dev/null)"
   log "  auth/kubernetes configured"

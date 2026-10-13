@@ -1,8 +1,11 @@
 # The identity of the OpenBao bootstrap Jobs (Kubernetes auth role `openbao-bootstrap`, 15 minute tokens).
-# It configures the engines, the auth methods, the policies and the application secrets, and nothing else:
-# it can not seal, rekey, rotate, generate a root token, touch raw storage or the raft cluster.
-# Whoever can write policies can grant themselves anything the ACL system allows, so the guard is where the
-# token comes from: only a Pod running as ServiceAccount foundation-vault/openbao-vault-bootstrap can log in.
+# It configures the engines, the auth methods, the policies and the application secrets.
+#
+# ⚠ It is ROOT-EQUIVALENT in practice: whoever can write a policy and a role can give themselves any power the ACL system has,
+# this policy's own denies included (measured: a token with only this policy rewrote it with `path "*"` and minted tokens). The denies
+# at the bottom stop a mistake in a script, not a hostile holder. The real control is who can obtain the identity: only a Pod running as
+# the ServiceAccounts foundation-vault/openbao-vault-bootstrap or openbao-init can log in with it, i.e. whoever may create Pods in this
+# namespace or change what Flux applies. Keep that group small.
 path "sys/mounts"        { capabilities = ["read"] }
 path "sys/mounts/*"      { capabilities = ["create", "read", "update", "delete", "sudo"] }
 path "sys/auth"          { capabilities = ["read"] }

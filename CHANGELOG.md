@@ -63,6 +63,16 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   ServiceAccount, which the bootstrap role did not accept, so a fresh cluster ended with the root token not revoked and the
   Job failing. The role now binds both ServiceAccounts, the calls of the root window are retried, and the root token is revoked
   on **any** exit from it. The mocked harness could not see this: it replaces the Kubernetes-auth login with a test seam.
+- **Hardened after an independent review of the redesign.** A non-numeric `threshold` in the ConfigMap made the guard *error* instead of
+  fail and `sys/init` ran with an empty body, leaving a live root token in a 0644 file: integers are now checked, the request is checked
+  before it is sent, every file is created 0600, the response is deleted as soon as it is parsed, and a root token left by a killed
+  container is revoked at the next start. The init Job refuses, before `sys/init`, a leftover recovery-shares Secret and a key that is not
+  base64; it no longer invents a seal key on a cluster that was initialised (a marker ConfigMap and the pods' own answer say so); it asks
+  every pod whether it is initialised and treats a failed request as "unknown", not "no". The break-glass role and policy are created in the
+  root window, so they exist whenever the window did; the Kubernetes auth config pins no CA (a snapshot restored onto a rebuilt cluster,
+  or a rotated CA, would otherwise lock out every login including the break-glass); the hand-over proof waits three minutes. The
+  `openaether-admin` identity can no longer write PKI roles or touch the PKI root. The README no longer claims the bootstrap identity
+  cannot escalate: it can, by design, and says who the real root of trust is. Harness: 124 checks.
 - The `backup/openbao` snapshot job uses `openbao:2.7.1` (was 2.5.4).
 
 ### Fixed
