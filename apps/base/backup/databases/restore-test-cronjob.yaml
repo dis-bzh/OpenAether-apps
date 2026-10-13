@@ -68,12 +68,26 @@ spec:
                     exit 1
                   fi
                   export RESTIC_CACHE_DIR=/tmp/restic-cache
+                  # Both restores stay on the `restore` volume (the next container reads them), whose
+                  # sizeLimit is 2Gi: past it kubelet evicts the pod with no message. Say it instead.
+                  limit_mib=1800; used_mib=0
                   verify() {
                     ep="$1"; bucket="$2"; label="$3"
                     export RESTIC_REPOSITORY="s3:${ep}/${bucket}/${CLUSTER_NAME}/cnpg"
                     echo "── repository ${label}: ${RESTIC_REPOSITORY}"
                     # A real re-read of a fraction of the data (decryption included).
                     restic check --read-data-subset=5%
+                    bytes="$(restic stats --json --host cnpg latest | sed -n 's/.*"total_size":\([0-9][0-9]*\).*/\1/p')"
+                    if [ -z "$bytes" ]; then
+                      echo "ERROR: could not read the size of the latest snapshot of repository ${label}."
+                      exit 1
+                    fi
+                    used_mib=$((used_mib + bytes / 1048576 + 1))
+                    if [ "$used_mib" -gt "$limit_mib" ]; then
+                      echo "ERROR: the restores need ${used_mib} MiB, the volume holds ${limit_mib}:"
+                      echo "        raise the sizeLimit of the restore volume and limit_mib together."
+                      exit 1
+                    fi
                     target="/restore/${label}"
                     rm -rf "$target"; mkdir -p "$target"
                     restic restore latest --host cnpg --target "$target"
@@ -158,5 +172,6 @@ spec:
             # Throwaway: the restore must leave NOTHING behind.
             - name: tmp
               emptyDir: { sizeLimit: 1Gi }
+            # Both repositories' restores at once; the script refuses past 1800 MiB (limit_mib).
             - name: restore
               emptyDir: { sizeLimit: 2Gi }

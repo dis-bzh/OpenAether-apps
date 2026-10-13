@@ -212,6 +212,15 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   substituted, and removing a stray object is not a violation. `check-externalsecret-namespaces.py` fails if either is lost (four new
   fixture cases). Rung: static (kustomize build, fixtures). **Not observed:** the generated webhook on a cluster. **Not done:** the six
   policies of `kyverno-policies` also use the default `Fail`; that is a separate decision (they match Pods in every namespace).
+- **The databases restore-test says when its restores do not fit, and the restore tests now also run under busybox (follow-up of ANSSI
+  hardening B03).** Both repositories are restored into one 2Gi `emptyDir` (the next container reads them), where the old script
+  deleted each target after use; past the limit kubelet evicts the pod with no message. The init container now reads the snapshot
+  size (`restic stats --json`, checked on restic 0.18.0 against a local repository) and stops with "raise the sizeLimit ... and
+  limit_mib together" if the two restores exceed 1800 MiB, or if the size cannot be read. The OpenBao test already removes each
+  target, so it holds one snapshot and its unpacked copy at a time. `test-backup-checks.sh` also runs the OpenBao script (intact,
+  altered, truncated) inside the restic image, whose busybox `tar`, `sha256sum` and `sh` are what runs on the cluster (mutation-checked
+  with a GNU-only flag). Rung: mocked/static plus a container run, not a CronJob on a cluster. **Does not:** change the volume size or
+  restore less data; dumps beyond 1.8 GiB for both repositories need the limit raised.
 - **Comments and a README that contradicted the code now say what the code does (ANSSI hardening B01, text only).** The backup README
   no longer says the restic password is printed in a log (`configure.sh` prints nothing; the operator reads it once and escrows it),
   that the CNPG PITR block is commented (it is active) or that no `VMRule` covers backups (`vmrule-backup.yaml` does); the Loki
