@@ -147,6 +147,24 @@ jobs:
           ./scripts/dev/test-observability-rbac.sh | tee observability-rbac.out
           grep -qE '^0 failed$' observability-rbac.out
 
+  vmrules:
+    name: VMRules (vmalert dry run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      # Every VMRule through the real vmalert (pinned release, sha256 checked): a typo in an expression is
+      # otherwise found when the rule fails to load on the cluster. Metric existence needs a cluster.
+      - name: Test the alert rules
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-vmrules.sh | tee vmrules.out
+          grep -qE '^0 failed$' vmrules.out
+
   openbao-bootstrap:
     name: OpenBao bootstrap (real OpenBao)
     runs-on: ubuntu-latest

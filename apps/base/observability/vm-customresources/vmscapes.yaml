@@ -232,7 +232,7 @@ spec:
   podMetricsEndpoints:
     - port: http-prom
       path: /metrics
-      # Same reason as kube-state-metrics: gotk_reconcile_condition carries the
+      # Same reason as kube-state-metrics: gotk_reconcile_duration_seconds carries the
       # RECONCILED object's namespace, which would otherwise be overwritten by
       # the controller pod's own (flux-system) and pushed to exported_namespace.
       honorLabels: true

@@ -52,6 +52,65 @@ spec:
           annotations:
             summary: "Node {{ $labels.node }}: {{ $labels.condition }} for 15 min"
 
+    # Disk and clock of the NODES, read from node-exporter (the timex and filesystem collectors are on by default).
+    - name: openaether-node-resources
+      interval: 1m
+      rules:
+        # 4) The EPHEMERAL partition, mounted at /var on Talos: containerd, the kubelet, etcd and everything
+        #    local-path provides (Loki's WAL and chunks, vmstorage). PersistentVolumeFillingUp is silent on
+        #    local-path, and NodeUnderPressure fires only once the kubelet already evicts. Nothing here on a
+        #    node with no /var mount (the Docker lab), which is fine.
+        - alert: NodeFilesystemFillingUp
+          expr: |
+            node_filesystem_avail_bytes{mountpoint="/var", fstype!~"tmpfs|overlay"}
+              / node_filesystem_size_bytes{mountpoint="/var", fstype!~"tmpfs|overlay"} < 0.15
+          for: 15m
+          labels:
+            severity: warning
+            component: node
+          annotations:
+            summary: "Node {{ $labels.instance }}: less than 15% free on /var (EPHEMERAL)"
+            description: >-
+              Log and metric volumes live here (local-path): kubectl get pv -o wide for the ones on this node.
+              A logging burst: see LokiIngestionBurst.
+
+        # 5) On course to be full within a day, at the last 6 h's pace, and under 40% free so that a big,
+        #    nearly empty disk cannot trigger it.
+        - alert: NodeFilesystemFullIn24h
+          expr: |
+            predict_linear(node_filesystem_avail_bytes{mountpoint="/var", fstype!~"tmpfs|overlay"}[6h], 24 * 3600) < 0
+              and node_filesystem_avail_bytes{mountpoint="/var", fstype!~"tmpfs|overlay"}
+                / node_filesystem_size_bytes{mountpoint="/var", fstype!~"tmpfs|overlay"} < 0.40
+          for: 1h
+          labels:
+            severity: warning
+            component: node
+          annotations:
+            summary: "Node {{ $labels.instance }}: /var (EPHEMERAL) will be full within 24 h at the current pace"
+
+        # 6) Clock drift (PA-012 R4: logs are only comparable across nodes if the clocks agree). 0.5 s is far above the
+        #    usual sub-10-ms offset and far below anything that breaks TLS, Raft or token validity.
+        - alert: NodeClockSkew
+          expr: abs(node_timex_offset_seconds) > 0.5
+          for: 10m
+          labels:
+            severity: warning
+            component: node
+          annotations:
+            summary: "Node {{ $labels.instance }}: clock offset above 0.5 s"
+            description: "talosctl -n <node> time shows the sources; every node should use the same ones."
+
+        # 7) The kernel says the clock is not disciplined by a time source. Info only: whether Talos's time service
+        #    keeps this flag set is to confirm on a real node; a healthy node reporting 0 means drop this rule.
+        - alert: NodeClockNotSynchronised
+          expr: node_timex_sync_status == 0
+          for: 1h
+          labels:
+            severity: info
+            component: node
+          annotations:
+            summary: "Node {{ $labels.instance }}: the kernel reports its clock as not synchronised"
+
     - name: openaether-workloads
       interval: 1m
       rules:

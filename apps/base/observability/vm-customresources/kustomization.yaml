@@ -21,6 +21,8 @@ resources:
   - vmrule-backup.yaml
   - vmrule-cluster.yaml
   - vmrule-platform.yaml
+  - vmrule-logging.yaml
+  - vmrule-security.yaml
 
 labels:
   - includeSelectors: false

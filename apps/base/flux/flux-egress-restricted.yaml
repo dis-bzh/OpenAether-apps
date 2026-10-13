@@ -20,7 +20,7 @@ spec:
   endpointSelector: {}
   ingress:
     # The cluster-wide default-deny leaves Flux with no ingress at all, so the
-    # controllers' metrics were unreachable. gotk_reconcile_condition comes from
+    # controllers' metrics were unreachable. gotk_reconcile_duration_seconds comes from
     # here: it is the only way to see a Kustomization that stopped reconciling.
     - fromEndpoints:
         - matchLabels:

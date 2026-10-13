@@ -116,6 +116,23 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Added
 
+- **Alerts for the log pipeline, the policy engine, Flux, the node disk and clock, and the backups.** 29 rules in
+  `vmrule-logging.yaml` (Alloy missing or dropping, Loki push errors, replica down, discards, ingestion burst, Grafana 5xx),
+  `vmrule-security.yaml` (Kyverno violations at admission time, webhook down, Flux object not Ready or suspended), and additions to
+  the cluster, platform and backup rules: `/var` (EPHEMERAL, where local-path volumes live) filling and full within 24 h, clock
+  offset and sync status, Cilium policy denials in a loop (Hubble is off), restore-test CronJobs stale for 35 days, a missing backup
+  CronJob, CNPG WAL archive failing, base backup failed or stale. Each family has an `*Absent` guard so a vanished scrape does not
+  read as "all clear". `docs/detection.md` lists what is covered and what is not, and the `kubectl get cpol,polr -A` procedure to
+  review Audit violations. `scripts/dev/test-vmrules.sh` (new CI job) runs every rule through a pinned vmalert `-dryRun`
+  and checks the conventions `check-alert-metrics.py` relies on. Addresses ANSSI PA-012 R12, R21, R22, C3.1 and C3.2, HYG-M36,
+  GH-BKP-2, NSA12-LOG-04 and SSDLC-CICD-MON-01/02. Rung: parsed by vmalert and built by kustomize, **never fired and never
+  evaluated against real data**: metric names were read in the sources of Alloy v1.6, Loki v3.3.2, Kyverno v1.12.1, CNPG v1.23.1 and
+  node-exporter v1.9 (the Kyverno counter's `_total` suffix is the OpenTelemetry exporter's convention, not read in code), thresholds are
+  guesses, and `NodeClockNotSynchronised` may fire on healthy Talos nodes. It does **not** alert on OpenBao authentication or root
+  use, `kubectl exec`, RBAC changes or an empty stream for one namespace (no audit log, no Loki ruler), keeps `require-security-context`
+  out of `KyvernoPolicyViolation` until its 74 known violations are fixed, and does not set the time sources of the nodes (the
+  OpenAether-infra half of the clock finding).
+
 - **Scrapes for what the new alerts read, and Flux per-object state.** Alloy, Loki, Grafana, Kyverno (the four controllers, :8000),
   Zitadel and the CNPG instances (:9187) had no scrape, so no rule could see them fail; `vmscrapes-pipeline.yaml` adds them, with
   the ingress rule for vmagent in the Loki, Alloy, Kyverno and Zitadel CiliumNetworkPolicies and the four ports in vmagent's egress
