@@ -9,7 +9,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 for bin in kubectl helm python3; do command -v "$bin" >/dev/null || { echo "$bin is required" >&2; exit 2; }; done
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
-CHARTS="alloy"   # HelmRelease names rendered below
+CHARTS="alloy grafana"   # HelmRelease names rendered below
 
 kubectl kustomize "$ROOT/apps/base/observability" > "$WORK/brick.yaml"
 kubectl kustomize "$ROOT/apps/base/observability/vm-customresources" > "$WORK/vmcr.yaml"
@@ -89,6 +89,19 @@ if "alloy" in charts:
           not [k for k in roles if k[1] == "alloy"])
     check("alloy: can read pods and pods/log", reads("alloy", "pods") and reads("alloy", "pods/log"))
     check("alloy: cannot read configmaps", not reads("alloy", "configmaps"))
+
+if "grafana" in charts:
+    rs = roles_of("grafana")
+    check("grafana: bound to exactly the hand-written grafana-dashboard-reader ClusterRole",
+          [r["metadata"]["name"] for r in rs] == ["grafana-dashboard-reader"])
+    check("grafana: the chart creates no Role nor ClusterRole of its own",
+          not [k for k in roles if k[1].startswith("grafana") and k[1] != "grafana-dashboard-reader"])
+    check("grafana: can list configmaps (dashboards sidecar)", reads("grafana", "configmaps"))
+    check("grafana: cannot read secrets", not reads("grafana", "secrets"))
+    sidecar = [c for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "grafana"
+               for c in d["spec"]["template"]["spec"]["containers"] if c["name"] == "grafana-sc-dashboard"]
+    env = {e["name"]: e.get("value") for c in sidecar for e in c.get("env", [])}
+    check("grafana: the dashboards sidecar asks for configmaps only (else 403 on secrets)", env.get("RESOURCE") == "configmap")
 
 print(f"{fails} failed")
 sys.exit(1 if fails else 0)

@@ -51,6 +51,15 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Security
 
+- **Grafana's dashboards sidecar reads ConfigMaps only, not Secrets.** The chart's ClusterRole gave the sidecar `configmaps` and
+  `secrets` in every namespace (`searchNamespace: ALL`). `rbac.create: false` drops the chart's roles and `rbac-grafana.yaml` ships
+  `grafana-dashboard-reader` (core `configmaps`, get/list/watch), with `sidecar.dashboards.resource: configmap` so the sidecar does
+  not list Secrets and take a 403. A new role name rather than `rbac.useExistingClusterRole`: a binding's `roleRef` is immutable,
+  so repointing the chart's binding would fail the Helm upgrade. `scripts/dev/test-observability-rbac.sh` covers it. Addresses
+  ANSSI PA-012 R19. Rung: chart render and kustomize build, not run on a cluster. Does not remove the accepted residual (ConfigMaps
+  stay readable cluster-wide; moving the dashboards into `services-observability` and narrowing `searchNamespace` would). Lab check:
+  the dashboards still load and the sidecar logs no 403.
+
 - **Alloy no longer reads every Secret and ConfigMap in the cluster.** The chart's ClusterRole (`rbac.create: true`) also granted
   `secrets`, `configmaps`, `nodes/proxy`, events and replicasets for components this config does not use. It is now off, and
   `rbac-alloy.yaml` ships `alloy-pod-logs`: `pods` and `namespaces` (get/list/watch) and `pods/log` (get), which is what

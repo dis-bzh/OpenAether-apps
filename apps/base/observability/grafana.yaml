@@ -158,10 +158,18 @@ spec:
             type: loki
             url: "http://loki.services-observability:3100"
             editable: false
+    # The chart's roles let the sidecar read ConfigMaps AND Secrets (cluster-wide, and in this namespace
+    # when namespaced). rbac.create false drops them all; rbac-grafana.yaml ships a ClusterRole on core
+    # configmaps only. A new name, not useExistingClusterRole: a binding's roleRef is immutable, so
+    # repointing the chart's binding would fail the Helm upgrade.
+    rbac:
+      create: false
     # Sidecar: automatic discovery of ConfigMaps labelled grafana_dashboard=1.
     sidecar:
       dashboards:
         enabled: true
+        # configmap, not the default `both`: it would list Secrets and take a 403.
+        resource: configmap
         label: grafana_dashboard
         labelValue: "1"
         searchNamespace: ALL

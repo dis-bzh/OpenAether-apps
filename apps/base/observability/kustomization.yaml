@@ -38,6 +38,7 @@ resources:
   - rbac-alloy.yaml
   # Grafana HA (CNPG DB in apps/base/cnpg/)
   - grafana.yaml
+  - rbac-grafana.yaml
   - externalsecrets-grafana.yaml
   - externalsecret-grafana-oidc.yaml
   # Alertmanager's Slack webhook (the CRs live in vm-customresources/, but an
