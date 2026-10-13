@@ -7,7 +7,7 @@ kind: Kustomization
 # Deployment order (through dependsOn):
 #   00 namespaces
 #   └─ 01 platform
-#      └─ 11 vault (OpenBao seal Shamir + unsealer HA — plus de root)
+#      └─ 11 vault (OpenBao HA, static auto-unseal)
 #         └─ 13 cert-manager ← also: 12 eso
 #            └─ 14 istio
 #   └─ 12 eso

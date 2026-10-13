@@ -14,7 +14,6 @@ CHANGELOG.md
 # Tracked in OpenAether-apps#40 with what closes it; this list
 # shrinks as they are translated, and must never grow.
 apps/clusters/README.md
-apps/base/foundation/vault/README.md
 apps/base/foundation/vault/pki-root-offline-runbook.md
 apps/base/backup/README.md
 apps/flux/README.md

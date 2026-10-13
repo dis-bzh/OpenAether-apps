@@ -1,19 +1,10 @@
-# OpenAether 0.5.0 — Roles ESO + cert-manager sur OpenBao (Job idempotent)
-# ───────────────────────────────────────────────────────────────────────────────────
-# PostSync vault — runs once the openbao StatefulSet is Healthy (3/3).
-# BeforeHookCreation: deleted + recreated on every sync → idempotent across
-# bootstrap, DR (lost PVCs), config change and version bumps.
+# OpenBao configuration — idempotent Job, recreated by Flux on every sync (scripts/configure.sh).
 #
-# This Job used to be "step 8" of pki-root/bootstrap/00-bootstrap-job.yaml.
-# Extracted here because it depends on OpenBao (not on the root) and must run
-# AFTER it is Healthy, not just after the root.
-#
-# Security: set +x wherever secrets travel; no key or token is ever logged.
-#
-# SA: openbao-vault-bootstrap (ns foundation-vault) — read-only rights on Secret
-# openbao-recovery (root_token) + OpenBao API access.
-# RBAC defined in this file (same kustomization → same namespace).
-# ───────────────────────────────────────────────────────────────────────────────────
+# Runs as ServiceAccount openbao-vault-bootstrap and logs in to OpenBao with it (Kubernetes auth role
+# `openbao-bootstrap`, created by openbao-init before it revoked the root token). It needs NO Kubernetes API access
+# and no Secret: the only credential it ever holds is a 15 minute OpenBao token, in a memory-backed file.
+# It mounts the engines and the PKI, writes the policies, the Kubernetes auth roles and the application
+# secrets (create-only), and prints no secret.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -22,46 +13,7 @@ metadata:
   labels:
     app: openbao-vault-bootstrap
     openaether.io/managed: "true"
-    openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao-vault-bootstrap
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: openbao-vault-bootstrap
-  namespace: foundation-vault
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/sprint: "0.5.0-sprint0"
-    openaether.io/component: openbao-vault-bootstrap
-rules:
-  # Read the root_token to configure auth/policies/roles.
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get"]
-    resourceNames: ["openbao-recovery"]
-  # Wait for the pods to be Ready before calling the API.
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: openbao-vault-bootstrap
-  namespace: foundation-vault
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/sprint: "0.5.0-sprint0"
-    openaether.io/component: openbao-vault-bootstrap
-subjects:
-  - kind: ServiceAccount
-    name: openbao-vault-bootstrap
-    namespace: foundation-vault
-roleRef:
-  kind: Role
-  name: openbao-vault-bootstrap
-  apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: batch/v1
 kind: Job
@@ -71,13 +23,11 @@ metadata:
   labels:
     app: openbao-vault-bootstrap
     openaether.io/managed: "true"
-    openaether.io/sprint: "0.5.0-sprint0"
     openaether.io/component: openbao-vault-bootstrap
-  annotations: {}
 spec:
   backoffLimit: 5
-  # 30 min: the wait loop above can legitimately spend 15 of them, and a
-  # deadline shorter than the wait turns a slow start into a hard failure.
+  # 30 minutes: the wait for openbao-init can legitimately spend 15, and a deadline shorter than the wait turns
+  # a slow start into a hard failure.
   activeDeadlineSeconds: 1800
   template:
     metadata:
@@ -96,354 +46,26 @@ spec:
           type: RuntimeDefault
       volumes:
         - name: tmp
-          emptyDir: {}
-        # OpenBao's internal CA — every curl call in this Job goes over TLS.
+          emptyDir:
+            medium: Memory
+        # OpenBao's internal CA: every call in this Job goes over TLS.
         - name: tls
           secret:
             secretName: openbao-server-tls
             defaultMode: 0444
+        - name: scripts
+          configMap:
+            name: openbao-bootstrap-scripts
+            defaultMode: 0555
       containers:
         - name: bootstrap-roles
-          # ⚠️ The `docker.io/` prefix is MANDATORY: an image without a registry
-          # matches NO pattern of the restrict-image-registries policy.
           image: docker.io/alpine/k8s:1.31.1
           env:
             - name: VAULT_NS
               value: "foundation-vault"
-          command:
-            - /bin/bash
-            - -c
-            - |
-              set -euo pipefail
-
-              WL_ADDR="https://openbao.${VAULT_NS}.svc.cluster.local:8200"
-              # Internal CA: every curl call in this script depends on it.
-              CACERT="--cacert /bao/tls/ca.crt"
-
-              # ── helper API ─────────────────────────────────────────
-              # Body into /tmp/wlbody; HTTP status into /tmp/wlhttp.
-              wlapi() {
-                local m="$1" p="$2" d="${3:-}" t="${4:-}"
-                local a=(-s --cacert /bao/tls/ca.crt -o /tmp/wlbody -w '%{http_code}' -X "$m")
-                [ -n "$t" ] && a+=(-H "X-Vault-Token: $t")
-                [ -n "$d" ] && a+=(-d "$d")
-                curl "${a[@]}" "${WL_ADDR}${p}" > /tmp/wlhttp
-                cat /tmp/wlbody
-              }
-              WH() { cat /tmp/wlhttp 2>/dev/null || echo "000"; }
-
-              # ── 1) Fetch root_token ──────────────────────────────
-              set +x
-              echo "════ Waiting for the root token ════"
-              # WAIT, do not exit. openbao-init needs several minutes to
-              # initialise and unseal; exiting here burns backoffLimit in under a
-              # minute and the Job ends Failed — permanently, because Flux
-              # re-applies the same spec and never restarts a finished Job. The
-              # cluster is then left with no `secret/` and no `pki/` mount, while
-              # the foundation-vault Kustomization still reports Ready.
-              # Observed on a real Scaleway bring-up 2026-07-29; the previous
-              # comment here claimed a retry that does not happen.
-              for i in $(seq 1 90); do
-                kubectl get secret openbao-recovery -n "$VAULT_NS" >/dev/null 2>&1 && break
-                [ "$i" = "90" ] && {
-                  echo "✗ openbao-recovery still absent after 15 min — openbao-init"
-                  echo "  never completed. Look there, not here."
-                  exit 1
-                }
-                sleep 10
-              done
-              WL_TOKEN="$(kubectl get secret openbao-recovery -n "$VAULT_NS" \
-                -o jsonpath='{.data.root_token}' | base64 -d 2>/dev/null)"
-              if [ -z "$WL_TOKEN" ]; then
-                echo "ERROR: root_token empty in the Secret"; exit 1
-              fi
-              echo "  root_token retrieved"
-              set -x; set +x
-
-              # ── 2) Wait for the API ────────────────────────────────
-              echo "════ Waiting for the API ($WL_ADDR) ════"
-              for i in $(seq 1 60); do
-                c="$(curl -s $CACERT -o /dev/null -w '%{http_code}' \
-                  "${WL_ADDR}/v1/sys/health?uninitcode=200&sealedcode=200&standbyok=true" || true)"
-                [ "$c" != "000" ] && [ -n "$c" ] && { echo "  API up (health=$c)"; break; }
-                echo "  waiting API... ${i}/60 (code=$c)"; sleep 5
-              done
-
-              # ── 3) Resolve the raft leader through /v1/sys/leader ─────────
-              # The headless service round-robins across all pods (standbys included).
-              # /v1/sys/leader gives the active node's URL → we point every write
-              # at it. If the current node answers with redirect_addr, we follow.
-              echo "════ Raft leader resolution ════"
-              set +x
-              LEADER_URL=""
-              for i in $(seq 1 24); do
-                LEADER_JSON="$(curl -s $CACERT "${WL_ADDR}/v1/sys/leader" || true)"
-                LEADER_URL="$(echo "$LEADER_JSON" | jq -r '.leader_address // empty' 2>/dev/null || true)"
-                IS_SELF="$(echo "$LEADER_JSON" | jq -r '.is_self // "false"' 2>/dev/null || echo "false")"
-                if [ -n "$LEADER_URL" ] && [ "$LEADER_URL" != "null" ]; then
-                  echo "  leader found: $LEADER_URL (is_self=${IS_SELF})"
-                  # Point wlapi straight at the leader
-                  WL_ADDR="$LEADER_URL"
-                  # Strip the trailing slash if present
-                  WL_ADDR="${WL_ADDR%/}"
-                  break
-                fi
-                echo "  waiting leader... ${i}/24 (leader_address=${LEADER_URL:-vide})"
-                sleep 5
-              done
-              if [ -z "$LEADER_URL" ] || [ "$LEADER_URL" = "null" ]; then
-                echo "ERROR: could not determine the raft leader after 2 min"; exit 1
-              fi
-              set -x; set +x
-
-              # ── 4) PKI engine (idempotent) ──────────────────────────────────
-              echo "════ PKI + auth kubernetes ════"
-              set +x
-
-              # 4a. mount the PKI (intermediate CA) at the EXACT expected path
-              #     par l'issuer openbao : pki.
-              #     DO NOT mount `pki/` at the root: it would occupy the prefix and
-              #     prevent the nested pki mount (conflict → HTTP 400,
-              #     then 404 on pki/intermediate/...). A long max_lease_ttl
-              #     to cover the intermediate's lifetime (17520h).
-              wlapi POST /v1/sys/mounts/pki \
-                '{"type":"pki","config":{"max_lease_ttl":"87600h"}}' "$WL_TOKEN" >/dev/null || true
-              echo "  pki mount: HTTP=$(WH) (204=created, 400=already there)"
-
-              # 4c. Intermediate CA — generates the CSR if absent, PRINTS it, DOES NOT BLOCK.
-              #     Importing the signed certificate is a MANUAL step (offline root):
-              #     sign the CSR offline with the ROOT CA (Bitwarden EU) then
-              #     `bao write pki/intermediate/set-signed certificate=@signed.pem`.
-              #     See pki-root-offline-runbook.md. Until set-signed is done, the
-              #     PKI signs no leaf (issuers NotReady) — BY DESIGN.
-              #     (Before: a blocking `read -r` timed the Job out under GitOps.)
-              echo "════ Intermediate CA (CSR generation — import is a manual step) ════"
-              set +x
-              INT_CERT="$(wlapi GET /v1/pki/cert/ca | jq -r '.data.certificate // empty' 2>/dev/null || true)"
-              if [ -n "$INT_CERT" ]; then
-                echo "  intermediate CA already present (signed + imported) → no-op"
-              else
-                echo "  generating the intermediate CSR..."
-                CSR_RESP="$(wlapi POST /v1/pki/intermediate/generate/internal \
-                  '{"common_name":"OpenAether Workload Intermediate CA","ttl":"17520h"}' "$WL_TOKEN")"
-                CSR="$(echo "$CSR_RESP" | jq -r '.data.csr // empty')"
-                if [ -z "$CSR" ]; then
-                  echo "  ⚠ CSR generation failed (HTTP=$(WH)) — will be retried on the next sync"
-                  echo "$CSR_RESP"
-                else
-                  echo ""
-                  echo "  >>> ÉTAPE MANUELLE (runbook PKI root-offline) :"
-                  echo "  >>> 1. Sign this CSR with the offline ROOT CA (key in Bitwarden EU)"
-                  echo "  >>> 2. Import the signed cert: bao write pki/intermediate/set-signed \\"
-                  echo "  >>>      certificate=@intermediate-signed.pem"
-                  echo "  ----- BEGIN INTERMEDIATE CSR -----"
-                  echo "$CSR"
-                  echo "  ----- END INTERMEDIATE CSR -----"
-                fi
-              fi
-              set -x; set +x
-
-              # 4d. Leaf PKI role — used by the openbao issuer to sign certs
-              #     through pki/sign/openaether. The role is configuration
-              #     (independent of the CA) → creatable before the signed
-              #     intermediate is imported; ACTUAL signing will need the CA.
-              #     Domains derived from the openaether-tls Certificate (openaether.local + *).
-              wlapi POST /v1/pki/roles/openaether \
-                '{"allowed_domains":["openaether.local"],"allow_subdomains":true,"allow_bare_domains":true,"allow_localhost":false,"max_ttl":"2160h","key_type":"rsa","key_bits":2048,"server_flag":true,"client_flag":true}' \
-                "$WL_TOKEN" >/dev/null || true
-              echo "  pki role openaether: HTTP=$(WH) (204=created/updated)"
-
-              # 4c. enable KV v2 engine (secret/) — the path used by ESO + the seeder
-              wlapi POST /v1/sys/mounts/secret '{"type":"kv","options":{"version":"2"}}' "$WL_TOKEN" >/dev/null || true
-              echo "  kv v2 secret/ mount: HTTP=$(WH) (204=created, 400=already there)"
-
-              # ── 5) Policies (ESO + secret-seeder + cert-manager) ──────────
-              # The policies do not need auth/kubernetes, so we create them first.
-              ESO_POLICY="$(printf 'path "secret/data/*" {\n  capabilities = ["read"]\n}\npath "secret/metadata/*" {\n  capabilities = ["read", "list"]\n}\n')"
-              wlapi PUT /v1/sys/policies/acl/external-secrets-read \
-                "$(jq -nc --arg p "$ESO_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
-              echo "  policy external-secrets-read: HTTP=$(WH)"
-
-              SEEDER_POLICY="$(printf 'path "secret/data/grafana/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/minio/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/longhorn/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/data/zitadel/*" {\n  capabilities = ["create","update","read"]\n}\npath "secret/metadata/*" {\n  capabilities = ["read","list"]\n}\n')"
-              wlapi PUT /v1/sys/policies/acl/secret-seeder \
-                "$(jq -nc --arg p "$SEEDER_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
-              echo "  policy secret-seeder: HTTP=$(WH)"
-
-              CM_POLICY="$(printf 'path "pki/sign/*" {\n  capabilities = ["create", "update"]\n}\npath "pki/cert/*" {\n  capabilities = ["read"]\n}\n')"
-              wlapi PUT /v1/sys/policies/acl/cert-manager-pki \
-                "$(jq -nc --arg p "$CM_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
-              echo "  policy cert-manager-pki: HTTP=$(WH)"
-
-              # Backup: snapshot raft read-only (CronJob openbao-snapshot).
-              BACKUP_POLICY="$(printf 'path "sys/storage/raft/snapshot" {\n  capabilities = ["read"]\n}\n')"
-              wlapi PUT /v1/sys/policies/acl/backup-snapshot \
-                "$(jq -nc --arg p "$BACKUP_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
-              echo "  policy backup-snapshot: HTTP=$(WH)"
-
-              # ── 5bis) HUMAN policies — to banish the root token from daily use ──
-              #
-              # The root token lives in the `openbao-recovery` Secret and must
-              # remain a LAST-RESORT means (bootstrap, rekey, repair): it never
-              # expires, cannot be usefully revoked, and appears in no audit trail
-              # under a human's name. These two policies allow named tokens
-              # NOMINATIFS et courts :
-              #   bao token create -policy=openaether-admin  -ttl=8h -display-name=prenom
-              #   bao token create -policy=openaether-reader -ttl=8h -display-name=prenom
-              #
-              # ⚠️ Written as single-line `printf` like the policies above: a
-              # heredoc would indent to column 0 and escape this script's YAML
-              # scalar (observed).
-              #
-              # `openaether-admin` covers daily operations but DENIES
-              # seal / rekey / rotation explicitly — those actions stay with the
-              # offline-escrowed root token, hence deliberate and traceable.
-              # Written as `deny` rather than omitted: the intent is readable in
-              # the policy, and a future widening of `sys/*` would not silently
-              # accident.
-              ADMIN_POLICY="$(printf 'path \"secret/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]\n}\npath \"pki/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]\n}\npath \"sys/policies/acl/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]\n}\npath \"auth/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\", \"sudo\"]\n}\npath \"sys/auth/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"sudo\"]\n}\npath \"sys/mounts/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"sudo\"]\n}\npath \"sys/mounts\" {\n  capabilities = [\"read\"]\n}\npath \"sys/leases/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\", \"sudo\"]\n}\npath \"sys/health\" {\n  capabilities = [\"read\"]\n}\npath \"sys/capabilities-self\" {\n  capabilities = [\"update\"]\n}\npath \"auth/token/lookup-self\" {\n  capabilities = [\"read\"]\n}\npath \"auth/token/renew-self\" {\n  capabilities = [\"update\"]\n}\npath \"auth/token/create\" {\n  capabilities = [\"create\", \"update\"]\n}\npath \"sys/seal\" {\n  capabilities = [\"deny\"]\n}\npath \"sys/step-down\" {\n  capabilities = [\"deny\"]\n}\npath \"sys/rekey/*\" {\n  capabilities = [\"deny\"]\n}\npath \"sys/rekey-recovery-key/*\" {\n  capabilities = [\"deny\"]\n}\npath \"sys/rotate\" {\n  capabilities = [\"deny\"]\n}\n')"
-              wlapi PUT /v1/sys/policies/acl/openaether-admin \
-                "$(jq -nc --arg p "$ADMIN_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
-              echo "  policy openaether-admin: HTTP=$(WH)"
-
-              # Read-only — audit, on-call, checking a secret without being able
-              # change it.
-              READER_POLICY="$(printf 'path \"secret/data/*\" {\n  capabilities = [\"read\"]\n}\npath \"secret/metadata/*\" {\n  capabilities = [\"read\", \"list\"]\n}\npath \"pki/cert/*\" {\n  capabilities = [\"read\", \"list\"]\n}\npath \"sys/mounts\" {\n  capabilities = [\"read\"]\n}\npath \"sys/policies/acl\" {\n  capabilities = [\"list\"]\n}\npath \"sys/health\" {\n  capabilities = [\"read\"]\n}\npath \"auth/token/lookup-self\" {\n  capabilities = [\"read\"]\n}\n')"
-              wlapi PUT /v1/sys/policies/acl/openaether-reader \
-                "$(jq -nc --arg p "$READER_POLICY" '{policy:$p}')" "$WL_TOKEN" >/dev/null
-              echo "  policy openaether-reader: HTTP=$(WH)"
-
-              # ── 6) Auth Kubernetes sur ────────────────────────────
-              # Must be enabled + configured BEFORE creating the roles: they live
-              # under /v1/auth/kubernetes/role/* → 404 if the backend is not mounted.
-              wlapi POST /v1/sys/auth/kubernetes '{"type":"kubernetes"}' "$WL_TOKEN" >/dev/null || true
-              echo "  auth kubernetes: HTTP=$(WH) (204=enabled, 400=already there)"
-
-              CA_CRT="$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)"
-              wlapi POST /v1/auth/kubernetes/config \
-                "$(jq -nc --arg ca "$CA_CRT" '{
-                    kubernetes_host:"https://kubernetes.default.svc.cluster.local",
-                    kubernetes_ca_cert:$ca,
-                    disable_iss_validation:true}')" "$WL_TOKEN" >/dev/null
-              CODE="$(WH)"
-              echo "  config auth k8s: HTTP=$CODE"
-              case "$CODE" in 200|204) : ;; *)
-                echo "ERROR: k8s auth config failed (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
-
-              # ── 7) Roles (ESO + cert-manager) — AFTER auth/kubernetes ───────
-              wlapi POST /v1/auth/kubernetes/role/external-secrets-operator \
-                "$(jq -nc '{
-                    bound_service_account_names:"external-secrets",
-                    bound_service_account_namespaces:"foundation-pki-management",
-                    token_policies:"external-secrets-read",
-                    token_ttl:"1h",
-                    token_max_ttl:"4h"}')" "$WL_TOKEN" >/dev/null
-              CODE="$(WH)"
-              echo "  role external-secrets-operator: HTTP=$CODE"
-              case "$CODE" in 200|204) : ;; *)
-                echo "ERROR: role external-secrets-operator failed (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
-
-              wlapi POST /v1/auth/kubernetes/role/cert-manager-issuer \
-                "$(jq -nc '{
-                    bound_service_account_names:"cert-manager",
-                    bound_service_account_namespaces:"cert-manager",
-                    token_policies:"cert-manager-pki",
-                    token_ttl:"1h",
-                    token_max_ttl:"4h"}')" "$WL_TOKEN" >/dev/null
-              CODE="$(WH)"
-              echo "  role cert-manager-issuer: HTTP=$CODE"
-              case "$CODE" in 200|204) : ;; *)
-                echo "ERROR: role cert-manager-issuer failed (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
-
-              wlapi POST /v1/auth/kubernetes/role/backup-snapshot \
-                "$(jq -nc '{
-                    bound_service_account_names:"openbao-snapshot",
-                    bound_service_account_namespaces:"foundation-vault",
-                    token_policies:"backup-snapshot",
-                    token_ttl:"30m",
-                    token_max_ttl:"1h"}')" "$WL_TOKEN" >/dev/null
-              CODE="$(WH)"
-              echo "  role backup-snapshot: HTTP=$CODE"
-              case "$CODE" in 200|204) : ;; *)
-                echo "ERROR: role backup-snapshot failed (HTTP=$CODE)"; cat /tmp/wlbody; exit 1 ;; esac
-              set -x; set +x
-
-              # ── 10) Seed secrets Sprint C (grafana, minio, longhorn) ────────
-              # Idempotent: GET kv → HTTP 404 → generate + PUT; HTTP 200 → no-op.
-              # Uses the already-loaded root_token (WL_TOKEN).
-              # set +x has been active since the start of this secret block.
-              echo ""
-              echo "════ 10) Seed secrets (grafana, minio, longhorn, zitadel/db, zitadel/masterkey) ════"
-
-              kv_seed() {
-                local path="$1"
-                local payload="$2"
-                wlapi GET "/v1/secret/data/${path}" '' "$WL_TOKEN" >/dev/null 2>&1
-                local code
-                code="$(WH)"
-                if [ "$code" = "200" ]; then
-                  echo "  secret/${path}: already present → no-op"
-                  return 0
-                fi
-                echo "  secret/${path}: missing (HTTP=$code) → generate + seed"
-                wlapi POST "/v1/secret/data/${path}" \
-                  "$(jq -nc --argjson d "$payload" '{"data":$d}')" \
-                  "$WL_TOKEN" >/dev/null
-                local wcode
-                wcode="$(WH)"
-                echo "    → HTTP=$wcode"
-                case "$wcode" in 200|204) : ;; *)
-                  echo "ERROR: write secret/${path} failed (HTTP=$wcode)"; cat /tmp/wlbody; exit 1 ;; esac
-              }
-
-              # Generate the random values BEFORE kv_seed (set +x active).
-              GRAFANA_PASS="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
-              GRAFANA_DB_PASS="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
-              MINIO_SECRET="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
-              LONGHORN_PASS="$(dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 | tr -d '/+=')"
-              ZITADEL_DB_PASS="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
-              # Zitadel masterkey: MUST be EXACTLY 32 bytes (internal encryption).
-              ZITADEL_MASTERKEY="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 32)"
-
-              kv_seed "grafana/admin" \
-                "$(jq -nc --arg p "$GRAFANA_PASS" '{username:"admin",password:$p}')"
-              kv_seed "grafana/db" \
-                "$(jq -nc --arg p "$GRAFANA_DB_PASS" '{password:$p}')"
-              kv_seed "minio/root" \
-                "$(jq -nc --arg s "$MINIO_SECRET" '{accessKey:"minio",secretKey:$s}')"
-              kv_seed "longhorn/encryption" \
-                "$(jq -nc --arg p "$LONGHORN_PASS" '{passphrase:$p}')"
-              kv_seed "zitadel/db" \
-                "$(jq -nc --arg p "$ZITADEL_DB_PASS" '{username:"zitadel",password:$p}')"
-              kv_seed "zitadel/masterkey" \
-                "$(jq -nc --arg k "$ZITADEL_MASTERKEY" '{masterkey:$k}')"
-
-              # backup/restic: password of the restic repositories (backup brick).
-              # Printed ONCE at generation time for OFFLINE ESCROW (Bitwarden EU):
-              # without it the backups are undecryptable the day OpenBao is lost —
-              # the very DR scenario the brick covers.
-              # (backup/s3-primary and s3-replica = operator seed, see
-              # apps/base/backup/README.md.)
-              wlapi GET "/v1/secret/data/backup/restic" '' "$WL_TOKEN" >/dev/null 2>&1
-              if [ "$(WH)" != "200" ]; then
-                RESTIC_PASS="$(dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 | tr -d '/+=' | head -c 48)"
-                kv_seed "backup/restic" \
-                  "$(jq -nc --arg p "$RESTIC_PASS" '{password:$p}')"
-                echo ""
-                echo "  >>> ESCROW MANDATORY (once only — Bitwarden EU):"
-                echo "  >>> restic password for the backups (backup/restic):"
-                echo "  ----- BEGIN RESTIC PASSWORD -----"
-                echo "  ${RESTIC_PASS}"
-                echo "  ----- END RESTIC PASSWORD -----"
-                echo ""
-              else
-                echo "  secret/backup/restic: already present → no-op"
-              fi
-
-              echo "  ✅ Sprint C secrets seeded (idempotent)"
-              set -x; set +x
-
-              echo ""
-              echo "✅ ESO + cert-manager roles configured, Sprint C secrets seeded"
+            - name: OA_TMP
+              value: "/tmp"
+          command: ["/bin/bash", "/scripts/configure.sh"]
           securityContext:
             capabilities:
               drop: ["ALL"]
@@ -457,6 +79,9 @@ spec:
               mountPath: /tmp
             - name: tls
               mountPath: /bao/tls
+              readOnly: true
+            - name: scripts
+              mountPath: /scripts
               readOnly: true
           resources:
             requests:

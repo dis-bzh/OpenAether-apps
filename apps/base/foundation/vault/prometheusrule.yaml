@@ -12,7 +12,7 @@ spec:
     - name: openbao
       interval: 30s
       rules:
-        # Workload sealed > 2min = critical (unsealer HA fail)
+        # Sealed > 2min = critical (static seal: the key Secret is missing or wrong)
         - alert: OpenBaoWorkloadSealed
           expr: openbao_core_unsealed == 0
           for: 2m
@@ -21,8 +21,8 @@ spec:
             component: openbao
           annotations:
             summary: "OpenBao sealed > 2min"
-            description: "OpenBao (ns foundation-vault) is sealed. The HA unsealer is inoperative (Shamir shares not loaded, network policy, or unsealer down). Check the unsealer logs and the OpenBao status."  # yamllint disable-line rule:line-length
-            runbook_url: "https://github.com/dis-bzh/OpenAether/blob/main/docs/runbooks/openbao-unseal.md"
+            description: "OpenBao (ns foundation-vault) is sealed. It unseals itself from the static key in the Secret openbao-seal-key: check that the Secret exists and is mounted (kubectl describe pod), that the key is the one the data was sealed with, and the pod logs."  # yamllint disable-line rule:line-length
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md"
         # Raft no leader = critical
         - alert: OpenBaoRaftNoLeader
           expr: openbao_raft_state != 1

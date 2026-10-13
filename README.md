@@ -25,7 +25,7 @@ apps/
 │   ├── namespaces/            # foundation-*/services-* split + PSA labels
 │   ├── platform/              # StorageClasses, Gateway API, PriorityClasses,
 │   │                          #   LB-IPAM, network policies, metrics-server
-│   ├── foundation/vault/      # OpenBao HA raft (Shamir 5/3 seal, internal TLS)
+│   ├── foundation/vault/      # OpenBao HA raft (static auto-unseal, internal TLS)
 │   ├── foundation/vault-ca/   # CA for the OpenBao listener (ns cert-manager)
 │   ├── external-secrets/      # ESO + openbao ClusterSecretStore
 │   ├── cert-manager/          # cert-manager + OpenBao-backed ClusterIssuers
