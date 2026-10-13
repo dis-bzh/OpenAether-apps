@@ -81,6 +81,15 @@ jobs:
       - name: pick.py --check (generated profiles up to date with the DAG)
         run: python3 scripts/pick.py --check
 
+      # Every pinned chart and vendored dump has a row in docs/eol-calendar.yaml and the row names the pin that is
+      # in the file. Errors fail; dates (past EOL, expired waiver) only annotate: see docs/eol-calendar.md.
+      - name: End-of-support calendar
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test-check-eol.py
+          python3 scripts/check-eol.py
+          python3 scripts/check-eol.py --check-doc
+
   build:
     name: Kustomize Build + Collision Check
     runs-on: ubuntu-latest

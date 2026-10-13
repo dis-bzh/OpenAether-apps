@@ -51,6 +51,20 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Security
 
+- **A patch policy and an end-of-support calendar, with a check.** `docs/patching.md` states the rule (a security fix merged or waived in
+  writing within 30 days, 7 for an exposed path) and the signals, and says plainly that it is not met today. `docs/eol-calendar.yaml`
+  (rendered into `docs/eol-calendar.md`) has a row per HelmRelease, vendored dump and pinned image (33), each with the pin read from its
+  file, the upstream line, its end-of-support date from endoflife.date or the project's page (`unknown` where none was found, not
+  assumed), an owner and a review date. `scripts/check-eol.py` fails CI when a pin and its row differ or a chart or dump has no row;
+  dates only annotate, and a weekly `End of support` workflow fails on them (`--strict`). Six lines are already past upstream support
+  (Istio 1.24, cert-manager 1.15, Kyverno 1.12, the CNPG operator 1.23, Grafana 11.3, Loki 3.3) and carry a waiver to 2026-12-31, a
+  date this change proposes and the owner sets; Longhorn 1.9 ends 2026-11-27. Found while reading the pins: the `vendored from vX`
+  comments Renovate maintains name the latest release, not the vendored one (CNPG says v1.30.0 over a 1.23.1 dump), and
+  `grafana-db-cluster.yaml` still pins PostgreSQL 16.3. Addresses ANSSI HYG-M34, HYG-R34, HYG-R35 and NT-35 R2 in part. Rung:
+  static (20 fixture cases in `scripts/dev/test-check-eol.py`, the check run on the tree), dates read from the public feeds on
+  2026-10-14. **Does not upgrade anything:** each hop is a cluster exercise, one minor per PR; whether the old releases carry
+  unpatched advisories was not checked.
+
 - **The apps CI gets the checks the infra CI has, and every PR gets a run.** `pull_request` no longer filters on `branches: [main]` (a PR
   stacked on another PR's branch got no run at all, measured on OpenAether-infra PR #100; `edited` is added so a retarget re-runs).
   `persist-credentials: false` on all checkouts. New: actionlint; kubeconform (`-strict`, CRD schemas from a pinned commit of the
