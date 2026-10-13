@@ -73,6 +73,7 @@ spec:
               - "*node-exporter*"
         - resources:
             namespaces:
+              - istio-system
               - foundation-service-mesh
             names:
               - "ztunnel-*"

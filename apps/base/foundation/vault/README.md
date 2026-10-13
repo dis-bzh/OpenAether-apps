@@ -92,10 +92,13 @@ base64 -d | base64 -d | gpg --decrypt` (try each `share-N`: only yours decrypts)
 ```bash
 kubectl -n foundation-vault exec -it openbao-0 -- sh
 export BAO_TOKEN="$(bao write -field=token auth/kubernetes/login role=openbao-breakglass jwt=-)"   # paste `kubectl … create token openbao-breakglass --duration=10m`, Ctrl-D
-OTP="$(bao operator generate-root -generate-otp)"; bao operator generate-root -init -otp="$OTP"
-bao operator generate-root            # each holder in turn, pasting their share; the last call prints the encoded token
+bao operator generate-root -cancel        # only if an earlier attempt was left half-done
+OTP="$(bao operator generate-root -generate-otp)"; bao operator generate-root -init -otp="$OTP"   # prints the nonce
+bao operator generate-root -nonce=<nonce>     # each holder in turn, pasting their share at the hidden prompt; the last call prints the encoded token
 bao operator generate-root -decode="<encoded token>" -otp="$OTP"     # the root token. Do the work, then: bao token revoke -self
 ```
+
+(Measured on a cluster: 2 of 3 PGP-decrypted shares, through the `openbao-breakglass` role, produced a root token.)
 
 **Seal key rotation.** In the Secret `openbao-seal-key`, put the new key as `key` and keep the old one as `previous-key`
 (`kubectl patch`), restart the pods one by one, check each unseals, then remove `previous-key`. The entrypoint computes the key ids.
