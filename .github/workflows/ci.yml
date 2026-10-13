@@ -94,6 +94,6 @@ jobs:
         run: |
           set -euo pipefail
           command -v docker gpg jq openssl curl
-          out="$(./scripts/dev/test-openbao-bootstrap.sh)"
-          printf '%s\n' "$out"
-          printf '%s\n' "$out" | grep -qE '^[0-9]+ passed, 0 failed$'
+          rc=0; ./scripts/dev/test-openbao-bootstrap.sh > bootstrap-test.out 2>&1 || rc=$?
+          cat bootstrap-test.out
+          [ "$rc" -eq 0 ] && grep -qE '^[0-9]+ passed, 0 failed$' bootstrap-test.out
