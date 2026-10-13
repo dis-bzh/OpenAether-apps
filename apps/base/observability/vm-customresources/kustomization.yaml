@@ -17,6 +17,7 @@ resources:
   - vmagent.yaml
   - vmalert.yaml
   - vmscapes.yaml
+  - vmscrapes-pipeline.yaml
   - vmrule-backup.yaml
   - vmrule-cluster.yaml
   - vmrule-platform.yaml

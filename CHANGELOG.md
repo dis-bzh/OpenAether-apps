@@ -114,6 +114,19 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   cannot escalate: it can, by design, and says who the real root of trust is. Harness: 124 checks.
 - The `backup/openbao` snapshot job uses `openbao:2.7.1` (was 2.5.4).
 
+### Added
+
+- **Scrapes for what the new alerts read, and Flux per-object state.** Alloy, Loki, Grafana, Kyverno (the four controllers, :8000),
+  Zitadel and the CNPG instances (:9187) had no scrape, so no rule could see them fail; `vmscrapes-pipeline.yaml` adds them, with
+  the ingress rule for vmagent in the Loki, Alloy, Kyverno and Zitadel CiliumNetworkPolicies and the four ports in vmagent's egress
+  list (Grafana already accepts its whole namespace; CNPG already accepted vmagent on :9187). kube-state-metrics now also exports
+  `gotk_resource_info{ready,suspended}` for Kustomizations, HelmReleases, GitRepositories and HelmRepositories (the mapping of the
+  Flux docs, `customResourceState` plus list/watch on those four kinds, no secrets): the Flux controllers export no per-object
+  condition (kustomize-controller v1.8.5 records only the reconcile duration, read in its source), so `gotk_reconcile_condition`
+  named by the audit can never carry data. Prepares ANSSI PA-012 R12, NSA12-LOG-04 and SSDLC-CICD-MON-01. Rung: kustomize build
+  and chart render, not run on a cluster. No rule reads the Zitadel metrics (names unchecked), and the kube-state-metrics
+  pod restarts once (one replica: a gap of a minute in the `kube_*` series).
+
 ### Fixed
 
 - **Kyverno Audit policies flagged pods that merely lack optional keys, and short Docker Hub names (#47).** `initContainers` and
