@@ -100,9 +100,18 @@ bao operator generate-root -decode="<encoded token>" -otp="$OTP"     # the root 
 
 (Measured on a cluster: 2 of 3 PGP-decrypted shares, through the `openbao-breakglass` role, produced a root token.)
 
-**Seal key rotation.** In the Secret `openbao-seal-key`, put the new key as `key` and keep the old one as `previous-key`
-(`kubectl patch`), restart the pods one by one, check each unseals, then remove `previous-key`. The entrypoint computes the key ids.
-Escrow the new key. (Tested against a real OpenBao: `scripts/dev/test-openbao-bootstrap.sh`.)
+**Seal key rotation.** The new key becomes `key` and the old one `previous-key`; roll the StatefulSet (one pod at a time, each Ready and
+unsealed before the next); drop `previous-key`; roll again. Then redo the Day-0 escrow of the seal key. The entrypoint computes the key ids.
+
+```bash
+OLD="$(kubectl -n foundation-vault get secret openbao-seal-key -o jsonpath='{.data.key}')"; NEW="$(head -c 32 /dev/urandom | base64 -w0)"
+kubectl -n foundation-vault patch secret openbao-seal-key --type merge -p "{\"data\":{\"key\":\"$NEW\",\"previous-key\":\"$OLD\"}}"
+kubectl -n foundation-vault rollout restart statefulset/openbao && kubectl -n foundation-vault rollout status statefulset/openbao --timeout=600s
+kubectl -n foundation-vault patch secret openbao-seal-key --type json -p '[{"op":"remove","path":"/data/previous-key"}]'
+kubectl -n foundation-vault rollout restart statefulset/openbao && kubectl -n foundation-vault rollout status statefulset/openbao --timeout=600s
+```
+
+(Measured on a 3-replica cluster, 2026-10-13, twice: about 70 s per roll, every pod unsealed with the new key, the data stayed readable.)
 
 **Disaster recovery.** The raft snapshot (backup brick) is encrypted by the seal key, so a restore needs the **escrowed key**:
 (1) once the namespace exists and before the pods start, create `openbao-seal-key` from the escrow; (2) let Flux deploy: `init.sh`
@@ -114,8 +123,21 @@ With any other key the data does not come back (tested). If standbys do not foll
 **Interrupted first run.** A failure inside the root window (between `sys/init` and the hand-over) revokes the root token on the
 way out, whatever the cause, and leaves an initialised OpenBao that nobody can configure (the root token is gone by design; the
 calls in the window are retried, and the hand-over is proven from the init Job's own identity before the token goes). On a cluster
-that holds nothing yet: delete the Job, the `data-openbao-*`
-PVCs and the Secrets `openbao-recovery-*`, keep `openbao-seal-key` (or delete it too) and re-sync. Otherwise use the break-glass.
+that holds nothing yet, start over (measured on a cluster, twice):
+
+```bash
+kubectl -n flux-system patch kustomization foundation-vault --type merge -p '{"spec":{"suspend":true}}'
+kubectl -n foundation-vault delete job openbao-init openbao-vault-bootstrap
+kubectl -n foundation-vault scale statefulset openbao --replicas=0   # wait until the pods are gone
+kubectl -n foundation-vault delete pvc data-openbao-0 data-openbao-1 data-openbao-2
+kubectl -n foundation-vault delete secret openbao-recovery-shares     # or openbao-recovery-dev; keep openbao-seal-key
+kubectl -n flux-system patch kustomization foundation-vault --type merge -p '{"spec":{"suspend":false}}'
+```
+
+Otherwise use the break-glass.
+**A re-init regenerates every generated secret** (database passwords, Longhorn's passphrase, restic's password…). Anything that already
+used the previous values (a database initialised with them, a volume encrypted with the passphrase) no longer matches: do it only on a
+cluster that holds nothing yet, as above.
 
 ## Alerts and network
 
