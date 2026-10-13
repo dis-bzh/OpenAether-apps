@@ -221,6 +221,15 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   altered, truncated) inside the restic image, whose busybox `tar`, `sha256sum` and `sh` are what runs on the cluster (mutation-checked
   with a GNU-only flag). Rung: mocked/static plus a container run, not a CronJob on a cluster. **Does not:** change the volume size or
   restore less data; dumps beyond 1.8 GiB for both repositories need the limit raised.
+- **The Longhorn `CRYPTO_PBKDF: argon2id` setting was checked against the sources, no change (follow-up of ANSSI hardening B03).** The
+  B03 entry named the `CRYPTO_*` keys from memory. Read: longhorn.io's volume-encryption page lists `CRYPTO_KEY_CIPHER`, `_HASH`,
+  `_SIZE` and `_PBKDF` as Secret keys (defaults `aes-xts-plain64`, `sha256`, 256, `argon2i`); longhorn-manager v1.9.2 (the chart pinned
+  here is 1.9.2) takes them from the node-stage Secret (`csi/node_server.go`), applies its defaults only to empty values and passes
+  them to `cryptsetup luksFormat --type luks2 ... --pbkdf <value>` (go-common-libs `ns/crypto.go`) without an allow-list;
+  cryptsetup documents `argon2id` as a `--pbkdf` value (2.0 onward) and makes it its LUKS2 default since 2.4.0. So the value is
+  forwarded and valid; it costs what the default `argon2i` costs at format time (same memory benchmark) and touches no existing
+  volume. Not observed: a volume formatted with it on a node (lab check: `cryptsetup luksDump` on the backing device shows
+  `PBKDF: argon2id` and a 512-bit key).
 - **Comments and a README that contradicted the code now say what the code does (ANSSI hardening B01, text only).** The backup README
   no longer says the restic password is printed in a log (`configure.sh` prints nothing; the operator reads it once and escrows it),
   that the CNPG PITR block is commented (it is active) or that no `VMRule` covers backups (`vmrule-backup.yaml` does); the Loki
