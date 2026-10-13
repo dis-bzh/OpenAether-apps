@@ -15,8 +15,9 @@
 # Idempotent. Run again on an initialised cluster it only checks that the bootstrap identity still works.
 #
 # What it can NOT repair: a first run that dies between `sys/init` and the revocation leaves an initialised
-# OpenBao nobody can configure. That window is a few API calls; the way out is a re-init (delete the three
-# PVCs) on a cluster that holds nothing yet, or `generate-root` with the recovery shares (README).
+# OpenBao nobody can configure. On ANY exit the root token is revoked (never left in the pod's memory), so that window
+# ends in a re-init (delete the three PVCs) on a cluster that holds nothing yet, or `generate-root` with the recovery
+# shares (README). The calls inside it are retried, because that is the cheap way to not need either.
 . "$(dirname "$0")/lib.sh"
 
 SEAL_SECRET=openbao-seal-key
@@ -83,7 +84,7 @@ do_init() { # sets ROOT_FILE (a header file holding the root token)
   ok || die "sys/init: HTTP $(code) $(body | jq -c '.errors // empty' 2>/dev/null)"
   local root; root="$(body | jq -r '.root_token // empty')"
   [ -n "$root" ] || die "sys/init answered without a root token"
-  ROOT_FILE="$OA_TMP/root.hdr"; header_file "$root" "$ROOT_FILE"; root=""
+  header_file "$root" "$OA_TMP/root.hdr"; ROOT_FILE="$OA_TMP/root.hdr"; root=""
 
   # The recovery shares: encrypted to the operators (prod) or the single development share (dev).
   local i=0 args=() name
@@ -104,25 +105,46 @@ do_init() { # sets ROOT_FILE (a header file holding the root token)
   wait_active
 }
 
+ROOT_FILE=""
+revoke_root() { # idempotent; safe on any exit
+  [ -n "$ROOT_FILE" ] && [ -f "$ROOT_FILE" ] || return 0
+  none | api POST /v1/auth/token/revoke-self "$ROOT_FILE"
+  if ok; then log "  root token revoked"; else log "  ⚠ the root token could NOT be revoked (HTTP $(code)): revoke it now (README, Interrupted first run)"; fi
+  rm -f "$ROOT_FILE"
+  ROOT_FILE=""
+}
+on_exit() {
+  local rc=$?
+  if [ "$rc" != 0 ] && [ -n "$ROOT_FILE" ] && [ -f "$ROOT_FILE" ]; then
+    log "  ✗ failed inside the root window: revoking the root token before leaving (the cluster stays initialised; README, Interrupted first run)"
+  fi
+  revoke_root
+  exit "$rc"
+}
+trap on_exit EXIT
+
 root_window() { # with the root token: the minimum that lets the bootstrap identity take over, then revoke the root
-  local tok="$ROOT_FILE" test_hdr="$OA_TMP/boot.hdr"
+  local tok="$ROOT_FILE" test_hdr="$OA_TMP/boot.hdr" i proved=0
   log "  root window: bootstrap policy, Kubernetes auth, bootstrap role"
-  put_policy openaether-bootstrap "$tok"
-  configure_k8s_auth "$tok"
-  put_k8s_role openbao-bootstrap openbao-vault-bootstrap "$VAULT_NS" openaether-bootstrap 15m 30m "$tok"
+  retry3 put_policy openaether-bootstrap "$tok"
+  retry3 configure_k8s_auth "$tok"
+  retry3 put_k8s_role openbao-bootstrap "$BOOTSTRAP_SAS" "$VAULT_NS" openaether-bootstrap 15m 30m "$tok"
   if [ -n "${OA_TEST_MAKE_TOKEN_FILE:-}" ]; then   # harness only: there is no kube-apiserver to review a JWT
     printf '{"policies":["openaether-bootstrap"],"ttl":"1h","no_parent":true}' | api POST /v1/auth/token/create "$tok"   # an orphan: a child would die with the root
     ok || die "test token: HTTP $(code)"
     header_file "$(body | jq -r .auth.client_token)" "$OA_TEST_MAKE_TOKEN_FILE"
     export OA_TEST_TOKEN_FILE="$OA_TEST_MAKE_TOKEN_FILE"
   fi
-  # Prove the hand-over works BEFORE the root disappears.
-  login_k8s openbao-bootstrap "$test_hdr" || die "the bootstrap role cannot log in; the root token is kept in memory for this run only"
+  # Prove the hand-over works, FROM THIS JOB'S OWN identity, BEFORE the root disappears. The TokenReview behind a login can
+  # take a moment to be served right after the auth method was configured, hence the retries.
+  for i in $(seq 1 12); do
+    if login_k8s openbao-bootstrap "$test_hdr"; then proved=1; break; fi
+    sleep 5
+  done
+  [ "$proved" = 1 ] || die "the bootstrap role cannot log in (HTTP $(code)): the hand-over is not proven, so the root token is revoked and the run fails"
   log "  bootstrap identity logs in"
-  none | api POST /v1/auth/token/revoke-self "$tok"
-  ok || die "revoke-self: HTTP $(code) (the root token would outlive this Job)"
-  rm -f "$tok" "$test_hdr"
-  log "  root token revoked"
+  rm -f "$test_hdr"
+  revoke_root
 }
 
 main() {

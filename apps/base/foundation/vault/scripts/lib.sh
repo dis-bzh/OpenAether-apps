@@ -21,6 +21,11 @@ set -euo pipefail
 : "${OA_SA_DIR:=/var/run/secrets/kubernetes.io/serviceaccount}"
 : "${OA_POLICY_DIR:=/scripts}"
 
+# The ServiceAccounts that may take the `openbao-bootstrap` role: the configure Job, and the init Job, which must prove
+# that the hand-over works from its own identity before it revokes the root token.
+# shellcheck disable=SC2034  # used by init.sh and configure.sh, which source this file
+BOOTSTRAP_SAS="openbao-vault-bootstrap,openbao-init"
+
 log() { printf '%s\n' "$*"; }
 die() { printf '✗ %s\n' "$*" >&2; exit 1; }
 kctl() { "$OA_KUBECTL" -n "$VAULT_NS" "$@"; }
@@ -45,6 +50,17 @@ none() { printf ''; }
 # A token as a curl header file (0600, memory-backed). Never a command-line argument.
 header_file() { # TOKEN OUTFILE
   ( umask 077; printf 'X-Vault-Token: %s\n' "$1" > "$2" )
+}
+
+# Run a command up to 3 times in a subshell (the helpers `die` on failure): an API that has just been configured can
+# answer a request before the change is visible on every node.
+retry3() {
+  local i
+  for i in 1 2 3; do
+    ( "$@" ) && return 0
+    [ "$i" = 3 ] || sleep 5
+  done
+  die "$1 failed 3 times"
 }
 
 wait_api() { # up to 15 minutes; any HTTP answer counts, sealed and uninitialised included
@@ -80,6 +96,7 @@ initialized() { curl -s "${CURL_CA[@]}" "${BAO_ADDR}/v1/sys/init" | jq -r '.init
 # there is no kube-apiserver to review a JWT there; the login path itself is exercised on a cluster.
 login_k8s() { # ROLE TOKEN_HEADER_FILE
   local role="$1" out="$2" jwt
+  [ -z "${OA_TEST_LOGIN_FAILS:-}" ] || return 1
   if [ -n "${OA_TEST_TOKEN_FILE:-}" ]; then cp "$OA_TEST_TOKEN_FILE" "$out"; return 0; fi
   [ -r "$OA_SA_DIR/token" ] || return 1
   jwt="$(cat "$OA_SA_DIR/token")"

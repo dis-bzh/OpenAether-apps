@@ -146,6 +146,18 @@ echo "=== init.sh refuses to guess: a ConfigMap it can not read is not 'developm
 if run_script dev 18211 init.sh STUB_CM_ERROR=1; then bad "init.sh went ahead although it could not read openbao-operator-keys"; else ok "init.sh stops when reading the ConfigMap is forbidden"; fi
 [ "$(curl -s --cacert "$T/tls/ca.crt" https://127.0.0.1:18211/v1/sys/init | jq -r .initialized)" = false ] && ok "…and OpenBao was not initialised" || bad "OpenBao was initialised in spite of it"
 
+echo "=== a failure inside the root window: the root token is revoked on the way out, not left in the pod ==="
+start_bao fail 18217 && ok "OpenBao for the failing run started" || bad "fail instance did not start"
+mkdir -p "$T/fail/tmp" "$T/fail/k8s"
+if run_script fail 18217 init.sh OA_TEST_LOGIN_FAILS=1; then bad "init.sh succeeded although the bootstrap role could not log in"; else ok "init.sh fails when the hand-over is not proven"; fi
+grep -q "the hand-over is not proven" "$T/fail/init.sh.out" && ok "…and says why" || bad "$(tail -3 "$T/fail/init.sh.out")"
+[ ! -e "$T/fail/tmp/root.hdr" ] && ok "no root token file is left in the pod's memory volume" || bad "root.hdr is still there"
+FAILREV=0; for _ in $(seq 1 10); do
+  docker logs bao-test-fail 2>&1 | grep '"type":"response"' | grep '"path":"auth/token/revoke-self"' | grep -q '"token_policies":\["root"\]' && { FAILREV=1; break; }; sleep 1
+done
+[ "$FAILREV" = 1 ] && ok "the audit trail shows the root token revoked itself on the failure path" || bad "no root revocation in the audit trail after the failure"
+grep -q "root token revoked" "$T/fail/init.sh.out" && ok "…and the log says so" || bad "no revocation line"
+
 echo "=== init.sh, development mode: seal key, one recovery share, the root token revoked, nothing printed ==="
 if run_script dev 18211 init.sh OA_TEST_MAKE_TOKEN_FILE="$T/dev/boot.hdr"; then ok "init.sh exits 0"; else bad "init.sh failed: $(tail -5 "$T/dev/init.sh.out")"; fi
 [ "$(stat -c %s "$T/dev/k8s/secret/openbao-seal-key/key" 2>/dev/null)" = 32 ] && ok "Secret openbao-seal-key holds 32 bytes" || bad "no 32-byte seal key Secret"
