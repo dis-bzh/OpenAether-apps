@@ -27,10 +27,11 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   `seed-openbao.sh` (k8s-auth, create-only) writing five paths in 2.6 s and leaving all five alone on the second run, the replica
   carrying the replica cloud's keys; External Secrets, cert-manager and the snapshot job authenticating with their roles; the
   documented admin helper; the break-glass producing a root token from 2 of 3 PGP-decrypted shares; the PKI CSR signed by a throwaway
-  root and imported with the admin identity (the `openbao` ClusterIssuer Ready); a replaced pod unsealing itself in 22 s; the seal-key
-  rotation procedure (two rolls of about 70 s each, run three times, every pod unsealing with the new key id); the Kyverno cleanup
-  CronJobs finishing in 3 to 4 s (they hung for about 138 s); no secret in any `foundation-vault` pod log (recovery-share blob, seal
-  key, root token, JWT, seven generated values, a seeded S3 key: no match). 35 of 35 Kustomizations Ready at the last snapshot.
+  root and imported with the admin identity (`set-signed` accepted the chain; the `openbao` ClusterIssuer was Ready, and no
+  certificate was requested from it afterwards); a replaced pod unsealing itself in 22 s; the seal-key
+  rotation procedure (two rolls of about 70 s each, run twice, once with `rollout restart`; every pod unsealing with the new key id); the Kyverno cleanup
+  CronJobs finishing in 3 to 4 s (they hung for about 138 s); no secret in the logs of the `foundation-vault` pods (the three
+  OpenBao pods and the re-run Jobs: recovery-share blob, seal key, root token, JWT, seven generated values, a seeded S3 key: no match). 35 of 35 Kustomizations Ready at the last snapshot.
   **Found there, and fixed in this release:** the init Job's hand-over proof used its own ServiceAccount, which the bootstrap role did
   not accept (the mocked harness replaces that login), leaving the root token valid; Loki's `spec.values` overrode the seeded S3
   destination (#53); the break-glass procedure lacked its nonce; two Kyverno exemptions named the wrong namespace or registry.
