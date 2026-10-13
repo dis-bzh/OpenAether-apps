@@ -27,7 +27,12 @@ this repo doesn't provision infrastructure itself.
     yamllint -c .yamllint apps/ scripts/ .github/workflows/
 
 All four run in CI too — a PR can't merge until they're green (see the required
-checks on `main`).
+checks on `main`). CI also runs actionlint on the workflows, kubeconform and
+`trivy config` on the rendered DAG (`scripts/dev/render-dag.py`; accepted findings
+are listed with a reason in `.trivyignore.yaml`), the Conventional Commits and
+authorship checks, and an environment-data scan of what the PR adds
+(`.gitleaks-envdata.toml`). `pre-commit install` installs the same commit-msg
+gates locally (`.pre-commit-config.yaml`).
 
 ## Conventions
 
@@ -53,3 +58,14 @@ checks on `main`).
 `main` requires a PR with all CI checks green — including for maintainers, no
 direct pushes. No mandatory reviewer count yet (small team), but PRs stay open
 for review during that window regardless.
+
+## AI-assisted contributions
+
+Welcome, under one condition: bring the evidence, not the intention. A change
+that claims to fix something and shows no run is refused whoever wrote it.
+
+Disclose the assistance with the `Assisted-by:` git trailer, naming the tool
+(`Assisted-by: Claude Code`). `Co-Authored-By` and `Signed-off-by` from a tool
+are forbidden, and so is a commit authored by a tool: those assert authorship
+and certify origin, which a model cannot do. The human submitting is the author
+and answers for every line. CI enforces it (`commits` job).

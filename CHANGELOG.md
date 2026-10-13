@@ -51,6 +51,22 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Security
 
+- **The apps CI gets the checks the infra CI has, and every PR gets a run.** `pull_request` no longer filters on `branches: [main]` (a PR
+  stacked on another PR's branch got no run at all, measured on OpenAether-infra PR #100; `edited` is added so a retarget re-runs).
+  `persist-credentials: false` on all checkouts. New: actionlint; kubeconform (`-strict`, CRD schemas from a pinned commit of the
+  community catalog) and `trivy config` (HIGH, CRITICAL) on the rendered output of every DAG path, with 18 accepted findings, all in
+  vendored upstream dumps or one false positive, listed with a reason in `.trivyignore.yaml`; Plumber (pipeline audit); Conventional
+  Commits, no-commit-authored-by-a-tool and no-tool-authorship-trailer checks; an environment-data gitleaks pass over what a PR adds
+  (the rules are tested against known-good and known-bad lines first). yamllint, PyYAML, commitizen, the Renovate validator, actionlint
+  and kubeconform are pinned with versions Renovate bumps; Renovate gets `minimumReleaseAge: "7 days"`, `vulnerabilityAlerts` and OSV
+  alerts (security fixes skip the weekly window), a SHA-pinned `.pre-commit-config.yaml` and a custom manager for it. Addresses
+  ANSSI SSDLC CIO-REC01/-REC05/-REC07, SCM-REC08, CICD-SAC-01, CONT-REC06, CICD-IFN-03 and CICD-AIP-01c in part. Rung: the commands
+  were run locally (actionlint, yamllint, kubeconform 0.8.0 on the 35 rendered paths: 326 valid, 0 invalid, 69 skipped for lack of a
+  schema; trivy 0.75.0 with the ignore file: clean; the gitleaks rules test; the Renovate validator in the 44.52.1 image), not on GitHub.
+  **Not seen yet:** the first run of the workflows on GitHub, Plumber's verdict on this repository (its `branchMustBeProtected`
+  control reads `main`'s protection), and Renovate's behaviour with the new keys on the hosted App. **Does not** add a required check
+  (a ruleset setting), hash-pin the pip installs, or make `trivy config` stricter than HIGH.
+
 - **Grafana's dashboards sidecar reads ConfigMaps only, not Secrets.** The chart's ClusterRole gave the sidecar `configmaps` and
   `secrets` in every namespace (`searchNamespace: ALL`). `rbac.create: false` drops the chart's roles and `rbac-grafana.yaml` ships
   `grafana-dashboard-reader` (core `configmaps`, get/list/watch), with `sidecar.dashboards.resource: configmap` so the sidecar does

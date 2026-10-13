@@ -15,10 +15,23 @@
   extends: ["config:recommended", "helpers:pinGitHubActionDigests"],
   automerge: false,
   platformAutomerge: false,
+  // A release must be this old before it is proposed: a fresh one can be yanked, retagged or found
+  // vulnerable within days (same value as OpenAether-infra). Security fixes below skip it.
+  minimumReleaseAge: "7 days",
   schedule: ["before 6am on monday"],
   timezone: "Europe/Paris",
   labels: ["dependencies"],
   flux: { enabled: true },
+
+  // Security fixes (ANSSI HYG-M34: patch within a month, docs/patching.md). Renovate's default for this block
+  // already skips the schedule and minimumReleaseAge, so a fix is proposed at once: only the label is ours.
+  // Needs the repository's Dependency graph and Dependabot alerts on, and the App allowed to read them; OSV
+  // adds the ecosystems GitHub's feed lacks. A vendored dump (ignorePaths below) still needs a human re-vendor.
+  vulnerabilityAlerts: { labels: ["dependencies", "security"] },
+  osvVulnerabilityAlerts: true,
+
+  // Off: it reads the SHA in `rev:` as a tag and so can never bump a hook. The custom manager below does it.
+  "pre-commit": { enabled: false },
 
   // CI actions are pinned to a commit SHA (tag kept as a trailing comment),
   // not a mutable tag — see OpenAether-infra/renovate.json5's header for why.
@@ -167,19 +180,21 @@
     },
     {
       customType: "regex",
-      description: "ci.yml: kubectl is downloaded + checksum-verified directly (not via an action), kept at the same version as OpenAether-infra's kubernetes_version so client/server stay in the same skew window.",
-      fileMatch: ["^\\.github/workflows/ci\\.yml$"],
+      description: "Workflow values the github-actions manager cannot see: a tool downloaded and checksum-verified directly (kubectl, gitleaks, actionlint, kubeconform, the Renovate validator) or a pip pin. gitleaks/gitleaks-action needs a paid org license (dis-bzh is an org), so the free CLI is run instead. Matched on the shape (an anchor comment above the value), not on named keys, so a new pin needs no change here.",
+      managerFilePatterns: ["/^\\.github/workflows/.*\\.ya?ml$/"],
       matchStrings: [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*KUBECTL_VERSION:\\s*\"(?<currentValue>[^\"]+)\"",
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*[\\w.-]+:\\s*\"(?<currentValue>[^\"]+)\"",
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*run: pip install \\S+==(?<currentValue>\\S+)",
       ],
     },
     {
       customType: "regex",
-      description: "security.yml: gitleaks CLI, downloaded + checksum-verified directly — gitleaks/gitleaks-action requires a paid org license (dis-bzh is an org), so we run the (always free) CLI instead of the Action github-actions would have tracked.",
-      fileMatch: ["^\\.github/workflows/security\\.yml$"],
+      description: "Pre-commit hooks pinned to a commit SHA with the tag in a trailing comment (`rev: <sha>  # v1.2.3`): bumps the tag and the SHA together. Hooks run third-party code on every commit, the same supply-chain class as GitHub Actions, hence the SHA.",
+      managerFilePatterns: ["/^\\.pre-commit-config\\.ya?ml$/"],
       matchStrings: [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*GITLEAKS_VERSION:\\s*\"(?<currentValue>[^\"]+)\"",
+        "repo:\\s*https://github\\.com/(?<depName>[\\w.-]+/[\\w.-]+?)(?:\\.git)?\\s*\\n\\s*rev:\\s*(?<currentDigest>[0-9a-f]{40})\\s*#\\s*(?<currentValue>v?\\d[\\w.+-]*)",
       ],
+      datasourceTemplate: "github-tags",
     },
     {
       customType: "regex",

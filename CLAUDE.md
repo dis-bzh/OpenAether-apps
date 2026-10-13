@@ -81,4 +81,3 @@ c'est ce qu'on relit avant de refaire l'erreur.
 - Convention ESO : chaque app porte son `ExternalSecret` dans son propre repo
   (cf. minio/zitadel/grafana ici pour le modèle) ; ce repo fournit le
   `ClusterSecretStore openbao` partagé.
-

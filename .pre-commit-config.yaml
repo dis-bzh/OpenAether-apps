@@ -1,0 +1,64 @@
+# Both hook types, so `pre-commit install` alone installs the commit-msg gates.
+# Without this the message hooks are silently absent from a fresh clone.
+default_install_hook_types: [pre-commit, commit-msg]
+
+# The vendored upstream dumps (renovate.json5 ignorePaths) are replaced whole on re-vendoring, never edited.
+exclude: |
+  (?x)^apps/base/(
+    kyverno/kyverno-|cnpg/cnpg-|external-secrets/install|orc/install|
+    platform/(gateway-api|local-path-provisioner)/|cluster-api-clusters/flux-gotk/gotk
+  )
+
+# Hooks are pinned to a commit SHA with the tag in a trailing comment, like the workflows' actions: a tag
+# can be force-moved upstream. renovate.json5 has a custom manager that bumps the SHA and the tag together.
+repos:
+  # Conventional Commits: the subject decides the CHANGELOG entry. Same tool as CI.
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: cc981fcb065527b6de0033b0cbf0432e69781901  # v4.9.1
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  - repo: local
+    hooks:
+      # A model is not an author and cannot certify origin: `Assisted-by:` instead (CI: `commits` job).
+      - id: no-tool-authorship-trailer
+        name: no Co-Authored-By / Signed-off-by from a tool
+        language: system
+        stages: [commit-msg]
+        entry: scripts/dev/check-commit-trailers.sh
+
+      # English is canonical here, and a French comment in a manifest reaches a cluster.
+      - id: language
+        name: no French prose in tracked files
+        language: system
+        pass_filenames: false
+        entry: scripts/dev/check-language.sh
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b  # v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ["--allow-multiple-documents"]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # gitleaks-system, not the default `gitleaks` hook: that one builds from source on first use (it panics in
+  # go-re2's WASM engine in the project's sandbox, OpenAether-infra#126). It runs the gitleaks on PATH.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # v8.30.1
+    hooks:
+      - id: gitleaks-system
+        # Upstream's gitleaks-system omits this, so pre-commit appends every changed file and `gitleaks git`
+        # takes at most one argument. It scans the staged diff itself.
+        pass_filenames: false
+
+  # Same config as CI.
+  - repo: https://github.com/adrienverge/yamllint
+    rev: 81e9f98ffd059efe8aa9c1b1a42e5cce61b640c6  # v1.35.1
+    hooks:
+      - id: yamllint
+        args: ["-c", ".yamllint"]
+        files: ^(apps|scripts|\.github/workflows)/.*\.(yaml|yml)$
