@@ -1,8 +1,4 @@
-# OpenAether 0.5.0 — OpenBao (3 raft replicas, Shamir seal + HA unsealer)
-# A refactor of the former apps/base/openbao/ — a single HA OpenBao, no root.
-# Seal: Shamir 5/3 (auto-unseal through an external HA unsealer)
-# HA unsealer: 2-3 RAM-only replicas, configurable source (file/bitwarden/manual).
-# Removed: foundation-pki-root, transit seal, openbao-seal-token, openbao-root-recovery.
+# OpenBao: 3 raft replicas, static auto-unseal, audit device, no root token at rest (see README).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -14,10 +10,8 @@ namespace: foundation-vault
 
 resources:
   - tls.yaml
-  - destinationrule-tls.yaml
   - configmap.yaml
   - serviceaccount.yaml
-  - unsealer-sa.yaml
   - statefulset.yaml
   - service.yaml
   - pdb.yaml
@@ -25,16 +19,30 @@ resources:
   - httproute.yaml
   - openbao-init.yaml
   - bootstrap-roles-job.yaml
-  - unsealer.yaml
-  - bitwarden-unseal-creds.yaml
-  # NB: the openbao-unseal-keys Secret is NOT managed by Flux (anti-drift):
-  # the init-Job (openbao-init.yaml) creates it with the real Shamir shares.
-  # Declaring it here would overwrite/prune the real shares on every reconcile.
-  # bitwarden-unseal-creds.yaml reste placeholder (optionnel, source=bitwarden).
+  # NB: the Secrets openbao-seal-key, openbao-recovery-shares and openbao-recovery-dev are NOT managed by Flux:
+  # openbao-init creates them (create-only), and declaring them here would let a reconcile overwrite or prune
+  # the real key material.
+
+# The bootstrap scripts and the policy files they load, as ONE ConfigMap: the files are the source of truth
+# (the harness scripts/dev/test-openbao-bootstrap.sh runs them against a real OpenBao). The name suffix hash is
+# kept: a changed script recreates both Jobs.
+configMapGenerator:
+  - name: openbao-bootstrap-scripts
+    files:
+      - scripts/lib.sh
+      - scripts/init.sh
+      - scripts/configure.sh
+      - scripts/policies/openaether-bootstrap.hcl
+      - scripts/policies/openaether-breakglass.hcl
+      - scripts/policies/external-secrets-read.hcl
+      - scripts/policies/cert-manager-pki.hcl
+      - scripts/policies/backup-snapshot.hcl
+      - scripts/policies/secret-seeder.hcl
+      - scripts/policies/openaether-admin.hcl
+      - scripts/policies/openaether-reader.hcl
 
 labels:
   - includeSelectors: false
     pairs:
       openaether.io/managed: "true"
-      openaether.io/sprint: "0.5.0-sprint0"
       openaether.io/component: openbao

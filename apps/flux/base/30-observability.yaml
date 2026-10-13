@@ -23,6 +23,7 @@ spec:
     - name: istio
     - name: cnpg
     - name: external-secrets
+    - name: external-secrets-stores  # ClusterSecretStore openbao (#38)
     - name: platform-local-path-provisioner  # Loki + VMCluster en storageClass local-path
 ---
 # Group 30b — VictoriaMetrics Custom Resources (VMCluster/VMAgent/VM*Scrape)

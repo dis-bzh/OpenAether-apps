@@ -1,6 +1,6 @@
-# OpenAether 0.5.0 — OpenBao StatefulSet (3 replicas, Shamir seal + HA unsealer)
+# OpenBao StatefulSet (3 replicas, static auto-unseal)
 # - Raft cluster 3/3
-# - Seal: Shamir 5/3 (auto-unseal through an external HA unsealer)
+# - Seal: static key from the Secret openbao-seal-key (no unsealer, no Shamir share, no root token in the cluster)
 # - PSS privileged (PKI system-level)
 # - PriorityClass platform-critical
 # - Storage: local-path-retain (local-path provisioner, Retain policy)
@@ -56,8 +56,10 @@ spec:
               app: openbao
       containers:
         - name: openbao
-          image: docker.io/openbao/openbao:2.5.4
-          # Wrapper: Shamir seal — no transit token. The HA unsealer handles unsealing.
+          # 2.7.1 and not 2.5.x: advisories fixed in 2.6.3/2.6.4/2.7.x include the Kubernetes auth method (a revoked
+          # token could still be renewed), which this deployment depends on.
+          image: docker.io/openbao/openbao:2.7.1
+          # Wrapper: renders the configuration from the seal key, then runs the server.
           # api_addr/cluster_addr via DNS stable (POD FQDN).
           command: ["/bin/sh", "/bao/config/entrypoint.sh"]
           env:
@@ -66,8 +68,6 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             # Address of the `bao` CLI inside the pod (kubectl exec … bao status).
-            # The server listened in cleartext (tls_disable=1) → http://, otherwise
-            # the CLI defaults to https:// ("HTTP response to HTTPS client").
             # Does NOT affect `bao server` (which uses BAO_API_ADDR/BAO_CLUSTER_ADDR).
             - name: BAO_ADDR
               value: "https://127.0.0.1:8200"
@@ -93,7 +93,7 @@ spec:
             runAsNonRoot: true
             runAsUser: 100
             seccompProfile: { type: RuntimeDefault }
-          # Probes: startup tolerates uninit/sealed (while the HA unsealer works).
+          # Probes: startup tolerates uninit/sealed (first boot, before openbao-init has run).
           # readiness removes a sealed pod from the Service. liveness is strict.
           startupProbe:
             httpGet:
@@ -102,7 +102,7 @@ spec:
               scheme: HTTPS
             initialDelaySeconds: 10
             periodSeconds: 10
-            failureThreshold: 60  # 10min: boot + attente unsealer + raft join
+            failureThreshold: 60  # 10 min: the pod waits for the seal key Secret, then boots and joins raft
           livenessProbe:
             httpGet:
               path: /v1/sys/health?standbyok=true&uninitcode=200&sealedcode=200
@@ -134,6 +134,9 @@ spec:
             - name: tls
               mountPath: /bao/tls
               readOnly: true
+            - name: seal
+              mountPath: /bao/seal
+              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -145,6 +148,11 @@ spec:
           secret:
             secretName: openbao-server-tls
             defaultMode: 0444
+        # The static seal key. The pods wait (ContainerCreating) until openbao-init has created the Secret.
+        - name: seal
+          secret:
+            secretName: openbao-seal-key
+            defaultMode: 0440
         - name: tmp
           emptyDir: {}
   volumeClaimTemplates:

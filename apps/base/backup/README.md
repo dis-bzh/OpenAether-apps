@@ -56,8 +56,8 @@ export RESTIC_REPOSITORY="s3:<endpoint>/<bucket>/openbao" RESTIC_PASSWORD=…  #
 restic restore latest --target /tmp/r
 # cluster OpenBao vierge redéployé par Flux, puis :
 bao operator raft snapshot restore /tmp/r/backup/openbao-raft.snap
-# ⚠ le snapshot rétablit AUSSI le seal d'origine → unseal avec les parts
-# Shamir escrowées de l'ANCIEN cluster (runbook foundation/vault/README.md).
+# ⚠ le snapshot est chiffré par la clé de seal statique : poser d'abord le Secret
+# openbao-seal-key depuis l'escrow de l'ANCIEN cluster (runbook foundation/vault/README.md, Disaster recovery).
 ```
 
 CNPG :

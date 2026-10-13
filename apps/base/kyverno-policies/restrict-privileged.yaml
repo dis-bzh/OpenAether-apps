@@ -63,9 +63,25 @@ spec:
               - capi-system
               - orc-system
               - capi-operator-system
+        # The only workloads that legitimately mount host paths outside those namespaces, named rather than their whole
+        # namespace so that a new hostPath pod next to them is still flagged (#47): node-exporter (/proc, /sys, /),
+        # ztunnel and the Istio CNI agent (the CNI socket and binaries).
+        - resources:
+            namespaces:
+              - services-observability
+            names:
+              - "*node-exporter*"
+        - resources:
+            namespaces:
+              - istio-system
+              - foundation-service-mesh
+            names:
+              - "ztunnel-*"
+              - "istio-cni-node-*"
       validate:
         message: "HostPath volumes are not allowed."
         pattern:
           spec:
-            volumes:
-            - =(hostPath): null
+            # Kyverno's own form: volumes is optional, and when present no entry may carry a hostPath.
+            =(volumes):
+            - X(hostPath): "null"

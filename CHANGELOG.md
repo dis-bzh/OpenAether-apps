@@ -17,6 +17,92 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+### Validated
+
+- **The OpenBao redesign on a real cluster, 2026-10-13: Scaleway, management role, 3 control planes + 2 workers,
+  `deploy_flux = true`, OpenAether-infra `claude/security-bootstrap` (production mode: 3 PGP recovery keys, threshold 2).**
+  Observed: the init Job in production mode (shares encrypted to the operator keys, root token revoked, the audit trail showing the
+  revocation, seal type `static`, three raft nodes); the configure Job logging in through the real Kubernetes auth method, creating 8
+  policies, 8 roles, the KV and PKI engines and 7 application secrets without printing one, and a second run changing nothing;
+  `seed-openbao.sh` (k8s-auth, create-only) writing five paths in 2.6 s and leaving all five alone on the second run, the replica
+  carrying the replica cloud's keys; External Secrets, cert-manager and the snapshot job authenticating with their roles; the
+  documented admin helper; the break-glass producing a root token from 2 of 3 PGP-decrypted shares; the PKI CSR signed by a throwaway
+  root and imported with the admin identity (`set-signed` accepted the chain; the `openbao` ClusterIssuer was Ready, and no
+  certificate was requested from it afterwards); a replaced pod unsealing itself in 22 s; the seal-key
+  rotation procedure (two rolls of about 70 s each, run twice, once with `rollout restart`; every pod unsealing with the new key id); the Kyverno cleanup
+  CronJobs finishing in 3 to 4 s (they hung for about 138 s); no secret in the logs of the `foundation-vault` pods (the three
+  OpenBao pods and the re-run Jobs: recovery-share blob, seal key, root token, JWT, seven generated values, a seeded S3 key: no match). 35 of 35 Kustomizations Ready at the last snapshot.
+  **Found there, and fixed in this release:** the init Job's hand-over proof used its own ServiceAccount, which the bootstrap role did
+  not accept (the mocked harness replaces that login), leaving the root token valid; Loki's `spec.values` overrode the seeded S3
+  destination (#53); the break-glass procedure lacked its nonce; two Kyverno exemptions named the wrong namespace or registry.
+  **A second run on the hardened code (same day, a fresh cluster, no re-initialisation):** the first run completed unaided (seal key
+  created, production mode, the break-glass role present from the root window, root token revoked); the Kubernetes auth config pinning no
+  CA served the init Job's own hand-over proof, the configure Job, External Secrets, cert-manager and the admin helper; with the seal key
+  Secret deleted on purpose the init Job refused to invent a new one, and passed again once the key was put back; the narrowed admin
+  identity imported the signed intermediate and was refused a PKI role (403); the break-glass produced a root token from 2 of 3 shares
+  (a different pair); the Kyverno reports showed 0 `restrict-privileged` and 0 `restrict-image-registries` violations (74
+  `require-security-context` remain); Grafana came up (the first run's failure was the double re-initialisation); 35 of 35 Kustomizations
+  Ready 132 s after the seeding began.
+  **Not observed:** the disaster-recovery restore on a cluster (exercised on a real OpenBao container only), a rolling upgrade of the
+  three replicas, Kyverno in Enforce mode, any log in Loki (it stores nothing on a cloud cluster, #53: its egress to the provider's S3 is
+  blocked), the Loki side of the log search, and the 3-replica restore. **A lab artefact of the first run, not a defect:** re-initialising
+  OpenBao twice regenerated the database password after the database had been created with the first one (Grafana failed to
+  authenticate until the role was aligned), which is why the README says a re-init regenerates every generated secret.
+
+### Security
+
+- **OpenBao bootstrap redesigned: no root token and no unseal key kept in the cluster.** The former design printed the five
+  Shamir shares and the root token in the `openbao-init` log (shipped to Loki and kept), stored the shares and the root token
+  in plain Secrets, and ran an unsealer that held the shares in memory. Now: `seal "static"` (a 32-byte key in the Secret
+  `openbao-seal-key`, created once and never printed) unseals the pods by themselves; `sys/init` returns *recovery* shares,
+  PGP-encrypted to the operators' keys in production (ConfigMap `openbao-operator-keys`) or a single labelled plaintext share in
+  development; the root token lives seconds in memory and is **revoked** after the hand-over to a Kubernetes-auth bootstrap
+  identity (15 minute tokens, no seal/rekey/raw/raft/audit/token-minting). The unsealer, `openbao-unseal-keys`,
+  `openbao-recovery` and `bitwarden-unseal-creds` are gone. The audit device is declared in the configuration (stdout, values
+  HMAC-ed). Application secrets are generated create-only (`cas=0`) and never printed. Eight least-privilege policies, with
+  explicit denies; `openaether-admin` can no longer write policies, roles or mounts (git does) or mint tokens.
+  Image `openbao:2.7.1` (the 2.5.4 it replaces predates published advisories: rate-limit bypass, k8s-auth renewals, PKI ACME).
+  **Limit, stated in the README: the static key sits next to the data it protects**; escrow it (Day 0) or lose the data with the cluster.
+  Tested against a real OpenBao by `scripts/dev/test-openbao-bootstrap.sh` (CI job `openbao-bootstrap`): both modes, root revocation,
+  no secret in any output, idempotence, create-only, policy enforcement, PGP shares, break-glass, snapshot restore with the
+  right and a wrong key, seal-key rotation. Not yet run on a real cluster at this entry: the Kubernetes-auth login, the 3-replica join.
+- Found by the first run on a cluster (Scaleway, 2026-10-13) and fixed: the init Job proved the hand-over with its own
+  ServiceAccount, which the bootstrap role did not accept, so a fresh cluster ended with the root token not revoked and the
+  Job failing. The role now binds both ServiceAccounts, the calls of the root window are retried, and the root token is revoked
+  on **any** exit from it. The mocked harness could not see this: it replaces the Kubernetes-auth login with a test seam.
+- **Hardened after an independent review of the redesign.** A non-numeric `threshold` in the ConfigMap made the guard *error* instead of
+  fail and `sys/init` ran with an empty body, leaving a live root token in a 0644 file: integers are now checked, the request is checked
+  before it is sent, every file is created 0600, the response is deleted as soon as it is parsed, and a root token left by a killed
+  container is revoked at the next start. The init Job refuses, before `sys/init`, a leftover recovery-shares Secret and a key that is not
+  base64; it no longer invents a seal key on a cluster that was initialised (a marker ConfigMap and the pods' own answer say so); it asks
+  every pod whether it is initialised and treats a failed request as "unknown", not "no". The break-glass role and policy are created in the
+  root window, so they exist whenever the window did; the Kubernetes auth config pins no CA (a snapshot restored onto a rebuilt cluster,
+  or a rotated CA, would otherwise lock out every login including the break-glass); the hand-over proof waits three minutes. The
+  `openaether-admin` identity can no longer write PKI roles or touch the PKI root. The README no longer claims the bootstrap identity
+  cannot escalate: it can, by design, and says who the real root of trust is. Harness: 124 checks.
+- The `backup/openbao` snapshot job uses `openbao:2.7.1` (was 2.5.4).
+
+### Fixed
+
+- **Kyverno Audit policies flagged pods that merely lack optional keys, and short Docker Hub names (#47).** `initContainers` and
+  `volumes` are now conditional anchors (`=(initContainers)`, `=(volumes)` with Kyverno's own `X(hostPath)`), the image
+  allow-list accepts the `org/image` short form of the allowed organisations (and `prom`), and `deny-hostpath` exempts
+  node-exporter, ztunnel and the Istio CNI agent by pod name rather than a whole namespace. Rung: static (the render and
+  the patterns' shape); the violation count is to be re-measured on a cluster, and Enforce remains a separate decision (#37).
+- **The Kyverno cleanup CronJobs downloaded kubectl at every run, which the egress policy does not allow, and could not
+  fail (#48).** They now run `docker.io/alpine/k8s` (kubectl and bash, allow-listed, already run by `openbao-init`) with the
+  upstream `set -euo pipefail` script untouched and nothing downloaded. Rung: static; the Job log of a run on a cluster is
+  what closes the issue.
+- **Three `dependsOn` edges were missing (#38).** `storage`, `cnpg` and `observability` now wait for
+  `external-secrets-stores`; the Istio `DestinationRule` of the OpenBao UI moved from `foundation-vault`, which is applied
+  before Istio and fails its dry-run on a missing CRD, to `services-gateway`, which depends on Istio.
+- The two OpenBao Jobs run `alpine/k8s:1.36.5` (was 1.31.1, five minors behind the cluster's Kubernetes).
+
+### Removed
+
+- `scripts/test-sprint0-openbao.sh` and `scripts/lib/test-helpers.sh`: an end-to-end test of the two-OpenBao design that no
+  longer exists (`foundation-pki-root`).
+
 ---
 
 ## [0.1.0] — 2026-10-12

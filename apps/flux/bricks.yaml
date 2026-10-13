@@ -63,7 +63,7 @@ descriptions:
   platform-network-policies: Default-deny + allow-dns/kube-api (CiliumNetworkPolicy)
   platform-metrics-server: metrics-server (kubectl top, HPA)
   vault-ca: internal CA of the OpenBao listener (ns cert-manager)
-  foundation-vault: HA OpenBao, raft 3 (Shamir 5/3 seal, unsealer, PKI intermediate)
+  foundation-vault: HA OpenBao, raft 3 (static auto-unseal, audit, PKI intermediate)
   external-secrets: External Secrets Operator
   external-secrets-stores: shared openbao ClusterSecretStore
   cert-manager: cert-manager (TLS webhooks, internal certs)

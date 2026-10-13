@@ -33,36 +33,30 @@ patches:
     target:
       kind: Namespace
       name: kyverno
+  # The two cleanup CronJobs (#48). The vendored image (bitnami/kubectl) is no longer published, and the previous patch
+  # downloaded kubectl from dl.k8s.io at every run: the egress policy allows only github.com and
+  # raw.githubusercontent.com, so the run hung ~2m20s, and `wget ... && ...` chained the script behind it, so a
+  # failed one left COUNT empty and exited 0. Now: an allow-listed image that already carries kubectl and bash
+  # (docker.io/alpine/k8s, also run by openbao-init), the upstream script untouched (`set -euo pipefail`: a failing
+  # `kubectl get` fails the Job), nothing downloaded.
   - target:
       kind: CronJob
       name: kyverno-cleanup-admission-reports
       namespace: kyverno
-    patch: |-
+    patch: &cleanup-patch |-
       - op: replace
         path: /spec/jobTemplate/spec/template/spec/containers/0/image
-        value: alpine:3.19
-      # The vendored manifest's image (bitnami/kubectl) has bash; alpine
-      # doesn't ship it by default. The script below is plain POSIX sh
-      # (no bashisms) — just needed the interpreter swapped to match.
-      - op: replace
-        path: /spec/jobTemplate/spec/template/spec/containers/0/command/0
-        value: /bin/sh
-      - op: replace
-        path: /spec/jobTemplate/spec/template/spec/containers/0/command/2
-        value: |
-          wget -qO /tmp/kubectl https://dl.k8s.io/release/v1.33.0/bin/linux/amd64/kubectl && \
-          chmod +x /tmp/kubectl && \
-          export PATH=/tmp:$PATH && \
-          COUNT=$(kubectl get admissionreports.kyverno.io -A | wc -l)
-          if [ "$COUNT" -gt 10000 ]; then
-            echo "too many reports found ($COUNT), cleaning up..."
-            kubectl delete admissionreports.kyverno.io -A -l='!audit.kyverno.io/report.aggregate'
-          else
-            echo "($COUNT) reports found, no clean up needed"
-          fi
+        value: docker.io/alpine/k8s:1.36.5
+      # Numeric, because the image runs as root by default and runAsNonRoot needs a uid it can verify.
       - op: add
         path: /spec/jobTemplate/spec/template/spec/containers/0/securityContext/runAsUser
         value: 65534
+      # readOnlyRootFilesystem: kubectl's discovery cache needs a writable HOME.
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/containers/0/env
+        value:
+          - name: HOME
+            value: /tmp
       - op: add
         path: /spec/jobTemplate/spec/template/spec/volumes
         value:
@@ -77,39 +71,4 @@ patches:
       kind: CronJob
       name: kyverno-cleanup-cluster-admission-reports
       namespace: kyverno
-    patch: |-
-      - op: replace
-        path: /spec/jobTemplate/spec/template/spec/containers/0/image
-        value: alpine:3.19
-      # The vendored manifest's image (bitnami/kubectl) has bash; alpine
-      # doesn't ship it by default. The script below is plain POSIX sh
-      # (no bashisms) — just needed the interpreter swapped to match.
-      - op: replace
-        path: /spec/jobTemplate/spec/template/spec/containers/0/command/0
-        value: /bin/sh
-      - op: replace
-        path: /spec/jobTemplate/spec/template/spec/containers/0/command/2
-        value: |
-          wget -qO /tmp/kubectl https://dl.k8s.io/release/v1.33.0/bin/linux/amd64/kubectl && \
-          chmod +x /tmp/kubectl && \
-          export PATH=/tmp:$PATH && \
-          COUNT=$(kubectl get clusteradmissionreports.kyverno.io -A | wc -l)
-          if [ "$COUNT" -gt 10000 ]; then
-            echo "too many reports found ($COUNT), cleaning up..."
-            kubectl delete clusteradmissionreports.kyverno.io -A -l='!audit.kyverno.io/report.aggregate'
-          else
-            echo "($COUNT) reports found, no clean up needed"
-          fi
-      - op: add
-        path: /spec/jobTemplate/spec/template/spec/containers/0/securityContext/runAsUser
-        value: 65534
-      - op: add
-        path: /spec/jobTemplate/spec/template/spec/volumes
-        value:
-          - name: tmp
-            emptyDir: {}
-      - op: add
-        path: /spec/jobTemplate/spec/template/spec/containers/0/volumeMounts
-        value:
-          - mountPath: /tmp
-            name: tmp
+    patch: *cleanup-patch

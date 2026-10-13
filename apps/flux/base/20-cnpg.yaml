@@ -30,4 +30,5 @@ spec:
   wait: true
   dependsOn:
     - name: external-secrets
+    - name: external-secrets-stores  # ClusterSecretStore openbao (#38)
     - name: platform-local-path-provisioner  # clusters zitadel-db/grafana-db en storageClass local-path-retain
