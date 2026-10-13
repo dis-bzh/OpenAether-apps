@@ -77,6 +77,13 @@ spec:
       name: loki-s3-credentials
       valuesKey: endpoint
       targetPath: loki.storage.s3.endpoint
+    # Loki signs SigV4 with this region (Loki 3.3.2 sends "dummy" when it is unset) and Scaleway and
+    # OVH answer a mismatch with AuthorizationHeaderMalformed ("region ... is wrong; expecting ...").
+    # The ExternalSecret fills it: seeded value, else read from the provider endpoint, else us-east-1.
+    - kind: Secret
+      name: loki-s3-credentials
+      valuesKey: region
+      targetPath: loki.storage.s3.region
     - kind: Secret
       name: loki-s3-credentials
       valuesKey: bucket
@@ -137,13 +144,12 @@ spec:
         retention_delete_delay: 2h
       storage:
         type: s3
-        # The endpoint and the three bucket names are NOT set here: they come from the
+        # The endpoint, the region and the three bucket names are NOT set here: they come from the
         # loki-s3-credentials Secret through `valuesFrom` above. `spec.values` is merged AFTER
         # `valuesFrom` and wins, so a literal here silently replaced the seeded destination: on a
         # cloud cluster Loki wrote to a MinIO that does not exist and refused every push (500,
         # "at least 2 live replicas required"), measured 2026-10-13.
         s3:
-          region: us-east-1
           s3ForcePathStyle: true
           # No `insecure` here (chart default false): the seeded endpoint decides the scheme,
           # https:// for a provider; the local overlay sets it true for the MinIO.

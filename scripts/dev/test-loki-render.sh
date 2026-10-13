@@ -20,7 +20,13 @@ for d in yaml.safe_load_all(open(src)):
     if d and d.get("kind") == "HelmRelease" and d["metadata"]["name"] == "loki":
         v = d["spec"]["values"]
         s3 = v.setdefault("loki", {}).setdefault("storage", {}).setdefault("s3", {})
-        s3.update(endpoint="https://s3.example.invalid", accessKeyId="AK", secretAccessKey="SK")
+        # What valuesFrom injects; a literal region in spec.values would win over it (checked below).
+        if not any(f.get("valuesKey") == "region" and f.get("targetPath") == "loki.storage.s3.region"
+                   for f in d["spec"].get("valuesFrom", [])):
+            sys.exit("valuesFrom does not feed loki.storage.s3.region from the Secret")
+        if "region" in s3:
+            sys.exit("spec.values sets loki.storage.s3.region: it would override the seeded one")
+        s3.update(endpoint="https://s3.example.invalid", accessKeyId="AK", secretAccessKey="SK", region="fr-par")
         v["loki"]["storage"]["bucketNames"] = {"chunks": "b", "ruler": "b", "admin": "b"}
         yaml.safe_dump(v, open(values_out, "w"))
         open(version_out, "w").write(d["spec"]["chart"]["spec"]["version"])
@@ -83,6 +89,7 @@ for env, replicas, rf, retention, insecure, pdb in (("base", 3, 2, 8760, False, 
     s3 = cfg["common"]["storage"]["s3"]
     check(f"{env}: s3 insecure {insecure}", bool(s3.get("insecure", False)) is insecure)
     check(f"{env}: s3 path style kept", s3.get("s3forcepathstyle") is True)
+    check(f"{env}: s3 region is the injected one, not a literal", s3.get("region") == "fr-par")
     # The rule that makes enabling the compactor safe: it deletes what the limit says is old.
     check(f"{env}: compactor never runs with a retention under 168h", hours(got) >= 168)
     if env == "base":

@@ -174,6 +174,18 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   bucket's key and the compactor can delete in it), set a per-stream or identity-log retention, add log-flow alerts or an Alloy buffer,
   or prove one compactor runs among three replicas. Anti-affinity stays preferred (clusters have 1 to 3 workers) and there is no
   topology spread (the chart exposes none for the single binary).
+- **Loki signs its S3 requests with the provider's region, not `us-east-1` (follow-up of ANSSI hardening B02; refs #53).** The
+  region was hard-coded, so even with the egress rule matching, Loki's SigV4 signature carried a region the provider does not serve.
+  Read in Loki 3.3.2 (`s3_storage_client.go`): the region is the configured one, `dummy` when empty, and the AWS SDK signs with it.
+  Scaleway and OVH reject a mismatch (`AuthorizationHeaderMalformed`, "the region ... is wrong; expecting ..."; community reports, the
+  providers' pages list one region code per endpoint); Outscale's own AWS CLI guide has the region set to the OOS region. restic
+  (minio-go) discovers the region, which is why the backup path proved nothing. The `loki-s3-credentials` ExternalSecret now builds a
+  `region` key (seeded `region` if any, else read from a Scaleway, OVH or Outscale endpoint host name, else `us-east-1`, the former
+  value, for the local MinIO) and the HelmRelease injects it with `valuesFrom`; no seed change is needed on an existing cluster
+  and `bao kv put ... region=` overrides it. The template was run against sprig, the library External Secrets uses, for the three
+  providers' hosts, the MinIO and a look-alike host; `test-loki-render.sh` now fails if a literal region comes back in `spec.values`.
+  Rung: mocked/static. **Not observed:** a push accepted by a provider's S3 (needs the lab: Loki must report no 4xx/403 and the
+  `loki_boltdb_shipper`/chunk uploads must show up in the bucket), nor the ExternalSecret reconciling on a cluster.
 - **Comments and a README that contradicted the code now say what the code does (ANSSI hardening B01, text only).** The backup README
   no longer says the restic password is printed in a log (`configure.sh` prints nothing; the operator reads it once and escrows it),
   that the CNPG PITR block is commented (it is active) or that no `VMRule` covers backups (`vmrule-backup.yaml` does); the Loki
