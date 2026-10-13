@@ -202,6 +202,16 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   It now builds the base and fails when the DNS rule loses `rules.dns`, when the peer rules lose 3100/9095/7946 tcp+udp (ingress
   or egress), when Alloy or Grafana lose 3100, when the S3 egress is not FQDN-scoped on 443 or loses a provider host, or the MinIO
   9000 rule goes (mutation-checked on four of them). Rung: static. It cannot show Cilium enforcing the policy (lab check).
+- **The Audit policy for External Secrets objects can no longer block them when Kyverno is down (follow-up of ANSSI hardening B04).**
+  `restrict-external-secrets-namespaces` set no `failurePolicy`, so it took the default `Fail`. Read in Kyverno v1.12.1
+  (`pkg/controllers/webhook/controller.go`): the validating webhook is built from every policy with a validate rule whatever its
+  `validationFailureAction`, so Audit did not remove it, and a Kyverno outage would have refused writes to `ExternalSecret`,
+  `PushSecret`, `SecretStore` and `ClusterSecretStore`, Flux applying the store included. It now sets `failurePolicy: Ignore`
+  (those kinds move to Kyverno's `Ignore` webhook) and its three rules match `CREATE` and `UPDATE` only: on DELETE `request.object` is
+  empty (`policycontext.NewPolicyContext` fills the old resource), the third rule's `request.object.metadata.name` could not be
+  substituted, and removing a stray object is not a violation. `check-externalsecret-namespaces.py` fails if either is lost (four new
+  fixture cases). Rung: static (kustomize build, fixtures). **Not observed:** the generated webhook on a cluster. **Not done:** the six
+  policies of `kyverno-policies` also use the default `Fail`; that is a separate decision (they match Pods in every namespace).
 - **Comments and a README that contradicted the code now say what the code does (ANSSI hardening B01, text only).** The backup README
   no longer says the restic password is printed in a log (`configure.sh` prints nothing; the operator reads it once and escrows it),
   that the CNPG PITR block is commented (it is active) or that no `VMRule` covers backups (`vmrule-backup.yaml` does); the Loki

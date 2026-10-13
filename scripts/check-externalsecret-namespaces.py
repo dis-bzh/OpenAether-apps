@@ -10,7 +10,9 @@ check-object-collisions.py) and fails when:
   - a ClusterExternalSecret / ClusterPushSecret or a second ClusterSecretStore exists,
   - the store has no `conditions` made of explicit `namespaces` (a label selector
     is spoofable by whoever can label a namespace),
-  - the Kyverno audit policy excludes a different set of namespaces than the store allows.
+  - the Kyverno audit policy excludes a different set of namespaces than the store allows;
+  - that policy loses `failurePolicy: Ignore` (Kyverno registers its webhook even in Audit, and the
+    default Fail would let a Kyverno outage block writes of these kinds) or matches DELETE.
 
 Usage: python3 scripts/check-externalsecret-namespaces.py
 Dependency: kubectl (kustomize is built in), PyYAML.
@@ -79,6 +81,12 @@ def check(docs):
                     excluded.update(e.get("resources", {}).get("namespaces", []))
             if excluded != allowed:
                 errors.append(f"{p}: {POLICY} excludes {sorted(excluded)} but the store allows {sorted(allowed)}")
+            if d["spec"].get("failurePolicy") != "Ignore":
+                errors.append(f"{p}: {POLICY} needs failurePolicy: Ignore (an Audit policy must not block writes when Kyverno is down)")
+            for rule in d["spec"]["rules"]:
+                for m in (rule.get("match") or {}).get("any", []):
+                    if set(m.get("resources", {}).get("operations") or ["DELETE"]) - {"CREATE", "UPDATE"}:
+                        errors.append(f"{p}: {POLICY} rule {rule.get('name')} must match CREATE/UPDATE only (request.object is empty on DELETE)")
             break
     else:
         errors.append(f"no ClusterPolicy/{POLICY} rendered (the Audit guard of the store)")
