@@ -80,6 +80,14 @@ jobs:
       - name: Cross-brick object collision check (builds every DAG path with kubectl kustomize)
         run: python3 scripts/check-object-collisions.py
 
+      # The openbao ClusterSecretStore only serves the namespaces it lists; an
+      # ExternalSecret rendered anywhere else would stay NotReady on a cluster.
+      - name: External Secrets objects stay in the store's namespaces
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test-check-externalsecret-namespaces.py
+          python3 scripts/check-externalsecret-namespaces.py
+
   backup-checks:
     name: Backup brick checks
     runs-on: ubuntu-latest

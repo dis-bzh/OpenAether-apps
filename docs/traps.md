@@ -17,6 +17,11 @@ belong to. What follows has no skill of its own yet.
 
 ## Databases and secrets
 
+- **The `openbao` ClusterSecretStore serves only the namespaces it lists.** An
+  ExternalSecret in any other one stays NotReady with a "denied by ClusterSecretStore
+  conditions" error (its existing Secret stays, but stops refreshing). A new brick
+  adds its namespace to `stores/clustersecretstore.yaml` and to the Kyverno audit
+  exclusion; `scripts/check-externalsecret-namespaces.py` fails CI otherwise.
 - **Seed OpenBao app-DB secrets BEFORE the CNPG cluster's first `initdb`.** Seeding
   late leaves the live Postgres role out of sync with the Secret.
 

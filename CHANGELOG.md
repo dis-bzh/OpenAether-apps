@@ -136,6 +136,20 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   dump into a database, an OpenBao snapshot into an OpenBao or a PITR on a cluster (the recovery manifest is written from the CNPG docs,
   untested), encrypt or re-prefix the barman archive (it would orphan the existing WAL chain), add CNPG archiver alerts, or give
   Longhorn volumes their own passphrase. Refs F-BKP-02, F-BKP-06, F-BKP-13, F-BKP-03, TLS-18 of the audit.
+- **The `openbao` ClusterSecretStore serves only the platform namespaces (ANSSI hardening B04, stage 1; addresses B2-RecomDiffusion-1,
+  HYG-M9, PG078-R13 and NSA12-AUTH-02 for the cross-namespace read).** Its OpenBao role reads every `secret/` path, so any
+  ExternalSecret in any namespace could materialise the restic password, the Longhorn passphrase or the Zitadel master key. It now
+  carries `spec.conditions[].namespaces` (`foundation-vault`, `foundation-databases`, `foundation-storage`, `longhorn-system`,
+  `services-identity`, `services-observability`: explicit names, since a label is set by whoever can label a namespace; the field is
+  checked against the vendored ESO v1.2.0 CRD). `scripts/check-externalsecret-namespaces.py` (CI, build job) builds every brick, the local
+  overlay included, and fails on an ExternalSecret, PushSecret or SecretStore outside that list, on a ClusterExternalSecret or a second
+  ClusterSecretStore, and when the store is not an explicit name list. A new brick `kyverno-policies-eso` (companion, needs Kyverno
+  and ESO, own Kustomization because Kyverno rejects a policy naming a kind whose CRD is absent) adds an **Audit** policy for the same
+  objects. Rung: mocked/static (kustomize builds, fixture tests of the check, `pick.py --validate/--check`), not run on a cluster. **It
+  does not:** narrow the OpenBao policy (`external-secrets-read.hcl` still reads `secret/data/*` for the one role: stage 2, per-domain
+  stores and path-scoped roles, waits for #54 and a lab), enforce anything in Kyverno, or grant or remove any RBAC (tenants should get none
+  on ClusterExternalSecret, SecretStore or PushSecret; no tenant model exists in the repo). An ExternalSecret outside the list, for
+  example in an application repository's namespace, stops refreshing until its namespace is added (its Secret stays).
 
 ### Removed
 
