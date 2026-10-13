@@ -30,6 +30,15 @@
   vulnerabilityAlerts: { labels: ["dependencies", "security"] },
   osvVulnerabilityAlerts: true,
 
+  // Images in our own manifests (backup jobs, OpenBao, restic, alpine/k8s) were not tracked at all: the kubernetes
+  // manager has no default file pattern. Enabled here for the hand-written bricks, with digest pinning, so a bump
+  // is a reviewed PR that writes `tag@sha256:...` (a re-pushed tag then no longer reaches the cluster unnoticed).
+  // The vendored dumps stay out (ignorePaths), and so do the Postgres images, which the custom managers below
+  // bump and which scripts read as `postgresql:<major>.<minor>`.
+  kubernetes: {
+    managerFilePatterns: ["/^apps/base/(backup|foundation)/.*\\.ya?ml$/"],
+  },
+
   // Off: it reads the SHA in `rev:` as a tag and so can never bump a hook. The custom manager below does it.
   "pre-commit": { enabled: false },
 
@@ -52,6 +61,18 @@
   ],
 
   packageRules: [
+    {
+      description: "Pin container images in our own manifests to a digest (the tag stays in the line). OpenBao and restic are also pinned by the infra bootstrap and the backup scripts: check the PR against them.",
+      matchManagers: ["kubernetes"],
+      pinDigests: true,
+      labels: ["dependencies", "container-image"],
+    },
+    {
+      description: "The Postgres images are bumped by the custom managers below (check-pg-dump-version.sh reads their tag).",
+      matchManagers: ["kubernetes"],
+      matchPackageNames: ["ghcr.io/cloudnative-pg/postgresql"],
+      enabled: false,
+    },
     {
       description: "CAPI providers (operator.cluster.x-k8s.io CRs) — independent controllers, independent release cadence, kept as separate PRs.",
       matchPackageNames: [

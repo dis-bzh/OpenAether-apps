@@ -36,7 +36,9 @@ Every bump is a reviewed PR, never auto-merged: Flux only reconciles what a pers
 2. **The end-of-support calendar** ([`eol-calendar.md`](eol-calendar.md)): a component whose line upstream no
    longer patches receives no security fix at all, whatever the advisory feed says. CI annotates it on every
    pull request and `End of support` fails weekly.
-3. **Renovate's weekly PRs** themselves (Monday before 6am). Read them.
+3. **The weekly `SBOM` workflow** scans every image the DAG deploys, charts included, with Trivy and fails on a
+   CRITICAL with a fix upstream ([`supply-chain.md`](supply-chain.md)); it reads the layers, which Renovate cannot.
+4. **Renovate's weekly PRs** themselves (Monday before 6am). Read them.
 
 ## What this does not do
 
@@ -45,7 +47,8 @@ Every bump is a reviewed PR, never auto-merged: Flux only reconciles what a pers
 - Renovate and the calendar see only what they were told to read. A component pulled in another way is invisible
   to both; `scripts/check-eol.py` fails on a HelmRelease or a vendored dump it has no row for, which closes that
   for charts and dumps, not for images inside charts.
-- Images are tracked by tag, not by digest (see the supply-chain notes in CHANGELOG): a re-pushed tag is not noticed.
+- Images are tracked by tag until Renovate's `pinDigests` has rewritten them (see [`supply-chain.md`](supply-chain.md)):
+  a re-pushed tag is not noticed meanwhile.
 
 ## Where it stands (2026-10-14)
 

@@ -51,6 +51,22 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Security
 
+- **An inventory of what is deployed, a scan of it, and the image pins checked.** `scripts/dev/gen-sbom.py` writes a CycloneDX 1.5 file from
+  the rendered DAG: the 15 Helm charts, 14 images from the manifests and, with `--helm`, about 38 images with those the charts render
+  (`valuesFrom` targets get a placeholder). The new `SBOM` workflow runs weekly and on each release, attaches it as
+  `openaether-apps-<tag>.cdx.json` and scans every image with Trivy (CRITICAL with a fix upstream fails; accepted findings go in
+  `.vex/openaether-apps.openvex.json`, empty today). `scripts/check-image-pins.py` fails CI on an image with no tag or a moving one. Renovate's
+  `kubernetes` manager is turned on for `backup` and `foundation` with `pinDigests`, so the next bumps write `tag@sha256`
+  (it tracked none of these images before). `restrict-image-registries` (still **Audit**) lists organisations instead of
+  whole registries (`gcr.io` and `docker.io/registry.k8s.io` dropped), read from the inventory. **No `verifyImages` policy:** checked
+  with cosign against the pinned versions, Kyverno 1.12.1 and CNPG 1.23.1 have no signature at all, cert-manager 1.15.3 no keyless one,
+  and only Flux and External Secrets verify (`docs/supply-chain.md` has the table and the order that follows). A
+  `repo-settings.yml` workflow runs infra's settings check (80 canned-API cases in CI; `--no-sandbox` added). Addresses ANSSI
+  SBOM25-1/-2/-3, SSDLC CICD-AIP-01a/-01b/-03, ART-REC03, CONT-REC05, SCM-REC06/-07 in part. Rung: the generator, the check and the
+  tests ran locally (including `helm template` of all 15 charts); not the workflows on GitHub, not Trivy on the images, not Renovate's
+  new manager. **Not done:** the rulesets as JSON (they need an admin export), signature verification, `--require-digest`, any
+  image upgrade. Lab check: the PolicyReports of `restrict-image-registries` and the `KyvernoPolicyViolation` alert after the org list lands.
+
 - **A patch policy and an end-of-support calendar, with a check.** `docs/patching.md` states the rule (a security fix merged or waived in
   writing within 30 days, 7 for an exposed path) and the signals, and says plainly that it is not met today. `docs/eol-calendar.yaml`
   (rendered into `docs/eol-calendar.md`) has a row per HelmRelease, vendored dump and pinned image (33), each with the pin read from its

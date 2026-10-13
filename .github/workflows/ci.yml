@@ -63,6 +63,10 @@ jobs:
       - name: Language
         run: ./scripts/dev/check-language.sh
 
+      # The settings check (repo-settings.yml) against a canned API: each check seen red and green.
+      - name: Repository-settings check self-test
+        run: ./scripts/dev/check-required-checks.sh --self-test
+
   dag:
     name: Flux DAG
     runs-on: ubuntu-latest
@@ -357,6 +361,14 @@ jobs:
 
       - name: Render every DAG path
         run: python3 scripts/dev/render-dag.py "$RUNNER_TEMP/rendered"
+
+      # No image floats (no tag, or `latest`); the tag-only count is printed. `--require-digest` is for after
+      # Renovate's pinDigests has rewritten the lines.
+      - name: Image pins and the SBOM extractor
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test-sbom.py
+          python3 scripts/check-image-pins.py --rendered "$RUNNER_TEMP/rendered"
 
       # -strict rejects unknown fields; core kinds come from the Kubernetes schemas, the CRDs from the community
       # catalog pinned to a commit (data only, nothing executes). A CRD the catalog lacks is skipped, not failed:
