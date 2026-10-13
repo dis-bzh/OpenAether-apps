@@ -26,10 +26,10 @@ docker info >/dev/null 2>&1 || { echo "↷ test-openbao-bootstrap not run: no Do
 docker image inspect "$IMAGE" >/dev/null 2>&1 || docker pull -q "$IMAGE" >/dev/null 2>&1 || { echo "↷ test-openbao-bootstrap not run: cannot pull $IMAGE"; exit 0; }
 
 T="$(mktemp -d)"; export GNUPGHOME="$T/gnupg"; mkdir -p "$GNUPGHOME"; chmod 700 "$GNUPGHOME"
-CONTAINERS=()
 cleanup() {
-  [ -n "${OA_TEST_KEEP:-}" ] && { echo "kept: containers ${CONTAINERS[*]}, files in $T"; return 0; }
-  for c in "${CONTAINERS[@]}"; do docker rm -f "$c" >/dev/null 2>&1; done; rm -rf "$T"
+  [ -n "${OA_TEST_KEEP:-}" ] && { echo "kept: containers labelled oa-test=$$, files in $T"; return 0; }
+  # By label, not from an array: the instances started inside $(...) are invisible to the parent shell.
+  docker ps -aq --filter "label=oa-test=$$" | xargs -r docker rm -f >/dev/null 2>&1; rm -rf "$T"
 }
 trap cleanup EXIT
 
@@ -91,7 +91,7 @@ mkpgp() { # N — N test identities with an encryption subkey; public keys as ba
 run_bao() { # NAME PORT — (re)start the container for NAME on its existing data and seal directories; waits for the API
   local name="$1" port="$2"
   docker rm -f "bao-test-$name" >/dev/null 2>&1
-  docker run -d --user "$(id -u):$(id -g)" --name "bao-test-$name" --hostname openbao-0 -p "127.0.0.1:$port:8200" \
+  docker run -d --label "oa-test=$$" --user "$(id -u):$(id -g)" --name "bao-test-$name" --hostname openbao-0 -p "127.0.0.1:$port:8200" \
     -e POD_NAMESPACE=foundation-vault \
     -v "$T/conf:/bao/config:ro" -v "$T/$name/seal:/bao/seal:ro" -v "$T/tls:/bao/tls:ro" -v "$T/$name/data:/bao/data" \
     -v "$T/sa:/var/run/secrets/kubernetes.io/serviceaccount:ro" \
@@ -106,7 +106,6 @@ start_bao() { # NAME PORT [SEAL_KEY_FILE] — a fresh OpenBao with the REAL entr
   mkdir -p "$T/$name/data" "$T/$name/seal"; chmod 777 "$T/$name/data"
   if [ -n "$key" ]; then cp "$key" "$T/$name/seal/key"; else head -c 32 /dev/urandom > "$T/$name/seal/key"; fi
   chmod a+r "$T/$name/seal/key"
-  CONTAINERS+=("bao-test-$name")
   run_bao "$name" "$port"
 }
 wait_active_port() { # PORT — initialised, unsealed and active

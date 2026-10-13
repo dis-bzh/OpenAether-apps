@@ -35,12 +35,19 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   **Found there, and fixed in this release:** the init Job's hand-over proof used its own ServiceAccount, which the bootstrap role did
   not accept (the mocked harness replaces that login), leaving the root token valid; Loki's `spec.values` overrode the seeded S3
   destination (#53); the break-glass procedure lacked its nonce; two Kyverno exemptions named the wrong namespace or registry.
+  **A second run on the hardened code (same day, a fresh cluster, no re-initialisation):** the first run completed unaided (seal key
+  created, production mode, the break-glass role present from the root window, root token revoked); the Kubernetes auth config pinning no
+  CA served the init Job's own hand-over proof, the configure Job, External Secrets, cert-manager and the admin helper; with the seal key
+  Secret deleted on purpose the init Job refused to invent a new one, and passed again once the key was put back; the narrowed admin
+  identity imported the signed intermediate and was refused a PKI role (403); the break-glass produced a root token from 2 of 3 shares
+  (a different pair); the Kyverno reports showed 0 `restrict-privileged` and 0 `restrict-image-registries` violations (74
+  `require-security-context` remain); Grafana came up (the first run's failure was the double re-initialisation); 35 of 35 Kustomizations
+  Ready 132 s after the seeding began.
   **Not observed:** the disaster-recovery restore on a cluster (exercised on a real OpenBao container only), a rolling upgrade of the
   three replicas, Kyverno in Enforce mode, any log in Loki (it stores nothing on a cloud cluster, #53: its egress to the provider's S3 is
-  blocked), the Kyverno violation counts after the exemptions (the reports had not refreshed in 15 minutes; 82 `require-security-context`
-  results remain, container-level `securityContext` missing in chart pods), and one lab artefact: re-initialising OpenBao twice regenerated
-  the database password after the database had been created with the first one (Grafana failed to authenticate until the role was
-  aligned), which is why the README says a re-init regenerates every generated secret.
+  blocked), the Loki side of the log search, and the 3-replica restore. **A lab artefact of the first run, not a defect:** re-initialising
+  OpenBao twice regenerated the database password after the database had been created with the first one (Grafana failed to
+  authenticate until the role was aligned), which is why the README says a re-init regenerates every generated secret.
 
 ### Security
 
