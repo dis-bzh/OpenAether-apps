@@ -50,7 +50,9 @@ spec:
                     - ALL
                 seccompProfile:
                   type: RuntimeDefault
-            initContainers:
+            # Conditional anchor: a pod WITHOUT initContainers is compliant. Written bare, the key itself
+            # was required and 13 of the pods measured on a fresh cluster failed only there (#47).
+            =(initContainers):
             - securityContext:
                 runAsNonRoot: true
                 allowPrivilegeEscalation: false

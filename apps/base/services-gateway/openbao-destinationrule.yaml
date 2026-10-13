@@ -1,4 +1,6 @@
 # TLS between the gateway and OpenBao (UI access).
+# Applied by services-gateway (depends on istio), NOT by foundation-vault: it is an Istio CRD, and foundation-vault is
+# reconciled before Istio exists — one missing CRD fails the dry-run of the whole bundle (#38).
 #
 # Since OpenBao's listener runs TLS, the Istio gateway must speak HTTPS to its
 # backend — the HTTPRoute only describes L7 routing and would send cleartext,

@@ -109,7 +109,7 @@ spec:
         - name: init
           # The `docker.io/` prefix is MANDATORY: an image without a registry matches NO pattern of the
           # restrict-image-registries policy.
-          image: docker.io/alpine/k8s:1.31.1
+          image: docker.io/alpine/k8s:1.36.5
           env:
             - name: VAULT_NS
               value: "foundation-vault"

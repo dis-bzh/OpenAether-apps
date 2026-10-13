@@ -36,6 +36,22 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   right and a wrong key, seal-key rotation. Not yet run on a real cluster at this entry: the Kubernetes-auth login, the 3-replica join.
 - The `backup/openbao` snapshot job uses `openbao:2.7.1` (was 2.5.4).
 
+### Fixed
+
+- **Kyverno Audit policies flagged pods that merely lack optional keys, and short Docker Hub names (#47).** `initContainers` and
+  `volumes` are now conditional anchors (`=(initContainers)`, `=(volumes)` with Kyverno's own `X(hostPath)`), the image
+  allow-list accepts the `org/image` short form of the allowed organisations (and `prom`), and `deny-hostpath` exempts
+  node-exporter, ztunnel and the Istio CNI agent by pod name rather than a whole namespace. Rung: static (the render and
+  the patterns' shape); the violation count is to be re-measured on a cluster, and Enforce remains a separate decision (#37).
+- **The Kyverno cleanup CronJobs downloaded kubectl at every run, which the egress policy does not allow, and could not
+  fail (#48).** They now run `docker.io/alpine/k8s` (kubectl and bash, allow-listed, already run by `openbao-init`) with the
+  upstream `set -euo pipefail` script untouched and nothing downloaded. Rung: static; the Job log of a run on a cluster is
+  what closes the issue.
+- **Three `dependsOn` edges were missing (#38).** `storage`, `cnpg` and `observability` now wait for
+  `external-secrets-stores`; the Istio `DestinationRule` of the OpenBao UI moved from `foundation-vault`, which is applied
+  before Istio and fails its dry-run on a missing CRD, to `services-gateway`, which depends on Istio.
+- The two OpenBao Jobs run `alpine/k8s:1.36.5` (was 1.31.1, five minors behind the cluster's Kubernetes).
+
 ### Removed
 
 - `scripts/test-sprint0-openbao.sh` and `scripts/lib/test-helpers.sh`: an end-to-end test of the two-OpenBao design that no
