@@ -6,8 +6,11 @@
 # 2 replicas + shardCount=2: each agent scrapes half the targets.
 # Avoids duplicate scraping while providing HA.
 #
-# ClusterRole vmagent: lecture cluster-wide pods/nodes/services/endpoints.
-# Required for automatic Kubernetes SD discovery.
+# ClusterRole vmagent: cluster-wide read of nodes/services/endpoints/pods/namespaces,
+# which is all kubernetes_sd needs. No `secrets` (no scrape references one: every
+# scrape uses the pod's own bearerTokenFile) and no `nodes/proxy` (kubelet and
+# cAdvisor are scraped on :10250 directly, which `nodes/metrics` authorizes).
+# Adding a scrape that needs a Secret = a namespaced Role, not this ClusterRole.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -31,13 +34,11 @@ rules:
   - apiGroups: [""]
     resources:
       - nodes
-      - nodes/proxy
       - nodes/metrics
       - services
       - endpoints
       - pods
       - namespaces
-      - secrets
     verbs: ["get", "list", "watch"]
   - apiGroups: ["extensions", "networking.k8s.io"]
     resources:
