@@ -113,12 +113,26 @@ hexkey() { # a PGP-encrypted share (base64) -> the key as `generate-root` takes 
   base64 -d | gpg --batch --quiet --decrypt 2>/dev/null | tr -d ' \n'
 }
 
+# The scripts run in the IMAGE the two Jobs run (read from the manifests, so the two can not drift): its bash, jq, curl
+# and coreutils are the ones that matter, not the host's. OA_TEST_HOST_TOOLS=1 uses the host's instead (no image pull).
+JOB_IMAGE="$(sed -n 's|^ *image: \(docker.io/alpine/k8s:[0-9.]*\)$|\1|p' "$V/openbao-init.yaml" "$V/bootstrap-roles-job.yaml" | sort -u)"
+[ "$(wc -l <<<"$JOB_IMAGE")" = 1 ] && [ -n "$JOB_IMAGE" ] || { echo "✗ the two Jobs do not run one image: $JOB_IMAGE"; exit 1; }
+if [ -z "${OA_TEST_HOST_TOOLS:-}" ]; then
+  docker image inspect "$JOB_IMAGE" >/dev/null 2>&1 || docker pull -q "$JOB_IMAGE" >/dev/null 2>&1 || { echo "↷ test-openbao-bootstrap not run: cannot pull $JOB_IMAGE"; exit 0; }
+fi
 run_script() { # NAME PORT SCRIPT [extra env...] — runs one of the real scripts; output in $T/<name>/<script>.out
   local name="$1" port="$2" script="$3"; shift 3
-  env STUB_DIR="$T/$name/k8s" PATH="$T/stub/bin:$PATH" OA_KUBECTL=kubectl OA_TMP="$T/$name/tmp" OA_SA_DIR="$T/sa" \
-      BAO_ADDR="https://127.0.0.1:$port" BAO_CACERT="$T/tls/ca.crt" OA_INIT_ADDR="https://127.0.0.1:$port" \
-      OA_NO_LEADER_REDIRECT=1 OA_POLICY_DIR="$V/scripts/policies" VAULT_NS=foundation-vault "$@" \
-      bash "$V/scripts/$script" > "$T/$name/$script.out" 2>&1
+  local envs=(STUB_DIR="$T/$name/k8s" PATH="$T/stub/bin:/usr/local/bin:/usr/bin:/bin:/sbin" OA_KUBECTL=kubectl OA_TMP="$T/$name/tmp"
+              OA_SA_DIR="$T/sa" BAO_ADDR="https://127.0.0.1:$port" BAO_CACERT="$T/tls/ca.crt" OA_INIT_ADDR="https://127.0.0.1:$port"
+              OA_NO_LEADER_REDIRECT=1 OA_POLICY_DIR="$V/scripts/policies" VAULT_NS=foundation-vault "$@")
+  if [ -n "${OA_TEST_HOST_TOOLS:-}" ]; then
+    env "${envs[@]}" bash "$V/scripts/$script" > "$T/$name/$script.out" 2>&1
+  else
+    local dargs=() e
+    for e in "${envs[@]}"; do dargs+=(-e "$e"); done
+    docker run --rm --network host --user "$(id -u):$(id -g)" -v "$T:$T" -v "$V:$V:ro" "${dargs[@]}" \
+      --entrypoint bash "$JOB_IMAGE" "$V/scripts/$script" > "$T/$name/$script.out" 2>&1
+  fi
 }
 
 echo "=== the real configuration template + entrypoint: OpenBao starts, static seal, audit device, TLS ==="
