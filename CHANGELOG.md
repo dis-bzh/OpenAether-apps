@@ -51,6 +51,13 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Security
 
+- **Loki no longer reads ConfigMaps and Secrets cluster-wide.** The chart bound a ClusterRole on both to the Loki ServiceAccount for
+  its rules sidecar (`loki_rule` ConfigMaps), which nothing here uses (no ruler). `sidecar.rules.enabled: false` and
+  `rbac.namespaced: true` remove the sidecar container, the ClusterRole and its binding; `scripts/dev/test-loki-render.sh` now fails
+  if either comes back. Addresses ANSSI PA-012 R19 (least privilege of the collection server) only. Rung: chart render against the
+  pinned 6.25.0, not run on a cluster. The StatefulSet pod template changes, so the three replicas roll one at a time (PDB
+  `minAvailable: 1`, RF 2); that roll and a Loki ruler loaded from ConfigMaps (none expected) are the lab checks.
+
 - **vmagent no longer reads Secrets or `nodes/proxy` cluster-wide.** Its ClusterRole listed `secrets` and `nodes/proxy`; no scrape
   references a Secret (all use the pod's own `bearerTokenFile`) and the kubelet and cAdvisor are scraped on :10250 directly, which
   `nodes/metrics` authorizes. Addresses ANSSI NSA12-AUTH-02, NSA12-NET-08 and BP-028 R64. Rung: static (`kubectl kustomize`), not run on

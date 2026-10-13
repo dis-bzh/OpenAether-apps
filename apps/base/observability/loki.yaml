@@ -162,6 +162,14 @@ spec:
         reject_old_samples_max_age: 168h
         ingestion_rate_mb: 10
         ingestion_burst_size_mb: 20
+    # No cluster-wide read of ConfigMaps and Secrets. The chart's rules sidecar (loki_rule
+    # ConfigMaps) is the only reason for that ClusterRole, and no Loki ruler is deployed;
+    # namespaced keeps the chart from rendering it back if the sidecar is ever re-enabled.
+    sidecar:
+      rules:
+        enabled: false
+    rbac:
+      namespaced: true
     # No bundled MinIO (we use our own instance).
     minio:
       enabled: false

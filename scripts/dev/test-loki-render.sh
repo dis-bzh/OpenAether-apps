@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Render the Loki chart with the values the repository ships (base and local overlay) and assert
 # what the manifests only claim: the compactor enforces retention, the S3 link is not forced to
-# http, a PDB exists, no canary DaemonSet. Needs kubectl, helm and python3 with PyYAML (network
+# http, a PDB exists, no canary DaemonSet, no ClusterRole. Needs kubectl, helm and python3 with PyYAML (network
 # for the chart). Rung: mocked/static, nothing runs on a cluster.
 #   Usage: scripts/dev/test-loki-render.sh
 set -euo pipefail
@@ -66,6 +66,10 @@ for env, replicas, rf, retention, insecure, pdb in (("base", 3, 2, 8760, False, 
     kinds, cfg = load(env)
     sts = [d for d in kinds.get("StatefulSet", []) if d["metadata"]["name"] == "loki"]
     check(f"{env}: one StatefulSet loki with {replicas} replica(s)", len(sts) == 1 and sts[0]["spec"]["replicas"] == replicas)
+    check(f"{env}: no ClusterRole nor ClusterRoleBinding (no cluster-wide read of ConfigMaps/Secrets)",
+          not kinds.get("ClusterRole") and not kinds.get("ClusterRoleBinding"))
+    check(f"{env}: no rules sidecar container (loki-sc-rules)",
+          not [c for d in sts for c in d["spec"]["template"]["spec"]["containers"] if "sc-rules" in c["name"]])
     check(f"{env}: no loki-canary DaemonSet", not [d for d in kinds.get("DaemonSet", []) if "canary" in d["metadata"]["name"]])
     check(f"{env}: PodDisruptionBudget {'present with minAvailable 1' if pdb else 'absent'}",
           (len(kinds.get("PodDisruptionBudget", [])) == 1 and kinds["PodDisruptionBudget"][0]["spec"].get("minAvailable") == 1) if pdb
