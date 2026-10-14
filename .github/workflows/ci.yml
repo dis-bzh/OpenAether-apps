@@ -105,6 +105,14 @@ jobs:
       - name: Health-gate list in apps/flux/README.md matches the management render (#50)
         run: ./scripts/dev/test-flux-health-gates.sh
 
+      # The local Docker lane (.github/workflows/local-docker.yml) only runs by hand or on a PR touching it, so its
+      # static shape is checked here on every PR: a closed brick set, a pinned GitRepository, an always-run teardown.
+      - name: Local Docker lane (static + mutation tests)
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-local-docker-lane.sh | tee lane-test.out
+          grep -qE '^0 failed$' lane-test.out
+
   loki-render:
     name: Loki chart render
     runs-on: ubuntu-latest
