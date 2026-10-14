@@ -1,8 +1,9 @@
 # apps/clusters — clusters clients CAPI (kubeception / gitception)
 
-Surcouche **exercée en cloud réel** : edge-1 (Scaleway) et edge-2 (OVH) ont été
-provisionnés de bout en bout depuis un management réel (2026-07-25/26), Cilium
-et Flux injectés à distance, gitception incluse. Les apiVersions des templates
+Surcouche : edge-1 (Scaleway) et edge-2 (OVH) ont été provisionnés de bout en bout
+depuis un management réel (2026-07-25/26), mais avant l'ajout des variables
+`CHILD_BACKUP_*` (2026-07-30) : depuis, la chaîne n'est validée que **statiquement**
+(`scripts/check-child-clusters.py`, CI), pas rejouée sur un cluster. Les apiVersions des templates
 sont validées contre les providers épinglés (CAPS v0.2.1 → `v1alpha2`,
 CACPPT v0.5.13 / CABPT v0.6.12 → `v1alpha3`).
 
@@ -29,6 +30,11 @@ Pas d'ordre strict requis : chaque étape retry jusqu'à ce que sa condition
 (kubeconfig présent, API joignable) soit vraie — convergence à la Flux.
 
 Voir `example-scaleway.yaml.example` pour le cycle complet commenté.
+
+Variables `postBuild.substitute` de la Kustomization `<nom>-gitops` : `CHILD_NAME` toujours ;
+`CHILD_BACKUP_S3_BUCKET` + `CHILD_BACKUP_S3_ENDPOINT` si le profil pioche `cnpg` ;
+`CHILD_BACKUP_TARGET_URL` s'il pioche `storage` (valeurs fictives dans git, cf. `edge-1.yaml`).
+`scripts/check-child-clusters.py` vérifie tout cela, exemple compris.
 
 ## Prérequis hors git (une fois par management)
 

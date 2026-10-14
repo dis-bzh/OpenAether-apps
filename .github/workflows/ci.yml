@@ -52,6 +52,13 @@ jobs:
       - name: pick.py --check (generated profiles up to date with the DAG)
         run: python3 scripts/pick.py --check
 
+      # apps/clusters is only partly rendered by the build job (edge-*.yaml and
+      # the .example are not listed), so a bad apiVersion there went unseen.
+      - name: Child clusters (static check + mutation tests)
+        run: |
+          python3 scripts/check-child-clusters.py
+          scripts/dev/test-check-child-clusters.sh
+
   build:
     name: Kustomize Build + Collision Check
     runs-on: ubuntu-latest
