@@ -17,6 +17,17 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+### Added
+
+- **Pull requests are scanned for environment data, not only credentials (#41).** A `leaks` job in `ci.yml` runs gitleaks with
+  `.gitleaks-envdata.toml` over what a PR adds: routable IPv4 addresses, 12-digit account ids and account/project UUIDs, concrete
+  `s3-…-backups` bucket names, on top of the default credential rules. The rules were measured against their own probe
+  (`scripts/dev/check-gitleaks-rules.sh`: 7 values it must catch, 9 it must leave alone, run before the scan because a rule that
+  matches nothing passes silently). A /16-or-wider network block (a provider's published range) is let through, a /32 is not.
+  The file is not named `.gitleaks.toml` on purpose: `security.yml` keeps scanning the full history with the default rules.
+  Rung: CI and a local run over this tree (no finding after the allowlists). Not made a required check: that is a repository
+  setting.
+
 ## [0.1.1] — 2026-10-14
 
 **The fixes the first real Flux runs asked for, for new clusters.** Read *Upgrade notes* (a cluster
