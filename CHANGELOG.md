@@ -70,7 +70,9 @@ distinguishes static checks, CI, local Docker, and real clouds.
     first install), the pool at `v2` with 0 warnings, the cleanup Jobs in 4 s, Loki's labels and a marker line, no `i/o timeout`,
     region `fr-par`, Longhorn's BackupTarget `available: true` (it was not checked on lab 4), and Kyverno at 82 `require-security-context`
     (45 + 37 autogen) and 3 `restrict-image-registries` (1 + 2 autogen, images not yet attributed), none `restrict-privileged`
-    (#37, #47). CloudNativePG on lab 6: archiving first failed because the lab reused its bucket and the previous cluster's WAL archive was still
+    (#37, #47). Flux then moved lab 6 to `4639c98` (the last commit): 35 of 35 Ready again, no pod outside Running or Completed, no
+    `i/o timeout`, no "Policy denied" drop in two later windows (three in the first 45 seconds after the re-apply, while pods restarted;
+    not identified). CloudNativePG on lab 6: archiving first failed because the lab reused its bucket and the previous cluster's WAL archive was still
     there (the pods did reach Scaleway's S3 through the new rule; the trap is in `docs/traps.md`); after that stale `cnpg/` prefix was
     removed both clusters reported `Continuous archiving is working`.
   - **OVH, full DAG, Paris region with the Gravelines S3 endpoint (`s3.gra.io.cloud.ovh.net`); one cluster that saw `4405794`, then
@@ -82,17 +84,19 @@ distinguishes static checks, CI, local Docker, and real clouds.
     denied" drop in a 60-second window, no Loki timeout in ten minutes, Loki's objects in the bucket, `zitadel-db` and `grafana-db`
     reporting `Continuous archiving is working`, and Longhorn's BackupTarget `available: true` (it had read `false` when first
     looked at).
-  - **Outscale, REDUCED profile on a twin of `4405794`** (a throwaway branch: `4405794` plus one regenerated management profile file;
-    picks `vault eso certs kyverno platform-cilium-lb-ipam`, 18 Kustomizations): the shipped Outscale quota (20 vCPU, 40 GB) cannot
-    hold the full DAG, so the full DAG was **not** run on Outscale. All 18 Ready, the same OpenBao observations, the pool at `v2`,
-    cleanup Jobs in 6 s. That profile has no Loki, database or Longhorn, so the `oos.*.outscale.com` pattern has been checked by
-    `scripts/dev/test-s3-egress-fqdns.py` only, never by a live flow; it mirrors the two that were.
+  - **Outscale, REDUCED profile, two labs on twins of the candidate** (throwaway branches: `4405794` for lab 4, then `4639c98` for
+    lab 6, each plus one regenerated management profile file; picks `vault eso certs kyverno platform-cilium-lb-ipam`, 18
+    Kustomizations): the shipped Outscale quota (20 vCPU, 40 GB) cannot hold the full DAG, so the full DAG was **not** run on
+    Outscale. Both labs: 18 of 18 Ready, OpenBao in production mode with the CSR stored, the pool at `v2` with 0 warnings, the cleanup
+    Jobs in 3 to 6 s, the Day-1 seeding writing five paths. That profile has no Loki, database or Longhorn, so the
+    `oos.*.outscale.com` pattern has been checked by `scripts/dev/test-s3-egress-fqdns.py` only, never by a live flow; it mirrors the
+    two that were.
   - **The stored CSR.** Through the `bao` CLI, `openaether-admin` was refused (exit code 2) an overwrite, a delete, a destroy and a
-    metadata wipe on Scaleway (labs 4 and 6), OVH and Outscale, the first three against the exact-path rule of `4405794` and the
-    later ones against the prefix rule. The CLI strips a trailing slash, so those checks could not see that a raw HTTP
+    metadata wipe on Scaleway (labs 4 and 6), OVH and Outscale (labs 4 and 6): lab 4 of Scaleway and Outscale and the first OVH cluster ran the
+    exact-path rule of `4405794`; Scaleway lab 6, Outscale lab 6 and OVH after `a3cb3d2` ran the prefix rule. The CLI strips a trailing slash, so those checks could not see that a raw HTTP
     `DELETE .../intermediate-csr/` got through the first rule (found by the independent review on the pinned image). The raw requests
     (trailing-slash `DELETE` of the data and metadata paths, the delete and undelete endpoints: all 403, the entry still readable at
-    version 1) were made against the prefix rule on OVH and on Scaleway lab 6.
+    version 1) were made against the prefix rule on OVH, Scaleway lab 6 and Outscale lab 6.
   - **CI on the pull request, per head:** CI, Security and the Local Docker lane were green on `883d888`, `4405794` and `953f459`;
     Security was red on `07d9347` (a fake key header in the lane's own test, fixed by `2776555` and a documented fingerprint); all seven
     checks were green on `065d440`, including `openbao-bootstrap` against a real OpenBao (136 checks: 131 up to `4405794`, 136 from
