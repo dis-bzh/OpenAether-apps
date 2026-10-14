@@ -84,6 +84,14 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Fixed
 
+- **Documentation statements the first real Flux run contradicted, and comments pointing at the wrong place (#50).** The 0.1.0
+  lead and Known limits corrected in place (they said no real-cluster run existed); the transient `ClusterSecretStore`
+  phase is not specific to an ad-hoc pick; `cnpg` is `wait: true` and reads the operator-seeded `backup/s3-primary`; the list of
+  Kustomizations without a health gate is in `apps/flux/README.md` and pinned by `scripts/dev/test-flux-health-gates.sh`; the
+  Job-recreation comments (a finished Job is reported unchanged unless its spec changes; `openbao-init` also expires after
+  its TTL); the backup README (bucket names and who creates which bucket, the restic password is generated and never printed);
+  the Flux 2.8/2.9 wording of one alert. Rung: static (docs and comments, no manifest behaviour changes). The text of the
+  published 0.1.0 release notes is not changed by this commit: that remains an owner action on GitHub.
 - **The `CiliumLoadBalancerIPPool` is `cilium.io/v2` (was `v2alpha1`, which the API server flags as deprecated from Cilium 1.19) (#49).**
   v2 is served since Cilium 1.18 and every pinned version is at or above it. The `CiliumL2AnnouncementPolicy` stays `v2alpha1`
   (upstream has no v2 type for it). Rung: static/mocked, not run on a cluster; `scripts/dev/test-cilium-lb-ipam-api.sh`
@@ -124,9 +132,10 @@ not reconciled on a real cluster at this tag.** This is the first number the rep
 what it measured is static: `yamllint`, `pick.py --validate` (the DAG is healthy) and `pick.py --check` (the generated
 profile matches it), a `kubectl kustomize` build of every brick with no object claimed by two bricks, and the Cilium
 settings of the CAPI children agreeing with the foundation's (`task apps-validate` from `OpenAether-infra`). The runs on a
-real cluster that this file records (July and August 2026, Scaleway and OVH) are on earlier commits. No run on a
-real cluster is recorded since, and `OpenAether-infra` 0.2.0 validated its three clouds with Flux off. Read Known limits before
-pulling this onto a cluster that matters.
+real cluster that this file records (July and August 2026, Scaleway and OVH) are on earlier commits. *Corrected in place on
+2026-10-14 (#50): the tag itself was not reconciled, but one lab then reconciled the `management` profile on Scaleway
+by hand on 2026-10-12 and 2026-10-13 (see Unreleased, Validated).* `OpenAether-infra` 0.2.0 validated its three clouds with
+Flux off. Read Known limits before pulling this onto a cluster that matters.
 
 `OpenAether-infra` 0.2.0 pins this tag in its `envs/*.tfvars.example` (`git_ref = "refs/tags/0.1.0"`). The tag replaces the withdrawn 1.0.0 below, whose entries are the
 record of how the repository got here and are part of what this tag contains.
@@ -161,11 +170,11 @@ record of how the repository got here and are part of what this tag contains.
 Read these before deploying something that matters. Open items:
 [the open issues](https://github.com/dis-bzh/OpenAether-apps/issues).
 
-- **No profile has been reconciled on a real cluster at this tag.** The statements above name the gates that ran. A real
-  reconcile of the `management` or `workload` profile, `deploy_flux = true` in `OpenAether-infra`, is the next thing to
-  measure and is not recorded anywhere.
-- **The pinned Flux source has never been exercised on a live cluster.** `ref.name: ${GIT_REF:=refs/heads/main}` carries a
-  tag or a branch (entry 1.0.0, Changed); only static validation ran.
+- **No profile had been reconciled on a real cluster at this tag.** *Corrected in place on 2026-10-14 (#50):* the `management`
+  profile was reconciled once by a lab, by hand, after the tag (Unreleased, Validated); the `workload` profile still has not been.
+  The statements above name the gates that ran at the tag.
+- **The pinned Flux source was not exercised on a live cluster at this tag.** `ref.name: ${GIT_REF:=refs/heads/main}` carries a
+  tag or a branch (entry 1.0.0, Changed). *Corrected in place on 2026-10-14 (#50):* the lab run above used it.
 - **The CAPI child clusters in `apps/clusters` are scaffolding, and none is enabled by default.** Two management clusters
   must never read the same `apps/clusters` (README).
 - **The public Gateway has no perimeter in front of it.** Nothing may be attached to it that does not authenticate its own

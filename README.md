@@ -112,7 +112,8 @@ stranger's cluster tries to reconcile.
 
 ⚠️ **Keep an operator and its own CRs in two separate Kustomizations**: a bundle
 containing both an operator and CRs of the CRDs it installs is rejected at
-dry-run while those CRDs do not yet exist.
+dry-run while those CRDs do not yet exist. The Kustomization holding the CRs must `dependsOn` the operator's, which
+is `wait: true` so that the CRDs are served before the CRs are applied (`external-secrets` then `external-secrets-stores`).
 
 ## Local development
 

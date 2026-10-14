@@ -111,7 +111,8 @@ cluster inconnu tente de réconcilier.
 
 ⚠️ **Opérateur et ses CR dans deux Kustomizations séparées** : un bundle
 contenant à la fois un opérateur et des CR de ses propres CRDs est rejeté au
-dry-run tant que les CRDs n'existent pas.
+dry-run tant que les CRDs n'existent pas. La Kustomization des CR doit `dependsOn` celle de l'opérateur, en
+`wait: true` pour que les CRDs soient servies avant les CR (`external-secrets` puis `external-secrets-stores`).
 
 ## Développement local
 

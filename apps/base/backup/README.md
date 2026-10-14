@@ -14,28 +14,30 @@ de clair —, déduplication, rétention (14 j / 8 sem / 12 mois) et `restic che
 | OpenBao (raft : KV, PKI intermediate, policies) | snapshot raft quotidien (`openbao-snapshot`, foundation-vault) | partiellement (DR by-design) — le snapshot raccourcit le RTO |
 | Bases CNPG (zitadel, grafana) | `pg_dump -Fc` quotidien (`cnpg-dump`, foundation-databases) | non |
 | Ressources K8s | — | oui : GitOps (Flux ré-applique tout) |
-| tfstate, kube/talosconfig | OpenAether-infra (PBKDF2/AES-GCM + gpg, 2 buckets) | — |
+| tfstate, kube/talosconfig | OpenAether-infra (PBKDF2/AES-GCM + gpg ; buckets tfstate et artefacts, chacun avec son jumeau `-backup`) | — |
 | etcd | OpenAether-infra `task etcd-snapshot` | oui (GitOps) — bretelle RTO |
 | Volumes Longhorn | LUKS at-rest ; `backupTarget` par env (voir bas de page) | selon l'app |
 
 ## Seed des secrets (une fois par cluster)
 
-1. `backup/restic` — **seedé automatiquement** par le Job
-   `openbao-vault-bootstrap` (password aléatoire, affiché UNE FOIS dans ses
-   logs). **ESCROW OFFLINE OBLIGATOIRE** (Bitwarden EU) : sans ce password,
+1. `backup/restic` — **généré** par le Job `openbao-vault-bootstrap`
+   (`configure.sh` : password aléatoire, **jamais affiché**, dans aucun log ;
+   à lire depuis OpenBao avec l'identité admin, cf. `docs/admin-access.md`
+   d'OpenAether-infra). **ESCROW OFFLINE OBLIGATOIRE** (Bitwarden EU) : sans ce password,
    les backups sont indéchiffrables le jour où OpenBao est perdu — c'est
    précisément le scénario DR principal.
 2. `backup/s3-primary` et `backup/s3-replica` — **seedés par l'opérateur**
    (creds provider inconnues in-cluster). `endpoint` inclut le schéma :
 
    ```bash
+   # bucket : s3-<projet>-<provider du cluster>-backups-<env> ; son jumeau `-backup` vit chez l'autre provider
    bao kv put secret/backup/s3-primary \
      endpoint="https://s3.fr-par.scw.cloud" \
-     bucket="s3-openaether-scw-backups" \
+     bucket="s3-<projet>-scaleway-backups-<env>" \
      access_key="…" secret_key="…"
    bao kv put secret/backup/s3-replica \
      endpoint="https://s3.eu-west-par.io.cloud.ovh.net" \
-     bucket="s3-openaether-ovh-backups" \
+     bucket="s3-<projet>-scaleway-backups-<env>-backup" \
      access_key="…" secret_key="…"
    # Local (test) : endpoint="http://minio.foundation-storage.svc.cluster.local:9000"
    ```
@@ -44,8 +46,11 @@ de clair —, déduplication, rétention (14 j / 8 sem / 12 mois) et `restic che
    NotReady et les CronJobs ne démarrent pas (by design, `wait: false`).
    Nouveau FQDN S3 ⇒ l'ajouter aussi aux `toFQDNs` des networkpolicies ici.
 3. **Les buckets doivent préexister** : restic ne les crée pas (et retry un
-   NoSuchBucket en silence). Cloud : opérateur / `ensure-buckets.sh` côté
-   infra. Local : chart MinIO (`backups-primary`/`backups-replica` dans les
+   NoSuchBucket en silence). Cloud : `ensure-buckets.sh` (infra) crée quatre
+   buckets (tfstate et artefacts, et leurs jumeaux `-backup`) ; le bucket
+   `backups-<env>` de ces sauvegardes (et son jumeau `-backup`, convention
+   `backup.tf`) est créé **par l'opérateur** ; les buckets d'images viennent de
+   `talos-image.sh`. Local : chart MinIO (`backups-primary`/`backups-replica` dans les
    values).
 
 ## Restauration

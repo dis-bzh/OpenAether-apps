@@ -23,7 +23,7 @@ spec:
         # 1) An object Flux has STOPPED reconciling — wedged controller, stuck
         #    finalizer, or suspended and forgotten. Every Kustomization has an
         #    interval <= 10 min, so a flat counter over 30 min is a real stop.
-        #    Does NOT catch "reconciling but failing": Flux 2.8 exposes no
+        #    Does NOT catch "reconciling but failing": Flux 2.8 and 2.9 export no
         #    per-object Ready condition (OpenAether-infra CHANGELOG, Known limits).
         - alert: FluxReconciliationStalled
           expr: |

@@ -21,8 +21,8 @@ design mistake, not a feature.
 ## Edges
 
 `dependsOn` is the only thing that orders reconciliation. Three missing edges
-have already been found, and they only bite an ad-hoc pick — the default profile
-happened to order them correctly by accident. When you add a component, ask what
+have already been found. They bit an ad-hoc pick and also the `management` profile (the
+full DAG, the one reconciled on a real cluster): a transient `ClusterSecretStore openbao not found` phase. When you add a component, ask what
 it reads at startup, not what it reads eventually.
 
 **Four ways the DAG has bitten, each once.**

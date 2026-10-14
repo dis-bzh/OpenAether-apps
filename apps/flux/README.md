@@ -49,6 +49,27 @@ Pour activer un profil : pointer la Kustomization Flux racine sur son chemin
 (`spec.path: ./apps/flux/<profil>`) côté `OpenAether-infra`
 (bootstrap-manifests), ou par patch d'overlay.
 
+## Health gates
+
+Une Kustomization sans `wait: true` ni `healthChecks` est « Ready » dès que ses objets sont appliqués, pas quand ils
+fonctionnent. Dans le rendu `apps/flux/management` (34 Kustomizations), ces 10 n'ont aucun gate de santé :
+
+<!-- health-gates:begin (pinned by scripts/dev/test-flux-health-gates.sh) -->
+- backup-databases
+- backup-openbao
+- capi-clusters
+- external-secrets-stores
+- flux-egress
+- foundation-vault
+- identity
+- observability
+- services-gateway
+- storage-backup-target
+<!-- health-gates:end -->
+
+Sur un cluster de management réel, `OpenAether-infra` en ajoute une 11e (`openaether-platform`), absente de ce
+dépôt : 11 sur 35. Ajouter ou retirer un `wait`/`healthChecks` change cette liste ; le test échoue tant qu'elle n'est pas mise à jour.
+
 ## Invariant à maintenir
 
 **`dependsOn` = dépendances réelles**, pas seulement un ordre de convergence.

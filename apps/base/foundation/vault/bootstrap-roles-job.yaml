@@ -1,4 +1,4 @@
-# OpenBao configuration — idempotent Job, recreated by Flux on every sync (scripts/configure.sh).
+# OpenBao configuration — idempotent Job, recreated by Flux when its spec changes (scripts/configure.sh).
 #
 # Runs as ServiceAccount openbao-vault-bootstrap and logs in to OpenBao with it (Kubernetes auth role
 # `openbao-bootstrap`, created by openbao-init before it revoked the root token). It needs NO Kubernetes API access

@@ -15,10 +15,11 @@ spec:
   path: ./apps/base/foundation/vault
   prune: true
   wait: false
-  # force: the openbao-vault-bootstrap Job is IMMUTABLE; without force, any
-  # change to its spec fails the dry-run → the WHOLE vault bundle is rejected
-  # (seen on real cloud). force recreates the Job (delete+create), which is
-  # exactly its contract ("deleted + recreated on every sync", idempotent).
+  # force: the Jobs openbao-init and openbao-vault-bootstrap are IMMUTABLE; without force, a change to
+  # a spec (including the configMapGenerator hash of a changed script) fails the dry-run → the WHOLE
+  # vault bundle is rejected (seen on real cloud). force recreates a Job only then (delete+create);
+  # with an unchanged spec Flux reports it unchanged. openbao-init also expires after its TTL (3600 s)
+  # and is recreated by the next reconcile (reasoned, not observed).
   force: true
   dependsOn:
     # cert-manager issues the OpenBao listener's certificate (internal TLS).

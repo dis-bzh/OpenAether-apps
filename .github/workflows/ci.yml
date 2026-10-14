@@ -91,6 +91,9 @@ jobs:
           python3 -I scripts/check-dependson-contracts.py
           ./scripts/dev/test-check-dependson-contracts.sh
 
+      - name: Health-gate list in apps/flux/README.md matches the management render (#50)
+        run: ./scripts/dev/test-flux-health-gates.sh
+
   openbao-bootstrap:
     name: OpenBao bootstrap (real OpenBao)
     runs-on: ubuntu-latest
