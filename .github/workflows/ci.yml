@@ -80,6 +80,9 @@ jobs:
       - name: Cross-brick object collision check (builds every DAG path with kubectl kustomize)
         run: python3 scripts/check-object-collisions.py
 
+      - name: CiliumLoadBalancerIPPool stays on cilium.io/v2 (#49)
+        run: ./scripts/dev/test-cilium-lb-ipam-api.sh
+
   openbao-bootstrap:
     name: OpenBao bootstrap (real OpenBao)
     runs-on: ubuntu-latest

@@ -84,6 +84,10 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Fixed
 
+- **The `CiliumLoadBalancerIPPool` is `cilium.io/v2` (was `v2alpha1`, which the API server flags as deprecated from Cilium 1.19) (#49).**
+  v2 is served since Cilium 1.18 and every pinned version is at or above it. The `CiliumL2AnnouncementPolicy` stays `v2alpha1`
+  (upstream has no v2 type for it). Rung: static/mocked, not run on a cluster; `scripts/dev/test-cilium-lb-ipam-api.sh`
+  (in CI) pins the apiVersion in the base and the local overlay. It does not prove the warning is gone: that is a cluster observation.
 - **Kyverno Audit policies flagged pods that merely lack optional keys, and short Docker Hub names (#47).** `initContainers` and
   `volumes` are now conditional anchors (`=(initContainers)`, `=(volumes)` with Kyverno's own `X(hostPath)`), the image
   allow-list accepts the `org/image` short form of the allowed organisations (and `prom`), and `deny-hostpath` exempts
