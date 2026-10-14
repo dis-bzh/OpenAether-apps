@@ -6,6 +6,13 @@
 # anything, so the configuration changes only through git, the Flux-run configure Job); mint tokens; seal, rekey,
 # rotate, generate a root token, touch raw storage, the raft cluster or the audit trail (recovery-share holders).
 path "secret/*"               { capabilities = ["create", "read", "update", "delete", "list"] }
+# The intermediate CSR is what the offline root signs: this identity reads it and can not replace, delete or destroy it
+# (a swapped CSR would get the attacker's key signed). The more specific path wins over secret/*.
+path "secret/data/pki/intermediate-csr"     { capabilities = ["read"] }
+path "secret/metadata/pki/intermediate-csr" { capabilities = ["read", "list"] }
+path "secret/delete/pki/intermediate-csr"   { capabilities = ["deny"] }
+path "secret/undelete/pki/intermediate-csr" { capabilities = ["deny"] }
+path "secret/destroy/pki/intermediate-csr"  { capabilities = ["deny"] }
 # PKI: import the signed intermediate, issue from the one role git defines, read what exists. Roles, issuers' configuration and
 # the root are not writable here: a role with allow_any_name would let this identity issue certificates for anything.
 path "pki/intermediate/generate/*" { capabilities = ["create", "update"] }

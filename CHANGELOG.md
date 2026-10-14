@@ -199,6 +199,13 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   fault inside plugin 1.23.6 is not found and nothing here pins a plugin version. Operator 1.23.1 is unsupported and does not list
   PostgreSQL 18. Rung: real cloud once by hand; the issue stays open for the cause.
 
+- **The stored PKI intermediate CSR is read-only for the admin identity (found on the Scaleway lab, 2026-10-14).** The first
+  version of the `secret/pki/intermediate-csr` entry could be overwritten, deleted or destroyed by `openaether-admin` (it holds
+  `secret/*`), so a swapped CSR would have got another key signed by the offline root. The admin policy now lets it read the
+  entry and its metadata only; the harness checks the read (200) and four refusals (overwrite, delete, destroy, metadata
+  wipe), and fails when the rule is removed (4 failures). This is the same configuration as before for everything else.
+  Rung: the 131-check harness against a real OpenBao; not yet re-observed on a cluster.
+
 ### Upgrade notes (0.1.1)
 
 - **Pulling 0.1.1 onto an existing cluster re-runs BOTH OpenBao bootstrap Jobs once.** `configure.sh` changed, which changes the hash

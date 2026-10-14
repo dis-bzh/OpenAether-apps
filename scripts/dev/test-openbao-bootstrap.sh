@@ -299,6 +299,7 @@ rq() { # TOKEN_HEADER_FILE METHOD PATH [JSON] -> HTTP status
 }
 printf '{"type":"kv","options":{"version":"2"}}' | curl -s --cacert "$CAB" -H "@$T/bg.root" -X POST -d @- -o /dev/null "$U/v1/sys/mounts/secret"
 printf '{"type":"pki"}' | curl -s --cacert "$CAB" -H "@$T/bg.root" -X POST -d @- -o /dev/null "$U/v1/sys/mounts/pki"
+printf '{"data":{"csr":"x"}}' | curl -s --cacert "$CAB" -H "@$T/bg.root" -X POST -d @- -o /dev/null "$U/v1/secret/data/pki/intermediate-csr"
 for pol in openaether-bootstrap openaether-breakglass external-secrets-read cert-manager-pki backup-snapshot secret-seeder openaether-admin openaether-reader; do
   jq -nc --rawfile p "$V/scripts/policies/$pol.hcl" '{policy:$p}' | curl -s --cacert "$CAB" -H "@$T/bg.root" -X PUT -d @- -o /dev/null "$U/v1/sys/policies/acl/$pol"
   printf '{"policies":["%s"],"ttl":"30m","no_parent":true}' "$pol" | curl -s --cacert "$CAB" -H "@$T/bg.root" -X POST -d @- "$U/v1/auth/token/create" \
@@ -320,6 +321,11 @@ expect "seeder can not write elsewhere"          '403'     "$(rq "$T/tok-secret-
 echo "--- openaether-admin: secrets yes, structure no"
 expect "admin reads a secret"                    '200'     "$(rq "$T/tok-openaether-admin" GET  /v1/secret/data/backup/s3-primary)"
 expect "admin writes a secret"                   '200|204' "$(rq "$T/tok-openaether-admin" POST /v1/secret/data/grafana/admin "$KV")"
+expect "admin reads the stored CSR"               '200'     "$(rq "$T/tok-openaether-admin" GET  /v1/secret/data/pki/intermediate-csr)"
+expect "admin can not overwrite the stored CSR"   '403'     "$(rq "$T/tok-openaether-admin" POST /v1/secret/data/pki/intermediate-csr "$KV")"
+expect "admin can not delete the stored CSR"      '403'     "$(rq "$T/tok-openaether-admin" DELETE /v1/secret/data/pki/intermediate-csr)"
+expect "admin can not destroy its versions"       '403'     "$(rq "$T/tok-openaether-admin" POST /v1/secret/destroy/pki/intermediate-csr '{"versions":[1]}')"
+expect "admin can not wipe its metadata"          '403'     "$(rq "$T/tok-openaether-admin" DELETE /v1/secret/metadata/pki/intermediate-csr)"
 expect "admin reads a policy"                    '200'     "$(rq "$T/tok-openaether-admin" GET  /v1/sys/policies/acl/secret-seeder)"
 expect "admin can not write a policy"            '403'     "$(rq "$T/tok-openaether-admin" PUT  /v1/sys/policies/acl/evil '{"policy":"path \"*\" { capabilities = [\"sudo\",\"create\",\"read\",\"update\",\"delete\",\"list\"] }"}')"
 expect "admin can not mount an engine"           '403'     "$(rq "$T/tok-openaether-admin" POST /v1/sys/mounts/evil '{"type":"kv"}')"
