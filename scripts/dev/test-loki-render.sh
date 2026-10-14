@@ -82,7 +82,10 @@ if es:
     lit = lambda name: re.search(r"\$%s := \"(.*?)\" -}}" % name, region)
     if lit("hosts") and lit("oos"):
         un = lambda m: m.group(1).replace("\\\\", "\\")
-        pat = re.compile("^https://(%s|%s)(:[0-9]+)?/?$" % (un(lit("hosts")), un(lit("oos"))))
+        # The printf format is read from the template too: a hard-coded copy would not notice an unanchored template.
+        fmt = re.search(r'regexMatch \(printf "(.*?)" \$hosts \$oos\)', region)
+        check("externalsecret: the host match is a readable printf of $hosts and $oos", fmt is not None and fmt.group(1).count("%s") == 2)
+        pat = re.compile(un(fmt) % (un(lit("hosts")), un(lit("oos"))) if fmt else "$^")
         sub = re.search(r'regexReplaceAll "(.*?)" \.endpoint', region)
         ext = re.compile(sub.group(1).replace("\\\\", "\\")) if sub else None
         def derive(ep):
