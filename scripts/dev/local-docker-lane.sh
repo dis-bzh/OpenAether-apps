@@ -215,7 +215,8 @@ cmd_collect() {
   scan_logs
 }
 
-# Known secret VALUES (seal key, recovery shares) plus the shape of an OpenBao token. Counts and names only are printed.
+# Known secret VALUES (seal key, recovery shares) plus the shapes of a token (Vault `hvs.`, OpenBao `s.`/`b.` + 24 characters) and of a
+# PEM private key. Counts and names only are printed. `scan` runs it alone on an existing $OUT (used by the static test).
 scan_logs() {
   local known="$OUT/.known-secrets" hits=0 f
   : >"$known"; chmod 600 "$known"
@@ -236,7 +237,7 @@ for v in d.values():
   : >"$OUT/leak-scan.txt"
   for f in "$OUT"/logs/*.log; do
     [ -e "$f" ] || continue
-    if { [ -s "$known" ] && grep -qF -f "$known" "$f"; } || grep -qE 'hvs\.[A-Za-z0-9_-]{20,}|BEGIN (RSA |EC )?PRIVATE KEY' "$f"; then
+    if { [ -s "$known" ] && grep -qF -f "$known" "$f"; } || grep -qE '(^|[^A-Za-z0-9_])(hvs\.[A-Za-z0-9_-]{20,}|[sb]\.[A-Za-z0-9]{24})([^A-Za-z0-9]|$)|BEGIN ([A-Z]+ )*PRIVATE KEY' "$f"; then
       hits=$((hits + 1)); echo "leak: $(basename "$f")" >>"$OUT/leak-scan.txt"
       rm -f "$f"
     fi
@@ -253,5 +254,6 @@ case "${1:-}" in
   wait) cmd_wait ;;
   assert) cmd_assert ;;
   collect) cmd_collect ;;
-  *) echo "usage: $0 plan|flux|prepare-mode|wait|assert|collect" >&2; exit 2 ;;
+  scan) scan_logs ;;
+  *) echo "usage: $0 plan|flux|prepare-mode|wait|assert|collect|scan" >&2; exit 2 ;;
 esac

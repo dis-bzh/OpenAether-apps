@@ -20,3 +20,5 @@ rendered/
 # Python
 __pycache__/
 *.pyc
+# output of scripts/dev/local-docker-lane.sh run locally (cluster dumps, pod logs)
+local-docker-out/

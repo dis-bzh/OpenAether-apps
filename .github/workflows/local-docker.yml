@@ -37,7 +37,8 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A manual dev run and a manual prod run on the same ref must not cancel each other.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -66,6 +67,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           path: apps
+          # The commit Flux clones, not the merge ref: the Kustomizations rendered must be the ones it reconciles.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7

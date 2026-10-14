@@ -1,4 +1,4 @@
-# Local Docker lane (rung 2): partial bricks, not a substitute for the cloud
+# Local Docker lane: partial bricks, not a substitute for the cloud
 
 `.github/workflows/local-docker.yml` runs `scripts/dev/local-docker-lane.sh` on a GitHub-hosted runner. It needs a runner
 because Talos 1.14 wants a kernel >= 6.15 and several GB of RAM; a small VPS or a laptop on an older kernel cannot host it.
@@ -22,16 +22,26 @@ because Talos 1.14 wants a kernel >= 6.15 and several GB of RAM; a small VPS or 
 
 ## What it proves
 
-OpenBao's real Kubernetes-auth login and 3-replica raft join on local-path volumes, the order of the two bootstrap Jobs,
-External Secrets and cert-manager starting and the `openbao` ClusterSecretStore/ClusterIssuer becoming Ready, Kyverno and its
-policies installing, and a cold-start `dependsOn` ordering on a cluster that is not a cloud one.
+OpenBao's real Kubernetes-auth login and 3-replica raft join on local-path volumes (both bootstrap Jobs `Complete`, in the requested
+mode), External Secrets, cert-manager, Kyverno and its policies reaching `Ready` as Flux Kustomizations, and a cold-start `dependsOn`
+ordering on a cluster that is not a cloud one. It does **not** read the `openbao` ClusterSecretStore or ClusterIssuer: the
+`external-secrets-stores` Kustomization has `wait: false`, so its `Ready` says only that the objects were applied.
+
+## What has actually run
+
+Dev mode, on the pull request of the 0.1.1 candidate, green on two commits (19 assertions, plus the bounded wait). **Not run:** prod
+mode (`openbao_mode=prod`, the throwaway PGP keys) and the `workflow_dispatch` route with its inputs; they are written and
+statically checked, not observed.
 
 ## What it does NOT prove
 
 Longhorn (the Docker image has no `iscsi-tools`), anything needing a routable LoadBalancer (the pool is the Docker bridge),
 provider S3 or egress rules, Zitadel behind the TLS gateway, Istio ambient, observability or Loki at this size, CloudNativePG
 (needs the `cluster-identity` ConfigMap that only the cloud bootstrap creates), the Cluster API providers, node rolls and PDB
-behaviour, the prod-mode break-glass (the throwaway private keys are discarded), and anything about a cloud provider. A green
+behaviour, the prod-mode break-glass (the throwaway private keys are discarded), the default-deny network baseline
+(`platform-network-policies`, `flux-egress`: neither is in the default set), the management/workload overlays and the root
+Kustomization with its `GIT_REF` substitution (the Kustomizations are applied flat from `apps/flux/base`), three OpenBao replicas
+spread over two nodes, and anything about a cloud provider. A green
 run is "local Docker, partial bricks"; the cloud rung is still required before a release.
 
 ## Running it

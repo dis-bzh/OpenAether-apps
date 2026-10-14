@@ -32,6 +32,19 @@ sed -i '0,/prune: true/s//prune: true\n  postBuild:\n    substituteFrom:\n      
 if LANE_ROOT="$T/mut" LANE_OUT="$T/mout" LANE_SET="namespaces" "$LANE" plan >"$T/m.out" 2>&1; then
   bad "substituteFrom on a selected brick: accepted"; else ok "substituteFrom on a selected brick: refused"; fi
 
+# The leak scan must catch what it claims to catch (positive controls), and keep a clean log. A stub kubectl: no Secret to read.
+mkdir -p "$T/bin" "$T/scan/logs"; printf '#!/bin/sh\nexit 1\n' >"$T/bin/kubectl"; chmod +x "$T/bin/kubectl"
+printf 'starting\nall good\nreconciled in 3s\n' >"$T/scan/logs/clean.log"
+printf 'token s.%s here\n' "$(printf 'A1b2C3d4E5f6G7h8I9j0K1l2')" >"$T/scan/logs/openbao-service.log"
+printf '{"client_token":"b.%s"}\n' "$(printf 'A1b2C3d4E5f6G7h8I9j0K1l2')" >"$T/scan/logs/openbao-batch.log"
+printf 'hvs.%s\n' "$(printf 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4')" >"$T/scan/logs/vault.log"
+printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n' >"$T/scan/logs/ssh.log"
+printf -- '-----BEGIN ENCRYPTED PRIVATE KEY-----\nabc\n' >"$T/scan/logs/pkcs8.log"
+PATH="$T/bin:$PATH" LANE_OUT="$T/scan" "$LANE" scan >"$T/scan.out" 2>&1
+[ "$(grep -c . "$T/scan/leak-scan.txt")" = 6 ] && grep -qx 'hits=5' "$T/scan/leak-scan.txt" \
+  && ok "leak scan: OpenBao service/batch tokens, a Vault token and two PEM private keys are caught" || bad "leak scan misses a planted secret: $(tr '\n' ' ' <"$T/scan/leak-scan.txt")"
+[ -e "$T/scan/logs/clean.log" ] && [ ! -e "$T/scan/logs/openbao-service.log" ] && ok "leak scan: the clean log is kept, the leaking ones are deleted" || bad "leak scan kept a leaking log or dropped a clean one"
+
 # The workflow.
 python3 -I - "$WF" <<'PY' || FAIL=$((FAIL + 1))
 import re, sys
@@ -57,7 +70,13 @@ if not down or str(down[-1].get("if", "")).strip() != "always()" or steps[-1] is
     errs.append("the last step must be the teardown, with if: always()")
 col = [s for s in steps if s.get("run", "").count("local-docker-lane.sh") and " collect" in s["run"]]
 if not col or str(col[0].get("if", "")).strip() != "always()": errs.append("collect must run if: always()")
-if "inputs." in "\n".join(s.get("run", "") for s in steps): errs.append("an input is interpolated into a run script")
+runs = "\n".join(s.get("run", "") for s in steps)
+if "inputs." in runs: errs.append("an input is interpolated into a run script")
+if re.search(r"github\.(head_ref|event\.)", runs): errs.append("an event-controlled value is interpolated into a run script")
+if "secrets." in text: errs.append("the lane must not use secrets.* (it runs on pull requests)")
+order = [i for k in ("local-docker-lane.sh wait", "local-docker-lane.sh collect", "local-docker-lane.sh assert")
+         for i, s in enumerate(steps) if k in s.get("run", "")]
+if len(order) != 3 or order != sorted(order): errs.append("the wait, collect and assert steps must all exist, in that order (assert reads the leak-scan result)")
 print("workflow:", "FAIL " + "; ".join(errs) if errs else "ok")
 sys.exit(1 if errs else 0)
 PY
