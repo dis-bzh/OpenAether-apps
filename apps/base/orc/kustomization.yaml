@@ -1,4 +1,4 @@
-# ORC — openstack-resource-controller v2.4.0 (install.yaml upstream, vendu tel quel).
+# ORC — openstack-resource-controller v2.4.0 (install.yaml upstream, vendored as is).
 #
 # HARD DEPENDENCY of CAPO ≥ v0.11: the OpenStack controller watches
 # openstack.k-orc.cloud resources (the Image kind in particular) and refuses to

@@ -8,7 +8,7 @@
 #     needs, DNS included, through the allow-dns CCNP or its own CNP)
 #   - Cilium's network isolation between pods across namespaces
 #
-# Note Cilium: utiliser fromEntities: cluster (pas fromEndpoints: [{}])
+# Note Cilium: use fromEntities: cluster (not fromEndpoints: [{}])
 # because Cilium 1.19 does not extend the empty selector to all pods on ingress.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy

@@ -57,6 +57,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # the sibling repository before copying it there.
 WORDS='le|la|les|des|une|dans|pour|avec|cette|être|est|sont|était|sera|qui|que|quand|ainsi|alors|aussi|avant|après|chaque|comme|depuis|donc|déjà|encore|entre|jamais|leur|mais|même|moins|notre|parce|peut|plutôt|puis|sans|sous|toujours|tout|toute|toutes|tous|très|vers|voici|voilà|faut|doit|doivent|ici|cela|ceci|celui|celle|nous|vous|elles|ils|du|au|aux|ni|elle|leurs|afin|lorsque|selon|plusieurs|ceux|celles|ensuite|enfin|pourrait|pourraient|publique|publiques|groupe|groupes|nom|noms|certificat|certificats|interne|internes|externe|externes|fichier|fichiers|exemple|exemples|attendu|attendue|ordinaire|ordinaires|racine|seule|seul|court|courte|observee|observée|valide|valider|ajoute|ajouter|affiche|utilise|supprime|renvoie|permet|sur|natif|veut|autoriser|stockage|cet|ces|ses|aucun|aucune|soit|fois|rien|manquant|vouliez|brique|briques|disponibles|existe|invalide|et|ou|ne|matchait|jetable|derrière|remplace|applicatif|fonctionne|fournie|gestion|trop|instancier'
 
+# Second tier: words that are French but also plausible in code (`pas`, `tel`), so they only count inside COMMENT lines and inline
+# comments, which are prose. Measured: "utiliser fromEntities: cluster (pas fromEndpoints...)" and "vendu tel quel" passed the first tier.
+WORDS_COMMENT='pas|utiliser|utilisé|vendu|tel|tels|quel|quelle|lequel|laquelle'
+
 usage() { sed -n '2,12p' "$0" | sed 's/^# \?//'; }
 case "${1:-}" in
   --list) printf '%s\n' "$WORDS" | tr '|' '\n'; exit 0 ;;
@@ -129,6 +133,14 @@ function french(text,    n, i, w, cap) {
     if (text ~ ("(^|[^[:alnum:]_-])(" w[i] "|" cap ")([^[:alnum:]_]|$)")) return 1
   }
   return 0
+}
+function french_comment(text,    n, i, w, cap) {
+  n = split(wordsc, w, "|")
+  for (i = 1; i <= n; i++) {
+    cap = toupper(substr(w[i], 1, 1)) substr(w[i], 2)
+    if (text ~ ("(^|[^[:alnum:]_-])(" w[i] "|" cap "|" toupper(w[i]) ")([^[:alnum:]_]|$)")) return 1
+  }
+  return 0
 }'
 
 hits=0
@@ -153,7 +165,7 @@ scan_code() {
   while read -r f; do
     [ -n "$f" ] || continue
     ignored "$repo" "$f" && continue
-    awk -v words="$WORDS" -v file="$f" "$AWK_FRENCH"'
+    awk -v words="$WORDS" -v wordsc="$WORDS_COMMENT" -v file="$f" "$AWK_FRENCH"'
       # Prose in code, by kind:
       #  - comment lines (# for yaml/sh/py/tf, // and * for the hcl/go style);
       #  - the text a script shows its user. `help=` and `description=` count even
@@ -213,7 +225,10 @@ scan_code() {
         }
         # Inline comment after code (needs whitespace on both sides of the hash).
         if (!comment && match(line, /[[:space:]]#[[:space:]].*/)) text = text " " substr(line, RSTART)
-        if (text != "" && french(text)) printf "%s:%d: %s\n", file, NR, $0
+        ctext = ""
+        if (comment) ctext = line
+        else if (match(line, /[[:space:]]#[[:space:]].*/)) ctext = substr(line, RSTART)
+        if ((text != "" && french(text)) || (ctext != "" && french_comment(ctext))) printf "%s:%d: %s\n", file, NR, $0
       }' "$repo/$f"
   done < <(code_files "$repo")
 }

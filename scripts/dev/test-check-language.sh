@@ -28,6 +28,10 @@ case_() {
 # French the word list alone used to miss, then English.
 case_ "accent-free French YAML comment"        1 a.yaml  $'# autoriser explicitement le trafic\nkind: X'
 case_ "English YAML comment"                   0 a.yaml  $'# explicitly allow the traffic\nkind: X'
+case_ "second tier: pas/utiliser in a comment"    1 a.yaml  $'# utiliser fromEntities (pas fromEndpoints)\nkind: X'
+case_ "second tier: vendu tel quel in a comment" 1 a.yaml $'# install.yaml upstream, vendu tel quel\nkind: X'
+case_ "second tier: inline comment"            1 a.sh    $'x=1   # pas touche\n'
+case_ "second tier: English comment, a variable named pas" 0 a.sh $'# the counter is only used when set\npas=1\necho "$pas"\nkind=X'
 case_ "accented French comment, unknown word" 1 a.yaml  $'# deploye? non: déployé\nkind: X'
 case_ "inline French comment"                  1 a.yaml  $'kind: X   # remplace la valeur\n'
 case_ "French in a .example file"              1 a.yaml.example $'# Pour activer: copier le fichier\nkind: X'
