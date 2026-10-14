@@ -6,6 +6,10 @@ Manifests Kubernetes **communs / plateforme** de OpenAether, réconciliés par
 
 🇬🇧 [English version](README.md)
 
+**Versions.** apps 0.1.1 vise les nouveaux clusters : un cluster initialisé par 0.1.0 ne peut pas y être migré sur place. Elle
+s'associe à OpenAether-infra 0.2.1 (pas encore publiée), pas à 0.2.0. La table d'association, ce qui a été validé où et ce qui n'est pas
+corrigé sont dans [CHANGELOG.md](CHANGELOG.md).
+
 ## Principe : socle figé + pioche modulaire
 
 **Seul socle figé : CNI (Cilium) + Flux.** Tout le reste — mesh Istio, Zitadel,

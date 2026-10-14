@@ -94,7 +94,8 @@ spec:
               - matchPattern: "*"
     # Longhorn's backup target is the provider's object storage (the `storage-backup-target` brick): the manager checks
     # it, the instance managers write the backups. Without this rule the BackupTarget stays `available: false` (seen
-    # on a real OVH cluster). Every region, as the other S3 rules (see test-s3-egress-fqdns.py).
+    # on a real OVH cluster). Every region, as the other S3 rules (see test-s3-egress-fqdns.py). The policy selects
+    # every pod of the namespace, so the rule is not limited to those two components.
     - toFQDNs:
         - matchPattern: "s3.*.scw.cloud"          # Scaleway Object Storage
         - matchPattern: "s3.*.io.cloud.ovh.net"   # OVH Object Storage (standard class)
