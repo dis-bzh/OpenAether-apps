@@ -67,7 +67,7 @@ spec:
                 - -c
                 - |
                   set -eu
-                  dump() { # <nom> <host> <dbname> <credsdir>
+                  dump() { # <name> <host> <dbname> <credsdir>
                     name="$1"; PGHOST="$2"; PGDATABASE="$3"; creds="$4"
                     PGPORT=5432
                     PGUSER="$(cat "$creds/username")"

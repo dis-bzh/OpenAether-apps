@@ -151,6 +151,23 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   profile, no public IP or UUID, example Cilium values equal to `edge-1.yaml`. Rung: static and mocked, not run on a cluster.
   It does NOT prove a Scaleway child comes up, nor that an undefined `CHILD_BACKUP_*` breaks the child as the
   `child-gitops` header claims; the issue stays open until the on-ramp is run on a real child.
+- **The English migration is finished on main, and the language check can no longer miss what it missed (#40).** The five
+  READMEs and runbooks that were still French (`apps/clusters`, `apps/flux`, `apps/flux/workload`, `apps/base/backup`, the PKI
+  offline-root runbook) are English, translated from main's own text and reconciled with it, not copied from another branch: the
+  backup README no longer says the restic password is printed in a log (it is never printed; read it with `bao_admin`) and
+  gives the cluster-prefixed repository paths, the active WAL archive, the `BackupTarget` brick and the restore tests; the runbook names
+  `openbao-vault-bootstrap`; the flux README reads the `# Pick:` header; the workload README lists the bricks the profile really picks; the
+  clusters README says the floating IPs live in a Secret, not in git. Also English now: the OpenStack
+  template header, `pick.py` runtime strings and docstrings, a dozen French comments in manifests, the `readme` value of the
+  `capi-clusters-readme` ConfigMap, and two CiliumNetworkPolicy `description` fields. The render changes only there (and in a
+  comment inside the `cnpg-dump` CronJob script, which rolls its pod template); every other touched brick renders byte-identical.
+  `check-language.sh` now also reads inline comments, Python string literals and docstrings, YAML `readme:`/`description:`/
+  `message:`/`summary:` values with their continuation lines, `*.example`/`*.hcl`/`*.json5`/`*.tpl`/`*.toml` files, flags any accented
+  French letter and French elisions, knows more words (`sur`, measured at 15 hits, all French), and fails on a `.languageignore` entry
+  whose file scans clean; `.languageignore` keeps only `CLAUDE.md` and `CHANGELOG.md`, French by decision (the 0.1.0 "Seven
+  runbooks" known limit is closed, and the count was wrong). New `scripts/dev/test-check-language.sh` (CI) holds the fixtures.
+  Rung: static; no cluster behaviour depends on it. It does NOT make the detector complete: an accent-free French line made of
+  words outside the list still passes, which is why the accent rule exists. The sibling `OpenAether-infra` copy is not updated.
 
 ### Documented
 

@@ -204,7 +204,7 @@ spec:
   ingress:
     # ⚠️ `host` and `remote-node` are REQUIRED by the public path: the cloud LB
     # hits the fixed NodePorts (30080/30443, see
-    # apps/base/services-gateway/service-nodeport.yaml), et en
+    # apps/base/services-gateway/service-nodeport.yaml), and
     # with externalTrafficPolicy: Cluster the node SNATs the packet to its own IP.
     # The entity Cilium sees is therefore no longer `world` but the node itself —
     # without those two entities, all public ingress is dropped.

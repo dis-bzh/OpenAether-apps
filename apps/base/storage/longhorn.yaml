@@ -30,8 +30,8 @@ spec:
   # longhorn-manager DaemonSet and the engine images are heavy to pull, the
   # install stays "InProgress" and expires. It is then remediated by an
   # uninstall — and if that is itself interrupted (node reboot), the Helm
-  # statut `uninstalling` et Flux se bloque sur « unable to determine state »
-  # release stays stuck while every pod runs (hit 2026-07-26, Outscale management).
+  # release is left in status `uninstalling` and Flux blocks on "unable to determine state":
+  # the release stays stuck while every pod runs (hit 2026-07-26, Outscale management).
   # Manual unblock: delete the sh.helm.release.v1.longhorn.v1 Secret.
   timeout: 15m
   chart:
@@ -92,4 +92,4 @@ spec:
       defaultClass: false
       defaultClassReplicaCount: 2
     ingress:
-      enabled: false  # UI accessible via port-forward ou HTTPRoute sprint D
+      enabled: false  # UI accessible via port-forward or HTTPRoute sprint D

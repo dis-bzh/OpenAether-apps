@@ -1,4 +1,4 @@
-# Cluster client Talos sur OVH (OpenStack) via CAPO — namespace capi-clusters.
+# Talos client cluster on OVH (OpenStack) through CAPO — namespace capi-clusters.
 #
 # apiVersions aligned with the CRDs ACTUALLY installed (verified 2026-07-25):
 #   CAPI   v1.13.2 → cluster.x-k8s.io/v1beta2: refs are {apiGroup, kind,
@@ -23,8 +23,8 @@
 #   ${MACHINE_REV:=v1} — bump it (v2, v3…) to roll the machines without
 #   touching the FloatingIPPool or the pre-allocated IP (same pattern as the
 #   Outscale template). Found live 2026-07-30: without it, changing
-#   OS_IMAGE_NAME nécessitait task edge-down + recréation complète.
-#   ${OS_CP_FLOATING_IPS} ${OS_CP_FLOATING_IPS_SURGE} — 2 FIP pré-allouées
+#   OS_IMAGE_NAME required task edge-down + a full recreation.
+#   ${OS_CP_FLOATING_IPS} ${OS_CP_FLOATING_IPS_SURGE} — 2 pre-allocated FIPs
 #   (task ensure-capo-fip.py <cluster> --count 2); the 2nd is held for the
 #   surge of a rolling upgrade (CP_REPLICAS+1 for the length of the cutover).
 ---

@@ -4,8 +4,8 @@
 # applied as soon as Istio is picked, whereas foundation-storage only exists if
 # the `storage` brick is picked too: an "istio without storage" profile (the
 # children's workload profile) blocked the Kustomization
-# istio-authorizationpolicies sur « namespaces "foundation-storage" not
-# found" — observed for real on edge-2 on 2026-07-27.
+# istio-authorizationpolicies on a missing namespace ("foundation-storage" not
+# found) — observed for real on edge-2 on 2026-07-27.
 #
 # They therefore form a separate COMPANION brick, dependsOn [istio, storage]:
 # picked only when both are. General rule — a policy protecting an optional

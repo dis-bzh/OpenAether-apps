@@ -1,10 +1,10 @@
-# OpenAether 0.5.0 Sprint C — Loki HA (stockage logs)
+# OpenAether 0.5.0 Sprint C — Loki HA (log storage)
 # ──────────────────────────────────────────────────────────────────
 # Mode: SingleBinary x2 (simple to operate, HA through Loki replication).
-# Backend: S3 (MinIO en local, S3 natif en cloud via overlay).
+# Backend: S3 (MinIO locally, the cloud's native S3 through an overlay).
 # replication_factor=2: every chunk is replicated across both instances.
 #
-# Destination S3 : ExternalSecret loki-s3-credentials (externalsecret-loki.yaml),
+# S3 destination: ExternalSecret loki-s3-credentials (externalsecret-loki.yaml),
 # fed from `secret/observability/loki-s3` in OpenBao. Credentials AND location
 # (endpoint + bucket) travel through that Secret, injected with `valuesFrom`:
 # moving from the internal MinIO to the provider's S3 therefore requires NO

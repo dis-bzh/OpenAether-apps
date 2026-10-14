@@ -36,6 +36,10 @@ jobs:
       - name: Language
         run: ./scripts/dev/check-language.sh
 
+      # The detector itself: each kind of French it once missed must still fail.
+      - name: Language check tests
+        run: ./scripts/dev/test-check-language.sh
+
   dag:
     name: Flux DAG
     runs-on: ubuntu-latest

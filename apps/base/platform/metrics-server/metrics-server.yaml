@@ -1,7 +1,7 @@
 # OpenAether — Metrics Server
 # ──────────────────────────────────────────────────────────────────
 # Enables the metrics API for kubectl top nodes/pods.
-# Sur Talos, --kubelet-preferred-address-types=InternalIP
+# On Talos, --kubelet-preferred-address-types=InternalIP
 # and --kubelet-insecure-tls are required because Talos does not use
 # kubelet certificates signed by the apiserver.
 ---

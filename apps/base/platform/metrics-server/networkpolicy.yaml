@@ -16,7 +16,7 @@
 #     Ready but useless (a classic false positive with ambient/CNP).
 #
 # Fix = the same pattern as the vmagent CNP (observability/networkpolicy.yaml):
-# autoriser explicitement host + remote-node sur :10250.
+# explicitly allow host + remote-node on :10250.
 # The allow-dns/allow-kube-api CCNPs stay additive (Cilium ORs the policies).
 ---
 apiVersion: cilium.io/v2

@@ -45,6 +45,6 @@ spec:
       #
       # Replaces an `insecureSkipVerify: true` that encrypted without
       # authenticating the server. `caCertificates` was unusable: it expects a
-      # FILE PATH inside the Envoy, which Istio generates and where we mount
-      # rien facilement.
+      # FILE PATH inside the Envoy, which Istio generates and where we cannot
+      # easily mount anything.
       credentialName: openbao-ca-bundle

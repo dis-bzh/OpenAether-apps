@@ -71,10 +71,10 @@ spec:
               protocol: TCP
             - port: "8000"
               protocol: TCP
-    # 5. CNPG Operator (gestion cluster + extraction status :8000/pg/status).
+    # 5. CNPG Operator (cluster management + status extraction on :8000/pg/status).
     # The operator runs in cnpg-system (NOT foundation-databases) and carries the
-    # label app.kubernetes.io/name=cloudnative-pg. L'ancien selector
-    # (ns foundation-databases + name cnpg-cloudnative-pg) ne matchait RIEN →
+    # label app.kubernetes.io/name=cloudnative-pg. The old selector
+    # (ns foundation-databases + name cnpg-cloudnative-pg) matched NOTHING →
     # operator→instance:8000 dropped → "Instance Status Extraction Error:
     # i/o timeout" → the Cluster is never "healthy" (visible once the ns is out of the mesh).
     - fromEndpoints:

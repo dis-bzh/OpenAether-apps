@@ -129,7 +129,7 @@ spec:
     # Without `optional` the pod would stay stuck and Grafana would be TOTALLY
     # unreachable for want of a not-yet-configured SSO — the opposite of the goal.
     # With it, Grafana starts, the Zitadel button is simply inert, and
-    # l'admin local fonctionne.
+    # the local admin keeps working.
     envValueFrom:
       GF_AUTH_GENERIC_OAUTH_CLIENT_ID:
         secretKeyRef:

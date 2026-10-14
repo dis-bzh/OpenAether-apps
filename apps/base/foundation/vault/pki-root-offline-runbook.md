@@ -1,52 +1,52 @@
 # OpenAether — PKI Root CA Offline Runbook
-## Génération et gestion de la Root CA hors-ligne
+## Generating and managing the offline Root CA
 
-### Objectif
-La Root CA ne touche **jamais** le cluster. Elle est générée dans un contexte éphémère (ta machine,
-un conteneur jetable, un VM isolé), sa clé privée est stockée dans **Bitwarden EU** (ou
-Vaultwarden, 1Password, KeepassXC), et seuls les certificats signés (intermediate) sont importés
-dans OpenBao.
+### Goal
+The Root CA **never** touches the cluster. It is generated in an ephemeral context (your machine,
+a throwaway container, an isolated VM), its private key is stored in **Bitwarden EU** (or
+Vaultwarden, 1Password, KeepassXC), and only the signed certificates (intermediate) are imported
+into OpenBao.
 
-### Prérequis
-- OpenSSL 3.x ou cfssl
-- Accès Bitwarden EU (CLI `bw` ou API) ou gestionnaire de mots de passe équivalent
-- Environnement isolé (pas de réseau, VM jetable recommandée)
+### Prerequisites
+- OpenSSL 3.x or cfssl
+- Access to Bitwarden EU (`bw` CLI or API) or an equivalent password manager
+- An isolated environment (no network, a throwaway VM is recommended)
 
 ---
 
-### 1. Génération de la Root CA
+### 1. Generating the Root CA
 
 ```bash
-# Dans un conteneur jetable (ex: podman run -it --rm alpine:3.20 sh)
-# ou sur ta machine hors-ligne
+# In a throwaway container (e.g. podman run -it --rm alpine:3.20 sh)
+# or on your offline machine
 
-# Générer la clé privée (RSA 4096 ou ECDSA P-384)
+# Generate the private key (RSA 4096 or ECDSA P-384)
 openssl genrsa -aes256 -out root-ca.key 4096
-# Ou ECDSA:
+# Or ECDSA:
 # openssl ecparam -genkey -name secp384r1 -out root-ca.key
 
-# Générer le certificat auto-signé (validité 10 ans = 3650 jours)
+# Generate the self-signed certificate (10 years = 3650 days)
 openssl req -x509 -new -nodes -key root-ca.key -sha256 -days 3650 \
   -subj "/CN=OpenAether Root CA/O=OpenAether/OU=PKI" \
   -addext "basicConstraints=critical,CA:TRUE" \
   -addext "keyUsage=critical,keyCertSign,cRLSign" \
   -out root-ca.crt
 
-# Vérifier
+# Check
 openssl x509 -in root-ca.crt -text -noout
 ```
 
-### 2. Stockage dans Bitwarden EU
+### 2. Storing it in Bitwarden EU
 
 ```bash
-# Via CLI bw (après login: bw login)
+# With the bw CLI (after login: bw login)
 bw create item \
   --name "OpenAether Root CA" \
   --type note \
   --notes "$(cat root-ca.key)" \
   --collection "OpenAether PKI"
 
-# Stocker aussi le certificat public
+# Also store the public certificate
 bw create item \
   --name "OpenAether Root CA Cert" \
   --type note \
@@ -54,22 +54,26 @@ bw create item \
   --collection "OpenAether PKI"
 ```
 
-### 3. Signature d'un CSR Intermediate (runbook récurrent)
+### 3. Signing an Intermediate CSR (recurring runbook)
 
-Quand le bootstrap-roles-job génère un CSR intermediate :
+When the `openbao-vault-bootstrap` Job generates an intermediate CSR:
 
 ```bash
-# 1. Récupérer le CSR (affiché dans les logs du job, ou via API)
-#    Le CSR commence par -----BEGIN CERTIFICATE REQUEST-----
+# 1. Get the CSR. The Job prints it (public data, no secret) in its logs:
+#      kubectl -n foundation-vault logs job/openbao-vault-bootstrap \
+#        | sed -n '/BEGIN CERTIFICATE REQUEST/,/END CERTIFICATE REQUEST/p'
+#    Logs are rotated: bao_admin write -field=csr pki/intermediate/generate/internal \
+#      common_name="OpenAether Workload Intermediate CA" makes a new one.
+#    The CSR starts with -----BEGIN CERTIFICATE REQUEST-----
 
-# 2. Le signer avec la Root CA
+# 2. Sign it with the Root CA
 openssl ca -config openssl-root.cnf \
   -in intermediate.csr \
   -out intermediate-signed.crt \
   -extensions v3_intermediate_ca \
-  -days 730  # 2 ans
+  -days 730  # 2 years
 
-# Contenu minimal openssl-root.cnf:
+# Minimal openssl-root.cnf:
 # [ca]
 # default_ca = CA_default
 # [CA_default]
@@ -94,44 +98,44 @@ openssl ca -config openssl-root.cnf \
 # subjectKeyIdentifier = hash
 ```
 
-### 4. Import dans OpenBao (étape MANUELLE)
+### 4. Importing into OpenBao (MANUAL step)
 
-Le `bootstrap-roles-job` ne fait QUE générer + afficher le CSR (non bloquant). L'import du
-certificat signé est manuel (le root reste hors-ligne). Il n'y a plus de root token dans le cluster : l'import se fait
-avec l'identité `openaether-admin` (helper `bao_admin` du README, qui échange le token du ServiceAccount contre un token
-OpenBao DANS le pod) :
+The `openbao-vault-bootstrap` Job ONLY generates and prints the CSR (non-blocking). Importing the
+signed certificate is manual (the root stays offline). There is no root token in the cluster: the import is done
+with the `openaether-admin` identity (the `bao_admin` helper of the README, which exchanges the ServiceAccount token for an
+OpenBao token INSIDE the pod):
 ```bash
 kubectl -n foundation-vault exec -i openbao-0 -- sh -c 'cat > /tmp/int.crt' < intermediate-signed.crt
 bao_admin write pki/intermediate/set-signed certificate=@/tmp/int.crt
 ```
-Après import, l'issuer cert-manager `openbao` (`pki/sign/openaether`) passe Ready.
+After the import, the cert-manager `openbao` issuer (`pki/sign/openaether`) becomes Ready.
 
-### 5. Renouvellement (tous les 1-2 ans)
+### 5. Renewal (every 1-2 years)
 
-- Générer un nouveau CSR intermediate
-- Le signer avec la même Root CA (ou une nouvelle Root CA si rotation complète)
-- Importer dans OpenBao
-- La Root CA (10 ans) ne change que rarement
+- Generate a new intermediate CSR
+- Sign it with the same Root CA (or a new Root CA for a complete rotation)
+- Import it into OpenBao
+- The Root CA (10 years) rarely changes
 
-### 6. Nettoyage
+### 6. Cleanup
 
 ```bash
-# Après stockage dans Bitwarden, supprimer les fichiers locaux
+# Once stored in Bitwarden, delete the local files
 shred -n 3 root-ca.key root-ca.crt intermediate.csr intermediate-signed.crt
 rm -f root-ca.key root-ca.crt intermediate.csr intermediate-signed.crt
 ```
 
 ---
 
-### Variantes selon le gestionnaire de secrets
+### Variants by secret manager
 
-| Gestionnaire | Stockage clé privée | Stockage certificat | Signature CSR |
+| Manager | Private key storage | Certificate storage | CSR signing |
 |-------------|---------------------|---------------------|---------------|
-| **Bitwarden EU** | Note chiffrée (champ `notes`) | Note séparée | CLI `bw` + `openssl` |
-| **Vaultwarden** (self-hosted) | Même chose | Même chose | Même chose |
-| **1Password** | Document sécurisé | Document sécurisé | CLI `op` + `openssl` |
-| **KeepassXC** | Entrée avec pièce jointe | Entrée avec pièce jointe | Manuel + `openssl` |
+| **Bitwarden EU** | Encrypted note (`notes` field) | Separate note | `bw` CLI + `openssl` |
+| **Vaultwarden** (self-hosted) | Same | Same | Same |
+| **1Password** | Secure document | Secure document | `op` CLI + `openssl` |
+| **KeepassXC** | Entry with an attachment | Entry with an attachment | Manual + `openssl` |
 | **Pass** (pass.store) | `pass insert pki/root-ca` | `pass insert pki/root-ca.crt` | `pass show` + `openssl` |
 
-Le principe reste identique : **la clé privée ne quitte jamais le gestionnaire de secrets**,
-seul le certificat signé circule vers le cluster.
+The principle stays the same: **the private key never leaves the secret manager**,
+only the signed certificate travels to the cluster.

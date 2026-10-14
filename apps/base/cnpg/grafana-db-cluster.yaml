@@ -2,7 +2,7 @@
 # ──────────────────────────────────────────────────────────────────
 # Grafana HA (2 replicas) requires a shared DB backend for the session,
 # dashboards, users and alerts.
-# PostgreSQL CNPG: 2 instances (streaming replication) sur stockage local-path.
+# PostgreSQL CNPG: 2 instances (streaming replication) on local-path storage.
 # CNPG handles ALL the HA (transaction-aware WAL replication + failover).
 # Stacking Longhorn (block replication, blind to transactions) = anti-pattern:
 # amplification and concurrent double failover (the cause of the "faulted" volumes, 06/2026),

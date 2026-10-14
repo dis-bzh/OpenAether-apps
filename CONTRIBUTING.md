@@ -26,6 +26,7 @@ this repo doesn't provision infrastructure itself.
     python3 scripts/check-object-collisions.py     # builds every brick, checks cross-brick object collisions
     python3 scripts/check-dependson-contracts.py   # dependsOn covers the store openbao, Istio and Gateway API users
     yamllint -c .yamllint apps/ scripts/ .github/workflows/
+    ./scripts/dev/check-language.sh                # English is canonical; scripts/dev/test-check-language.sh tests the detector
 
 All five run in CI too — a PR can't merge until they're green (see the required
 checks on `main`).

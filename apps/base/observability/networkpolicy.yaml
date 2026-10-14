@@ -577,7 +577,7 @@ spec:
               protocol: TCP
             - port: "7946"
               protocol: UDP
-    # MinIO S3 (local) ou S3 cloud :443 (overlay)
+    # MinIO S3 (local) or cloud S3 :443 (overlay)
     # ⚠️ the minio 5.2.0 chart sets the legacy label `app: minio` (NOT
     # app.kubernetes.io/name) — found during the backup brick's e2e test:
     # the canonical selector alone matches NOTHING → local S3 egress dropped.

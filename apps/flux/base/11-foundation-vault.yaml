@@ -26,7 +26,7 @@ spec:
     # This became possible once the REVERSE dependency — cert-manager →
     # foundation-vault — was removed: it was wrong (only the ISSUERS depend on OpenBao).
     - name: cert-manager
-    - name: vault-ca   # CA du certificat serveur (ns cert-manager)
+    - name: vault-ca   # CA of the server certificate (ns cert-manager)
     - name: platform-gateway-api
     - name: platform-local-path-provisioner  # PVC raft storageClassName local-path-retain
     - name: platform-priority-classes        # priorityClassName platform-critical (pod rejected at admission if absent)
