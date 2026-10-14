@@ -51,6 +51,21 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Security
 
+- **A key inventory, the replacement procedure of every application key, the root-CA custody options and the backup policy are written
+  down** (ANSSI B2 impact/crypto-period/erasure rules, TLS-12, TLS-20, DP-06, DP-07, F-BKP-07, F-BKP-16). `docs/key-inventory.md`
+  lists each key the applications repository creates (purpose, location, algorithm, period, impact of loss and of leak, replacement,
+  archive) and the recorded deviations (software seal key and AES-GCM wrap, listener CA, Istio CA, root custody); the offline-root
+  runbook is now English, offers a token/HSM or offline media (a password manager stays as a recorded deviation), signs with
+  SHA-384, and covers compromise and erasure (`shred` is dropped as unreliable on SSDs); the backup README gains a per-dataset
+  policy table (schedule, RPO, retention, destination, key holder, restore test, destruction), the order of a full recovery
+  (OpenBao before the Zitadel database, because the masterkey lives in OpenBao) and is translated; `SECURITY.md` points to the
+  incident procedure. The Longhorn comment that called a passphrase change harmless now says not to rotate while encrypted volumes
+  exist. **Docs only: the OpenSSL commands of the runbook were run on a scratch directory (ECDSA P-384 root, SHA-384 signature of a
+  CSR, verification); nothing else was run, and no replacement procedure was run on a cluster.** The token/HSM commands, the
+  root-compromise path and the transit-seal migration are untried. It does NOT change any manifest, add a key period the code
+  enforces, or claim compliance. Grafana's `secret_key` is unset (upstream's public default): listed as a gap, not changed.
+  The links to `OpenAether-infra/docs/{key-management,incident-response,disaster-recovery}.md` point at documents the infra half of
+  this work writes: they do not exist on the infra branch yet.
 - **Zitadel no longer installs with its public admin password, and its authentication policy is written down.** A new instance used to
   get `zitadel-admin` / `Password1!` (upstream's default, reproduced: it logs in as IAM_OWNER, and Grafana's admin role hangs off that
   account) and Zitadel's open defaults: 8-character passwords, no lockout, no MFA, self-registration open, 12 h tokens. Now `configure.sh`

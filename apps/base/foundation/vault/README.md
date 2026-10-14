@@ -86,6 +86,9 @@ bao_admin() {
 
 ## Runbooks
 
+Every key of the platform, its period and how to replace it: [`docs/key-inventory.md`](../../../../docs/key-inventory.md). Operating an incident:
+`OpenAether-infra/docs/incident-response.md`.
+
 **PKI intermediate.** The first `openbao-vault-bootstrap` run prints the intermediate's CSR (public data) and generates it once;
 read it with `kubectl -n foundation-vault logs job/openbao-vault-bootstrap | sed -n '/BEGIN CERTIFICATE REQUEST/,/END CERTIFICATE REQUEST/p'`
 (logs are rotated: `bao_admin write -field=csr pki/intermediate/generate/internal common_name="OpenAether Workload Intermediate CA"`
@@ -181,6 +184,13 @@ kube-apiserver, to create the Secrets).
 - A development bootstrap can not be upgraded to production; nothing monitors that the seal key has been escrowed.
 - The Kubernetes-auth login is only exercised on a cluster; the harness replaces that one call. The 3-replica join, the seal-key
   rotation and the start-over were run on a cluster; the restore with standbys and the other runbooks were not.
+- **Recorded deviations** (ANSSI TLS-12): the seal key is a software key, not an HSM or an external KMS, and the static seal wraps the
+  barrier with AES-GCM (upstream's implementation) rather than a key-wrap mode; `vault-ca`'s `openbao-ca` is separate from the OpenBao
+  PKI because OpenBao needs a certificate to start; the Istio CA is istiod's own. The way out for the first is a `transit` seal against an
+  OpenBao or KMS outside the cluster: set the old seal `disabled = "true"` next to the new one and run `bao operator unseal -migrate`
+  on each pod, with a fresh escrow of the new key. **Not built and not tried on this platform**; start it with a throwaway cluster
+  (rolling order, egress to the external seal under the network policies, and what a cold start does when the external seal is
+  down are the open questions). The root CA custody options are in the [runbook](./pki-root-offline-runbook.md).
 - **Nested PKI mounts are forbidden**: never mount `pki/` and `pki/<x>/` (the second fails with HTTP 400, sub-paths 404).
 
 ## Tests

@@ -1,137 +1,118 @@
-# OpenAether — PKI Root CA Offline Runbook
-## Génération et gestion de la Root CA hors-ligne
+# OpenAether — offline root CA runbook
 
-### Objectif
-La Root CA ne touche **jamais** le cluster. Elle est générée dans un contexte éphémère (ta machine,
-un conteneur jetable, un VM isolé), sa clé privée est stockée dans **Bitwarden EU** (ou
-Vaultwarden, 1Password, KeepassXC), et seuls les certificats signés (intermediate) sont importés
-dans OpenBao.
+How the root CA of the OpenBao PKI is generated, kept and used. Its inventory row, crypto-period and compromise
+procedure are in [`docs/key-inventory.md`](../../../../docs/key-inventory.md).
 
-### Prérequis
-- OpenSSL 3.x ou cfssl
-- Accès Bitwarden EU (CLI `bw` ou API) ou gestionnaire de mots de passe équivalent
-- Environnement isolé (pas de réseau, VM jetable recommandée)
+## Objective and custody
 
----
+The root CA never touches the cluster. It signs the OpenBao intermediate once (and again at each renewal); only the
+signed intermediate certificate is imported. The root **private key** has three possible custodies, in order of preference:
 
-### 1. Génération de la Root CA
+| Custody | What it is | Status |
+|---|---|---|
+| **Hardware token / HSM** | Key generated ON the device (PIV smartcard, PKCS#11 HSM), non-exportable; signing happens on the device | Recommended for production |
+| **Offline encrypted media** | Passphrase-protected key on encrypted USB media (or an encrypted blob printed on paper), at least two copies in two places, never plugged into a networked host | Acceptable for production |
+| **Password manager** | Passphrase-protected key as a note in a networked service (Bitwarden, Vaultwarden, 1Password, KeePassXC) | **Recorded deviation**: the key is reachable from a networked service, which ANSSI's CA guidance (IGC-BP-05) asks to avoid. Lab or small deployments only |
+
+A password manager is always fine for the PUBLIC certificate (`root-ca.crt`). Whichever custody you pick, write it in
+the key inventory so that a deviation is a decision on record and not an accident.
+
+Why the root is offline and the intermediate online: the intermediate lives in OpenBao and is unwrapped by the static seal
+key held in the cluster (README, "Limits"), so it is only as safe as that key. The root is what limits the damage: a
+compromised intermediate is replaced, a compromised root means re-trusting everything.
+
+## Prerequisites
+
+- OpenSSL 3.x. For a token: `ykman` or `pkcs11-tool` plus the PKCS#11 module of the device.
+- An air-gapped host or a disposable VM with no network, a RAM-backed working directory (`mount -t tmpfs`), and
+  encrypted media for the output.
+
+## 1. Generate the root
 
 ```bash
-# Dans un conteneur jetable (ex: podman run -it --rm alpine:3.20 sh)
-# ou sur ta machine hors-ligne
+# Working directory in RAM, so that nothing of the key lands on a disk.
+sudo mount -t tmpfs -o size=16m tmpfs /mnt/ca && cd /mnt/ca
 
-# Générer la clé privée (RSA 4096 ou ECDSA P-384)
-openssl genrsa -aes256 -out root-ca.key 4096
-# Ou ECDSA:
-# openssl ecparam -genkey -name secp384r1 -out root-ca.key
+# ECDSA P-384 (preferred; or `openssl genrsa -aes256 -out root-ca.key 4096`). The passphrase prompt: use a long random one.
+openssl ecparam -genkey -name secp384r1 | openssl pkcs8 -topk8 -v2 aes-256-cbc -out root-ca.key
 
-# Générer le certificat auto-signé (validité 10 ans = 3650 jours)
-openssl req -x509 -new -nodes -key root-ca.key -sha256 -days 3650 \
+# Self-signed certificate, 10 years (3650 days), SHA-384.
+openssl req -x509 -new -key root-ca.key -sha384 -days 3650 \
   -subj "/CN=OpenAether Root CA/O=OpenAether/OU=PKI" \
   -addext "basicConstraints=critical,CA:TRUE" \
   -addext "keyUsage=critical,keyCertSign,cRLSign" \
   -out root-ca.crt
-
-# Vérifier
 openssl x509 -in root-ca.crt -text -noout
 ```
 
-### 2. Stockage dans Bitwarden EU
+On a token, generate the key on the device instead (for a YubiKey PIV: `ykman piv keys generate -a ECCP384 9c pub.pem`, then
+`ykman piv certificates generate -s "/CN=OpenAether Root CA/" -d 3650 9c pub.pem`) and sign through OpenSSL's PKCS#11
+provider. The token commands were NOT run for this repository: dry-run the whole procedure (generation, one signature, the
+import on a scratch OpenBao) with a throwaway root before the first real one.
+
+## 2. Store
+
+- Token: nothing to store but the PIN/PUK custody, and a second token enrolled the same way if the policy asks for a spare.
+- Offline media: copy `root-ca.key` (already passphrase-encrypted) to the media, twice, to two places; keep the passphrase
+  apart from the media. Check that a copy decrypts: `openssl pkey -in root-ca.key -noout` on the copy.
+- Password manager (the recorded deviation): the encrypted key as a note (`bw create item`). Keep the passphrase elsewhere.
+- Always: keep `root-ca.crt` anywhere, it is public.
+
+## 3. Sign an intermediate CSR (the recurring step)
+
+The `openbao-vault-bootstrap` Job prints the CSR (public data) on its first run (README, "PKI intermediate").
 
 ```bash
-# Via CLI bw (après login: bw login)
-bw create item \
-  --name "OpenAether Root CA" \
-  --type note \
-  --notes "$(cat root-ca.key)" \
-  --collection "OpenAether PKI"
-
-# Stocker aussi le certificat public
-bw create item \
-  --name "OpenAether Root CA Cert" \
-  --type note \
-  --notes "$(cat root-ca.crt)" \
-  --collection "OpenAether PKI"
+# openssl-root.cnf, minimal:
+#   [ca]  default_ca = CA_default
+#   [CA_default]  dir = .  certificate = root-ca.crt  private_key = root-ca.key  new_certs_dir = ./newcerts
+#                 database = ./index.txt  serial = ./serial  default_md = sha384  policy = policy_loose
+#   [policy_loose]  commonName = supplied  organizationName = optional  organizationalUnitName = optional
+#   [v3_intermediate_ca]  basicConstraints = critical,CA:TRUE,pathlen:0
+#                         keyUsage = critical,keyCertSign,cRLSign  subjectKeyIdentifier = hash
+# (write each section on its own lines in the real file)
+mkdir -p newcerts && : > index.txt && echo 1000 > serial
+openssl ca -config openssl-root.cnf -md sha384 -in intermediate.csr -out intermediate-signed.crt \
+  -extensions v3_intermediate_ca -days 730 -notext -batch
+openssl verify -CAfile root-ca.crt intermediate-signed.crt
 ```
 
-### 3. Signature d'un CSR Intermediate (runbook récurrent)
+730 days matches the 17520 h that `configure.sh` asks for; the intermediate can not outlive the root (10 years).
 
-Quand le bootstrap-roles-job génère un CSR intermediate :
+## 4. Import into OpenBao (a manual step)
 
-```bash
-# 1. Récupérer le CSR (affiché dans les logs du job, ou via API)
-#    Le CSR commence par -----BEGIN CERTIFICATE REQUEST-----
+There is no root token in the cluster: the import uses the `openaether-admin` identity (the `bao_admin` helper of the README),
+which may import the signed certificate but not write PKI roles or mounts.
 
-# 2. Le signer avec la Root CA
-openssl ca -config openssl-root.cnf \
-  -in intermediate.csr \
-  -out intermediate-signed.crt \
-  -extensions v3_intermediate_ca \
-  -days 730  # 2 ans
-
-# Contenu minimal openssl-root.cnf:
-# [ca]
-# default_ca = CA_default
-# [CA_default]
-# dir = .
-# certificate = root-ca.crt
-# private_key = root-ca.key
-# new_certs_dir = ./newcerts
-# database = ./index.txt
-# serial = ./serial
-# default_md = sha256
-# policy = policy_loose
-# [policy_loose]
-# countryName = optional
-# stateOrProvinceName = optional
-# organizationName = optional
-# organizationalUnitName = optional
-# commonName = supplied
-# emailAddress = optional
-# [v3_intermediate_ca]
-# basicConstraints = critical,CA:TRUE,pathlen:0
-# keyUsage = critical,keyCertSign,cRLSign
-# subjectKeyIdentifier = hash
-```
-
-### 4. Import dans OpenBao (étape MANUELLE)
-
-Le `bootstrap-roles-job` ne fait QUE générer + afficher le CSR (non bloquant). L'import du
-certificat signé est manuel (le root reste hors-ligne). Il n'y a plus de root token dans le cluster : l'import se fait
-avec l'identité `openaether-admin` (helper `bao_admin` du README, qui échange le token du ServiceAccount contre un token
-OpenBao DANS le pod) :
 ```bash
 kubectl -n foundation-vault exec -i openbao-0 -- sh -c 'cat > /tmp/int.crt' < intermediate-signed.crt
 bao_admin write pki/intermediate/set-signed certificate=@/tmp/int.crt
 ```
-Après import, l'issuer cert-manager `openbao` (`pki/sign/openaether`) passe Ready.
 
-### 5. Renouvellement (tous les 1-2 ans)
+The `openbao` ClusterIssuer (`pki/sign/openaether`) becomes Ready: `kubectl get clusterissuer openbao`.
 
-- Générer un nouveau CSR intermediate
-- Le signer avec la même Root CA (ou une nouvelle Root CA si rotation complète)
-- Importer dans OpenBao
-- La Root CA (10 ans) ne change que rarement
+## 5. Renewal (every 1 to 2 years; put it in a calendar)
 
-### 6. Nettoyage
+- Generate a new intermediate CSR (`bao_admin write -field=csr pki/intermediate/generate/internal common_name="OpenAether Workload Intermediate CA"`),
+  sign it with the same root, import it. Certificates already issued keep working until they expire; new ones come from the
+  new intermediate.
+- The root (10 years) changes rarely. A new root means a new trust anchor everywhere the old one was distributed (the clients
+  that trust `*.openaether.local`): plan it as a migration, not a renewal.
 
-```bash
-# Après stockage dans Bitwarden, supprimer les fichiers locaux
-shred -n 3 root-ca.key root-ca.crt intermediate.csr intermediate-signed.crt
-rm -f root-ca.key root-ca.crt intermediate.csr intermediate-signed.crt
-```
+## 6. Compromise
 
----
+No CRL or OCSP is published for this PKI, so **revocation is replacement**.
 
-### Variantes selon le gestionnaire de secrets
+- **Intermediate compromised or suspected** (the seal key leaked together with a snapshot, a readable backup, an admin
+  token): with a break-glass root token (the admin identity can not touch mounts) disable and re-enable the `pki/` mount, which
+  destroys its keys and issuers, generate a new intermediate, sign it with the root, import it, then have cert-manager
+  re-issue every leaf (`cmctl renew --all`). Rotate the seal key as well (README) and follow
+  [`docs/key-inventory.md`](../../../../docs/key-inventory.md). Not run on a cluster.
+- **Root compromised**: generate a new root, a new intermediate under it, replace the trust anchor in every place that holds
+  the old one, and treat everything issued since the compromise as untrusted.
 
-| Gestionnaire | Stockage clé privée | Stockage certificat | Signature CSR |
-|-------------|---------------------|---------------------|---------------|
-| **Bitwarden EU** | Note chiffrée (champ `notes`) | Note séparée | CLI `bw` + `openssl` |
-| **Vaultwarden** (self-hosted) | Même chose | Même chose | Même chose |
-| **1Password** | Document sécurisé | Document sécurisé | CLI `op` + `openssl` |
-| **KeepassXC** | Entrée avec pièce jointe | Entrée avec pièce jointe | Manuel + `openssl` |
-| **Pass** (pass.store) | `pass insert pki/root-ca` | `pass insert pki/root-ca.crt` | `pass show` + `openssl` |
+## 7. Erasure
 
-Le principe reste identique : **la clé privée ne quitte jamais le gestionnaire de secrets**,
-seul le certificat signé circule vers le cluster.
+`shred` is not a reliable erasure on an SSD (wear levelling), a journaled or copy-on-write filesystem, or a snapshotted
+volume. The working directory above is RAM (`umount /mnt/ca` ends it). For media: encrypt first, so that destroying the
+passphrase is the erasure, and physically destroy media at end of life.
