@@ -494,8 +494,8 @@ spec:
     # dropped on the wire with nothing to show for it.
 
 # ── Loki ──────────────────────────────────────────────────────────
-# ingress: Alloy (push logs) + Grafana (query)
-# egress: DNS + MinIO :9000 (chunks S3)
+# ingress: Alloy (push logs) + Grafana (query) + Loki peers
+# egress: DNS + Loki peers + MinIO :9000 (local) or the provider S3 :443 (chunks)
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -507,7 +507,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: loki
 spec:
-  description: "Loki: ingress Alloy+Grafana :3100, egress MinIO :9000."
+  description: "Loki: ingress Alloy+Grafana :3100 and peers, egress peers + S3."
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: loki
@@ -539,9 +539,15 @@ spec:
         - ports:
             - port: "3100"
               protocol: TCP
+            - port: "9095"   # ingester gRPC: a replicated write goes through it
+              protocol: TCP
             - port: "7946"
               protocol: TCP
+            - port: "7946"
+              protocol: UDP
   egress:
+    # ⚠️ `rules.dns` is what makes the toFQDNs rule below match: without the DNS proxy
+    # observing the lookup, Cilium never learns the S3 IPs and every push fails (apps #53).
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -552,7 +558,26 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # MinIO S3 (local) ou S3 cloud :443 (overlay)
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Loki peers: memberlist gossip and the replicated write. The ingress rule above only
+    # opens the receiving side; without this the ring never forms ("at least 2 live replicas").
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: loki
+      toPorts:
+        - ports:
+            - port: "3100"
+              protocol: TCP
+            - port: "9095"
+              protocol: TCP
+            - port: "7946"
+              protocol: TCP
+            - port: "7946"
+              protocol: UDP
+    # MinIO S3 (local) or cloud S3 :443 (overlay)
     # ⚠️ the minio 5.2.0 chart sets the legacy label `app: minio` (NOT
     # app.kubernetes.io/name) — found during the backup brick's e2e test:
     # the canonical selector alone matches NOTHING → local S3 egress dropped.
@@ -573,9 +598,11 @@ spec:
     # providers if needed.
     # Locally: this rule is never reached (the internal MinIO :9000 is enough).
     - toFQDNs:
-        - matchName: s3.fr-par.scw.cloud     # Scaleway Object Storage
-        - matchName: s3.eu-west-par.io.cloud.ovh.net  # OVH (aligned with the eu-west-par tfvars)
-        - matchName: oos.eu-west-2.outscale.com   # Outscale OSU
+        # Every region of the provider, not one host: a real OVH config uses s3.gra.io.cloud.ovh.net, which the
+        # former single-host rule dropped (apps #53, seen on a real OVH cluster). `*` stays inside one DNS label.
+        - matchPattern: "s3.*.scw.cloud"          # Scaleway Object Storage
+        - matchPattern: "s3.*.io.cloud.ovh.net"   # OVH Object Storage (standard class)
+        - matchPattern: "oos.*.outscale.com"      # Outscale OSU
       toPorts:
         - ports:
             - port: "443"

@@ -6,6 +6,10 @@
 
 🇫🇷 [Version française](README.fr.md)
 
+**Versions.** apps 0.1.1 is for new clusters: a cluster initialised by 0.1.0 cannot be moved to it in place. It pairs with
+OpenAether-infra 0.2.1 (not yet cut), not with 0.2.0. The pairing table, what was validated where and what is not fixed are in
+[CHANGELOG.md](CHANGELOG.md).
+
 ## Principle: fixed foundation + modular pick
 
 **The only fixed foundation is CNI (Cilium) + Flux.** Everything else — Istio
@@ -46,7 +50,7 @@ apps/
     ├── base/                  # FULL DAG — source of truth for dependsOn
     ├── bricks.yaml            # Catalogue: aliases, baseline, companions, descriptions
     ├── management/            # Profile: full DAG
-    ├── workload/              # Generated profile (pick: vault eso certs gateway)
+    ├── workload/              # Generated profile (its `# Pick:` header lists the bricks)
     └── local/                 # Profile: local Docker
 ```
 
@@ -112,7 +116,8 @@ stranger's cluster tries to reconcile.
 
 ⚠️ **Keep an operator and its own CRs in two separate Kustomizations**: a bundle
 containing both an operator and CRs of the CRDs it installs is rejected at
-dry-run while those CRDs do not yet exist.
+dry-run while those CRDs do not yet exist. The Kustomization holding the CRs must `dependsOn` the operator's, which
+is `wait: true` so that the CRDs are served before the CRs are applied (`external-secrets` then `external-secrets-stores`).
 
 ## Local development
 
@@ -121,12 +126,15 @@ alongside:
 
 ```bash
 cd ../OpenAether-infra
-task local-up      # 3 CP + 3 worker Talos cluster on Docker
-task local-test    # Flux SUSPENDED, deploy via kubectl apply -k from the working tree
+task local-up      # 3 CP + 3 worker Talos cluster on Docker (Cilium, no Flux, no apps)
+task local-test    # + Flux controllers and apps/flux/local, every Kustomization SUSPENDED
 ```
 
-Locally, Flux is deliberately a no-op: you apply from the working tree, which
-lets you test a change **before** pushing it.
+Locally, Flux is deliberately a no-op there: for the apps, `task local-test` proves only that the controllers start and the
+Kustomization objects are admitted (it also checks the cluster itself: etcd quorum, nodes, Cilium). To deploy a brick, apply it yourself from the working
+tree (`kubectl apply -k apps/base/<brick>`), which lets you test a change **before** pushing it. A CI lane
+that really reconciles a subset of bricks on Docker exists (`.github/workflows/local-docker.yml`, see
+[docs/local-docker.md](docs/local-docker.md)): local Docker, partial bricks, not a substitute for the cloud rung.
 
 ## License
 

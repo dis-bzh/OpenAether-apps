@@ -246,6 +246,8 @@ done
 for kv in grafana/admin grafana/db minio/root longhorn/encryption zitadel/db zitadel/masterkey backup/restic; do
   [ -n "$(bao_get "/v1/secret/data/$kv" | jq -r '.data.data | keys[0] // empty')" ] && ok "secret/$kv exists" || bad "secret/$kv missing"
 done
+CSR1="$(bao_get /v1/secret/data/pki/intermediate-csr | jq -r '.data.data.csr // empty')"
+grep -q "BEGIN CERTIFICATE REQUEST" <<<"$CSR1" && ok "the intermediate CSR is stored in secret/pki/intermediate-csr (outlives the Job's log)" || bad "no CSR in secret/pki/intermediate-csr"
 LEAK=0
 for kv in grafana/admin grafana/db minio/root longhorn/encryption zitadel/db zitadel/masterkey backup/restic; do
   while IFS= read -r val; do
@@ -262,6 +264,8 @@ grep -q "already present" "$T/dev/configure.sh.out" && ok "it reports the secret
 NKEYS="$(curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X LIST https://127.0.0.1:18211/v1/pki/keys | jq -r '.data.keys | length')"
 [ "$NKEYS" = 1 ] && ok "two runs, one pending PKI key (no key per sync)" || bad "pki keys after two runs: $NKEYS"
 grep -q "already generated" "$T/dev/configure.sh.out" && ok "the second run says the CSR is pending" || bad "no 'already generated' line"
+[ "$(bao_get /v1/secret/data/pki/intermediate-csr | jq -r '.data.data.csr // empty')" = "$CSR1" ] && [ "$(bao_get /v1/secret/data/pki/intermediate-csr | jq -r '.data.metadata.version')" = 1 ] \
+  && ok "the stored CSR is unchanged by the second run (still version 1)" || bad "the stored CSR changed or was rewritten"
 echo "--- the seeding identity can create and test, never overwrite or read a value"
 printf '{"policies":["secret-seeder"],"ttl":"10m"}' | curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X POST -d @- https://127.0.0.1:18211/v1/auth/token/create > "$T/dev/seeder.json"
 SEEDER_CODE="$(jq -r '.errors[0] // "created"' "$T/dev/seeder.json")"
@@ -295,6 +299,7 @@ rq() { # TOKEN_HEADER_FILE METHOD PATH [JSON] -> HTTP status
 }
 printf '{"type":"kv","options":{"version":"2"}}' | curl -s --cacert "$CAB" -H "@$T/bg.root" -X POST -d @- -o /dev/null "$U/v1/sys/mounts/secret"
 printf '{"type":"pki"}' | curl -s --cacert "$CAB" -H "@$T/bg.root" -X POST -d @- -o /dev/null "$U/v1/sys/mounts/pki"
+printf '{"data":{"csr":"x"}}' | curl -s --cacert "$CAB" -H "@$T/bg.root" -X POST -d @- -o /dev/null "$U/v1/secret/data/pki/intermediate-csr"
 for pol in openaether-bootstrap openaether-breakglass external-secrets-read cert-manager-pki backup-snapshot secret-seeder openaether-admin openaether-reader; do
   jq -nc --rawfile p "$V/scripts/policies/$pol.hcl" '{policy:$p}' | curl -s --cacert "$CAB" -H "@$T/bg.root" -X PUT -d @- -o /dev/null "$U/v1/sys/policies/acl/$pol"
   printf '{"policies":["%s"],"ttl":"30m","no_parent":true}' "$pol" | curl -s --cacert "$CAB" -H "@$T/bg.root" -X POST -d @- "$U/v1/auth/token/create" \
@@ -316,6 +321,18 @@ expect "seeder can not write elsewhere"          '403'     "$(rq "$T/tok-secret-
 echo "--- openaether-admin: secrets yes, structure no"
 expect "admin reads a secret"                    '200'     "$(rq "$T/tok-openaether-admin" GET  /v1/secret/data/backup/s3-primary)"
 expect "admin writes a secret"                   '200|204' "$(rq "$T/tok-openaether-admin" POST /v1/secret/data/grafana/admin "$KV")"
+expect "admin reads the stored CSR"               '200'     "$(rq "$T/tok-openaether-admin" GET  /v1/secret/data/pki/intermediate-csr)"
+expect "admin can not overwrite the stored CSR"   '403'     "$(rq "$T/tok-openaether-admin" POST /v1/secret/data/pki/intermediate-csr "$KV")"
+expect "admin can not delete the stored CSR"      '403'     "$(rq "$T/tok-openaether-admin" DELETE /v1/secret/data/pki/intermediate-csr)"
+expect "admin can not destroy its versions"       '403'     "$(rq "$T/tok-openaether-admin" POST /v1/secret/destroy/pki/intermediate-csr '{"versions":[1]}')"
+expect "admin can not wipe its metadata"          '403'     "$(rq "$T/tok-openaether-admin" DELETE /v1/secret/metadata/pki/intermediate-csr)"
+expect "admin can not soft-delete a version (the delete endpoint)" '403' "$(rq "$T/tok-openaether-admin" POST /v1/secret/delete/pki/intermediate-csr '{"versions":[1]}')"
+expect "admin can not undelete a version"         '403'     "$(rq "$T/tok-openaether-admin" POST /v1/secret/undelete/pki/intermediate-csr '{"versions":[1]}')"
+# A raw HTTP path with a trailing slash is served by the same handlers; the CLI strips it, so only curl can send it (review of 4405794).
+expect "admin can not delete the stored CSR with a trailing slash"  '403' "$(rq "$T/tok-openaether-admin" DELETE /v1/secret/data/pki/intermediate-csr/)"
+expect "admin can not wipe its metadata with a trailing slash"      '403' "$(rq "$T/tok-openaether-admin" DELETE /v1/secret/metadata/pki/intermediate-csr/)"
+[ "$(curl -s --cacert "$CAB" -H "@$T/tok-openaether-admin" "$U/v1/secret/data/pki/intermediate-csr" | jq -r '[.data.metadata.version, .data.data.csr] | @tsv')" = "$(printf '1\tx')" ] \
+  && ok "the stored CSR is still version 1 and readable after every attempt" || bad "the stored CSR changed or vanished during the attempts above"
 expect "admin reads a policy"                    '200'     "$(rq "$T/tok-openaether-admin" GET  /v1/sys/policies/acl/secret-seeder)"
 expect "admin can not write a policy"            '403'     "$(rq "$T/tok-openaether-admin" PUT  /v1/sys/policies/acl/evil '{"policy":"path \"*\" { capabilities = [\"sudo\",\"create\",\"read\",\"update\",\"delete\",\"list\"] }"}')"
 expect "admin can not mount an engine"           '403'     "$(rq "$T/tok-openaether-admin" POST /v1/sys/mounts/evil '{"type":"kv"}')"

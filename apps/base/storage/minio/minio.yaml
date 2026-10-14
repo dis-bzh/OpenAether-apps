@@ -2,7 +2,7 @@
 # ──────────────────────────────────────────────────────────────────
 # MinIO is deployed LOCALLY ONLY, to test the S3 configurations (Loki backend,
 # future VMCluster backup) with the same interface
-# qu'un S3 cloud (Scaleway Object Storage, OVH OBS, Outscale OSU).
+# as a cloud S3 (Scaleway Object Storage, OVH OBS, Outscale OSU).
 #
 # This file is included ONLY in apps/overlays/local/kustomization.yaml.
 # apps/overlays/management/ (cloud) points straight at the provider's native S3

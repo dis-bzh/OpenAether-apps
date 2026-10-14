@@ -11,7 +11,7 @@
 #
 # Variables (postBuild.substitute, see apps/clusters/README.md):
 #   ${CLUSTER_NAME}      — child cluster name (e.g. edge-1)
-#   ${K8S_VERSION:=v1.31.4}  ${TALOS_VERSION:=v1.9}
+#   ${K8S_VERSION:=v1.35.3}  ${TALOS_VERSION:=v1.13}
 #   ${CP_REPLICAS:=1}    ${WORKER_REPLICAS:=1}
 #   ${SCW_PROJECT_ID}    ${SCW_REGION:=fr-par}
 #   ${SCW_INSTANCE_TYPE:=DEV1-L}
@@ -72,7 +72,7 @@ metadata:
   namespace: capi-clusters
 spec:
   replicas: ${CP_REPLICAS:=1}
-  version: ${K8S_VERSION:=v1.31.4}
+  version: ${K8S_VERSION:=v1.35.3}
   infrastructureTemplate:
     apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
     kind: ScalewayMachineTemplate
@@ -80,7 +80,7 @@ spec:
   controlPlaneConfig:
     controlplane:
       generateType: controlplane
-      talosVersion: ${TALOS_VERSION:=v1.9}
+      talosVersion: ${TALOS_VERSION:=v1.13}
       # The CNI is NOT laid down here (no ~MB inlineManifests inside a CR):
       # Cilium + Flux are injected remotely by the management (kubeConfig).
       # strategicPatches and NOT configPatches (JSON6902): "JSON6902 patches
@@ -122,7 +122,7 @@ spec:
   template:
     spec:
       generateType: join
-      talosVersion: ${TALOS_VERSION:=v1.9}
+      talosVersion: ${TALOS_VERSION:=v1.13}
       # Workers need the same kubelet flag as the control plane (see above);
       # kubernetesTalosAPIAccess is a control-plane-only feature.
       strategicPatches:

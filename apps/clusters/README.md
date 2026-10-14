@@ -1,103 +1,116 @@
-# apps/clusters — clusters clients CAPI (kubeception / gitception)
+# apps/clusters — CAPI client clusters (kubeception / gitception)
 
-Surcouche **exercée en cloud réel** : edge-1 (Scaleway) et edge-2 (OVH) ont été
-provisionnés de bout en bout depuis un management réel (2026-07-25/26), Cilium
-et Flux injectés à distance, gitception incluse. Les apiVersions des templates
-sont validées contre les providers épinglés (CAPS v0.2.1 → `v1alpha2`,
-CACPPT v0.5.13 / CABPT v0.6.12 → `v1alpha3`).
+This layer: edge-1 (Scaleway) and edge-2 (OVH) were provisioned end to end
+from a real management cluster (2026-07-25/26), Cilium and Flux injected
+remotely, gitception included, but before the `CHILD_BACKUP_*` variables were
+added (2026-07-30). Since then the chain is validated **statically only**
+(`scripts/check-child-clusters.py`, CI), not replayed on a cluster. The template
+apiVersions are checked against the pinned providers (CAPS v0.2.1 →
+`v1alpha2`, CACPPT v0.5.13 / CABPT v0.6.12 → `v1alpha3`).
 
-Un cluster de management (briques `cluster-api-operator` + `cluster-api-providers`
-piochées) pilote ici ses clusters clients : **un fichier par cluster**, listé
-dans `kustomization.yaml`, réconcilié par la Kustomization Flux `capi-clusters`.
+A management cluster (with the `cluster-api-operator` + `cluster-api-providers`
+bricks picked) drives its client clusters from here: **one file per cluster**,
+listed in `kustomization.yaml`, reconciled by the `capi-clusters` Flux
+Kustomization.
 
-## Principe (100 % Flux natif, zéro outillage neuf)
+## Principle (100 % native Flux, no new tooling)
 
-1. **CAPI** provisionne les machines Talos (template
-   `apps/base/cluster-api-clusters/templates/…`, paramétré par
-   `postBuild.substitute`) et publie le Secret `<nom>-kubeconfig`.
-2. Le management applique **à distance** (`spec.kubeConfig` des
-   HelmRelease/Kustomization Flux) dans l'enfant :
-   Cilium (CNI socle) → `flux-gotk` (Flux épinglé en git) → `child-gitops`
-   (GitRepository `openaether` + Kustomization racine `openaether-platform`,
-   mêmes noms que le bootstrap parent).
-3. **Gitception** : l'enfant réconcilie ensuite lui-même son profil
-   `apps/flux/${CHILD_PROFILE}` — mêmes briques, même pioche
-   (`scripts/pick.py … -o apps/flux/workload-<nom>`), autonome même si le
-   management tombe.
+1. **CAPI** provisions the Talos machines (template
+   `apps/base/cluster-api-clusters/templates/…`, parameterised by
+   `postBuild.substitute`) and publishes the `<name>-kubeconfig` Secret.
+2. The management applies **remotely** (`spec.kubeConfig` of the Flux
+   HelmRelease/Kustomization) inside the child:
+   Cilium (baseline CNI) → `flux-gotk` (Flux pinned in git) → `child-gitops`
+   (GitRepository `openaether` + root Kustomization `openaether-platform`,
+   same names as the parent bootstrap).
+3. **Gitception**: the child then reconciles its own profile
+   `apps/flux/${CHILD_PROFILE}` — same bricks, same picker
+   (`scripts/pick.py … -o apps/flux/workload-<name>`), autonomous even if the
+   management goes down.
 
-Pas d'ordre strict requis : chaque étape retry jusqu'à ce que sa condition
-(kubeconfig présent, API joignable) soit vraie — convergence à la Flux.
+No strict order is required: each step retries until its condition
+(kubeconfig present, API reachable) holds — Flux-style convergence.
 
-Voir `example-scaleway.yaml.example` pour le cycle complet commenté.
+See `example-scaleway.yaml.example` for the full commented lifecycle.
 
-## Prérequis hors git (une fois par management)
+`postBuild.substitute` variables of the `<name>-gitops` Kustomization:
+`CHILD_NAME` always; `CHILD_BACKUP_S3_BUCKET` + `CHILD_BACKUP_S3_ENDPOINT` if
+the profile picks `cnpg`; `CHILD_BACKUP_TARGET_URL` if it picks `storage`
+(placeholders in git, see `edge-1.yaml`). `scripts/check-child-clusters.py`
+checks all of this, the example included. It checks that the placeholders exist in git, not that you replaced them: a forgotten
+`<your-bucket>` is not a Flux substitution error, it becomes a bogus bucket name (the WAL archive then fails).
 
-Scaleway :
+## Prerequisites outside git (once per management cluster)
+
+Scaleway:
 ```bash
 kubectl create secret generic scaleway-capi-credentials -n capi-clusters \
-  --from-literal=SCW_ACCESS_KEY=… --from-literal=SCW_SECRET_KEY=…   # docs CAPS : seules ces 2 clés sont lues
-kubectl create secret generic <enfant>-substitutes -n flux-system \
-  --from-literal=SCW_PROJECT_ID=…                                    # consommé par postBuild.substituteFrom
+  --from-literal=SCW_ACCESS_KEY=… --from-literal=SCW_SECRET_KEY=…   # CAPS docs: only these 2 keys are read
+kubectl create secret generic <child>-substitutes -n flux-system \
+  --from-literal=SCW_PROJECT_ID=…                                    # consumed by postBuild.substituteFrom
 ```
 
-OpenStack / OVH — un seul Secret, la région vit DANS `clouds.yaml`
-(surtout pas dans `identityRef`, cf. en-tête du template). ⚠️ La clé sous
-`clouds:` DOIT s'appeler `ovh` (= `${OS_CLOUD_NAME:=ovh}` dans le template,
+OpenStack / OVH — a single Secret, the region lives INSIDE `clouds.yaml`
+(definitely not in `identityRef`, see the template header). ⚠️ The key under
+`clouds:` MUST be named `ovh` (= `${OS_CLOUD_NAME:=ovh}` in the template,
 `apps/base/cluster-api-clusters/templates/cluster-talos-openstack/cluster.yaml`)
-— un autre nom (ex. `openstack`) fait échouer CAPO en silence côté status
-(`OpenStackCluster` sans status du tout) avec dans les logs du
-`capo-controller-manager` : `auth option failed for cloud : Missing input
-for argument [auth_url]` (constaté en réel, 2026-07-30) :
+— any other name (e.g. `openstack`) makes CAPO fail silently on the status side
+(an `OpenStackCluster` with no status at all), with this in the
+`capo-controller-manager` logs: `auth option failed for cloud : Missing input
+for argument [auth_url]` (observed for real, 2026-07-30):
 ```bash
 kubectl -n capi-clusters create secret generic ovh-capi-credentials \
   --from-file=clouds.yaml=./clouds.yaml
 # clouds.yaml:
 #   clouds:
-#     ovh:                    # <- pas "openstack", le template lit ce nom précis
+#     ovh:                    # <- not "openstack", the template reads this exact name
 #       auth: { auth_url: …, username: …, password: …, project_id: …, project_name: …, user_domain_name: …, project_domain_name: … }
 #       region_name: …
 #       interface: …
 #       identity_api_version: …
 ```
 
-Outscale : Secret `outscale-capi-credentials` (clés **minuscules**
-`access_key`/`secret_key`/`region`) + keypair `openaether-capi` côté compte.
+Outscale: Secret `outscale-capi-credentials` (**lowercase** keys
+`access_key`/`secret_key`/`region`) + keypair `openaether-capi` on the account.
 
-### Floating IP d'un enfant OpenStack (à re-créer après chaque teardown)
+### Floating IPs of an OpenStack child (to recreate after every teardown)
 
-L'IMDS OpenStack n'expose pas la FIP : elle doit être connue **avant** le boot
-pour entrer dans les `certSANs` Talos, donc écrite en git. C'est la seule
-ressource d'un enfant créée hors OpenTofu **et** hors CAPI — elle ne survit pas
-à un `task fleet-down`. Ré-allocation idempotente (dépôt infra) :
+The OpenStack IMDS does not expose the FIP: it must be known **before** boot to
+enter the Talos `certSANs`. It is the only child resource created outside both
+OpenTofu **and** CAPI — it does not survive a `task fleet-down`. The real
+addresses never go in git (this repository is public): they live in the
+`flux-system/edge-2-env` Secret that `edge-2.yaml` reads through
+`postBuild.substituteFrom` (see its header). Idempotent re-allocation (infra
+repository):
 
 ```bash
 source .env.sh
-python3 scripts/ops/ensure-capo-fip.py edge-2      # une FIP par réplique de CP
-# → reporter l'adresse dans OS_CP_FLOATING_IPS de apps/clusters/edge-2.yaml
+python3 scripts/ops/ensure-capo-fip.py edge-2 --count 2   # one FIP per CP replica, plus one for the upgrade surge
+# → put them in the edge-2-env Secret (OS_CP_FLOATING_IPS, OS_CP_FLOATING_IPS_SURGE)
 ```
 
-Kubeconfig de l'enfant : Secret `<enfant>-kubeconfig` (ns `capi-clusters`,
-clé `value`). Parcours jour-1 complet : `OpenAether-infra/docs/admin-access.md`.
+The child's kubeconfig: Secret `<child>-kubeconfig` (ns `capi-clusters`, key
+`value`). Full day-1 path: `OpenAether-infra/docs/admin-access.md`.
 
-## Décommissionner — `task edge-down` D'ABORD
+## Decommissioning — `task edge-down` FIRST
 
-⚠️ **Ne PAS se contenter de retirer le fichier du kustomization.** Flux prune
-tous les objets d'un coup, sans ordre : si l'`<Infra>Cluster` part avant les
-machines, le provider perd le client cloud nécessaire pour les détruire et
-boucle sur « … is not available yet » — machines bloquées sur finalizers et
-**VMs orphelines facturées** (constaté deux fois sur Scaleway).
+⚠️ **Do NOT just remove the file from the kustomization.** Flux prunes all the
+objects at once, in no order: if the `<Infra>Cluster` goes before the machines,
+the provider loses the cloud client it needs to destroy them and loops on
+"… is not available yet" — machines stuck on finalizers and **orphaned VMs
+still billed** (seen twice on Scaleway).
 
-Ordre correct, idempotent :
+Correct, idempotent order:
 
 ```bash
 export KUBECONFIG=<management>
-task edge-down CLUSTER=edge-1 -- --yes     # cascade CAPI propre, attend la fin
-# puis seulement : retirer edge-1.yaml de apps/clusters/kustomization.yaml
-git commit && git push                     # le prune Flux n'a plus rien à faire
+task edge-down CLUSTER=edge-1 -- --yes     # clean CAPI cascade, waits for the end
+# only then: remove edge-1.yaml from apps/clusters/kustomization.yaml
+git commit && git push                     # Flux prune has nothing left to do
 ```
 
-`task edge-down` supprime le `Cluster` (CAPI cascade via ownerReferences),
-attend la disparition complète, et en cas de blocage du provider lève les
-finalizers **en signalant explicitement les VMs à vérifier côté console**.
+`task edge-down` deletes the `Cluster` (CAPI cascades through ownerReferences),
+waits until it is completely gone, and if the provider blocks it lifts the
+finalizers **while explicitly flagging the VMs to check in the cloud console**.
 
-Les backups de l'enfant (brique backup, si piochée) restent dans les buckets S3.
+The child's backups (backup brick, if picked) stay in the S3 buckets.

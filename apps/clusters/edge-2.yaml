@@ -51,7 +51,7 @@ spec:
       # istio-waypoint, gateway). b3-16 doubles both — found live 2026-07-30.
       OS_FLAVOR: b3-16
       OS_EXTERNAL_NETWORK: Ext-Net
-      OS_NODE_CIDR: 10.20.0.0/24  # distinct du management OVH
+      OS_NODE_CIDR: 10.20.0.0/24  # distinct from the OVH management
       # Pre-allocated CP FIPs: must appear in the Talos certSANs (the
       # OpenStack IMDS does not reveal them). One per control-plane replica,
       # plus one surge slot for a rolling upgrade's temporary CP_REPLICAS+1

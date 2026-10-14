@@ -7,7 +7,7 @@
 #
 # GOLDEN RULE: never double up replication.
 #   App self-replicates (CNPG, VMCluster, Loki, Kafka, OpenSearch)
-#     → longhorn-x1-rwo ou local-path
+#     → longhorn-x1-rwo or local-path
 #   Single-replica app with no clean failover
 #     → longhorn-x2-rwo (or encrypted for sensitive data)
 #
@@ -23,7 +23,7 @@
 # 1 Longhorn replica + ReadWriteOnce.
 # For: apps that self-replicate (CNPG primary, vmstorage, Loki singleBinary).
 # Benefit: the volume is NOT replicated by Longhorn → zero Longhorn network overhead.
-# HA fournie par l'applicatif. Backup Longhorn (S3) reste disponible.
+# HA is provided by the application. Longhorn backup (S3) stays available.
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass

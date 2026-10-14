@@ -6,8 +6,8 @@ metadata:
     # NO istio.io/dataplane-mode: ambient — the data layer (CNPG).
     # Under ambient, ztunnel takes over the kubelet probes and re-emits them
     # from 169.254.7.127 to CNPG's instance-manager port (:8000) → blocked by
-    # CiliumNetworkPolicy → startup probe timeout → l'instance Postgres ne passe
-    # never Ready ("Waiting for instances to become active") while the DB is
+    # CiliumNetworkPolicy → startup probe timeout → the Postgres instance
+    # never goes Ready ("Waiting for instances to become active") while the DB is
     # running. A DB operator (its own replication, direct/CNPG access) has no
     # place in the mesh. Same reason as the PKI/secrets foundation.
     pod-security.kubernetes.io/enforce: restricted

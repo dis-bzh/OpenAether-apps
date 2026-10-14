@@ -173,3 +173,10 @@ spec:
       # Only override it to test a branch end to end, and remember to remove it
       # afterwards: a deleted branch leaves the child pointing at a source that
       # cannot be found, and it stops reconciling anything.
+      # REQUIRED because the workload profile picks cnpg and storage, see
+      # child-gitops/gitrepository.yaml's header for why there is no default.
+      # Placeholders: this file is public, substitute your own bucket in a branch.
+      CHILD_BACKUP_S3_BUCKET: s3-<your-bucket>-backups-dev
+      CHILD_BACKUP_S3_ENDPOINT: https://s3.fr-par.scw.cloud
+      # Same bucket, in Longhorn's own URL syntax (storage brick's BackupTarget).
+      CHILD_BACKUP_TARGET_URL: s3://s3-<your-bucket>-backups-dev@fr-par/

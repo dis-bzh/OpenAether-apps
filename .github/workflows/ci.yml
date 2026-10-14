@@ -36,6 +36,10 @@ jobs:
       - name: Language
         run: ./scripts/dev/check-language.sh
 
+      # The detector itself: each kind of French it once missed must still fail.
+      - name: Language check tests
+        run: ./scripts/dev/test-check-language.sh
+
   dag:
     name: Flux DAG
     runs-on: ubuntu-latest
@@ -51,6 +55,13 @@ jobs:
 
       - name: pick.py --check (generated profiles up to date with the DAG)
         run: python3 scripts/pick.py --check
+
+      # apps/clusters is only partly rendered by the build job (edge-*.yaml and
+      # the .example are not listed), so a bad apiVersion there went unseen.
+      - name: Child clusters (static check + mutation tests)
+        run: |
+          python3 scripts/check-child-clusters.py
+          scripts/dev/test-check-child-clusters.sh
 
   build:
     name: Kustomize Build + Collision Check
@@ -80,12 +91,64 @@ jobs:
       - name: Cross-brick object collision check (builds every DAG path with kubectl kustomize)
         run: python3 scripts/check-object-collisions.py
 
+      - name: CiliumLoadBalancerIPPool stays on cilium.io/v2 (#49)
+        run: ./scripts/dev/test-cilium-lb-ipam-api.sh
+
+      - name: Kyverno cleanup CronJobs render and behave as fixed (#48)
+        run: python3 -I scripts/dev/test-kyverno-cleanup-render.py
+
+      - name: Provider S3 egress rules admit every region of the provider (#53)
+        run: python3 -I scripts/dev/test-s3-egress-fqdns.py
+
+      - name: dependsOn covers the cross-Kustomization contracts (#38)
+        run: |
+          python3 -I scripts/check-dependson-contracts.py
+          ./scripts/dev/test-check-dependson-contracts.sh
+
+      - name: Health-gate list in apps/flux/README.md matches the management render (#50)
+        run: ./scripts/dev/test-flux-health-gates.sh
+
+      # The local Docker lane (.github/workflows/local-docker.yml) only runs by hand or on a PR touching it, so its
+      # static shape is checked here on every PR: a closed brick set, a pinned GitRepository, an always-run teardown.
+      - name: Local Docker lane (static + mutation tests)
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-local-docker-lane.sh | tee lane-test.out
+          grep -qE '^0 failed$' lane-test.out
+
+  loki-render:
+    name: Loki chart render
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      # The shipped values through the pinned chart, the ExternalSecret region and the CiliumNetworkPolicy (#53).
+      # helm and kubectl are on the runner image. The script exits 2 when one is missing.
+      - name: Test the Loki values
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-loki-render.sh | tee loki-render.out
+          grep -qE '^0 failed$' loki-render.out
+
   openbao-bootstrap:
     name: OpenBao bootstrap (real OpenBao)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      # Jobs with a deadline have a ttl, the configure deadline covers its waits, the alert names both Jobs (#34).
+      - name: Bootstrap Jobs and alert (static, with a self-test)
+        run: |
+          set -euo pipefail
+          pip install pyyaml
+          ./scripts/dev/check-bootstrap-jobs.sh
+          ./scripts/dev/check-bootstrap-jobs.sh --selftest | tee selftest.out
+          ! grep -q 'NOT detected' selftest.out
 
       # The real entrypoint, init.sh and configure.sh against an OpenBao container (root revoked, nothing secret in any
       # output, policies enforced, break-glass, snapshot restore, key rotation). A skip is not a pass: the script exits

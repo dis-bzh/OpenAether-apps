@@ -6,6 +6,10 @@ Manifests Kubernetes **communs / plateforme** de OpenAether, réconciliés par
 
 🇬🇧 [English version](README.md)
 
+**Versions.** apps 0.1.1 vise les nouveaux clusters : un cluster initialisé par 0.1.0 ne peut pas y être migré sur place. Elle
+s'associe à OpenAether-infra 0.2.1 (pas encore publiée), pas à 0.2.0. La table d'association, ce qui a été validé où et ce qui n'est pas
+corrigé sont dans [CHANGELOG.md](CHANGELOG.md).
+
 ## Principe : socle figé + pioche modulaire
 
 **Seul socle figé : CNI (Cilium) + Flux.** Tout le reste — mesh Istio, Zitadel,
@@ -45,7 +49,7 @@ apps/
     ├── base/                  # DAG COMPLET — source de vérité des dependsOn
     ├── bricks.yaml            # Catalogue : alias, socle, compagnons, descriptions
     ├── management/            # Profil : DAG complet
-    ├── workload/              # Profil généré (pioche : vault eso certs gateway)
+    ├── workload/              # Profil généré (son en-tête `# Pick:` liste les briques)
     └── local/                 # Profil : Docker local
 ```
 
@@ -111,7 +115,8 @@ cluster inconnu tente de réconcilier.
 
 ⚠️ **Opérateur et ses CR dans deux Kustomizations séparées** : un bundle
 contenant à la fois un opérateur et des CR de ses propres CRDs est rejeté au
-dry-run tant que les CRDs n'existent pas.
+dry-run tant que les CRDs n'existent pas. La Kustomization des CR doit `dependsOn` celle de l'opérateur, en
+`wait: true` pour que les CRDs soient servies avant les CR (`external-secrets` puis `external-secrets-stores`).
 
 ## Développement local
 
@@ -120,12 +125,16 @@ Nécessite [OpenAether-infra](https://github.com/dis-bzh/OpenAether-infra) clon�
 
 ```bash
 cd ../OpenAether-infra
-task local-up      # cluster Talos 3 CP + 3 workers sous Docker
-task local-test    # Flux SUSPENDU, déploiement via kubectl apply -k du working tree
+task local-up      # cluster Talos 3 CP + 3 workers sous Docker (Cilium, sans Flux ni apps)
+task local-test    # + contrôleurs Flux et apps/flux/local, toutes les Kustomizations SUSPENDUES
 ```
 
-En local, Flux est volontairement un no-op : on applique depuis l'arbre de
-travail, ce qui permet de tester une modification **avant** de la pousser.
+En local, Flux est volontairement un no-op : pour les apps, `task local-test` prouve seulement que les contrôleurs
+démarrent et que les objets Kustomization sont admis (il vérifie aussi le cluster lui-même : quorum etcd, nœuds, Cilium). Pour déployer une brique, on l'applique soi-même
+depuis l'arbre de travail (`kubectl apply -k apps/base/<brique>`), ce qui permet de tester une
+modification **avant** de la pousser. Une lane CI qui réconcilie réellement un sous-ensemble de briques
+sous Docker existe (`.github/workflows/local-docker.yml`, voir [docs/local-docker.md](docs/local-docker.md)) :
+Docker local, briques partielles, pas un substitut du rang cloud.
 
 ## Licence
 

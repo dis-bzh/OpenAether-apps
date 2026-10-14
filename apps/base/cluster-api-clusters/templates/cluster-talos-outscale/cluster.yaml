@@ -82,7 +82,7 @@ spec:
     # (osccluster_loadbalancer.go: SetControlPlaneEndpoint{Host: DnsName,
     # Port: listener.loadbalancerport}).
     # CACPPT does NOT go through the endpoint: it opens a Talos session on
-    # machine.Status.Addresses (ExternalIP *ou* InternalIP), port 50000
+    # machine.Status.Addresses (ExternalIP *or* InternalIP), port 50000
     # (controllers/configs.go::talosconfigFromMachines). The management sits on
     # ANOTHER cloud, where the 10.30.x InternalIP is unreachable => the CPs MUST
     # have a public IP (node.vm.publicIp, see OscMachineTemplate).
@@ -457,7 +457,7 @@ spec:
 # -----------------------------------------------------------------------------
 # MachineDeployment — cluster.x-k8s.io/v1beta2.
 # Refs {apiGroup, kind, name}; in v1beta2 the rollout strategy lives under
-# spec.rollout.strategy (et non plus spec.strategy).
+# spec.rollout.strategy (no longer spec.strategy).
 # -----------------------------------------------------------------------------
 apiVersion: cluster.x-k8s.io/v1beta2
 kind: MachineDeployment

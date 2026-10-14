@@ -1,5 +1,5 @@
 # OpenAether 0.5.0 — Allow Infrastructure Egress (Restricted / Zero Trust)
-# Remplace allow-infra-egress.yaml (trop permissif: world)
+# Replaces allow-infra-egress.yaml (too permissive: world)
 # Each namespace has its own allowed FQDNs.
 # DNS (53 UDP/TCP) to the cluster (CoreDNS) is allowed for everyone.
 # Kube-API (443) is allowed for everyone through allow-kube-api.yaml (a separate CCNP).
@@ -82,7 +82,7 @@ spec:
         - matchName: api.scaleway.com
         - matchName: api.ovh.com
         - matchName: api.outscale.com
-        - matchName: github.com  # Pour installer CRDs/manifests
+        - matchName: github.com  # to install CRDs/manifests
       toPorts:
         - ports:
             - port: "443"

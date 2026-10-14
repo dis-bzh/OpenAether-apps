@@ -32,7 +32,7 @@ from pathlib import Path
 try:
     import yaml
 except ImportError:
-    sys.exit("PyYAML manquant : apt install python3-yaml (ou pip install pyyaml)")
+    sys.exit("PyYAML missing: apt install python3-yaml (or pip install pyyaml)")
 
 REPO = Path(__file__).resolve().parent.parent
 BASE = REPO / "apps" / "flux" / "base"
@@ -50,7 +50,7 @@ class Brick:
 
 
 def load_dag():
-    """Parse les Kustomizations Flux de apps/flux/base/*.yaml."""
+    """Parse the Flux Kustomizations of apps/flux/base/*.yaml."""
     bricks = {}
     for i, f in enumerate(sorted(BASE.glob("*.yaml"))):
         if f.name == "kustomization.yaml":
@@ -67,7 +67,7 @@ def load_dag():
             deps = [d["name"] for d in spec.get("dependsOn") or []]
             if name in bricks:
                 sys.exit(f"Invalid DAG: Kustomization '{name}' defined twice "
-                         f"({bricks[name].source_file.name} et {f.name})")
+                         f"({bricks[name].source_file.name} and {f.name})")
             bricks[name] = Brick(name, deps, spec.get("path", ""), f, (i, j))
     if not bricks:
         sys.exit(f"No Flux Kustomization found under {BASE}")
@@ -103,9 +103,9 @@ def validate_dag(bricks):
         if b.path:
             target = REPO / b.path.lstrip("./")
             if not target.is_dir():
-                errors.append(f"{b.name}: spec.path {b.path} n'existe pas dans le repo")
+                errors.append(f"{b.name}: spec.path {b.path} does not exist in the repo")
 
-    # Cycles (DFS trois couleurs)
+    # Cycles (three-colour DFS)
     WHITE, GREY, BLACK = 0, 1, 2
     color = {n: WHITE for n in bricks}
 
@@ -116,7 +116,7 @@ def validate_dag(bricks):
                 continue
             if color[d] == GREY:
                 cycle = stack[stack.index(d):] + [d] if d in stack else [n, d]
-                errors.append("cycle dependsOn : " + " → ".join(cycle))
+                errors.append("dependsOn cycle: " + " → ".join(cycle))
             elif color[d] == WHITE:
                 dfs(d, stack + [d])
         color[n] = BLACK
@@ -135,7 +135,7 @@ def validate_dag(bricks):
 
 
 def resolve_names(requested, bricks, aliases):
-    """Alias + validation, avec suggestion en cas de faute de frappe."""
+    """Alias + validation, with a suggestion on a typo."""
     resolved = []
     known = list(bricks) + list(aliases)
     for r in requested:
@@ -144,14 +144,14 @@ def resolve_names(requested, bricks, aliases):
             hint = difflib.get_close_matches(r, known, n=3)
             msg = f"unknown brick: '{r}'"
             if hint:
-                msg += f" — vouliez-vous dire : {', '.join(hint)} ?"
+                msg += f" — did you mean: {', '.join(hint)} ?"
             sys.exit(msg + "\n(full list: scripts/pick.py --list)")
         resolved.append(name)
     return resolved
 
 
 def closure(selected, bricks, reasons):
-    """Fermeture transitive des dependsOn."""
+    """Transitive closure of dependsOn."""
     work = list(selected)
     out = set(selected)
     while work:
@@ -311,17 +311,17 @@ def cmd_list(bricks, cat):
         rev_aliases.setdefault(t, []).append(a)
     baseline = set(cat.get("baseline") or [])
     companions = set(cat.get("companions") or [])
-    print(f"\nBriques disponibles ({len(bricks)}) — socle=[S] compagnon=[C]\n")
+    print(f"\nAvailable bricks ({len(bricks)}) — baseline=[S] companion=[C]\n")
     for n in sorted(bricks, key=lambda x: bricks[x].order):
         b = bricks[n]
         tag = "S" if n in baseline else ("C" if n in companions else " ")
-        aka = f" (alias : {', '.join(sorted(rev_aliases[n]))})" if n in rev_aliases else ""
+        aka = f" (alias: {', '.join(sorted(rev_aliases[n]))})" if n in rev_aliases else ""
         print(f" [{tag}] {n}{aka}")
         if desc.get(n):
             print(f"       {desc[n]}")
         if b.deps:
             print(f"       depends on: {', '.join(b.deps)}")
-    print("\nExemple : python3 scripts/pick.py vault gateway -o apps/flux/edge\n")
+    print("\nExample: python3 scripts/pick.py vault gateway -o apps/flux/edge\n")
 
 
 def main():
@@ -342,7 +342,7 @@ def main():
     bricks = load_dag()
     errors = validate_dag(bricks)
     if errors:
-        print("DAG invalide :", file=sys.stderr)
+        print("Invalid DAG:", file=sys.stderr)
         for e in errors:
             print(f"  - {e}", file=sys.stderr)
         sys.exit(1)

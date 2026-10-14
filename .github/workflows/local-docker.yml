@@ -1,0 +1,144 @@
+# The "local Docker" rung: a Talos-in-Docker cluster on a GitHub-hosted runner (the only place that has the
+# kernel, >= 6.15 for Talos 1.14, and the RAM), Flux, and a CONSERVATIVE subset of the bricks. Partial by
+# design: no Longhorn, no routable LoadBalancer, no provider S3, no Zitadel. It is NOT a substitute for the
+# cloud rung. See docs/local-docker.md.
+#
+# Two ways to run it, neither needs the workflow on main:
+#   gh workflow run local-docker.yml --ref <branch> -f infra_ref=<sha> -f openbao_mode=dev
+#   or open/update a pull request touching this file or the script (the `paths:` below).
+name: Local Docker
+
+on:
+  workflow_dispatch:
+    inputs:
+      infra_ref:
+        description: "OpenAether-infra ref (commit sha) providing `task local-up`"
+        type: string
+        # OpenAether-infra main when this lane was written. Bump it deliberately: it is the Talos/Cilium/tooling pin.
+        default: f127a266a10e79275931a38b546cfa1acfa057be
+      openbao_mode:
+        description: "OpenBao init mode: dev (one plaintext share) or prod (3 throwaway PGP keys, threshold 2)"
+        type: choice
+        options: [dev, prod]
+        default: dev
+      bricks:
+        description: "Flux Kustomizations, space-separated (empty = default set; must be closed under dependsOn)"
+        type: string
+        default: ""
+      wait_seconds:
+        description: "Total budget for the Kustomizations and Jobs to become Ready"
+        type: string
+        default: "1500"
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/local-docker.yml
+      - scripts/dev/local-docker-lane.sh
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A manual dev run and a manual prod run on the same ref must not cancel each other.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lane:
+    name: Talos on Docker (1 control plane + 1 worker)
+    # A fork's pull request cannot be cloned by Flux through this repository's URL.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      # One control plane and one worker: the supported non-HA topology infra's weekly Clea lane boots.
+      TF_VAR_control_plane_count: "1"
+      TF_VAR_worker_count: "1"
+      LANE_NODES: "2"
+      INFRA_REF: ${{ inputs.infra_ref || 'f127a266a10e79275931a38b546cfa1acfa057be' }}
+      LANE_MODE: ${{ inputs.openbao_mode || 'dev' }}
+      LANE_SET: ${{ inputs.bricks }}
+      LANE_WAIT_SECONDS: ${{ inputs.wait_seconds || '1500' }}
+      # Flux clones GitHub, so it must be given a commit that exists there, never the merge ref.
+      LANE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      LANE_BRANCH: ${{ github.head_ref || github.ref_name }}
+      LANE_OUT: ${{ github.workspace }}/local-docker-out
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          path: apps
+          # The commit Flux clones, not the merge ref: the Kustomizations rendered must be the ones it reconciles.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          repository: dis-bzh/OpenAether-infra
+          ref: ${{ env.INFRA_REF }}
+          path: infra
+          persist-credentials: false
+
+      - name: Host
+        run: |
+          uname -r
+          free -m
+          df -h /
+          nproc
+
+      - name: Plan (render the bricks, check the set is closed)
+        run: ./apps/scripts/dev/local-docker-lane.sh plan
+
+      - name: Toolchain pinned by OpenAether-infra
+        working-directory: infra
+        run: printf 'y\n' | ./scripts/setup.sh
+
+      - name: task local-up (infra's own Talos-in-Docker, Cilium, no Flux)
+        working-directory: infra
+        timeout-minutes: 25
+        run: |
+          ./scripts/bootstrap/render-bootstrap-manifests.sh --local
+          task local-up
+
+      - name: Flux and the selected bricks
+        timeout-minutes: 10
+        run: |
+          export KUBECONFIG="$GITHUB_WORKSPACE/infra/infrastructure/opentofu-local/kubeconfig"
+          ./apps/scripts/dev/local-docker-lane.sh flux
+          ./apps/scripts/dev/local-docker-lane.sh prepare-mode
+
+      - name: Wait (bounded)
+        id: wait
+        timeout-minutes: 40
+        run: |
+          export KUBECONFIG="$GITHUB_WORKSPACE/infra/infrastructure/opentofu-local/kubeconfig"
+          ./apps/scripts/dev/local-docker-lane.sh wait
+
+      - name: Collect get / describe / logs
+        if: always()
+        run: |
+          export KUBECONFIG="$GITHUB_WORKSPACE/infra/infrastructure/opentofu-local/kubeconfig"
+          [ -s "$KUBECONFIG" ] || { echo "no cluster was brought up, nothing to collect"; exit 0; }
+          ./apps/scripts/dev/local-docker-lane.sh collect
+
+      - name: Assert (read-only)
+        if: always()
+        run: |
+          export KUBECONFIG="$GITHUB_WORKSPACE/infra/infrastructure/opentofu-local/kubeconfig"
+          ./apps/scripts/dev/local-docker-lane.sh assert
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: local-docker-${{ github.run_id }}
+          path: ${{ env.LANE_OUT }}
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # Always, last: a leftover container or a kubeconfig on a shared runner is the failure this guards against.
+      - name: Tear down
+        if: always()
+        working-directory: infra
+        run: |
+          task local-down || true
+          echo "containers left: $(docker ps -aq --filter name=openaether-local-dev- | wc -l)"

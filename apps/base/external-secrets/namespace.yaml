@@ -5,7 +5,7 @@ metadata:
   labels:
     # NO istio.io/dataplane-mode: ambient — the foundation layer (secrets).
     # external-secrets has a validating webhook called by the kube-apiserver
-    # sur :443. En ambient, ztunnel veut tunneliser cet appel en HBONE/15008,
+    # on :443. Under ambient, ztunnel would tunnel that call over HBONE/15008,
     # blocked by CiliumNetworkPolicy (443/10250 allow-list) → Cilium DROP =
     # "operation not permitted" (EPERM) → the ExternalSecret dry-run fails → cnpg
     # blocked. An admission/validating webhook must never depend on the mesh.

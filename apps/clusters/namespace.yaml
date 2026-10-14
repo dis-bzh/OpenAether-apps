@@ -20,4 +20,4 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: capi-clusters
 data:
-  readme: "Instancier un cluster client: cf. apps/clusters/README.md"
+  readme: "Instantiating a client cluster: see apps/clusters/README.md"

@@ -11,7 +11,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintA"
     openaether.io/component: "cluster-api-operator"
 spec:
-  description: "CAPI operator webhook: ingress kube-apiserver sur webhook:9443,
+  description: "CAPI operator webhook: ingress from kube-apiserver to webhook:9443,
     egress DNS + kube-api."
   endpointSelector:
     matchLabels:

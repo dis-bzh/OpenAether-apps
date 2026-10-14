@@ -17,7 +17,7 @@ spec:
   ingress:
     # 1. Istio Gateway (Gateway API) — vault.openaether.local
     #    ⚠️ The Envoy Gateway-API pod carries `service.istio.io/canonical-name:
-    #    openaether-gateway-istio`, PAS `k8s-app: cilium-gateway` (label legacy
+    #    openaether-gateway-istio`, NOT `k8s-app: cilium-gateway` (the legacy label of
     #    Cilium Gateway, never set here) → the old selector never matched
     #    → the vault UI timed out. We target the real Istio label.
     - fromEndpoints:

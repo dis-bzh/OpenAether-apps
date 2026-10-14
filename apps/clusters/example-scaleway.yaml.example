@@ -1,22 +1,27 @@
-# ⚠️ EXEMPLE NON APPLIQUÉ (extension .example, non listé dans kustomization.yaml).
-# Pour activer : copier en <nom>.yaml, ajuster les substitute, l'ajouter aux
-# resources de apps/clusters/kustomization.yaml. Flux (management) fait le reste.
+# EXAMPLE, NOT APPLIED (.example extension, not listed in kustomization.yaml).
+# To enable: copy to <name>.yaml, replace "child-1" by your cluster name, adjust
+# the substitute values and add the file to resources in apps/clusters/kustomization.yaml.
+# Flux on the management cluster does the rest. It is edge-1.yaml with the
+# placeholders left in; scripts/check-child-clusters.py keeps the two aligned.
 #
-# Cycle de vie d'un cluster enfant "edge-1" (kubeception/gitception) :
-#   1. `edge-1-cluster`  : applique les CRs CAPI (template talos-scaleway) → CAPI
-#      provisionne les VMs Talos et écrit le Secret edge-1-kubeconfig.
-#   2. `edge-1-cilium`   : HelmRelease AVEC spec.kubeConfig → installe le CNI
-#      DANS l'enfant (retry jusqu'à ce que le kubeconfig existe — convergence).
-#   3. `edge-1-flux`     : applique gotk-components (Flux épinglé) dans l'enfant.
-#   4. `edge-1-gitops`   : pose GitRepository+Kustomization racine dans l'enfant
-#      → son propre Flux réconcilie apps/flux/${CHILD_PROFILE} depuis git.
-#      L'enfant est ensuite AUTONOME (le management peut tomber, il réconcilie).
-#   Profil : générer avec scripts/pick.py (ex: -o apps/flux/workload-edge-1).
+# Lifecycle of a child cluster (kubeception/gitception):
+#   1. `child-1-cluster`: applies the CAPI CRs (talos-scaleway template); CAPI
+#      provisions the Talos VMs and writes the Secret child-1-kubeconfig.
+#   2. `child-1-cilium`: HelmRelease WITH spec.kubeConfig, installs the CNI INSIDE
+#      the child (retries until the kubeconfig exists).
+#   3. `child-1-flux`: applies gotk-components (pinned Flux) inside the child.
+#   4. `child-1-gitops`: lays the GitRepository + root Kustomization in the child,
+#      whose own Flux then reconciles apps/flux/${CHILD_PROFILE} from git.
+#      The child is AUTONOMOUS from then on (the management may go down).
+# The chart sources (cilium, talos-ccm) are shared and live in helmrepository-*.yaml.
+# kubectl prerequisites (never in git):
+#   Secret capi-clusters/scaleway-capi-credentials (SCW_ACCESS_KEY, SCW_SECRET_KEY)
+#   Secret flux-system/child-1-substitutes (SCW_PROJECT_ID)
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: edge-1-cluster
+  name: child-1-cluster
   namespace: flux-system
 spec:
   interval: 10m
@@ -30,58 +35,84 @@ spec:
     - name: capi-clusters
   postBuild:
     substitute:
-      CLUSTER_NAME: edge-1
+      CLUSTER_NAME: child-1
       CP_REPLICAS: "1"
       WORKER_REPLICAS: "1"
-      SCW_PROJECT_ID: "<project Scaleway>"
-      SCW_IMAGE_NAME: "<nom de l'image Talos du schematic talos-image>"
+      # Aligned with the parent's image (talos-image, resolved_image_ref).
+      K8S_VERSION: v1.35.3
+      TALOS_VERSION: v1.13
+      SCW_IMAGE_NAME: "<talos image name of your schematic>"
+      SCW_ZONE: fr-par-1
+    substituteFrom:
+      - kind: Secret
+        name: child-1-substitutes   # SCW_PROJECT_ID
 ---
-apiVersion: source.toolkit.fluxcd.io/v2
-kind: HelmRepository
-metadata:
-  name: cilium
-  namespace: capi-clusters
-spec:
-  interval: 24h
-  url: https://helm.cilium.io
----
+# (The `cilium` HelmRepository is shared by every child and now lives in
+# helmrepository-cilium.yaml — it must not depend on child-1 being enabled.)
+# The child's CNI, applied REMOTELY (CAPI kubeConfig). Values aligned with
+# the parent foundation (render-bootstrap-manifests.sh): KPR + KubePrism + WireGuard.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
-  name: edge-1-cilium
+  name: child-1-cilium
   namespace: capi-clusters
 spec:
   interval: 10m
-  # Applique DANS l'enfant via le kubeconfig généré par CAPI (clé `value`).
+  timeout: 10m
   kubeConfig:
     secretRef:
-      name: edge-1-kubeconfig
+      name: child-1-kubeconfig
   targetNamespace: kube-system
   storageNamespace: kube-system
+  releaseName: cilium
+  install:
+    remediation: { retries: -1 }   # retry until the child's kubeconfig/API is ready
   chart:
     spec:
       chart: cilium
-      version: "1.19.2"   # match the foundation version on the infra side
+      version: "1.19.2"            # same version as the parent foundation
       sourceRef: { kind: HelmRepository, name: cilium }
   values:
-    # Align with bootstrap-manifests/cilium.yaml on the infra side
-    # (kubeProxyReplacement, Talos securityContext capabilities + cgroup,
-    # ipam kubernetes…). check-cilium-parity.py enforces the ones that matter.
     kubeProxyReplacement: true
+    # ⚠️ ipam.mode=kubernetes — DO NOT REMOVE. The chart default is
+    # `cluster-pool`, which IGNORES the `clusterNetwork.pods` declared by CAPI
+    # (10.244.0.0/16) and carves pod CIDRs out of 10.0.0.0/8. But the nodes
+    # live in that same /8: 10.20.0.0/24 on OpenStack, 10.0.0.0/24 for the
+    # foundation subnets (OVH, Outscale, Proxmox). The `kubernetes` mode
+    # reuses the podCIDR allocated by kube-controller-manager, like the parent —
+    # which sets this for exactly the same reason.
     ipam: { mode: kubernetes }
-    # ⚠️ Both are REQUIRED as soon as the child's profile carries Istio ambient:
-    # without cni.exclusive=false, Cilium rewrites 05-cilium.conflist in a loop
-    # and strips the chained istio-cni plugin → istio-cni never Ready → ztunnel,
-    # services-gateway and istio-authorizationpolicies stuck in cascade.
-    # hostNamespaceOnly=true is the other half of the ambient pair: socket-LB
-    # must not short-circuit the in-pod redirection. It only disables socket-LB
-    # for NON-root netns; host-network processes keep ClusterIP translation.
-    # See apps/clusters/edge-1.yaml for the complete set of values.
+    # ⚠️ cni.exclusive=false is REQUIRED as soon as the child's profile carries
+    # Istio ambient (apps/base/istio): otherwise Cilium rewrites
+    # 05-cilium.conflist in a loop and strips the chained istio-cni plugin
+    # ("conflicting component constantly reverting our work") → /readyz 503 →
+    # Helm install timeout → ztunnel, services-gateway and istio-authorizationpolicies stuck.
+    #
+    # hostNamespaceOnly=true: aligned with the parent foundation and required by
+    # Istio ambient. The flag only disables socket-LB for NON-root netns (chart
+    # "Disable socket lb for non-root ns"); host-network processes,
+    # including kube-apiserver → webhook ClusterIPs, keep the translation. The
+    # "failed calling webhook" of 2026-07-26 was wrongly blamed on it: it was
+    # observed during a hot CNI rollout that had already broken the children's
+    # datapath.
     socketLB: { enabled: true, hostNamespaceOnly: true }
     cni: { exclusive: false }
-    # Metrics: without these the child's CNI serves nothing and is invisible.
+    nodeSelectorLabels: true
+    bpf: { hostLegacyRouting: false, masquerade: true }
+    cgroup: { autoMount: { enabled: false }, hostRoot: /sys/fs/cgroup }
+    k8sServiceHost: localhost      # KubePrism Talos
+    k8sServicePort: 7445
+    hubble: { enabled: false }
+    # Metrics: without these the child's CNI serves nothing and is invisible,
+    # while the parent foundation is monitored — the mismatch is silent, hence
+    # both keys are in check-cilium-parity.py.
     prometheus: { enabled: true }
-    operator: { prometheus: { enabled: true } }
+    operator: { replicas: 1, prometheus: { enabled: true } }
+    encryption: { enabled: true, type: wireguard }
+    securityContext:
+      capabilities:
+        ciliumAgent: [CHOWN, KILL, NET_ADMIN, NET_RAW, IPC_LOCK, SYS_ADMIN, SYS_RESOURCE, DAC_OVERRIDE, FOWNER, SETGID, SETUID]  # yamllint disable-line rule:line-length
+        cleanCiliumState: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE]
 ---
 # providerID: Talos does not set one, so CAPI never resolves nodeRef and
 # MachineHealthCheck stays dead. The CCM fills it in from the Talos platform
@@ -93,14 +124,14 @@ spec:
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
-  name: ${CLUSTER_NAME}-talos-ccm
+  name: child-1-talos-ccm
   namespace: capi-clusters
 spec:
   interval: 10m
   timeout: 10m
   kubeConfig:
     secretRef:
-      name: ${CLUSTER_NAME}-kubeconfig
+      name: child-1-kubeconfig
   targetNamespace: kube-system
   storageNamespace: kube-system
   releaseName: talos-ccm
@@ -115,7 +146,7 @@ spec:
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: edge-1-flux
+  name: child-1-flux
   namespace: capi-clusters
 spec:
   interval: 10m
@@ -127,12 +158,12 @@ spec:
   wait: false
   kubeConfig:
     secretRef:
-      name: edge-1-kubeconfig
+      name: child-1-kubeconfig
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: edge-1-gitops
+  name: child-1-gitops
   namespace: capi-clusters
 spec:
   interval: 10m
@@ -143,10 +174,22 @@ spec:
   prune: true
   wait: false
   dependsOn:
-    - name: edge-1-flux
+    - name: child-1-flux
   kubeConfig:
     secretRef:
-      name: edge-1-kubeconfig
+      name: child-1-kubeconfig
   postBuild:
     substitute:
-      CHILD_PROFILE: workload   # ou un profil pick.py dédié (workload-edge-1)
+      CHILD_PROFILE: workload
+      CHILD_NAME: child-1   # prefix of this child's restic repositories
+      # CHILD_REF deliberately absent → defaults to refs/heads/main (see child-gitops).
+      # Only override it to test a branch end to end, and remember to remove it
+      # afterwards: a deleted branch leaves the child pointing at a source that
+      # cannot be found, and it stops reconciling anything.
+      # REQUIRED because the workload profile picks cnpg and storage, see
+      # child-gitops/gitrepository.yaml's header for why there is no default.
+      # Placeholders: this file is public, substitute your own bucket in a branch.
+      CHILD_BACKUP_S3_BUCKET: s3-<your-bucket>-backups-dev
+      CHILD_BACKUP_S3_ENDPOINT: https://s3.fr-par.scw.cloud
+      # Same bucket, in Longhorn's own URL syntax (storage brick's BackupTarget).
+      CHILD_BACKUP_TARGET_URL: s3://s3-<your-bucket>-backups-dev@fr-par/

@@ -71,10 +71,10 @@ spec:
               protocol: TCP
             - port: "8000"
               protocol: TCP
-    # 5. CNPG Operator (gestion cluster + extraction status :8000/pg/status).
+    # 5. CNPG Operator (cluster management + status extraction on :8000/pg/status).
     # The operator runs in cnpg-system (NOT foundation-databases) and carries the
-    # label app.kubernetes.io/name=cloudnative-pg. L'ancien selector
-    # (ns foundation-databases + name cnpg-cloudnative-pg) ne matchait RIEN →
+    # label app.kubernetes.io/name=cloudnative-pg. The old selector
+    # (ns foundation-databases + name cnpg-cloudnative-pg) matched NOTHING →
     # operator→instance:8000 dropped → "Instance Status Extraction Error:
     # i/o timeout" → the Cluster is never "healthy" (visible once the ns is out of the mesh).
     - fromEndpoints:
@@ -133,9 +133,11 @@ spec:
     # for 15+ minutes; same gap as backup/databases/networkpolicy.yaml,
     # narrowed to FQDNs, no toEntities:world).
     - toFQDNs:
-        - matchName: s3.fr-par.scw.cloud          # Scaleway Object Storage
-        - matchName: s3.eu-west-par.io.cloud.ovh.net  # OVH (aligned with the eu-west-par tfvars)
-        - matchName: oos.eu-west-2.outscale.com   # Outscale OSU
+        # Every region of the provider, not one host: a real OVH config uses s3.gra.io.cloud.ovh.net, which the
+        # former single-host rule dropped (apps #53, seen on a real OVH cluster). `*` stays inside one DNS label.
+        - matchPattern: "s3.*.scw.cloud"          # Scaleway Object Storage
+        - matchPattern: "s3.*.io.cloud.ovh.net"   # OVH Object Storage (standard class)
+        - matchPattern: "oos.*.outscale.com"      # Outscale OSU
       toPorts:
         - ports:
             - port: "443"
