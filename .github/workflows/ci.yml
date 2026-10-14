@@ -85,6 +85,14 @@ jobs:
       - name: pick.py --check (generated profiles up to date with the DAG)
         run: python3 scripts/pick.py --check
 
+      # Every HTTPRoute on the shared Gateway is in docs/public-exposure.yaml with what authenticates its callers (the
+      # app LB has no source ACL).
+      - name: Routes on the shared Gateway are registered
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test-check-gateway-routes.py
+          python3 scripts/check-gateway-routes.py
+
       # Every pinned chart and vendored dump has a row in docs/eol-calendar.yaml and the row names the pin that is
       # in the file. Errors fail; dates (past EOL, expired waiver) only annotate: see docs/eol-calendar.md.
       - name: End-of-support calendar
@@ -123,6 +131,11 @@ jobs:
 
       - name: Cross-brick object collision check (builds every DAG path with kubectl kustomize)
         run: python3 scripts/check-object-collisions.py
+
+      # The opt-in component that takes the OpenBao and Grafana routes off the shared Gateway: render it, apply the
+      # patches it hands to Flux to the real bricks, and see exactly those two routes go.
+      - name: Private-admin-routes component
+        run: python3 scripts/dev/test-private-admin-routes.py
 
       # The openbao ClusterSecretStore only serves the namespaces it lists; an
       # ExternalSecret rendered anywhere else would stay NotReady on a cluster.

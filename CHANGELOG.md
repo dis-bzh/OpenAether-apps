@@ -51,6 +51,18 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Security
 
+- **Every route on the shared Gateway is registered with what authenticates its callers, and an opt-in component takes the OpenBao
+  and Grafana routes off it** (ANSSI BP-028 R51 and R79 in part; the Zitadel first-admin half is the
+  Zitadel entry of this section). The app load balancer has no source ACL, so each HTTPRoute on `openaether-gateway` answers anyone who sets its Host
+  header. `docs/public-exposure.yaml` lists the five routes and their guard; `scripts/check-gateway-routes.py` (fixture-tested,
+  in CI) fails on an unregistered route, a missing authentication, a route served by default that states none, or flags that
+  disagree with the manifests. `apps/flux/components/private-admin-routes` (default off, a cluster adds it to its own overlay)
+  deletes the `openbao` and `grafana` routes through Flux `spec.patches`; `scripts/dev/test-private-admin-routes.py` renders it
+  and applies those patches to the real bricks (exactly two routes go). **Mocked/static: Flux's merge of `spec.patches` into a
+  path, and the admin paths after the routes are gone (OpenBao through `bao_admin`, Grafana through a port-forward without its
+  Zitadel login), were not run on a cluster.** It does NOT filter the app load balancer (an `app_lb_allowed_cidrs` ACL is the
+  infra half), create a second Gateway for public applications (reviewed as high risk: every policy names `openaether-gateway`),
+  or change what a deployed cluster serves unless its overlay opts in.
 - **The OpenBao seal-key escrow is proven by a hash, needs two custodians, and a missing or stale attestation raises an alert**
   (ANSSI F-BKP-05 / GH-M37-5, DP-02 / B2 recovery rule, PA-022 R45 in part). Day 0 now escrows the key with at least two
   recipients or as a k-of-n split, and ends with a step that reconstructs the key from the escrow, compares its sha256 with the live
