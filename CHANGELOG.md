@@ -17,7 +17,9 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
-**The 0.1.1 candidate: the fixes the first real Flux runs asked for, for fresh clusters.** Read *Upgrade notes* (a cluster
+## [0.1.1] — 2026-10-14
+
+**The fixes the first real Flux runs asked for, for new clusters.** Read *Upgrade notes* (a cluster
 initialised by 0.1.0 cannot be moved in place) and *Not fixed* before pulling it, and the rung written under each entry: this file
 distinguishes static checks, CI, local Docker, and real clouds.
 
@@ -388,7 +390,7 @@ profile matches it), a `kubectl kustomize` build of every brick with no object c
 settings of the CAPI children agreeing with the foundation's (`task apps-validate` from `OpenAether-infra`). The runs on a
 real cluster that this file records (July and August 2026, Scaleway and OVH) are on earlier commits. *Corrected in place on
 2026-10-14 (#50): the tag itself was not reconciled, but one lab then reconciled the `management` profile on Scaleway
-by hand on 2026-10-12 (UTC; see Unreleased, Validated).* `OpenAether-infra` 0.2.0 validated its three clouds with
+by hand on 2026-10-12 (UTC; see 0.1.1, Validated).* `OpenAether-infra` 0.2.0 validated its three clouds with
 Flux off. Read Known limits before pulling this onto a cluster that matters.
 
 `OpenAether-infra` 0.2.0 pins this tag in its `envs/*.tfvars.example` (`git_ref = "refs/tags/0.1.0"`). The tag replaces the withdrawn 1.0.0 below, whose entries are the
@@ -425,7 +427,7 @@ Read these before deploying something that matters. Open items:
 [the open issues](https://github.com/dis-bzh/OpenAether-apps/issues).
 
 - **No profile had been reconciled on a real cluster at this tag.** *Corrected in place on 2026-10-14 (#50):* the `management`
-  profile was reconciled once by a lab, by hand, after the tag (Unreleased, Validated); the `workload` profile still has not been.
+  profile was reconciled once by a lab, by hand, after the tag (0.1.1, Validated); the `workload` profile still has not been.
   The statements above name the gates that ran at the tag.
 - **The pinned Flux source was not exercised on a live cluster at this tag.** `ref.name: ${GIT_REF:=refs/heads/main}` carries a
   tag or a branch (entry 1.0.0, Changed). *Corrected in place on 2026-10-14 (#50):* the lab run above used it.
@@ -436,7 +438,8 @@ Read these before deploying something that matters. Open items:
 - **Pivoting a management cluster onto itself with `clusterctl move` needs the provider inventory installed some other
   way** (the `clusterctl-inventory` brick is gone, above).
 - **Seven runbooks and READMEs are still French at an English-canonical name** (#40); the language check lists them in
-  `.languageignore` and the list must not grow.
+  `.languageignore` and the list must not grow. *Corrected in place on 2026-10-14 (#40): all translated in 0.1.1 (see Fixed there);
+  `.languageignore` keeps only `CLAUDE.md` and `CHANGELOG.md`.*
 
 ---
 
