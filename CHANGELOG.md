@@ -192,11 +192,12 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Documented
 
-- **`kubectl cnpg promote` reported success and changed nothing (#36): not fixed, only documented.** `docs/traps.md` now says
-  to read the Cluster status, the replica's streaming state and the operator log instead of the plugin's output, and notes that
-  operator 1.23.1 is unsupported and does not list PostgreSQL 18 (`zitadel-db`). The cause is unknown and the plugin skew is a
-  hypothesis (upstream advises a plugin at least as new as the operator, which 1.23.6 already was when it failed, so that advice is not a proven remedy). Rung: text only; a cluster must
-  reproduce or rule out the skew, so the issue stays open.
+- **`kubectl cnpg promote` reported success and changed nothing (#36): reproduced and narrowed, not fixed.** On a real cluster
+  (operator 1.23.1, PostgreSQL 18, Scaleway, 2026-10-14) plugin 1.23.6 prints "will be promoted" and changes nothing, while plugins
+  1.23.1 and 1.30.0 promote correctly. `docs/traps.md` says so and still tells to read the Cluster status, the replica's streaming
+  state and the operator log; it no longer advises "a plugin at least as new as the operator" (1.23.6 is newer and fails). The
+  fault inside plugin 1.23.6 is not found and nothing here pins a plugin version. Operator 1.23.1 is unsupported and does not list
+  PostgreSQL 18. Rung: real cloud once by hand; the issue stays open for the cause.
 
 ### Upgrade notes (0.1.1)
 

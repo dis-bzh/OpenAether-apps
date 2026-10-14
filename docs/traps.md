@@ -19,13 +19,14 @@ belong to. What follows has no skill of its own yet.
 
 - **Seed OpenBao app-DB secrets BEFORE the CNPG cluster's first `initdb`.** Seeding
   late leaves the live Postgres role out of sync with the Secret.
-- **Do not trust `kubectl cnpg promote` output; read the Cluster.** A plugin 1.23.6 against the
-  1.23.1 operator printed success three times and nothing changed (#36, cause not found). Install a
-  plugin at least as new as the operator (upstream's advice; that was already the case when it failed, so it is not a remedy proven
-  here), then check `.status.targetPrimary`,
-  `.status.currentPrimary`, the conditions, that the target replica is streaming and not lagging, and
-  the `cnpg-system` operator log. Operator 1.23 is end of support and does not list PostgreSQL 18, which
-  `zitadel-db` runs (`grafana-db` runs 16.3): a failed promote there is not a plugin bug until proven.
+- **Do not trust `kubectl cnpg promote` output; read the Cluster.** Measured on a real cluster against the 1.23.1 operator
+  (PostgreSQL 18 `zitadel-db`, 3 instances, Scaleway, 2026-10-14): plugin **1.23.6** printed "will be promoted" and changed
+  nothing (`.status.targetPrimary` never moved: reproduced), while plugin **1.23.1** and plugin **1.30.0** promoted the replica
+  and the Cluster followed (#36). So "install a plugin at least as new as the operator" is not the remedy (1.23.6 is newer and
+  failed); the cause inside 1.23.6 is not found. Use 1.23.1 or a current plugin, and in every case check
+  `.status.targetPrimary`, `.status.currentPrimary`, the conditions, that the target replica is streaming and not lagging,
+  and the `cnpg-system` operator log. Operator 1.23 is end of support and does not list PostgreSQL 18, which `zitadel-db` runs
+  (`grafana-db` runs 16.3).
 
 ## CAPI
 
