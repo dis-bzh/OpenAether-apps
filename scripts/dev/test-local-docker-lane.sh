@@ -34,9 +34,11 @@ if LANE_ROOT="$T/mut" LANE_OUT="$T/mout" LANE_SET="namespaces" "$LANE" plan >"$T
 
 # The leak scan must catch what it claims to catch (positive controls), and keep a clean log. A stub kubectl: no Secret to read.
 mkdir -p "$T/bin" "$T/scan/logs"; printf '#!/bin/sh\nexit 1\n' >"$T/bin/kubectl"; chmod +x "$T/bin/kubectl"
-printf 'starting\nall good\nreconciled in 3s\n' >"$T/scan/logs/clean.log"
+# Ordinary lines that look a little like a token must NOT trip the scan (a hit deletes the log and fails the lane).
+printf 'starting\nall good\nreconciled in 3s\nhost foo.s.AbCdEfGhIjKlMnOpQrStUvWx.example\nimage k8s.gcr.io/pause@sha256:0123456789abcdef\nid sa.AbCdEfGhIjKlMnOpQrStUvWxYz\n' >"$T/scan/logs/clean.log"
 printf 'token s.%s here\n' "$(printf 'A1b2C3d4E5f6G7h8I9j0K1l2')" >"$T/scan/logs/openbao-service.log"
-printf '{"client_token":"b.%s"}\n' "$(printf 'A1b2C3d4E5f6G7h8I9j0K1l2')" >"$T/scan/logs/openbao-batch.log"
+# A real OpenBao batch token is "b." followed by about 130 base64url characters.
+printf '{"client_token":"b.%s"}\n' "$(printf 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v2W3x4Y5z6_-A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v2W3x4Y5z6')" >"$T/scan/logs/openbao-batch.log"
 printf 'hvs.%s\n' "$(printf 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4')" >"$T/scan/logs/vault.log"
 # The PEM marker is assembled here so that no key header sits in this file (secret scanners flag it).
 printf -- '-----BEGIN %s KEY-----\nabc\n' "OPENSSH PRIVATE" >"$T/scan/logs/ssh.log"

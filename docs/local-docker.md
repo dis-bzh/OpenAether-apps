@@ -29,7 +29,7 @@ ordering on a cluster that is not a cloud one. It does **not** read the `openbao
 
 ## What has actually run
 
-Dev mode, on the pull request of the 0.1.1 candidate, green on two commits (19 assertions, plus the bounded wait). **Not run:** prod
+Dev mode, on the pull request of the 0.1.1 candidate: every run so far was green (the first three on the merge ref, later ones on the head commit; 19 assertions, plus the bounded wait). **Not run:** prod
 mode (`openbao_mode=prod`, the throwaway PGP keys) and the `workflow_dispatch` route with its inputs; they are written and
 statically checked, not observed.
 

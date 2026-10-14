@@ -25,9 +25,9 @@ distinguishes static checks, CI, local Docker, and real clouds.
 
 | OpenAether-infra | apps | Status |
 |---|---|---|
-| 0.2.0 | 0.1.0 | The pair validated on 2026-10-12 (Scaleway, Flux off; one hand-driven Flux reconcile of 0.1.0 on 2026-10-13). |
+| 0.2.0 | 0.1.0 | The pair infra 0.2.0 validated on its three clouds with Flux off (2026-10-12); one Scaleway run reconciled apps 0.1.0 by hand with Flux on (2026-10-12, UTC). |
 | 0.2.0 | 0.1.1 | **Not supported.** Infra 0.2.0 has no operator PGP keys (OpenBao would start in development mode) and its `seed-openbao.sh` waits for a root-token Secret that 0.1.1 never creates. |
-| 0.2.1 (not yet cut) | 0.1.1 | The intended pair. Validated with OpenAether-infra `f127a26` (a commit on main, not a tag), on the three clouds below. |
+| 0.2.1 (not yet cut) | 0.1.1 | The intended pair. Validated with OpenAether-infra `f127a26` (a commit on main, not a tag), on the clouds and commits listed under Validated. |
 | main or 0.2.1 | 0.1.0 | Not supported: the seed script and `cluster-security` refuse it by design. |
 
 ### Added
@@ -36,8 +36,8 @@ distinguishes static checks, CI, local Docker, and real clouds.
   `docs/local-docker.md`): on a GitHub-hosted runner, infra's own `task local-up` (1 control plane + 1 worker), Flux, then a
   conservative set of bricks reconciled from the commit under test (namespaces, platform prerequisites, External Secrets,
   cert-manager, OpenBao in dev or prod mode, Kyverno), bounded waits, read-only assertions, a pod-log leak scan, artifacts and
-  an `if: always()` teardown. Rung reached: local Docker, **dev mode only**, run twice on a GitHub-hosted runner (the pull request of
-  this candidate, green both times: 19 assertions after a bounded wait). **Not run:** prod mode (`openbao_mode=prod`) and the
+  an `if: always()` teardown. Rung reached: local Docker, **dev mode only**, on a GitHub-hosted runner: every run on the pull request of this
+  candidate so far was green (the first three on the merge ref, later ones on the head commit), 19 assertions after a bounded wait. **Not run:** prod mode (`openbao_mode=prod`) and the
   `workflow_dispatch` route with its inputs; they are written and statically checked. Static checks in CI: `plan` refusals,
   the workflow's shape (pinned actions, minimal permissions, step order, an always-run teardown, no `secrets.*`), and the leak scan
   against planted secrets. It is local Docker with partial bricks: it does not prove Longhorn, routable LoadBalancers, provider
@@ -49,42 +49,59 @@ distinguishes static checks, CI, local Docker, and real clouds.
 
 ### Validated
 
-- **The 0.1.1 candidate on three clouds, 2026-10-14 (apps `883d888`, then `4405794`, then the later fix commits of this block;
-  OpenAether-infra `f127a26`, a commit on main, not a tag; management role, 3 control planes + 2 workers, Kubernetes v1.37.1,
-  `deploy_flux = true`, OpenBao in production mode with 3 throwaway PGP recovery keys, threshold 2).** Rung: real cloud, **once per
-  cloud**, driven by hand; nothing is repeated or unattended, and `cluster-up` still ends 201 on the documented `flux-system exists`
-  line until the Day-1 seeding has run.
-  - **Scaleway, full DAG:** 35 of 35 Kustomizations Ready (34 apps Kustomizations plus infra's root) after the seeding. Observed:
-    the PKI CSR stored in KV (`created`), `ttlSecondsAfterFinished` 3600 and `activeDeadlineSeconds` 3600 on the configure Job,
-    both Jobs removed by their ttl about an hour after they ended and re-created by Flux about 1.5 minutes later, as no-ops
-    (Complete in 5 to 6 s); `OpenBaoBootstrapJobFailed` **firing** for a deliberately failed `openbao-init` (with `openaether-platform` and
-    `foundation-vault` suspended: suspending the child alone is reverted by its parent) and clearing after the resume (#34); the
-    `CiliumLoadBalancerIPPool` at `cilium.io/v2` with 0 deprecation warnings (#49); the Kyverno cleanup Jobs in 4 s with
-    `(0) reports found, no clean up needed` (#48); `loki-s3-credentials` synced with region `fr-par`, the `namespace` label, a LogQL
-    marker line returned, the S3 host in Cilium's FQDN cache, Loki objects in the bucket and no `i/o timeout` (#53; two Alloy
-    `status=500` lines at start-up, none after); no secret in the `foundation-vault` logs; the CNPG `promote` matrix (#36, see
-    Documented). Kyverno reports on this candidate: 82 `require-security-context` (45 + 37 autogen), 3 `restrict-image-registries`
-    (1 + 2 autogen, images not yet attributed) and no `restrict-privileged` (#37, #47).
-  - **OVH, full DAG, Paris region with the Gravelines S3 endpoint (`s3.gra.io.cloud.ovh.net`):** 35 of 35 Ready, the same Job and
-    CSR observations, `cilium.io/v2` with 0 warnings, cleanup Jobs in 3 s. The first lab of the day never got that far: every node
-    lost its egress (no DNS, no NTP) behind a router whose centralized SNAT port stayed DOWN, so no apps object was ever deployed
-    there; a lab with a fresh router came up in under 10 minutes. This run **found a real defect that no earlier gate could**: the
-    provider-S3 egress rules named one OVH host, so Cilium dropped Loki, the CNPG backups and Longhorn's backup target (see Fixed,
-    #53); after the fix Loki wrote its objects, `zitadel-db` and `grafana-db` reported `Continuous archiving is working`, and Loki
-    logged no timeout.
-  - **Outscale, REDUCED profile** (`vault eso certs kyverno platform-cilium-lb-ipam`, 18 Kustomizations): the shipped Outscale quota
-    (20 vCPU, 40 GB) cannot hold the full DAG, so the full DAG was **not** run on Outscale. All 18 Ready, the same OpenBao and CSR
-    observations, the pool at `v2`, cleanup Jobs in 6 s. Loki and the databases were not part of that profile.
-  - **The stored CSR on all three clouds:** `openaether-admin` reads it (200) and is refused (exit code 2) an overwrite, a delete, a
-    destroy and a metadata wipe through the `bao` CLI. The CLI strips a trailing slash, so those checks missed a raw HTTP
-    `DELETE .../intermediate-csr/`, which the first version of the rule let through (found by the independent review on the pinned
-    image, fixed by a prefix rule, below); the harness now sends it.
-  - **CI on the pull request:** all required jobs green on the heads named above, including `openbao-bootstrap` against a real
-    OpenBao (136 checks), `loki-render`, the S3 egress test, and the local Docker lane (dev mode, 19 assertions).
+- **The 0.1.1 candidate on three clouds, 2026-10-14: different commits and different profiles on each (OpenAether-infra `f127a26`, a
+  commit on main, not a tag; management role, 3 control planes + 2 workers, Kubernetes v1.37.1, `deploy_flux = true`, OpenBao in
+  production mode with 3 throwaway PGP recovery keys, threshold 2).** Rung: real cloud, **once per cloud**, driven by hand; nothing
+  is repeated or unattended, and `cluster-up` still ends 201 on the documented `flux-system exists` line until the Day-1 seeding
+  has run. Which commit each cloud saw matters, because the S3 egress rules, Longhorn's rule and the CSR prefix rule are later
+  commits than the first labs:
+  - **Scaleway, full DAG, two labs.** *Lab 4* (apps `883d888`, moved by Flux to `4405794`; torn down by its deadline before the later
+    fixes existed): 35 of 35 Kustomizations Ready (34 apps Kustomizations plus infra's root) after the seeding. The PKI CSR stored
+    in KV, `ttlSecondsAfterFinished` 3600 and `activeDeadlineSeconds` 3600 on the configure Job, both Jobs removed by their ttl about
+    an hour after they ended and re-created by Flux roughly 1.5 minutes later (the removal time is approximate), as no-ops (5 to 6 s);
+    `OpenBaoBootstrapJobFailed` **firing** for a deliberately failed `openbao-init` (with `openaether-platform` and `foundation-vault`
+    suspended: suspending the child alone is reverted by its parent) and clearing after the resume (#34); the pool at `cilium.io/v2`
+    with 0 deprecation warnings and 13 addresses available (#49); the Kyverno cleanup Jobs in 4 s (#48); `loki-s3-credentials` synced
+    with region `fr-par`, the `namespace` label, a LogQL marker line, the S3 host in Cilium's FQDN cache, Loki objects in the bucket,
+    no `i/o timeout` (#53; two Alloy `status=500` lines at start-up and none in the minute after); no secret in the `foundation-vault`
+    logs; the CNPG `promote` observation (#36, see Documented). The stored CSR entry on this cluster held a probe value left by a
+    test, not a CSR, so it shows the refusals but not "reads a CSR". *Lab 6* (apps `065d440`, the final behaviour: only tests, docs,
+    one regex and one policy `description` come after it): 35 of 35 Ready, both Jobs Complete in production mode (34 s and 40 s on a
+    first install), the pool at `v2` with 0 warnings, the cleanup Jobs in 4 s, Loki's labels and a marker line, no `i/o timeout`,
+    region `fr-par`, Longhorn's BackupTarget `available: true` (it was not checked on lab 4), and Kyverno at 82 `require-security-context`
+    (45 + 37 autogen) and 3 `restrict-image-registries` (1 + 2 autogen, images not yet attributed), none `restrict-privileged`
+    (#37, #47). CloudNativePG on lab 6: archiving first failed because the lab reused its bucket and the previous cluster's WAL archive was still
+    there (the pods did reach Scaleway's S3 through the new rule; the trap is in `docs/traps.md`); after that stale `cnpg/` prefix was
+    removed both clusters reported `Continuous archiving is working`.
+  - **OVH, full DAG, Paris region with the Gravelines S3 endpoint (`s3.gra.io.cloud.ovh.net`); one cluster that saw `4405794`, then
+    `953f459`, `07d9347` and `065d440` through Flux:** 35 of 35 Ready on each, the same Job and CSR observations, `cilium.io/v2` with
+    0 warnings, cleanup Jobs in 3 s. The first lab of the day never got that far: every node lost its egress (no DNS, no NTP) behind a
+    router whose centralized SNAT port stayed DOWN, so no apps object was deployed there; a lab with a fresh router came up in about
+    8 minutes. This run **found a real defect that no earlier gate could**: the provider-S3 egress rules named one OVH host, so
+    Cilium dropped Loki, the CNPG backups and Longhorn's backup target (see Fixed, #53). After the fix, on OVH: no further "Policy
+    denied" drop in a 60-second window, no Loki timeout in ten minutes, Loki's objects in the bucket, `zitadel-db` and `grafana-db`
+    reporting `Continuous archiving is working`, and Longhorn's BackupTarget `available: true` (it had read `false` when first
+    looked at).
+  - **Outscale, REDUCED profile on a twin of `4405794`** (a throwaway branch: `4405794` plus one regenerated management profile file;
+    picks `vault eso certs kyverno platform-cilium-lb-ipam`, 18 Kustomizations): the shipped Outscale quota (20 vCPU, 40 GB) cannot
+    hold the full DAG, so the full DAG was **not** run on Outscale. All 18 Ready, the same OpenBao observations, the pool at `v2`,
+    cleanup Jobs in 6 s. That profile has no Loki, database or Longhorn, so the `oos.*.outscale.com` pattern has been checked by
+    `scripts/dev/test-s3-egress-fqdns.py` only, never by a live flow; it mirrors the two that were.
+  - **The stored CSR.** Through the `bao` CLI, `openaether-admin` was refused (exit code 2) an overwrite, a delete, a destroy and a
+    metadata wipe on Scaleway (labs 4 and 6), OVH and Outscale, the first three against the exact-path rule of `4405794` and the
+    later ones against the prefix rule. The CLI strips a trailing slash, so those checks could not see that a raw HTTP
+    `DELETE .../intermediate-csr/` got through the first rule (found by the independent review on the pinned image). The raw requests
+    (trailing-slash `DELETE` of the data and metadata paths, the delete and undelete endpoints: all 403, the entry still readable at
+    version 1) were made against the prefix rule on OVH and on Scaleway lab 6.
+  - **CI on the pull request, per head:** CI, Security and the Local Docker lane were green on `883d888`, `4405794` and `953f459`;
+    Security was red on `07d9347` (a fake key header in the lane's own test, fixed by `2776555` and a documented fingerprint); all seven
+    checks were green on `065d440`, including `openbao-bootstrap` against a real OpenBao (136 checks: 131 up to `4405794`, 136 from
+    `a3cb3d2`), `loki-render`, the S3 egress test and the local Docker lane (dev mode, 19 assertions).
   - **Not observed, on any cloud:** the disaster-recovery restore on a cluster, a rolling upgrade of the OpenBao replicas, Kyverno in
     Enforce mode, the #39 CAPI child on-ramp on a real child, #38's "store not found" window (the events had expired), prod-mode
     local Docker, the `workflow_dispatch` route of the lane, an in-place upgrade of a cluster initialised by 0.1.0 (it cannot be done,
-    see Upgrade notes), a Longhorn backup or restore (its target was only seen available on OVH), and anything repeated or unattended.
+    see Upgrade notes), a Longhorn backup or restore (its target was seen available on OVH and Scaleway lab 6 only), and anything
+    repeated or unattended.
 - **The OpenBao redesign on a real cluster, 2026-10-13: Scaleway, management role, 3 control planes + 2 workers,
   `deploy_flux = true`, an OpenAether-infra branch that is not public (production mode: 3 PGP recovery keys, threshold 2).**
   Observed: the init Job in production mode (shares encrypted to the operator keys, root token revoked, the audit trail showing the
@@ -111,8 +128,8 @@ distinguishes static checks, CI, local Docker, and real clouds.
   failure was the double re-initialisation); 35 of 35 Kustomizations Ready 132 s after the seeding began (34 apps Kustomizations
   plus infra's root).
   **Not observed:** the disaster-recovery restore on a cluster (exercised on a real OpenBao container only), a rolling upgrade of the
-  three replicas, Kyverno in Enforce mode, any log in Loki (it stores nothing on a cloud cluster, #53: its egress to the provider's S3 is
-  blocked), the Loki side of the log search, and the 3-replica restore. **A lab artefact of the first run, not a defect:** re-initialising
+  three replicas, Kyverno in Enforce mode, on that day, before the Loki and egress fixes of this block, any log in Loki (it stored nothing on a cloud
+  cluster, #53), the Loki side of the log search, and the 3-replica restore. **A lab artefact of the first run, not a defect:** re-initialising
   OpenBao twice regenerated the database password after the database had been created with the first one (Grafana failed to
   authenticate until the role was aligned), which is why the README says a re-init regenerates every generated secret.
 
@@ -150,7 +167,7 @@ distinguishes static checks, CI, local Docker, and real clouds.
 - The `backup/openbao` snapshot job uses `openbao:2.7.1` (was 2.5.4).
 - **The stored PKI intermediate CSR is read-only for the admin identity (found on the Scaleway lab, 2026-10-14; hardened again after
   the independent review).** `configure.sh` keeps the CSR in KV at `secret/pki/intermediate-csr` (create only, so it outlives the
-  Job log). `openaether-admin` holds `secret/*`, so the first version of that entry could be overwritten, deleted or destroyed by it,
+  Job log). `openaether-admin` holds `secret/*`, so the first version of that entry could be overwritten, deleted or destroyed by it (the protection is against that identity; the bootstrap identity, which the Jobs run as, holds `secret/*` by design),
   and a swapped CSR would get another key signed by the offline root. The admin policy now lets it read the entry and its metadata
   only, and the five KV paths (data, metadata, delete, undelete, destroy) are **prefix** rules: the first version matched the exact
   path, and a raw HTTP `DELETE .../intermediate-csr/` (trailing slash) fell through to `secret/*` (204, entry gone; the `bao` CLI
@@ -173,7 +190,7 @@ distinguishes static checks, CI, local Docker, and real clouds.
 - **The `CiliumLoadBalancerIPPool` is `cilium.io/v2` (was `v2alpha1`, which the API server flags as deprecated from Cilium 1.19) (#49).**
   v2 is served since Cilium 1.18 and every pinned version is at or above it. The `CiliumL2AnnouncementPolicy` stays `v2alpha1`
   (upstream has no v2 type for it). Rung: static in CI (`scripts/dev/test-cilium-lb-ipam-api.sh` pins the apiVersion in the base and the local overlay), then real
-  cloud on Scaleway, OVH and Outscale: `cilium.io/v2`, 0 deprecation warnings in the kustomize-controller log, the pool kept its blocks.
+  cloud on Scaleway, OVH and Outscale: `cilium.io/v2`, 0 deprecation warnings in the kustomize-controller log, on Scaleway the pool kept its 13 addresses.
 - **Loki could not push to the provider's S3 on a cloud cluster (#53, second half; the first, `spec.values` overriding the seeded
   destination, was fixed earlier).** The Loki CiliumNetworkPolicy now has `rules.dns` on its DNS rule (without it Cilium never
   learns the addresses behind the S3 FQDN rule), egress to the Loki peers and ingress on 9095 and 7946/UDP (the ring and the
@@ -185,18 +202,20 @@ distinguishes static checks, CI, local Docker, and real clouds.
   On OVH this worked only after the next entry. It does NOT: give Loki its own bucket and key (the infra seed reuses the backup ones, infra #302; the comments now say
   so), change `insecure: true` with an `https` endpoint, disable the rules
   sidecar (no API egress), or fix the 2 replicas with replication factor 2 (one pod down still rejects pushes).
-- **The provider-S3 egress rules named one host per provider, so a real OVH configuration (`s3.gra.io.cloud.ovh.net`) had Loki, the
-  CNPG backups and Longhorn's backup target dropped by Cilium (#53, found on a real OVH cluster, not by any earlier gate).** The four
+- **The provider-S3 egress rules named one host per provider, so a real OVH configuration (`s3.gra.io.cloud.ovh.net`) had Loki and the
+  CNPG backups dropped by Cilium, and Longhorn's policy had no S3 rule at all (#53, found on a real OVH cluster, not by any earlier gate).** The four
   `toFQDNs` rules (`observability`, `backup/openbao`, `backup/databases`, the `cnpg` restricted policy) allowed only
   `s3.fr-par.scw.cloud`, `s3.eu-west-par.io.cloud.ovh.net` and `oos.eu-west-2.outscale.com`, while the owner's OVH configuration
   uses the Gravelines endpoint: Cilium answered "Policy denied" to `loki-0`, `zitadel-db-1` and `longhorn-manager` (935 Loki
   `i/o timeout` lines in an hour). They now use one `matchPattern` per provider (`s3.*.scw.cloud`, `s3.*.io.cloud.ovh.net`,
-  `oos.*.outscale.com`; `*` never crosses a dot), and the `longhorn` policy, which had **no** S3 rule at all (its BackupTarget sat at
-  `available: false`), gets the same rule plus `rules.dns` on its DNS rule. New `scripts/dev/test-s3-egress-fqdns.py` (in CI) checks
+  `oos.*.outscale.com`; `*` never crosses a dot), and the `longhorn` policy, which had **no** S3 rule at all on any provider (its BackupTarget sat at
+  `available: false` on the OVH cluster; that was not checked on the others before the fix), gets the same rule plus `rules.dns` on its DNS rule. New `scripts/dev/test-s3-egress-fqdns.py` (in CI) checks
   the five files against the regions the tfvars can name and against look-alike hosts that must stay refused, and shows that the
   former rule missed `s3.gra.io.cloud.ovh.net`. Rung: static in CI, then real cloud once on OVH: the drops from Loki and the
   database pod stopped when Flux applied the rule, Loki wrote its chunks to the bucket within seconds, both CNPG clusters reported
-  `Continuous archiving is working`. It does NOT: cover OVH's high-performance class (`*.perf.cloud.ovh.net`) or an endpoint outside
+  `Continuous archiving is working`. The egress now admits every region of three provider domains on 443: a pod holding that provider's credentials could already
+  reach its own bucket through the one host, so this adds regions, not a new channel, and an exact per-cluster host would be narrower.
+  It does NOT: cover OVH's high-performance class (`*.perf.cloud.ovh.net`) or an endpoint outside
   the three providers' names; Longhorn's BackupTarget turned `available: true` on OVH once the rule landed (it had been `false` since the cluster
   came up); it was not checked on Scaleway or Outscale, and no backup was taken or restored through it.
 - **A Failed OpenBao configure Job never came back, its deadline did not fit its waits, and nothing alerted on it (#34).**
@@ -297,8 +316,8 @@ distinguishes static checks, CI, local Docker, and real clouds.
 - **On a cluster already running the redesign, pulling 0.1.1 re-runs BOTH OpenBao bootstrap Jobs once.** `configure.sh` and the
   admin policy changed, which changes the hash of the shared `openbao-bootstrap-scripts` ConfigMap, and Flux (`force: true`)
   re-creates `openbao-init` and `openbao-vault-bootstrap`. `init.sh` is idempotent (the harness runs it twice against a real OpenBao).
-  Observed on Scaleway, Outscale and OVH moving between candidate commits: both Jobs re-ran and ended Complete in 5 to 31 s, finding an
-  initialised OpenBao with its root token already revoked.
+  Observed on Scaleway, Outscale and OVH moving between candidate commits: both Jobs re-ran and ended Complete (Outscale 6 s each; OVH 3 s
+  and 4 s on the last hop; not recorded for the Scaleway hop), finding an initialised OpenBao with its root token already revoked.
 - **A live Scaleway CAPI child that relied on the template defaults must pin `K8S_VERSION` and `TALOS_VERSION` to its current values
   BEFORE pulling this** (the control plane default moves from v1.31.4 / Talos v1.9 to v1.35.3 / v1.13: four Kubernetes minors, an
   unsupported path). See #39 under Fixed.
@@ -356,7 +375,7 @@ profile matches it), a `kubectl kustomize` build of every brick with no object c
 settings of the CAPI children agreeing with the foundation's (`task apps-validate` from `OpenAether-infra`). The runs on a
 real cluster that this file records (July and August 2026, Scaleway and OVH) are on earlier commits. *Corrected in place on
 2026-10-14 (#50): the tag itself was not reconciled, but one lab then reconciled the `management` profile on Scaleway
-by hand on 2026-10-12 and 2026-10-13 (see Unreleased, Validated).* `OpenAether-infra` 0.2.0 validated its three clouds with
+by hand on 2026-10-12 (UTC; see Unreleased, Validated).* `OpenAether-infra` 0.2.0 validated its three clouds with
 Flux off. Read Known limits before pulling this onto a cluster that matters.
 
 `OpenAether-infra` 0.2.0 pins this tag in its `envs/*.tfvars.example` (`git_ref = "refs/tags/0.1.0"`). The tag replaces the withdrawn 1.0.0 below, whose entries are the

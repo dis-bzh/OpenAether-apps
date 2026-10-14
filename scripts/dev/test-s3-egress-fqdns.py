@@ -75,7 +75,14 @@ def s3_rules(path):
                 break
             i += 1
         if any(re.search(r"scw\.cloud|ovh\.net|outscale\.com", v) and re.search(r"s3|oos", v) for _, v in block):
-            out.append(block)
+            ports = []
+            j = i
+            while j < len(lines) and (not lines[j].strip() or len(lines[j]) - len(lines[j].lstrip()) > indent):
+                m2 = re.match(r"^\s*- port:\s*\"?(\d+)\"?", lines[j]) or re.match(r"^\s*port:\s*\"?(\d+)\"?", lines[j])
+                if m2:
+                    ports.append(m2.group(1))
+                j += 1
+            out.append((block, sorted(set(ports))))
     return out
 
 
@@ -91,7 +98,9 @@ for f in FILES:
     if len(blocks) != 1:
         fail(f"{f}: expected exactly one provider-S3 toFQDNs block, found {len(blocks)}")
         continue
-    rules = blocks[0]
+    rules, ports = blocks[0]
+    if ports != ["443"]:
+        fail(f"{f}: the provider-S3 rule must open exactly 443/TCP, found ports {ports}")
     sets[f] = sorted(rules)
     for host in MUST_MATCH:
         if not matches(rules, host):
@@ -103,6 +112,6 @@ for f in FILES:
 if len({tuple(v) for v in sets.values()}) > 1:
     fail("the five files carry different provider-S3 rules: " + "; ".join(f"{k}={v}" for k, v in sets.items()))
 
-print(f"{failures} failed" if failures else "ok: the five provider-S3 egress rules admit every region of Scaleway, OVH and Outscale "
-      "and nothing else; the former single-host rule is shown to miss s3.gra.io.cloud.ovh.net")
+print(f"{failures} failed" if failures else "ok: the five provider-S3 egress rules admit every region of Scaleway, OVH and Outscale on 443 only, "
+      "refuse the look-alike hosts and are identical; the former single-host rule is shown to miss s3.gra.io.cloud.ovh.net")
 sys.exit(1 if failures else 0)

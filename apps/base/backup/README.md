@@ -51,7 +51,7 @@ a throwaway volume; the `BackupJobFailed` alert covers the CronJobs.
 
    While they are missing, the `backup-restic-env` ExternalSecrets stay
    NotReady and the CronJobs do not start (by design, `wait: false`).
-   A new S3 FQDN ⇒ add it to the `toFQDNs` of the network policies here too.
+   A new S3 FQDN ⇒ add it to the `toFQDNs` of the five policies that carry the provider-S3 rule (`observability`, `backup/openbao`, `backup/databases`, `cnpg` restricted, `storage`); `scripts/dev/test-s3-egress-fqdns.py` lists them and fails when they differ.
 3. **The buckets must already exist**: restic does not create them (and retries
    a NoSuchBucket silently). Cloud: `ensure-buckets.sh` (infra) creates four
    buckets (tfstate and artefacts, and their `-backup` twins); the `backups-<env>` bucket of these backups (and its `-backup`

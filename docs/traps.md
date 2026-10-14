@@ -22,7 +22,7 @@ belong to. What follows has no skill of its own yet.
 - **Do not trust `kubectl cnpg promote` output; read the Cluster.** Measured once on a real cluster against the 1.23.1 operator
   (PostgreSQL 18 `zitadel-db`, 3 instances, Scaleway, 2026-10-14), three promotions in a row, one per plugin, no repeat: plugin
   **1.30.0** promoted the replica; about a minute later plugin **1.23.6** printed "will be promoted" and changed nothing
-  (`.status.targetPrimary` never moved; reproduced once), and the operator had just logged "Cluster is not healthy"; plugin
+  (`.status.targetPrimary` never moved), and the operator had just logged "Cluster is not healthy"; plugin
   **1.23.1**, run later, promoted and the Cluster followed (#36). Two readings fit: a fault inside plugin 1.23.6, or a promote
   ignored right after a switchover. They were not separated (no repeat of 1.23.6 on a settled cluster), so nothing here pins or
   bans a plugin version. "Install a plugin at least as new as the operator" is not a remedy (1.23.6 is newer than the operator).
@@ -30,6 +30,13 @@ belong to. What follows has no skill of its own yet.
   not lagging, and the `cnpg-system` operator log, and let the cluster settle between two switchovers. For 1.30.0 the two status
   fields printed empty before and after, so that promotion is evidenced by the pod roles only. Operator 1.23 is end of support and
   does not list PostgreSQL 18, which `zitadel-db` runs (`grafana-db` runs 16.3).
+
+- **A cluster rebuilt on a bucket that still holds the old cluster's WAL archive does not archive.** CNPG's
+  `barman-cloud-check-wal-archive` refuses a non-empty archive for a new cluster ("WAL archive check failed for server ...:
+  Expected empty archive"), the `ContinuousArchiving` condition stays `False` with `ContinuousArchivingFailing`, and no WAL
+  leaves the cluster. It happens when a lab or a rebuild reuses the bucket (and the `cnpg/<cluster>` path) of an earlier cluster.
+  Either bootstrap the new cluster from that archive (recovery), or, once you are sure you do not need it, remove that path
+  from the bucket. Seen on a Scaleway lab that reused its bucket (105 objects under `cnpg/`).
 
 ## CAPI
 
