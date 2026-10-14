@@ -59,11 +59,11 @@ bw create item \
 When the `openbao-vault-bootstrap` Job generates an intermediate CSR:
 
 ```bash
-# 1. Get the CSR. The Job prints it (public data, no secret) in its logs:
-#      kubectl -n foundation-vault logs job/openbao-vault-bootstrap \
-#        | sed -n '/BEGIN CERTIFICATE REQUEST/,/END CERTIFICATE REQUEST/p'
-#    Logs are rotated: bao_admin write -field=csr pki/intermediate/generate/internal \
-#      common_name="OpenAether Workload Intermediate CA" makes a new one.
+# 1. Get the CSR (public data, no secret). The Job stores it in KV and also prints it, but its log is removed 60 minutes
+#    after it ends, so read it from KV:
+#      bao_admin kv get -field=csr secret/pki/intermediate-csr
+#    A cluster whose CSR was generated before this entry existed has none: bao_admin write -field=csr
+#    pki/intermediate/generate/internal common_name="OpenAether Workload Intermediate CA" makes a new one.
 #    The CSR starts with -----BEGIN CERTIFICATE REQUEST-----
 
 # 2. Sign it with the Root CA

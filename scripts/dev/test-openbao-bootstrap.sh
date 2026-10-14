@@ -246,6 +246,8 @@ done
 for kv in grafana/admin grafana/db minio/root longhorn/encryption zitadel/db zitadel/masterkey backup/restic; do
   [ -n "$(bao_get "/v1/secret/data/$kv" | jq -r '.data.data | keys[0] // empty')" ] && ok "secret/$kv exists" || bad "secret/$kv missing"
 done
+CSR1="$(bao_get /v1/secret/data/pki/intermediate-csr | jq -r '.data.data.csr // empty')"
+grep -q "BEGIN CERTIFICATE REQUEST" <<<"$CSR1" && ok "the intermediate CSR is stored in secret/pki/intermediate-csr (outlives the Job's log)" || bad "no CSR in secret/pki/intermediate-csr"
 LEAK=0
 for kv in grafana/admin grafana/db minio/root longhorn/encryption zitadel/db zitadel/masterkey backup/restic; do
   while IFS= read -r val; do
@@ -262,6 +264,8 @@ grep -q "already present" "$T/dev/configure.sh.out" && ok "it reports the secret
 NKEYS="$(curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X LIST https://127.0.0.1:18211/v1/pki/keys | jq -r '.data.keys | length')"
 [ "$NKEYS" = 1 ] && ok "two runs, one pending PKI key (no key per sync)" || bad "pki keys after two runs: $NKEYS"
 grep -q "already generated" "$T/dev/configure.sh.out" && ok "the second run says the CSR is pending" || bad "no 'already generated' line"
+[ "$(bao_get /v1/secret/data/pki/intermediate-csr | jq -r '.data.data.csr // empty')" = "$CSR1" ] && [ "$(bao_get /v1/secret/data/pki/intermediate-csr | jq -r '.data.metadata.version')" = 1 ] \
+  && ok "the stored CSR is unchanged by the second run (still version 1)" || bad "the stored CSR changed or was rewritten"
 echo "--- the seeding identity can create and test, never overwrite or read a value"
 printf '{"policies":["secret-seeder"],"ttl":"10m"}' | curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X POST -d @- https://127.0.0.1:18211/v1/auth/token/create > "$T/dev/seeder.json"
 SEEDER_CODE="$(jq -r '.errors[0] // "created"' "$T/dev/seeder.json")"

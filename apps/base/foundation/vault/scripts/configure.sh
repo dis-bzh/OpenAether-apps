@@ -46,6 +46,7 @@ rand() { head -c "$1" /dev/urandom | base64 | tr -d '/+=\n' | head -c "$2"; }
 
 pki() {
   log "════ PKI ════"
+  mount_engine secret '{"type":"kv","options":{"version":"2"}}' # before the CSR, which is stored there
   mount_engine pki '{"type":"pki","config":{"max_lease_ttl":"87600h"}}'
   # The intermediate CA's CSR is PUBLIC data (a request to sign a public key): printing it is the runbook.
   none | api GET /v1/pki/cert/ca "$HDR"
@@ -60,6 +61,8 @@ pki() {
     if [ -n "$csr" ]; then
       log "  >>> MANUAL STEP (pki-root-offline-runbook.md): sign this CSR with the offline root, then import it."
       log "  ----- BEGIN INTERMEDIATE CSR -----"; log "$csr"; log "  ----- END INTERMEDIATE CSR -----"
+      # The Job and its log are deleted after ttlSecondsAfterFinished, the offline signing takes longer: keep the (public) CSR in KV.
+      local d; d="$(C="$csr" jq -nc '{csr:$ENV.C}')"; D="$d" kv_create pki/intermediate-csr D
     else
       log "  CSR generation answered HTTP $(code): retried on the next sync"
     fi
