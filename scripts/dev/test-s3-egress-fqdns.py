@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The provider-S3 egress rules must admit every region of a provider, not one hard-coded host (apps #53).
 
-Four CiliumNetworkPolicies let a workload reach the provider's object storage on :443 through `toFQDNs`.
+Five CiliumNetworkPolicies (observability, backup/openbao, backup/databases, cnpg, storage) let a workload reach the provider's object storage on :443 through `toFQDNs`.
 They used to name ONE host per provider (`s3.eu-west-par.io.cloud.ovh.net`), so a real OVH config with
 `s3.gra.io.cloud.ovh.net` had Loki, the CNPG backups and the OpenBao snapshot job dropped by Cilium
 ("Policy denied", measured on a real OVH cluster). This test reads those rules and checks them against
@@ -19,6 +19,7 @@ FILES = [
     "apps/base/backup/openbao/networkpolicy.yaml",
     "apps/base/backup/databases/networkpolicy.yaml",
     "apps/base/cnpg/networkpolicy-db-restricted.yaml",
+    "apps/base/storage/networkpolicy.yaml",
 ]
 MUST_MATCH = [
     "s3.fr-par.scw.cloud", "s3.nl-ams.scw.cloud", "s3.pl-waw.scw.cloud",
@@ -100,8 +101,8 @@ for f in FILES:
             fail(f"{f}: admits {host}, which it must not")
 
 if len({tuple(v) for v in sets.values()}) > 1:
-    fail("the four files carry different provider-S3 rules: " + "; ".join(f"{k}={v}" for k, v in sets.items()))
+    fail("the five files carry different provider-S3 rules: " + "; ".join(f"{k}={v}" for k, v in sets.items()))
 
-print(f"{failures} failed" if failures else "ok: the four provider-S3 egress rules admit every region of Scaleway, OVH and Outscale "
+print(f"{failures} failed" if failures else "ok: the five provider-S3 egress rules admit every region of Scaleway, OVH and Outscale "
       "and nothing else; the former single-host rule is shown to miss s3.gra.io.cloud.ovh.net")
 sys.exit(1 if failures else 0)

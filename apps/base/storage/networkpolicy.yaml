@@ -77,6 +77,8 @@ spec:
             - port: "8503"
               protocol: TCP
     # DNS
+    # `rules.dns` lets the toFQDNs rule below match: without the DNS proxy observing the lookup, Cilium never learns the
+    # S3 addresses (same mechanism as the Loki rule, apps #53).
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -86,6 +88,20 @@ spec:
             - port: "53"
               protocol: UDP
             - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Longhorn's backup target is the provider's object storage (the `storage-backup-target` brick): the manager checks
+    # it, the instance managers write the backups. Without this rule the BackupTarget stays `available: false` (seen
+    # on a real OVH cluster). Every region, as the other S3 rules (see test-s3-egress-fqdns.py).
+    - toFQDNs:
+        - matchPattern: "s3.*.scw.cloud"          # Scaleway Object Storage
+        - matchPattern: "s3.*.io.cloud.ovh.net"   # OVH Object Storage (standard class)
+        - matchPattern: "oos.*.outscale.com"      # Outscale OSU
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP
     # kube-api
     - toEntities:
