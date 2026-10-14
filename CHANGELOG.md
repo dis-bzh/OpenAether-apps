@@ -96,6 +96,17 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   v2 is served since Cilium 1.18 and every pinned version is at or above it. The `CiliumL2AnnouncementPolicy` stays `v2alpha1`
   (upstream has no v2 type for it). Rung: static/mocked, not run on a cluster; `scripts/dev/test-cilium-lb-ipam-api.sh`
   (in CI) pins the apiVersion in the base and the local overlay. It does not prove the warning is gone: that is a cluster observation.
+- **Loki could not push to the provider's S3 on a cloud cluster (#53, second half; the first, `spec.values` overriding the seeded
+  destination, was fixed earlier).** The Loki CiliumNetworkPolicy now has `rules.dns` on its DNS rule (without it Cilium never
+  learns the addresses behind the S3 FQDN rule), egress to the Loki peers and ingress on 9095 and 7946/UDP (the ring and the
+  replicated write), and Loki signs with the provider's region: `us-east-1` left `spec.values`, and the ExternalSecret builds
+  `region` (seeded value, else read from a Scaleway, OVH or Outscale endpoint host, else `us-east-1`). Hunks ported from the ANSSI
+  branch (2d8c50c, f016228, 1755f51). New `scripts/dev/test-loki-render.sh` and CI job `loki-render` (values through the pinned
+  chart, the policy, the template's regex on fixtures). Rung: static/mocked, not run on a cluster; ESO never evaluated the
+  template. It does NOT: give Loki its own bucket and key (the infra seed reuses the backup ones, infra #302; the comments now say
+  so), make the FQDN list follow a cluster in another region, change `insecure: true` with an `https` endpoint, disable the rules
+  sidecar (no API egress), or fix the 2 replicas with replication factor 2 (one pod down still rejects pushes). Not observed:
+  labels in Loki, a LogQL marker line, no `status=500` in Alloy in steady state, Cilium learning the S3 addresses.
 - **A Failed OpenBao configure Job never came back, its deadline did not fit its waits, and nothing alerted on it (#34).**
   `openbao-vault-bootstrap` now has `ttlSecondsAfterFinished: 3600` (like `openbao-init`) and `activeDeadlineSeconds: 3600` (its two
   15 minute waits filled the old 1800); the comments that said both Jobs are re-created on every sync now say what is true (after
