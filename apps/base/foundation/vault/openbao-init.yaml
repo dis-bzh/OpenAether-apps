@@ -75,8 +75,8 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: openbao-init
   annotations:
-    # force recreates the Job only when its spec changes (an unchanged one is reported unchanged); once finished it
-    # expires after ttlSecondsAfterFinished and the next reconcile recreates it. The script is idempotent either way.
+    # Re-created by Flux once ttlSecondsAfterFinished has removed it (the script is idempotent: on an initialised
+    # cluster it checks and exits). The annotation only matters when a patch hits an immutable field.
     kustomize.toolkit.fluxcd.io/force: "enabled"
 spec:
   backoffLimit: 10

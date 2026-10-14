@@ -18,6 +18,7 @@ resources:
   - vmalert.yaml
   - vmscapes.yaml
   - vmrule-backup.yaml
+  - vmrule-bootstrap.yaml
   - vmrule-cluster.yaml
   - vmrule-platform.yaml
 

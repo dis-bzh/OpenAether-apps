@@ -1,0 +1,34 @@
+# Alert on a Failed OpenBao bootstrap Job (#34). Both Jobs are removed by ttlSecondsAfterFinished and re-made by Flux,
+# so a failure that repeats shows up here and nowhere else. This VMRule lives in this directory for the CRD-before-CR
+# reason in the kustomization.yaml next to it. kube_job_failed{condition="true"} is the Job's own Failed condition.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: bootstrap-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: openbao
+spec:
+  groups:
+    - name: openaether-bootstrap
+      interval: 5m
+      rules:
+        - alert: OpenBaoBootstrapJobFailed
+          expr: |
+            max by (namespace, job_name) (
+              kube_job_failed{namespace="foundation-vault", condition="true",
+                              job_name=~"openbao-init|openbao-vault-bootstrap"}
+            ) > 0
+          for: 15m
+          labels:
+            severity: critical
+            component: openbao
+          annotations:
+            summary: "OpenBao bootstrap Job failed: {{ $labels.namespace }}/{{ $labels.job_name }}"
+            description: >-
+              The Job hit its deadline or its backoff limit. Read its log (kubectl logs -n
+              {{ $labels.namespace }} job/{{ $labels.job_name }}); it is re-created about 70 minutes after it ended.
+              If openbao-init fails again after an interruption inside the root window, follow "Interrupted first run".
+            runbook_url: >-
+              https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md

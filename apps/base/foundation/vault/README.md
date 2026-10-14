@@ -85,9 +85,9 @@ bao_admin() {
 ## Runbooks
 
 **PKI intermediate.** The first `openbao-vault-bootstrap` run prints the intermediate's CSR (public data) and generates it once;
-read it with `kubectl -n foundation-vault logs job/openbao-vault-bootstrap | sed -n '/BEGIN CERTIFICATE REQUEST/,/END CERTIFICATE REQUEST/p'`
-(logs are rotated: `bao_admin write -field=csr pki/intermediate/generate/internal common_name="OpenAether Workload Intermediate CA"`
-makes a new one). Sign it offline with the root ([`pki-root-offline-runbook.md`](./pki-root-offline-runbook.md)), then import it.
+read it within an hour of the run (the Job is removed 3600 s after it ends, and later runs do not print it again) with `kubectl -n foundation-vault logs job/openbao-vault-bootstrap | sed -n '/BEGIN CERTIFICATE REQUEST/,/END CERTIFICATE REQUEST/p'`
+(after that: `bao_admin write -field=csr pki/intermediate/generate/internal common_name="OpenAether Workload Intermediate CA"`
+makes a new one, and leaves the first key pending too). Sign it offline with the root ([`pki-root-offline-runbook.md`](./pki-root-offline-runbook.md)), then import it.
 Until then the `openbao` ClusterIssuer stays NotReady, by design.
 
 **Break-glass root token** (an emergency only; the quorum of recovery-share holders is the control). Each holder decrypts their
@@ -157,8 +157,11 @@ cluster that holds nothing yet, as above.
 
 ## Alerts and network
 
-`prometheusrule.yaml`: `OpenBaoWorkloadSealed` (critical: the key Secret is missing or wrong), `OpenBaoRaftNoLeader` (critical),
-`OpenBaoRaftLagHigh` (warning). `networkpolicy.yaml`: the OpenBao policy admits ESO, cert-manager, the snapshot job, Prometheus,
+`OpenBaoBootstrapJobFailed` (critical, `observability/vm-customresources/vmrule-bootstrap.yaml`): `openbao-init` or
+`openbao-vault-bootstrap` ended Failed for 15 minutes; the configure Job comes back about 70 minutes later by itself, the init Job
+likewise, but after an interruption inside the root window it fails again (see above) and this alert is what shows it. Not observed
+on a cluster. `prometheusrule.yaml` (`OpenBaoWorkloadSealed`, `OpenBaoRaftNoLeader`, `OpenBaoRaftLagHigh`) is NOT in this
+kustomization and is not deployed. `networkpolicy.yaml`: the OpenBao policy admits ESO, cert-manager, the snapshot job, Prometheus,
 the raft peers and the two Jobs; each Job has an egress policy of its own (DNS and OpenBao; only `openbao-init` also reaches the
 kube-apiserver, to create the Secrets).
 

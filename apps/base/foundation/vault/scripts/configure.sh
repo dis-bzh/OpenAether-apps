@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# openbao-vault-bootstrap — the idempotent configuration of OpenBao, run by Flux on every sync.
+# openbao-vault-bootstrap — the idempotent configuration of OpenBao, run by a Job that Flux re-creates (script change, or ttl plus one sync).
 #
 # It logs in as the bootstrap identity (Kubernetes auth role `openbao-bootstrap`, ServiceAccount
 # openbao-vault-bootstrap, 15 minute tokens) that init.sh created before it revoked the root token.

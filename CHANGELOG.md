@@ -96,6 +96,17 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   v2 is served since Cilium 1.18 and every pinned version is at or above it. The `CiliumL2AnnouncementPolicy` stays `v2alpha1`
   (upstream has no v2 type for it). Rung: static/mocked, not run on a cluster; `scripts/dev/test-cilium-lb-ipam-api.sh`
   (in CI) pins the apiVersion in the base and the local overlay. It does not prove the warning is gone: that is a cluster observation.
+- **A Failed OpenBao configure Job never came back, its deadline did not fit its waits, and nothing alerted on it (#34).**
+  `openbao-vault-bootstrap` now has `ttlSecondsAfterFinished: 3600` (like `openbao-init`) and `activeDeadlineSeconds: 3600` (its two
+  15 minute waits filled the old 1800); the comments that said both Jobs are re-created on every sync now say what is true (after
+  the ttl plus one sync, or when a script changes). New `OpenBaoBootstrapJobFailed` VMRule (`kube_job_failed`, 15 minutes).
+  `scripts/dev/check-bootstrap-jobs.sh` (CI, with a self-test) fails on a Job with a deadline and no ttl, a deadline not above the
+  waits, or an alert not naming both Jobs. Rung: static/mocked, not run on a cluster: Flux's re-creation after the ttl and the
+  `kube_job_failed` series are unobserved. It does NOT make an interrupted first run recover: after a failure inside the root
+  window, `openbao-init` fails again on every re-creation (the alert shows it; the fix stays the README's re-init). **Side effect:**
+  the PKI CSR printed by the first run is now in a log that disappears an hour after the Job ends (README: PKI intermediate;
+  OpenAether-infra's `docs/admin-access*.md` still say to read it from the Job log without that limit). `prometheusrule.yaml` was
+  never in the vault kustomization: its three rules are not deployed, and the README now says so (not fixed here).
 - **Kyverno Audit policies flagged pods that merely lack optional keys, and short Docker Hub names (#47).** `initContainers` and
   `volumes` are now conditional anchors (`=(initContainers)`, `=(volumes)` with Kyverno's own `X(hostPath)`), the image
   allow-list accepts the `org/image` short form of the allowed organisations (and `prom`), and `deny-hostpath` exempts

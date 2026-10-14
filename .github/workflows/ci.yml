@@ -101,6 +101,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
 
+      # Jobs with a deadline have a ttl, the configure deadline covers its waits, the alert names both Jobs (#34).
+      - name: Bootstrap Jobs and alert (static, with a self-test)
+        run: |
+          set -euo pipefail
+          pip install pyyaml
+          ./scripts/dev/check-bootstrap-jobs.sh
+          ./scripts/dev/check-bootstrap-jobs.sh --selftest | tee selftest.out
+          ! grep -q 'NOT detected' selftest.out
+
       # The real entrypoint, init.sh and configure.sh against an OpenBao container (root revoked, nothing secret in any
       # output, policies enforced, break-glass, snapshot restore, key rotation). A skip is not a pass: the script exits
       # 0 when Docker or gpg is missing, so the step demands the tools and the "0 failed" line.

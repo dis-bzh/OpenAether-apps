@@ -1,4 +1,5 @@
-# OpenBao configuration — idempotent Job, recreated by Flux when its spec changes (scripts/configure.sh).
+# OpenBao configuration — idempotent Job (scripts/configure.sh). Flux re-creates it when the script ConfigMap hash changes, or
+# once ttlSecondsAfterFinished has removed it (about 70 minutes after it ends, Complete or Failed: ttl + one sync).
 #
 # Runs as ServiceAccount openbao-vault-bootstrap and logs in to OpenBao with it (Kubernetes auth role
 # `openbao-bootstrap`, created by openbao-init before it revoked the root token). It needs NO Kubernetes API access
@@ -26,9 +27,12 @@ metadata:
     openaether.io/component: openbao-vault-bootstrap
 spec:
   backoffLimit: 5
-  # 30 minutes: the wait for openbao-init can legitimately spend 15, and a deadline shorter than the wait turns
-  # a slow start into a hard failure.
-  activeDeadlineSeconds: 1800
+  # 60 minutes: wait_api (15) plus login_bootstrap (15) can spend 30 before any work starts, and the deadline spans every
+  # in-place restart. scripts/dev/check-bootstrap-jobs.sh keeps it above that sum.
+  activeDeadlineSeconds: 3600
+  # Without a ttl a Failed Job stays Failed: Flux does not re-apply an unchanged object (#34). Kept for an hour so the
+  # first run's PKI CSR can be read from its log (README: PKI intermediate).
+  ttlSecondsAfterFinished: 3600
   template:
     metadata:
       labels:
