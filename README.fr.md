@@ -121,12 +121,16 @@ Nécessite [OpenAether-infra](https://github.com/dis-bzh/OpenAether-infra) clon�
 
 ```bash
 cd ../OpenAether-infra
-task local-up      # cluster Talos 3 CP + 3 workers sous Docker
-task local-test    # Flux SUSPENDU, déploiement via kubectl apply -k du working tree
+task local-up      # cluster Talos 3 CP + 3 workers sous Docker (Cilium, sans Flux ni apps)
+task local-test    # + contrôleurs Flux et apps/flux/local, toutes les Kustomizations SUSPENDUES
 ```
 
-En local, Flux est volontairement un no-op : on applique depuis l'arbre de
-travail, ce qui permet de tester une modification **avant** de la pousser.
+En local, Flux est volontairement un no-op : `task local-test` prouve seulement que les contrôleurs
+démarrent et que les objets Kustomization sont admis. Pour déployer une brique, on l'applique soi-même
+depuis l'arbre de travail (`kubectl apply -k apps/base/<brique>`), ce qui permet de tester une
+modification **avant** de la pousser. Une lane CI qui réconcilie réellement un sous-ensemble de briques
+sous Docker existe (`.github/workflows/local-docker.yml`, voir [docs/local-docker.md](docs/local-docker.md)) :
+Docker local, briques partielles, pas un substitut du rang cloud.
 
 ## Licence
 

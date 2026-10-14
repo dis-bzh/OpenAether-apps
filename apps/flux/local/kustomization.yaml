@@ -4,7 +4,10 @@ kind: Kustomization
 #
 # Locally Flux does not reconcile from GitHub: every Kustomization is suspended,
 # Flux is a no-op, and deployment happens with `kubectl apply -k apps/base/<x>`.
-# `task local-test` (infra repo) drives the whole order; check with
+# `task local-test` (infra repo) only installs Flux and applies this overlay: it
+# proves the controllers start and the objects are admitted, it deploys no brick
+# and drives no order. A subset of bricks is really reconciled on Docker by the
+# CI lane .github/workflows/local-docker.yml (docs/local-docker.md); check with
 # `kubectl get kustomization -A`.
 #
 # Two local specifics, both patched below:

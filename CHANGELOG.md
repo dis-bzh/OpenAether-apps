@@ -17,6 +17,18 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+### Added
+
+- **A local Docker validation lane** (`.github/workflows/local-docker.yml`, `scripts/dev/local-docker-lane.sh`,
+  `docs/local-docker.md`): on a GitHub-hosted runner, infra's own `task local-up` (1 control plane + 1 worker), Flux, then a
+  conservative set of bricks reconciled from the commit under test (namespaces, platform prerequisites, External Secrets,
+  cert-manager, OpenBao in dev or prod mode, Kyverno), bounded waits, read-only assertions, a pod-log leak scan, artifacts and
+  an `if: always()` teardown. Rung reached: written and statically tested (shellcheck, yamllint, a mutation test in CI); its
+  first real run is on GitHub. It is local Docker with partial bricks: it does not prove Longhorn, routable LoadBalancers,
+  provider S3, Zitadel, Istio, observability or CloudNativePG, and does not replace the cloud rung.
+- Fixed the README and `apps/flux/local` header, which said `task local-test` "drives the whole order": it only installs
+  Flux and applies the suspended overlay.
+
 ### Validated
 
 - **The OpenBao redesign on a real cluster, 2026-10-13: Scaleway, management role, 3 control planes + 2 workers,
