@@ -232,9 +232,9 @@ spec:
   podMetricsEndpoints:
     - port: http-prom
       path: /metrics
-      # Same reason as kube-state-metrics: gotk_reconcile_condition carries the
-      # RECONCILED object's namespace, which would otherwise be overwritten by
-      # the controller pod's own (flux-system) and pushed to exported_namespace.
+      # Same reason as kube-state-metrics: a Flux metric that names the RECONCILED object keeps its
+      # namespace label instead of the controller pod's own (flux-system) being pushed to exported_namespace.
+      # (gotk_reconcile_condition itself is gone in Flux 2.8, apps #44.)
       honorLabels: true
 
 # ── cert-manager ───────────────────────────────────────────────────

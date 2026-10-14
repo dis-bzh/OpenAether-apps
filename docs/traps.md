@@ -19,14 +19,17 @@ belong to. What follows has no skill of its own yet.
 
 - **Seed OpenBao app-DB secrets BEFORE the CNPG cluster's first `initdb`.** Seeding
   late leaves the live Postgres role out of sync with the Secret.
-- **Do not trust `kubectl cnpg promote` output; read the Cluster.** Measured on a real cluster against the 1.23.1 operator
-  (PostgreSQL 18 `zitadel-db`, 3 instances, Scaleway, 2026-10-14): plugin **1.23.6** printed "will be promoted" and changed
-  nothing (`.status.targetPrimary` never moved: reproduced), while plugin **1.23.1** and plugin **1.30.0** promoted the replica
-  and the Cluster followed (#36). So "install a plugin at least as new as the operator" is not the remedy (1.23.6 is newer and
-  failed); the cause inside 1.23.6 is not found. Use 1.23.1 or a current plugin, and in every case check
-  `.status.targetPrimary`, `.status.currentPrimary`, the conditions, that the target replica is streaming and not lagging,
-  and the `cnpg-system` operator log. Operator 1.23 is end of support and does not list PostgreSQL 18, which `zitadel-db` runs
-  (`grafana-db` runs 16.3).
+- **Do not trust `kubectl cnpg promote` output; read the Cluster.** Measured once on a real cluster against the 1.23.1 operator
+  (PostgreSQL 18 `zitadel-db`, 3 instances, Scaleway, 2026-10-14), three promotions in a row, one per plugin, no repeat: plugin
+  **1.30.0** promoted the replica; about a minute later plugin **1.23.6** printed "will be promoted" and changed nothing
+  (`.status.targetPrimary` never moved; reproduced once), and the operator had just logged "Cluster is not healthy"; plugin
+  **1.23.1**, run later, promoted and the Cluster followed (#36). Two readings fit: a fault inside plugin 1.23.6, or a promote
+  ignored right after a switchover. They were not separated (no repeat of 1.23.6 on a settled cluster), so nothing here pins or
+  bans a plugin version. "Install a plugin at least as new as the operator" is not a remedy (1.23.6 is newer than the operator).
+  In every case check `.status.targetPrimary`, `.status.currentPrimary`, the conditions, that the target replica is streaming and
+  not lagging, and the `cnpg-system` operator log, and let the cluster settle between two switchovers. For 1.30.0 the two status
+  fields printed empty before and after, so that promotion is evidenced by the pod roles only. Operator 1.23 is end of support and
+  does not list PostgreSQL 18, which `zitadel-db` runs (`grafana-db` runs 16.3).
 
 ## CAPI
 

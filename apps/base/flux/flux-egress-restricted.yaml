@@ -20,8 +20,8 @@ spec:
   endpointSelector: {}
   ingress:
     # The cluster-wide default-deny leaves Flux with no ingress at all, so the
-    # controllers' metrics were unreachable. gotk_reconcile_condition comes from
-    # here: it is the only way to see a Kustomization that stopped reconciling.
+    # controllers' metrics were unreachable. They are scraped from here. gotk_reconcile_condition no longer
+    # exists in Flux 2.8 (apps #44): nothing alerts on a Kustomization that reconciles and fails.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability

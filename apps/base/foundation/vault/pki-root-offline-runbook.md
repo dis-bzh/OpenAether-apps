@@ -62,7 +62,8 @@ When the `openbao-vault-bootstrap` Job generates an intermediate CSR:
 # 1. Get the CSR (public data, no secret). The Job stores it in KV and also prints it, but its log is removed 60 minutes
 #    after it ends, so read it from KV:
 #      bao_admin kv get -field=csr secret/pki/intermediate-csr
-#    A cluster whose CSR was generated before this entry existed has none: bao_admin write -field=csr
+#    The entry holds the CSR of the FIRST generation only. A cluster whose CSR was generated before this entry existed has none,
+#    and for a renewal (section 5) the entry is stale: bao_admin write -field=csr
 #    pki/intermediate/generate/internal common_name="OpenAether Workload Intermediate CA" makes a new one.
 #    The CSR starts with -----BEGIN CERTIFICATE REQUEST-----
 
@@ -112,7 +113,7 @@ After the import, the cert-manager `openbao` issuer (`pki/sign/openaether`) beco
 
 ### 5. Renewal (every 1-2 years)
 
-- Generate a new intermediate CSR
+- Generate a new intermediate CSR (`bao_admin write -field=csr pki/intermediate/generate/internal common_name="OpenAether Workload Intermediate CA"`; do not reuse the KV entry, it is the first generation's)
 - Sign it with the same Root CA (or a new Root CA for a complete rotation)
 - Import it into OpenBao
 - The Root CA (10 years) rarely changes

@@ -40,11 +40,11 @@ a throwaway volume; the `BackupJobFailed` alert covers the CronJobs.
    ```bash
    bao_admin kv put secret/backup/s3-primary \
      endpoint="https://s3.fr-par.scw.cloud" \
-     bucket="s3-<projet>-scaleway-backups-<env>" \
+     bucket="s3-<project>-scaleway-backups-<env>" \
      access_key="…" secret_key="…"
    bao_admin kv put secret/backup/s3-replica \
      endpoint="https://s3.eu-west-par.io.cloud.ovh.net" \
-     bucket="s3-<projet>-scaleway-backups-<env>-backup" \
+     bucket="s3-<project>-scaleway-backups-<env>-backup" \
      access_key="…" secret_key="…"
    # Local (test): endpoint="http://minio.foundation-storage.svc.cluster.local:9000"
    ```

@@ -46,7 +46,7 @@ apps/
     ├── base/                  # FULL DAG — source of truth for dependsOn
     ├── bricks.yaml            # Catalogue: aliases, baseline, companions, descriptions
     ├── management/            # Profile: full DAG
-    ├── workload/              # Generated profile (pick: vault eso certs gateway)
+    ├── workload/              # Generated profile (its `# Pick:` header lists the bricks)
     └── local/                 # Profile: local Docker
 ```
 
@@ -126,8 +126,8 @@ task local-up      # 3 CP + 3 worker Talos cluster on Docker (Cilium, no Flux, n
 task local-test    # + Flux controllers and apps/flux/local, every Kustomization SUSPENDED
 ```
 
-Locally, Flux is deliberately a no-op there: `task local-test` proves the controllers start and the
-Kustomization objects are admitted, nothing more. To deploy a brick, apply it yourself from the working
+Locally, Flux is deliberately a no-op there: for the apps, `task local-test` proves only that the controllers start and the
+Kustomization objects are admitted (it also checks the cluster itself: etcd quorum, nodes, Cilium). To deploy a brick, apply it yourself from the working
 tree (`kubectl apply -k apps/base/<brick>`), which lets you test a change **before** pushing it. A CI lane
 that really reconciles a subset of bricks on Docker exists (`.github/workflows/local-docker.yml`, see
 [docs/local-docker.md](docs/local-docker.md)): local Docker, partial bricks, not a substitute for the cloud rung.
