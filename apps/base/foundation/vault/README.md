@@ -87,6 +87,8 @@ if [ "$(sha256sum < key.bin | cut -d' ' -f1)" = "$LIVE" ]; then
   kubectl -n foundation-vault create configmap openbao-escrow-ack --from-literal=escrowed-at="$(date -u +%F)" \
     --from-literal=seal-key-sha256="$LIVE" --from-literal=holders=<number of independent custodians> \
     --dry-run=client -o yaml | kubectl apply -f -
+  # The same fact on the Secret itself, for OpenAether-infra's `cluster-security` check 4.7 (opt-in there, it reads this annotation).
+  kubectl -n foundation-vault annotate secret openbao-seal-key openaether.io/escrowed-at="$(date -u +%FT%TZ)" --overwrite
 else
   echo "MISMATCH: the escrow does not open the live key; nothing attested"
 fi
@@ -95,8 +97,8 @@ fi
 The ConfigMap is not managed by Flux (nothing prunes it) and holds no secret (the hash of a random 32-byte key). The CronJob
 `openbao-escrow-check` reads it daily on a production cluster: it fails when the ConfigMap is absent a week after initialisation,
 malformed, names fewer than two holders, or is older than 400 days, and the alert `OpenBaoEscrowNotAttested` follows (warning).
-It never reads the Secret that holds the key, so it can not tell that the escrow is of an OLD key: **redo steps 1, 5 after every
-seal-key rotation**. Do this in a RAM-backed directory (`mount -t tmpfs`, see the root-CA runbook, section 7): `rm` erases nothing on an SSD.
+It never reads the Secret that holds the key, so it can not tell that the escrow is of an OLD key: the rotation runbook deletes
+the ConfigMap, and you **redo steps 1 and 5 after every seal-key rotation**. Do this in a RAM-backed directory (`mount -t tmpfs`, see the root-CA runbook, section 7): `rm` erases nothing on an SSD.
 
 Operator access (`bao_admin`): a token for the ServiceAccount is exchanged for an OpenBao token **inside the pod**, so no
 OpenBao token ever crosses your terminal:
@@ -136,11 +138,14 @@ bao operator generate-root -decode="<encoded token>" -otp="$OTP"     # the root 
 (Measured on a cluster: 2 of 3 PGP-decrypted shares, through the `openbao-breakglass` role, produced a root token.)
 
 **Seal key rotation.** The new key becomes `key` and the old one `previous-key`; roll the StatefulSet (one pod at a time, each Ready and
-unsealed before the next); drop `previous-key`; roll again. Then redo the Day-0 escrow of the seal key (steps 1 and 5: the attestation of the old key is now wrong). The entrypoint computes the key ids.
+unsealed before the next); drop `previous-key`; roll again. Then redo the Day-0 escrow of the seal key (steps 1 and 5; the commands above already removed both records, so the checks go red until you do). The entrypoint computes the key ids.
 
 ```bash
 OLD="$(kubectl -n foundation-vault get secret openbao-seal-key -o jsonpath='{.data.key}')"; NEW="$(head -c 32 /dev/urandom | base64 -w0)"
 kubectl -n foundation-vault patch secret openbao-seal-key --type merge -p "{\"data\":{\"key\":\"$NEW\",\"previous-key\":\"$OLD\"}}"
+# The escrow is of the OLD key now: drop both records of it, so that the daily check and infra's check 4.7 ask for a new one.
+kubectl -n foundation-vault annotate secret openbao-seal-key openaether.io/escrowed-at-
+kubectl -n foundation-vault delete configmap openbao-escrow-ack --ignore-not-found
 kubectl -n foundation-vault rollout restart statefulset/openbao && kubectl -n foundation-vault rollout status statefulset/openbao --timeout=600s
 kubectl -n foundation-vault patch secret openbao-seal-key --type json -p '[{"op":"remove","path":"/data/previous-key"}]'
 kubectl -n foundation-vault rollout restart statefulset/openbao && kubectl -n foundation-vault rollout status statefulset/openbao --timeout=600s

@@ -73,8 +73,9 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   `scripts/dev/test-escrow-check.sh` (36 assertions, run on the host and under the CronJob's image, wired into CI) caught a real
   flaw in a first draft: an unreachable API read as a development cluster and passed. **Mocked/static: the CronJob, the alert and
   the ConfigMap flow were not run on a cluster, `kube_cronjob_status_last_successful_time` was not checked against the deployed
-  kube-state-metrics, and the `ssss`/`gfsplit` split was not tried.** It does NOT detect an escrow of an old key after a rotation
-  (the job never reads the key; compare the hash by hand), run the restore drill, or move the key out of the cluster (the
+  kube-state-metrics, and the `ssss`/`gfsplit` split was not tried.** It does NOT detect an escrow of an old key by itself
+  (the job never reads the key: the rotation runbook now deletes the ConfigMap and the `escrowed-at` annotation that
+  OpenAether-infra's check 4.7 reads, and the Day 0 step sets that annotation), run the restore drill, or move the key out of the cluster (the
   `transit` seal stays a recorded deviation). The `get` on `openbao-seal-key` in the init Role stays: `init.sh` needs it on every
   re-run to refuse inventing a second key. The infra half (an `escrow` task, the cluster-verify check, the runbook twins) is not in
   this repository.
