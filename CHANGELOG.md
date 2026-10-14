@@ -152,6 +152,14 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   It does NOT prove a Scaleway child comes up, nor that an undefined `CHILD_BACKUP_*` breaks the child as the
   `child-gitops` header claims; the issue stays open until the on-ramp is run on a real child.
 
+### Documented
+
+- **`kubectl cnpg promote` reported success and changed nothing (#36): not fixed, only documented.** `docs/traps.md` now says
+  to read the Cluster status, the replica's streaming state and the operator log instead of the plugin's output, and notes that
+  operator 1.23.1 is unsupported and does not list PostgreSQL 18 (`zitadel-db`). The cause is unknown and the plugin skew is a
+  hypothesis (upstream advises a plugin at least as new as the operator, which 1.23.6 is). Rung: text only; a cluster must
+  reproduce or rule out the skew, so the issue stays open.
+
 ### Removed
 
 - `scripts/test-sprint0-openbao.sh` and `scripts/lib/test-helpers.sh`: an end-to-end test of the two-OpenBao design that no
