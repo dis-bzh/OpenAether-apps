@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Static check of the OpenBao bootstrap Jobs (#34): every Job with a deadline has a ttl (a Failed Job without one is never
-# re-created), the configure Job's deadline covers the sum of its wait loops, and the alert names both Jobs.
+# re-created), the configure Job's deadline covers the sum of its wait loops, the ttl is in (0, 7200] and above the alert's `for`
+# (the docs promise a re-run about 70 minutes later), and the alert names both Jobs.
 # Usage: check-bootstrap-jobs.sh [REPO_ROOT]   (the self-test in --selftest mutates a copy and requires a failure)
 set -uo pipefail
 ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
@@ -12,6 +13,8 @@ if [ "${1:-}" = "--selftest" ]; then
   mut; sed -i '/ttlSecondsAfterFinished/d' "$t/r/apps/base/foundation/vault/bootstrap-roles-job.yaml"; check "missing ttl"
   mut; sed -i 's/activeDeadlineSeconds: 3600/activeDeadlineSeconds: 1800/' "$t/r/apps/base/foundation/vault/bootstrap-roles-job.yaml"; check "short deadline"
   mut; sed -i 's/openbao-init|//' "$t/r/apps/base/observability/vm-customresources/vmrule-bootstrap.yaml"; check "alert without openbao-init"
+  mut; sed -i 's/ttlSecondsAfterFinished: 3600/ttlSecondsAfterFinished: 999999/' "$t/r/apps/base/foundation/vault/bootstrap-roles-job.yaml"; check "ttl above 2 hours"
+  mut; sed -i 's/ttlSecondsAfterFinished: 3600/ttlSecondsAfterFinished: 300/' "$t/r/apps/base/foundation/vault/bootstrap-roles-job.yaml"; check "ttl below the alert's for"
   exit $rc
 fi
 command -v kubectl >/dev/null || { echo "kubectl is missing" >&2; exit 2; }
@@ -35,7 +38,18 @@ for n, sp in jobs.items():
         bad.append("%s has a deadline and no ttlSecondsAfterFinished" % n)
 if jobs.get("openbao-vault-bootstrap", {}).get("activeDeadlineSeconds", 0) <= waits:
     bad.append("the configure Job deadline is not above its waits (%d s)" % waits)
-exprs = [r["expr"] for g in yaml.safe_load(open(rule))["spec"]["groups"] for r in g["rules"]]
+rules = [r for g in yaml.safe_load(open(rule))["spec"]["groups"] for r in g["rules"]]
+exprs = [r["expr"] for r in rules]
+def secs(d):
+    m = re.fullmatch(r"(\d+)([smh])", d)
+    return int(m.group(1)) * {"s": 1, "m": 60, "h": 3600}[m.group(2)] if m else 0
+fors = [secs(str(r.get("for", ""))) for r in rules]
+for n, sp in jobs.items():
+    ttl = sp.get("ttlSecondsAfterFinished", 0)
+    if not 0 < ttl <= 7200:
+        bad.append("%s ttlSecondsAfterFinished %s is not in (0, 7200]" % (n, ttl))
+    if fors and ttl <= max(fors):
+        bad.append("%s ttl %s is not above the alert's for (%d s): the Job would vanish before the alert fires" % (n, ttl, max(fors)))
 expr = " ".join(exprs)
 for n in ("openbao-init", "openbao-vault-bootstrap"):
     if n not in expr:
