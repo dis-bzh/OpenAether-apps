@@ -95,11 +95,10 @@ if es:
                          ("https://oos.eu-west-2.outscale.com", "eu-west-2"), ("http://minio.foundation-storage:9000", "us-east-1"),
                          ("https://s3.fr-par.scw.cloud.evil.example", "us-east-1"), ("https://evil.example/s3.fr-par.scw.cloud", "us-east-1")):
             check("externalsecret: %s gives %s" % (ep, want), derive(ep) == want)
-        fq = next((r for d in docs if d.get("kind") == "CiliumNetworkPolicy" and d["metadata"]["name"] == "loki"
-                   for r in d["spec"]["egress"] if r.get("toFQDNs")), {"toFQDNs": []})
-        for f in fq["toFQDNs"]:
-            h = f["matchName"]
-            check("externalsecret: the listed S3 host %s yields a non-default region" % h, derive("https://" + h) != "us-east-1")
+        # The hosts the egress patterns admit (test-s3-egress-fqdns.py proves the policy side) must each yield a region.
+        for h in ("s3.fr-par.scw.cloud", "s3.nl-ams.scw.cloud", "s3.eu-west-par.io.cloud.ovh.net", "s3.gra.io.cloud.ovh.net",
+                  "oos.eu-west-2.outscale.com"):
+            check("externalsecret: the S3 host %s yields a non-default region" % h, derive("https://" + h) != "us-east-1")
     else:
         check("externalsecret: the host regexes are readable", False)
 
@@ -123,9 +122,9 @@ if policy:
     fq = [r for r in spec["egress"] if r.get("toFQDNs")]
     check("netpol: S3 egress is FQDN-scoped on 443/tcp, not toEntities world",
           len(fq) == 1 and ports(fq[0]) == {("443", "TCP")} and not any("world" in r.get("toEntities", []) for r in spec["egress"]))
-    check("netpol: FQDN list names the Scaleway, OVH and Outscale S3 hosts",
-          {"s3.fr-par.scw.cloud", "s3.eu-west-par.io.cloud.ovh.net", "oos.eu-west-2.outscale.com"}
-          <= {f.get("matchName") for r in fq for f in r["toFQDNs"]})
+    check("netpol: FQDN list covers every region of the Scaleway, OVH and Outscale S3 hosts",
+          {"s3.*.scw.cloud", "s3.*.io.cloud.ovh.net", "oos.*.outscale.com"}
+          <= {f.get("matchPattern") for r in fq for f in r["toFQDNs"]})
     check("netpol: local MinIO egress on 9000/tcp",
           any(("9000", "TCP") in ports(r) for r in spec["egress"]
               if any(e.get("matchLabels", {}).get("io.kubernetes.pod.namespace") == "foundation-storage" for e in r.get("toEndpoints", []))))

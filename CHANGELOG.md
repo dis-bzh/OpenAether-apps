@@ -116,9 +116,18 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   branch (2d8c50c, f016228, 1755f51). New `scripts/dev/test-loki-render.sh` and CI job `loki-render` (values through the pinned
   chart, the policy, the template's regex on fixtures). Rung: static/mocked, not run on a cluster; ESO never evaluated the
   template. It does NOT: give Loki its own bucket and key (the infra seed reuses the backup ones, infra #302; the comments now say
-  so), make the FQDN list follow a cluster in another region, change `insecure: true` with an `https` endpoint, disable the rules
+  so), change `insecure: true` with an `https` endpoint, disable the rules
   sidecar (no API egress), or fix the 2 replicas with replication factor 2 (one pod down still rejects pushes). Not observed:
   labels in Loki, a LogQL marker line, no `status=500` in Alloy in steady state, Cilium learning the S3 addresses.
+- **The provider-S3 egress rules named one host per provider, so a real OVH configuration (`s3.gra.io.cloud.ovh.net`) had Loki, the
+  CNPG backups and the OpenBao snapshot job dropped by Cilium (#53, found on a real OVH cluster, not by any earlier gate).** The four
+  `toFQDNs` rules (`observability`, `backup/openbao`, `backup/databases`, `cnpg` restricted policy) allowed only
+  `s3.fr-par.scw.cloud`, `s3.eu-west-par.io.cloud.ovh.net` and `oos.eu-west-2.outscale.com`; they now use one `matchPattern` per
+  provider (`s3.*.scw.cloud`, `s3.*.io.cloud.ovh.net`, `oos.*.outscale.com`; `*` never crosses a dot). New
+  `scripts/dev/test-s3-egress-fqdns.py` (in CI) checks the four rules against the regions the tfvars can name, against look-alike
+  hosts that must stay refused, and shows that the former rule missed `s3.gra.io.cloud.ovh.net`. Rung: static; the real-cloud
+  observation is in Validated. It does NOT: cover OVH's high-performance class (`*.perf.cloud.ovh.net`) or an endpoint outside
+  the three providers' names, or give Longhorn's backup target any S3 egress (see Known limits).
 - **A Failed OpenBao configure Job never came back, its deadline did not fit its waits, and nothing alerted on it (#34).**
   `openbao-vault-bootstrap` now has `ttlSecondsAfterFinished: 3600` (like `openbao-init`) and `activeDeadlineSeconds: 3600` (its two
   15 minute waits filled the old 1800); the comments that said both Jobs are re-created on every sync now say what is true (after

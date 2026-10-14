@@ -97,6 +97,9 @@ jobs:
       - name: Kyverno cleanup CronJobs render and behave as fixed (#48)
         run: python3 -I scripts/dev/test-kyverno-cleanup-render.py
 
+      - name: Provider S3 egress rules admit every region of the provider (#53)
+        run: python3 -I scripts/dev/test-s3-egress-fqdns.py
+
       - name: dependsOn covers the cross-Kustomization contracts (#38)
         run: |
           python3 -I scripts/check-dependson-contracts.py
