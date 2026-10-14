@@ -1,0 +1,131 @@
+# Daily check that the operator attested the off-cluster escrow of the seal key (scripts/escrow-check.sh, README Day 0).
+# It reads three ConfigMaps and nothing else: never the Secret holding the key. A failure shows as a stale CronJob
+# success (VMRule OpenBaoEscrowNotAttested); on a development cluster it always passes. Static, not run on a cluster.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao-escrow-check
+  namespace: foundation-vault
+  labels:
+    app: openbao-escrow-check
+    openaether.io/managed: "true"
+    openaether.io/component: openbao-escrow-check
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openbao-escrow-check
+  namespace: foundation-vault
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: openbao-escrow-check
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+    resourceNames: ["openbao-operator-keys", "openbao-init-state", "openbao-escrow-ack"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openbao-escrow-check
+  namespace: foundation-vault
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: openbao-escrow-check
+subjects:
+  - kind: ServiceAccount
+    name: openbao-escrow-check
+    namespace: foundation-vault
+roleRef:
+  kind: Role
+  name: openbao-escrow-check
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openbao-escrow-check
+  namespace: foundation-vault
+  labels:
+    app: openbao-escrow-check
+    openaether.io/managed: "true"
+    openaether.io/component: openbao-escrow-check
+spec:
+  schedule: "41 5 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app: openbao-escrow-check
+            openaether.io/component: openbao-escrow-check
+        spec:
+          serviceAccountName: openbao-escrow-check
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: scripts
+              configMap:
+                name: openbao-escrow-check-script
+                defaultMode: 0555
+          containers:
+            - name: check
+              # Same image as openbao-init (kubectl and a shell); the `docker.io/` prefix is mandatory
+              # for restrict-image-registries.
+              image: docker.io/alpine/k8s:1.36.5
+              command: ["/bin/bash", "/scripts/escrow-check.sh"]
+              securityContext:
+                capabilities:
+                  drop: ["ALL"]
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits: { cpu: 200m, memory: 128Mi }
+---
+# Egress: DNS and the kube-apiserver only (toEntities, not toServices: see the openbao-init policy for why).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: openbao-escrow-check
+  namespace: foundation-vault
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: openbao-escrow-check
+spec:
+  description: "Escrow check egress: DNS and the Kubernetes API."
+  endpointSelector:
+    matchLabels:
+      app: openbao-escrow-check
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver

@@ -240,6 +240,14 @@ jobs:
           cat bootstrap-test.out
           [ "$rc" -eq 0 ] && grep -qE '^[0-9]+ passed, 0 failed$' bootstrap-test.out
 
+      # The daily check that the seal-key escrow was attested: the shipped script against stubbed ConfigMaps, on this
+      # host and under the CronJob's own image. CI=true makes a skipped image run a failure.
+      - name: Test the escrow check
+        run: |
+          set -euo pipefail
+          CI=true ./scripts/dev/test-escrow-check.sh | tee escrow-check.out
+          grep -qE '^[0-9]+ passed, 0 failed$' escrow-check.out
+
   # Commit-msg hooks live in .git/hooks, which no clone carries (see .pre-commit-config.yaml): the same
   # checks run here on every commit a PR adds.
   commits:

@@ -62,9 +62,12 @@ show an `[E]` (a signing-only or expired key makes `sys/init` fail *after* it ha
 The cluster can not do these for you, and **losing the seal key loses every secret**:
 
 ```bash
-# 1. Escrow the seal key, encrypted, off the cluster. (It is the master key of the raft data.)
+# 1. Escrow the seal key off the cluster, with at least TWO custodians (one gpg recipient is one person's laptop).
+#    Choose by the goal. Several recipients (any ONE of them can decrypt: survives losing a person, not one leak):
 kubectl -n foundation-vault get secret openbao-seal-key -o jsonpath='{.data.key}' | base64 -d \
-  | gpg --encrypt --recipient <ops-key> --output openbao-seal-key.gpg
+  | gpg --encrypt --recipient <ops-key-a> --recipient <ops-key-b> --output openbao-seal-key.gpg
+#    or a k-of-n split (no single custodian can open it: survives one leak), each share encrypted to a different person and kept
+#    in a different place; `ssss-split -t 2 -n 3 -x` or `gfsplit -n 2 -m 3` (neither tried on this platform).
 # 2. Keep a copy of the (already PGP-encrypted) recovery shares: the Secret dies with the cluster.
 for i in 1 2 3; do kubectl -n foundation-vault get secret openbao-recovery-shares -o jsonpath="{.data.share-$i}" | base64 -d > openbao-share-$i.b64; done
 # 3. Escrow the restic password: without it the backups are unreadable the day OpenBao is lost.
@@ -72,6 +75,28 @@ bao_admin kv get -mount=secret -field=password backup/restic          # helper b
 # 4. A NEW cluster only: read Zitadel's first-admin password once, to log in and enrol (docs/zitadel-hardening.md).
 bao_admin kv get -mount=secret -field=password zitadel/admin
 ```
+
+**5. Prove the escrow, then attest it.** An escrow nobody has opened is a hope. Reconstruct the key from the escrow alone (a
+custodian decrypts, or k of n shares are combined) into `key.bin`, and compare its hash with the live Secret's; only then say
+so to the cluster:
+
+```bash
+LIVE="$(kubectl -n foundation-vault get secret openbao-seal-key -o jsonpath='{.data.key}' | base64 -d | sha256sum | cut -d' ' -f1)"
+if [ "$(sha256sum < key.bin | cut -d' ' -f1)" = "$LIVE" ]; then
+  rm -f key.bin
+  kubectl -n foundation-vault create configmap openbao-escrow-ack --from-literal=escrowed-at="$(date -u +%F)" \
+    --from-literal=seal-key-sha256="$LIVE" --from-literal=holders=<number of independent custodians> \
+    --dry-run=client -o yaml | kubectl apply -f -
+else
+  echo "MISMATCH: the escrow does not open the live key; nothing attested"
+fi
+```
+
+The ConfigMap is not managed by Flux (nothing prunes it) and holds no secret (the hash of a random 32-byte key). The CronJob
+`openbao-escrow-check` reads it daily on a production cluster: it fails when the ConfigMap is absent a week after initialisation,
+malformed, names fewer than two holders, or is older than 400 days, and the alert `OpenBaoEscrowNotAttested` follows (warning).
+It never reads the Secret that holds the key, so it can not tell that the escrow is of an OLD key: **redo steps 1, 5 after every
+seal-key rotation**. Do this in a RAM-backed directory (`mount -t tmpfs`, see the root-CA runbook, section 7): `rm` erases nothing on an SSD.
 
 Operator access (`bao_admin`): a token for the ServiceAccount is exchanged for an OpenBao token **inside the pod**, so no
 OpenBao token ever crosses your terminal:
@@ -111,7 +136,7 @@ bao operator generate-root -decode="<encoded token>" -otp="$OTP"     # the root 
 (Measured on a cluster: 2 of 3 PGP-decrypted shares, through the `openbao-breakglass` role, produced a root token.)
 
 **Seal key rotation.** The new key becomes `key` and the old one `previous-key`; roll the StatefulSet (one pod at a time, each Ready and
-unsealed before the next); drop `previous-key`; roll again. Then redo the Day-0 escrow of the seal key. The entrypoint computes the key ids.
+unsealed before the next); drop `previous-key`; roll again. Then redo the Day-0 escrow of the seal key (steps 1 and 5: the attestation of the old key is now wrong). The entrypoint computes the key ids.
 
 ```bash
 OLD="$(kubectl -n foundation-vault get secret openbao-seal-key -o jsonpath='{.data.key}')"; NEW="$(head -c 32 /dev/urandom | base64 -w0)"
@@ -127,7 +152,7 @@ kubectl -n foundation-vault rollout restart statefulset/openbao && kubectl -n fo
 the recovery shares that apply afterwards are the SOURCE cluster's:
 
 1. Once the namespace exists and before the vault pods start, create `openbao-seal-key` from the escrow
-   (`gpg -d openbao-seal-key.gpg > key && kubectl -n foundation-vault create secret generic openbao-seal-key --from-file=key=key`, then
+   (`gpg -d openbao-seal-key.gpg > key`, or combine k shares into `key`, then `kubectl -n foundation-vault create secret generic openbao-seal-key --from-file=key=key`, then
    delete `key`). Suspend the Flux Kustomizations that consume secrets until step 4, so that nothing picks up the throw-away values the
    fresh bootstrap generates. The init Job refuses to invent a key on a cluster that was initialised before.
 2. Let `foundation-vault` deploy: `init.sh` initialises an empty cluster.
@@ -181,7 +206,8 @@ kube-apiserver, to create the Secrets).
   what Flux applies, i.e. Git write access. That group is the real root of trust.
 - **The break-glass depends on Kubernetes auth working** (and on the recovery quorum). A first run that fails before the root window ends,
   a PGP key that `sys/init` rejects, or a bad hand-over end in a re-init, only possible on a cluster that holds nothing yet.
-- A development bootstrap can not be upgraded to production; nothing monitors that the seal key has been escrowed.
+- A development bootstrap can not be upgraded to production. The escrow is monitored only as far as an operator's attestation
+  goes (Day 0, step 5): the cluster can not check that the escrowed copy opens the CURRENT key, and the restore from it is not drilled.
 - The Kubernetes-auth login is only exercised on a cluster; the harness replaces that one call. The 3-replica join, the seal-key
   rotation and the start-over were run on a cluster; the restore with standbys and the other runbooks were not.
 - **Recorded deviations** (ANSSI TLS-12): the seal key is a software key, not an HSM or an external KMS, and the static seal wraps the

@@ -35,7 +35,8 @@ anymore is not erased: only deleting the objects is.
 1. `backup/restic`: **seeded automatically** by the OpenBao configuration Job (`foundation/vault/scripts/configure.sh`, a random
    password, **in no log**). The operator reads it ONCE with the `openaether-admin` identity (command in
    `foundation/vault/README.md`, Day 0) and puts it in **offline escrow**: without this password the backups are unreadable
-   the day OpenBao is lost, which is precisely the main DR scenario. Nothing in the cluster checks that the escrow was done.
+   the day OpenBao is lost, which is precisely the main DR scenario. The cluster only checks that an operator attested it (the `openbao-escrow-check` CronJob, vault README Day 0, step 5), not that
+   the restic password was escrowed: that one is on your checklist.
 2. `backup/s3-primary` and `backup/s3-replica`: **seeded by the operator** (provider credentials are unknown in-cluster).
    `endpoint` includes the scheme:
 

@@ -51,6 +51,21 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Security
 
+- **The OpenBao seal-key escrow is proven by a hash, needs two custodians, and a missing or stale attestation raises an alert**
+  (ANSSI F-BKP-05 / GH-M37-5, DP-02 / B2 recovery rule, PA-022 R45 in part). Day 0 now escrows the key with at least two
+  recipients or as a k-of-n split, and ends with a step that reconstructs the key from the escrow, compares its sha256 with the live
+  Secret's and only then writes the ConfigMap `openbao-escrow-ack` (date, hash, number of holders). A new CronJob
+  `openbao-escrow-check` (foundation-vault, daily, `get` on three ConfigMaps and never on the Secret) fails on a production
+  cluster that has no attestation a week after initialisation, a malformed one, fewer than two holders, or one older than 400
+  days; the VMRule `OpenBaoEscrowNotAttested` (warning) fires when it has not succeeded for 36 h. A development cluster passes.
+  `scripts/dev/test-escrow-check.sh` (36 assertions, run on the host and under the CronJob's image, wired into CI) caught a real
+  flaw in a first draft: an unreachable API read as a development cluster and passed. **Mocked/static: the CronJob, the alert and
+  the ConfigMap flow were not run on a cluster, `kube_cronjob_status_last_successful_time` was not checked against the deployed
+  kube-state-metrics, and the `ssss`/`gfsplit` split was not tried.** It does NOT detect an escrow of an old key after a rotation
+  (the job never reads the key; compare the hash by hand), run the restore drill, or move the key out of the cluster (the
+  `transit` seal stays a recorded deviation). The `get` on `openbao-seal-key` in the init Role stays: `init.sh` needs it on every
+  re-run to refuse inventing a second key. The infra half (an `escrow` task, the cluster-verify check, the runbook twins) is not in
+  this repository.
 - **A key inventory, the replacement procedure of every application key, the root-CA custody options and the backup policy are written
   down** (ANSSI B2 impact/crypto-period/erasure rules, TLS-12, TLS-20, DP-06, DP-07, F-BKP-07, F-BKP-16). `docs/key-inventory.md`
   lists each key the applications repository creates (purpose, location, algorithm, period, impact of loss and of leak, replacement,

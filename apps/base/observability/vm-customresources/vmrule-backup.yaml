@@ -168,3 +168,24 @@ spec:
           annotations:
             summary: "No CNPG metrics: WAL archive and base backup alerts are blind"
             description: "The CNPG CiliumNetworkPolicy must accept vmagent on :9187 (cnpg VMPodScrape)."
+
+        # 4) The escrow check (foundation-vault, daily) has not SUCCEEDED for 36 h: a production OpenBao whose seal key
+        #    escrow nobody attested (or attested over a year ago), see the vault README, Day 0. A development cluster
+        #    always passes, so it never fires there. Warning first: it asks for an operator action, not for an outage.
+        - alert: OpenBaoEscrowNotAttested
+          expr: |
+            time() - max by (namespace, cronjob) (
+              kube_cronjob_status_last_successful_time{namespace="foundation-vault", cronjob="openbao-escrow-check"}
+            ) > 36 * 3600
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "The OpenBao seal-key escrow is not attested (or the attestation is stale)"
+            description: >-
+              The openbao-escrow-check Job fails: no ConfigMap openbao-escrow-ack, or it is older than a year,
+              or it is malformed. Losing the seal key loses every secret and every raft snapshot. Logs:
+              kubectl -n foundation-vault logs job/<latest openbao-escrow-check job>.
+              Procedure: the vault README, Day 0.
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md"
