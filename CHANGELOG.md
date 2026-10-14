@@ -95,8 +95,12 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   the patterns' shape); the violation count is to be re-measured on a cluster, and Enforce remains a separate decision (#37).
 - **The Kyverno cleanup CronJobs downloaded kubectl at every run, which the egress policy does not allow, and could not
   fail (#48).** They now run `docker.io/alpine/k8s` (kubectl and bash, allow-listed, already run by `openbao-init`) with the
-  upstream `set -euo pipefail` script untouched and nothing downloaded. Rung: static; the Job log of a run on a cluster is
-  what closes the issue.
+  upstream `set -euo pipefail` script untouched and nothing downloaded. Rung: real cloud, hand-run (Scaleway lab, 2026-10-13: the
+  Jobs completed in 3 to 4 s, they ran 2m19s before; the log line `(0) reports found, no clean up needed` is noted in the lab
+  journal). The raw Job log was not archived, so #48 stays open until one is captured. CI now runs
+  `scripts/dev/test-kyverno-cleanup-render.py`: the render (image, `pipefail`, no download tool, numeric uid, writable HOME) and the
+  rendered script under a stub `kubectl` (a failing `get` fails the Job, the 10000-report branch deletes). It does not run the
+  image or touch a cluster.
 - **Three `dependsOn` edges were missing (#38).** `storage`, `cnpg` and `observability` now wait for
   `external-secrets-stores`; the Istio `DestinationRule` of the OpenBao UI moved from `foundation-vault`, which is applied
   before Istio and fails its dry-run on a missing CRD, to `services-gateway`, which depends on Istio.

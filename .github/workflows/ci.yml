@@ -83,6 +83,9 @@ jobs:
       - name: CiliumLoadBalancerIPPool stays on cilium.io/v2 (#49)
         run: ./scripts/dev/test-cilium-lb-ipam-api.sh
 
+      - name: Kyverno cleanup CronJobs render and behave as fixed (#48)
+        run: python3 -I scripts/dev/test-kyverno-cleanup-render.py
+
   openbao-bootstrap:
     name: OpenBao bootstrap (real OpenBao)
     runs-on: ubuntu-latest
