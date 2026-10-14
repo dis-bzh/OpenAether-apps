@@ -1,0 +1,4 @@
+# A fake PEM header, planted on purpose as a positive control by scripts/dev/test-local-docker-lane.sh in 65b6690 (the leak scan
+# of the local Docker lane must catch it). The next commit assembles the marker at run time, so no tree contains it any more;
+# only that one commit of the pull request does. Not a secret.
+65b6690b54fb69afb6f1bdde783e1452786237c9:scripts/dev/test-local-docker-lane.sh:private-key:41

@@ -38,8 +38,9 @@ printf 'starting\nall good\nreconciled in 3s\n' >"$T/scan/logs/clean.log"
 printf 'token s.%s here\n' "$(printf 'A1b2C3d4E5f6G7h8I9j0K1l2')" >"$T/scan/logs/openbao-service.log"
 printf '{"client_token":"b.%s"}\n' "$(printf 'A1b2C3d4E5f6G7h8I9j0K1l2')" >"$T/scan/logs/openbao-batch.log"
 printf 'hvs.%s\n' "$(printf 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4')" >"$T/scan/logs/vault.log"
-printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n' >"$T/scan/logs/ssh.log"
-printf -- '-----BEGIN ENCRYPTED PRIVATE KEY-----\nabc\n' >"$T/scan/logs/pkcs8.log"
+# The PEM marker is assembled here so that no key header sits in this file (secret scanners flag it).
+printf -- '-----BEGIN %s KEY-----\nabc\n' "OPENSSH PRIVATE" >"$T/scan/logs/ssh.log"
+printf -- '-----BEGIN %s KEY-----\nabc\n' "ENCRYPTED PRIVATE" >"$T/scan/logs/pkcs8.log"
 PATH="$T/bin:$PATH" LANE_OUT="$T/scan" "$LANE" scan >"$T/scan.out" 2>&1
 [ "$(grep -c . "$T/scan/leak-scan.txt")" = 6 ] && grep -qx 'hits=5' "$T/scan/leak-scan.txt" \
   && ok "leak scan: OpenBao service/batch tokens, a Vault token and two PEM private keys are caught" || bad "leak scan misses a planted secret: $(tr '\n' ' ' <"$T/scan/leak-scan.txt")"
