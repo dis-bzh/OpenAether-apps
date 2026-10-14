@@ -104,6 +104,10 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 - **Three `dependsOn` edges were missing (#38).** `storage`, `cnpg` and `observability` now wait for
   `external-secrets-stores`; the Istio `DestinationRule` of the OpenBao UI moved from `foundation-vault`, which is applied
   before Istio and fails its dry-run on a missing CRD, to `services-gateway`, which depends on Istio.
+  Rung: static/mocked, not run on a cluster. `scripts/check-dependson-contracts.py` (in CI, with a mutation test) now fails when
+  a Kustomization renders an `ExternalSecret` on the store `openbao`, an `istio.io` or Gateway API object without the provider in
+  its `dependsOn` closure. It does not remove the "store not ready" phase (`external-secrets-stores` is `wait: false`) and the
+  ordering is not measured on a cluster.
 - The two OpenBao Jobs run `alpine/k8s:1.36.5` (was 1.31.1, five minors behind the cluster's Kubernetes).
 
 ### Removed
