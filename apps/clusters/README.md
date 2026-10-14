@@ -37,7 +37,8 @@ See `example-scaleway.yaml.example` for the full commented lifecycle.
 `CHILD_NAME` always; `CHILD_BACKUP_S3_BUCKET` + `CHILD_BACKUP_S3_ENDPOINT` if
 the profile picks `cnpg`; `CHILD_BACKUP_TARGET_URL` if it picks `storage`
 (placeholders in git, see `edge-1.yaml`). `scripts/check-child-clusters.py`
-checks all of this, the example included.
+checks all of this, the example included. It checks that the placeholders exist in git, not that you replaced them: a forgotten
+`<your-bucket>` is not a Flux substitution error, it becomes a bogus bucket name (the WAL archive then fails).
 
 ## Prerequisites outside git (once per management cluster)
 

@@ -21,7 +21,8 @@ belong to. What follows has no skill of its own yet.
   late leaves the live Postgres role out of sync with the Secret.
 - **Do not trust `kubectl cnpg promote` output; read the Cluster.** A plugin 1.23.6 against the
   1.23.1 operator printed success three times and nothing changed (#36, cause not found). Install a
-  plugin at least as new as the operator (upstream's advice), then check `.status.targetPrimary`,
+  plugin at least as new as the operator (upstream's advice; that was already the case when it failed, so it is not a remedy proven
+  here), then check `.status.targetPrimary`,
   `.status.currentPrimary`, the conditions, that the target replica is streaming and not lagging, and
   the `cnpg-system` operator log. Operator 1.23 is end of support and does not list PostgreSQL 18, which
   `zitadel-db` runs (`grafana-db` runs 16.3): a failed promote there is not a plugin bug until proven.

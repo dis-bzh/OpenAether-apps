@@ -166,6 +166,10 @@ kustomization and is not deployed. `networkpolicy.yaml`: the OpenBao policy admi
 the raft peers and the two Jobs; each Job has an egress policy of its own (DNS and OpenBao; only `openbao-init` also reaches the
 kube-apiserver, to create the Secrets).
 
+The configure Job runs about every 70 minutes (ttl 3600 s plus one sync), not once: each run rewrites the policies and the Kubernetes-auth
+roles from git, so a manual edit of either is reverted within about 70 minutes. Change the configuration in git, never by hand (a drill
+that needs a temporary grant should expect it to disappear).
+
 ## Limits, stated plainly
 
 - **The static key sits next to the data it protects**: a Secret in the cluster (etcd) and the raft PVCs on the node, and every

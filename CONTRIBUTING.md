@@ -28,7 +28,7 @@ this repo doesn't provision infrastructure itself.
     yamllint -c .yamllint apps/ scripts/ .github/workflows/
     ./scripts/dev/check-language.sh                # English is canonical; scripts/dev/test-check-language.sh tests the detector
 
-All five run in CI too — a PR can't merge until they're green (see the required
+All of these run in CI too — a PR can't merge until they're green (see the required
 checks on `main`).
 
 ## Conventions
