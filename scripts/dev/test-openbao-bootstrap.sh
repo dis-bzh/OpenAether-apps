@@ -326,6 +326,13 @@ expect "admin can not overwrite the stored CSR"   '403'     "$(rq "$T/tok-openae
 expect "admin can not delete the stored CSR"      '403'     "$(rq "$T/tok-openaether-admin" DELETE /v1/secret/data/pki/intermediate-csr)"
 expect "admin can not destroy its versions"       '403'     "$(rq "$T/tok-openaether-admin" POST /v1/secret/destroy/pki/intermediate-csr '{"versions":[1]}')"
 expect "admin can not wipe its metadata"          '403'     "$(rq "$T/tok-openaether-admin" DELETE /v1/secret/metadata/pki/intermediate-csr)"
+expect "admin can not soft-delete a version (the delete endpoint)" '403' "$(rq "$T/tok-openaether-admin" POST /v1/secret/delete/pki/intermediate-csr '{"versions":[1]}')"
+expect "admin can not undelete a version"         '403'     "$(rq "$T/tok-openaether-admin" POST /v1/secret/undelete/pki/intermediate-csr '{"versions":[1]}')"
+# A raw HTTP path with a trailing slash is served by the same handlers; the CLI strips it, so only curl can send it (review of 4405794).
+expect "admin can not delete the stored CSR with a trailing slash"  '403' "$(rq "$T/tok-openaether-admin" DELETE /v1/secret/data/pki/intermediate-csr/)"
+expect "admin can not wipe its metadata with a trailing slash"      '403' "$(rq "$T/tok-openaether-admin" DELETE /v1/secret/metadata/pki/intermediate-csr/)"
+[ "$(curl -s --cacert "$CAB" -H "@$T/tok-openaether-admin" "$U/v1/secret/data/pki/intermediate-csr" | jq -r '[.data.metadata.version, .data.data.csr] | @tsv')" = "$(printf '1\tx')" ] \
+  && ok "the stored CSR is still version 1 and readable after every attempt" || bad "the stored CSR changed or vanished during the attempts above"
 expect "admin reads a policy"                    '200'     "$(rq "$T/tok-openaether-admin" GET  /v1/sys/policies/acl/secret-seeder)"
 expect "admin can not write a policy"            '403'     "$(rq "$T/tok-openaether-admin" PUT  /v1/sys/policies/acl/evil '{"policy":"path \"*\" { capabilities = [\"sudo\",\"create\",\"read\",\"update\",\"delete\",\"list\"] }"}')"
 expect "admin can not mount an engine"           '403'     "$(rq "$T/tok-openaether-admin" POST /v1/sys/mounts/evil '{"type":"kv"}')"
