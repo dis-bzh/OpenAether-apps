@@ -34,6 +34,8 @@ spec:
       # alternative is a mesh control plane that pins a node forever.
       replicaCount: 2
       autoscaleEnabled: false
+      seccompProfile:
+        type: RuntimeDefault
       env:
         PILOT_ENABLE_AMBIENT: "true"
       resources:
@@ -43,6 +45,10 @@ spec:
         limits:
           cpu: 1000m
           memory: 1Gi
+    # The Gateways and waypoints istiod templates (the istio-proxy container) get the default seccomp profile too (#47).
+    gateways:
+      seccompProfile:
+        type: RuntimeDefault
     meshConfig:
       enableAutoMtls: true
       # trustDomain = cluster.local (Istio default). Single-cluster dev → idiomatic.

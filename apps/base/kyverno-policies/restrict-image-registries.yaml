@@ -36,13 +36,14 @@ spec:
       validate:
         message: >-
           Image registry not allowed. Allowed: ghcr.io, quay.io, registry.k8s.io, gcr.io and, on Docker Hub, the
-          organisations istio, rancher, kiwigrid, grafana, victoriametrics, restic, openbao, alpine and prom, plus
+          organisations istio, rancher, kiwigrid, grafana, victoriametrics, restic, openbao, alpine and prom, plus the
+          single image wait4x/wait4x (the Zitadel chart's wait-for init container), plus
           registry.hub.docker.com/outscale (the CAPI Outscale provider), written
           either as docker.io/<org>/<image> or as the short <org>/<image> the VictoriaMetrics operator uses.
         pattern:
           spec:
             containers:
-            - image: "ghcr.io/* | quay.io/* | registry.k8s.io/* | gcr.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | docker.io/grafana/* | docker.io/registry.k8s.io/* | docker.io/victoriametrics/* | docker.io/restic/* | docker.io/openbao/* | docker.io/alpine/* | docker.io/prom/* | registry.hub.docker.com/outscale/* | istio/* | rancher/* | kiwigrid/* | grafana/* | victoriametrics/* | restic/* | openbao/* | alpine/* | prom/*"  # yamllint disable-line rule:line-length
+            - image: "ghcr.io/* | quay.io/* | registry.k8s.io/* | gcr.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | docker.io/grafana/* | docker.io/registry.k8s.io/* | docker.io/victoriametrics/* | docker.io/restic/* | docker.io/openbao/* | docker.io/alpine/* | docker.io/prom/* | docker.io/wait4x/wait4x:* | registry.hub.docker.com/outscale/* | istio/* | rancher/* | kiwigrid/* | grafana/* | victoriametrics/* | restic/* | openbao/* | alpine/* | prom/* | wait4x/wait4x:*"  # yamllint disable-line rule:line-length
             # Conditional anchor: initContainers is optional (#47).
             =(initContainers):
-            - image: "ghcr.io/* | quay.io/* | registry.k8s.io/* | gcr.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | docker.io/grafana/* | docker.io/registry.k8s.io/* | docker.io/victoriametrics/* | docker.io/restic/* | docker.io/openbao/* | docker.io/alpine/* | docker.io/prom/* | registry.hub.docker.com/outscale/* | istio/* | rancher/* | kiwigrid/* | grafana/* | victoriametrics/* | restic/* | openbao/* | alpine/* | prom/*"  # yamllint disable-line rule:line-length
+            - image: "ghcr.io/* | quay.io/* | registry.k8s.io/* | gcr.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | docker.io/grafana/* | docker.io/registry.k8s.io/* | docker.io/victoriametrics/* | docker.io/restic/* | docker.io/openbao/* | docker.io/alpine/* | docker.io/prom/* | docker.io/wait4x/wait4x:* | registry.hub.docker.com/outscale/* | istio/* | rancher/* | kiwigrid/* | grafana/* | victoriametrics/* | restic/* | openbao/* | alpine/* | prom/* | wait4x/wait4x:*"  # yamllint disable-line rule:line-length

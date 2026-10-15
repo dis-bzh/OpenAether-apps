@@ -39,13 +39,25 @@ spec:
       leaderElection:
         namespace: cert-manager
     installCRDs: true
+    # Kyverno reads the container level (#47): the chart's default lacks runAsNonRoot and seccompProfile there.
+    containerSecurityContext: &csc
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
     startupapicheck:
       enabled: false
     replicaCount: 2
     webhook:
       replicaCount: 2
+      containerSecurityContext: *csc
     cainjector:
       replicaCount: 2
+      containerSecurityContext: *csc
     resources:
       limits:
         cpu: 200m
