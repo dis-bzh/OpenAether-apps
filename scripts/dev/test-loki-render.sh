@@ -79,6 +79,9 @@ def hours(v):
 for env, replicas, rf, retention, insecure, pdb in (("base", 3, 2, 8760, False, True), ("local", 1, 1, 168, True, False)):
     kinds, cfg = load(env)
     sts = [d for d in kinds.get("StatefulSet", []) if d["metadata"]["name"] == "loki"]
+    anti = ((sts[0]["spec"]["template"]["spec"].get("affinity") or {}).get("podAntiAffinity") or {}) if sts else {}
+    check(f"{env}: no hard pod anti-affinity (replicas may share a node when there are fewer nodes than replicas)",
+          not anti.get("requiredDuringSchedulingIgnoredDuringExecution"))
     check(f"{env}: one StatefulSet loki with {replicas} replica(s)", len(sts) == 1 and sts[0]["spec"]["replicas"] == replicas)
     check(f"{env}: no ClusterRole nor ClusterRoleBinding (no cluster-wide read of ConfigMaps/Secrets)",
           not kinds.get("ClusterRole") and not kinds.get("ClusterRoleBinding"))

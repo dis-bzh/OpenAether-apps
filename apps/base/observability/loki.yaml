@@ -111,6 +111,11 @@ spec:
       # topologySpreadConstraints for the single binary, so this is the only spread.
       affinity:
         podAntiAffinity:
+          # The chart's default is a HARD anti-affinity: with three replicas on the two workers of a 3+2
+          # cluster the third pod never schedules (seen on a real OVH cluster, 2026-10-15). Helm merges
+          # the maps, so the default is cleared here, and the preferred rule below spreads the pods when
+          # the nodes allow it.
+          requiredDuringSchedulingIgnoredDuringExecution: []
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100
               podAffinityTerm:
