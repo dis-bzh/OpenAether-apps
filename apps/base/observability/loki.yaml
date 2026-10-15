@@ -99,16 +99,6 @@ spec:
       targetPath: loki.storage.bucketNames.admin
   values:
     deploymentMode: SingleBinary
-    sidecar:
-      securityContext:
-        readOnlyRootFilesystem: true
-        runAsNonRoot: true
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-            - ALL
-        seccompProfile:
-          type: RuntimeDefault
     singleBinary:
       replicas: 3
       securityContext:
