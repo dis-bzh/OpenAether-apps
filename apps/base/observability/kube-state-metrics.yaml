@@ -44,6 +44,16 @@ spec:
     remediation:
       retries: 3
   values:
+    # Kyverno reads the container level (#47): all four fields are set here.
+    containerSecurityContext:
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
     # ⚠️ ONE replica, deliberately. `replicaCount: 2` used to sit here and this
     # chart's key is `replicas` — Helm ignored the value in silence and the
     # Deployment ran at 1 for as long as anyone had been reading it as HA.

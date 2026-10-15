@@ -17,6 +17,115 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-15
+
+**The pod-security work the first real clusters asked for, a Loki that no longer shares the backups bucket, and a scan for environment
+data in pull requests. For new clusters.** Read *Upgrade notes* and *Not fixed* before pulling it, and the rung written under each entry:
+this file distinguishes static checks, CI, local Docker, and real clouds.
+
+**Pairing with OpenAether-infra.** Infra tags pin an apps tag and cannot be moved, so this is a table of what was proven:
+
+| OpenAether-infra | apps | Status |
+|---|---|---|
+| 0.2.1 (not yet cut) | 0.2.0 | The intended pair. Validated with an OpenAether-infra branch (`39df1b8` on OVH and Outscale, `4ae2357` on Scaleway), not a tag. |
+| 0.2.1 (not yet cut) | 0.1.1 | **Not run.** Infra 0.2.1's code (the Loki seed, the logs bucket) was only run with apps 0.2.0 candidates; the only validated 0.1.1 pair is infra `f127a26` (a commit on main) with apps 0.1.1. Infra 0.2.1's pin moves to 0.2.0. |
+| 0.2.0 | 0.2.0 or 0.1.1 | **Not supported**, for the reasons given under 0.1.1 (no operator PGP keys, a seed script that waits for a root-token Secret). |
+| 0.2.0 | 0.1.0 | The pair infra 0.2.0 validated on its three clouds with Flux off. |
+
+### Upgrade notes
+
+- **VictoriaMetrics data written as root cannot be opened by the new non-root workloads (#47, #71).** vmstorage and vmselect now run as
+  uid 65534; on a cluster that ran the earlier code their local-path volumes hold files owned by root and the pods crash with
+  `cannot create lock file … permission denied` (seen on Scaleway, 2026-10-15). `fsGroup` does not help: the local-path
+  provisioner's volumes are not ownership-managed. What worked: delete the PVC and the pod of each vmstorage, then of each
+  vmselect (`vmselect-cachedir-*` is a cache), one at a time. **That loses the metric history of that node; with
+  `replicationFactor: 2` the second node keeps its own until it is treated too, so treating both loses all of it.** Take a
+  `vmbackup` first if the history matters. New clusters are not affected. Rung: real cloud, once (Scaleway, a cluster that booted on a candidate commit of this release and was moved by Flux commit by commit; not
+  a cluster built from the 0.1.1 tag).
+- A cluster initialised by 0.1.0 still cannot be moved to this release in place (see 0.1.1): build a new cluster, on new buckets.
+- Loki, Grafana, Alloy, kube-state-metrics, node-exporter, the VictoriaMetrics pods, cert-manager, the CNPG operator and istiod restart once
+  (new container `securityContext`); the ones using the Longhorn or local-path volumes come back on them.
+
+### Changed
+
+- **Kyverno `require-security-context`: the container-level `securityContext` it reads is now set on the observability stack, cert-manager,
+  the CNPG operator and istiod (#47, #37).** Grafana and its sidecar, kube-state-metrics, node-exporter, the VictoriaMetrics operator,
+  Alloy and its config reloader, Loki and its rules sidecar, and every VMAgent / VMAlert / VMAlertmanager / VMCluster pod (their
+  `spec.securityContext` takes the pod and container fields flat; `containerSecurityContext` is not a field of these CRs and was
+  silently ignored) run with `runAsNonRoot`, `allowPrivilegeEscalation: false`, `drop: [ALL]` and `seccompProfile: RuntimeDefault`.
+  The VictoriaMetrics images run as root, so they also get `runAsUser: 65534`: with `runAsNonRoot` alone the containers fail with
+  `CreateContainerConfigError`. **Measured on Scaleway management clusters: 82 `require-security-context` results (and 3 of `restrict-image-registries`)
+  on the 0.1.1 candidate, 2026-10-14; 86 results across the policies at the start of the 2026-10-15 lab, and 8 on the policy report at its end,
+  2 of them genuine:** the Istio-generated `istio-proxy` of the north-south Gateway and of the waypoint carry seccomp on the pod
+  but not on the container, and `Gateway.spec.infrastructure` (the only knob) is not in the Gateway API v1.1.0 CRDs this repository
+  installs (it arrives in v1.2), so they stay until those are bumped. The other 6 are `ztunnel` (5) and the Outscale provider
+  controller, which the policy now exempts. **Hypothesis, not observed:** Kyverno had not re-evaluated them when the lab ended (the policy
+  changed during the lab; a fresh cluster does not list them, and whether a later background scan drops them was not watched, #37). `ztunnel` (the ambient node proxy, root with NET_ADMIN by design) and the Outscale CAPI provider controller (an upstream manifest)
+  are exempt by name/namespace; the registry allow-list gains the single image `wait4x/wait4x` (the Zitadel chart's init container,
+  which accounted for the `restrict-image-registries` results: the Deployment, ReplicaSet and Pod entries of one init container). **The three policies stay in Audit** (#37): Enforce needs a refreshed report at
+  zero and a lab that survives a node roll, and neither exists yet. Rung: real cloud, once, by hand.
+
+- **Comments and docs follow OpenAether-infra's Loki bucket (#53 rest, infra #302).** The seed now gives Loki a bucket of its own
+  and a dedicated key pair when the operator supplies one; with the shared keys it can still reach the backups. No manifest
+  changes: the ExternalSecret reads whatever `observability/loki-s3` holds. Not changed: 2 replicas with replication factor 2.
+
+### Added
+
+- **Pull requests are scanned for environment data, not only credentials (#41).** A `leaks` job in `ci.yml` runs gitleaks with
+  `.gitleaks-envdata.toml` over what a PR adds: routable IPv4 addresses, 12-digit account ids and account/project UUIDs, concrete
+  `s3-…-backups`/`-logs`/artifact bucket names, on top of the default credential rules. The rules were measured against their own probe
+  (`scripts/dev/check-gitleaks-rules.sh`: 16 values it must catch, 13 it must leave alone, including mixed lines and prefixed key names, which an
+  independent review found slipping through the first version; the probe runs before the scan because a rule that
+  matches nothing passes silently). A /16-or-wider network block (a provider's published range) is let through, a /32 is not. **Known limit:** a
+  line that carries a version word (`version`, `chart`, `sha256`…) is excused whole, so a real address on that same line passes.
+  The file is not named `.gitleaks.toml` on purpose: `security.yml` keeps scanning the full history with the default rules.
+  Rung: CI and a local run over this tree (no finding after the allowlists). Not made a required check: that is a repository
+  setting.
+
+- **A static guard for the two mistakes of this block** (`scripts/dev/test-container-security-context.py`, in CI): the VictoriaMetrics CRs must
+  carry a complete `spec.securityContext` with a non-zero uid and no `containerSecurityContext` (a field the operator ignores), and no
+  Gateway may use `spec.infrastructure` while the vendored Gateway API CRDs are older than v1.2. Its self-test fails on each mistake.
+  Rung: CI (static; it proves the manifests, not the operator).
+
+### Validated
+
+- **The 0.2.0 candidate on three clouds, 2026-10-15, with OpenAether-infra `claude/infra-0.2.1` (not a tag).** Rung: real cloud, **once per
+  cloud**, driven by hand; nothing is repeated or unattended, and `cluster-up` still ends 201 on the documented `flux-system exists` line
+  until the Day-1 seeding has run. Management role, 3 control planes + 2 workers, `deploy_flux = true`, OpenBao in production mode with 3
+  throwaway PGP recovery keys, threshold 2, the apps followed by branch.
+  - **Scaleway, full DAG** (infra `4ae2357`, replica on OVH; Flux followed `claude/apps-0.2.0` through the commits of this block, so the
+    final tree was not the one that booted): 35 of 35 Kustomizations Ready about 3 minutes after the seeding; Loki chunks and index in its own
+    logs bucket while the backups bucket held only `cnpg/` (no Loki object); CNPG `grafana-db` and `zitadel-db` archiving True; Longhorn
+    BackupTarget available; `cluster-security` 30 of 31; strict plan "No changes". Found on this lab: the VictoriaMetrics CR field
+    name and the root user of its images (both fixed, and guarded by a test), root-owned volumes (an upgrade note, not fixed: #71), and a `Gateway.spec.infrastructure` attempt that broke the `istio`
+    Kustomization for about six minutes until reverted (that field needs Gateway API v1.2).
+  - **OVH, full DAG** (infra `39df1b8`, apps `82f5919`, replica on Scaleway): 35 of 35 about 2.5 minutes after the seeding, every pod Running 4
+    minutes later; Loki objects in its logs bucket, backups bucket `cnpg/` only; both CNPG clusters Ready and archiving; Longhorn available;
+    **the Kyverno report of this fresh cluster held exactly 2 results (the Istio-generated proxies), against the 82 + 3 above and 86 at the start of the Scaleway lab**; no Cilium drop in a
+    40 s window; `cluster-security` 30 of 31; strict plan "No changes". One worker did not come up after boot (OVH, infra #49): hard-rebooted, `up` re-run.
+  - **Outscale, REDUCED profile only** (infra `39df1b8`, apps `82f5919` + a throwaway profile commit, 18 Kustomizations, no observability, CNPG,
+    Longhorn or Istio, so none of the entries above is observed there): 18 of 18 Ready; an OpenBao snapshot job pushed to both destinations
+    and the restic check found no error; `cluster-security` 25 of 31 (the four failures are the mesh checks, there is no Istio in that profile).
+  - **What ran is `82f5919` plus the throwaway profile on OVH and Outscale; nothing after it was run on a cluster.** The commits since touch CI,
+    scripts, documentation and the gitleaks rules only (`apps/` is byte-identical).
+  - **Not run:** a rolling upgrade or any upgrade from a 0.1.1 cluster beyond the Scaleway one that was moved by Flux commit by commit, Kyverno
+    Enforce, a DR restore, a CAPI child, the local Docker lane on prod mode. CI on the pull request is the other rung (see the PR).
+
+### Not fixed
+
+The two results left by the Istio-generated proxies (#70) and the loss of the VictoriaMetrics history on a 0.1.1 → 0.2.0 move (#71) are
+new and open. Unchanged since 0.1.1: #34 (half: a first run interrupted inside the root window still fails again), #35, #36 (cause of
+the `promote` no-op unknown), #37 (the three Kyverno policies stay in Audit), #47 (partly: the optional-key anchors and the image names are done, 2 results remain, #70), #38 (guard, not a cure), #39 (static only), #42, #44 (no
+per-object Flux Ready signal), #51 (new clusters only), the rest of #53 (2 Loki replicas with replication factor 2; the dedicated Loki key
+pair was never run on a cloud, infra #302). **Not observed anywhere:** a disaster-recovery restore, a rolling upgrade of the OpenBao
+replicas, Kyverno Enforce, a CAPI child, prod-mode local Docker, a Longhorn backup or restore. This release does not make `task cluster-up`
+produce a working platform by itself: the Day-1 seeding, the PKI signing and the Grafana OIDC client stay manual.
+
+### Maintainers
+
+Merge by **squash**. The ruleset on `main` requires `Lint`, `Flux DAG`, `Kustomize Build + Collision Check` and `Secret Detection`; the new
+`Environment data in new commits` job is not required yet (a repository setting). The tags ruleset (id 25117854) forbids moving a tag.
+
 ## [0.1.1] — 2026-10-14
 
 **The fixes the first real Flux runs asked for, for new clusters.** Read *Upgrade notes* (a cluster

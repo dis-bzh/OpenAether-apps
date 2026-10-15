@@ -49,6 +49,17 @@ spec:
     remediation:
       retries: 3
   values:
+    # Kyverno reads the container level (#47): all four fields are set here.
+    securityContext:
+      enabled: true
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
     # 1 replica: 2 replicas fight over the leader lease → crash loop.
     replicaCount: 1
     resources:

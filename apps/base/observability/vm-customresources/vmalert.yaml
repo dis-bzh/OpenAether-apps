@@ -19,6 +19,17 @@ metadata:
     openaether.io/component: vmalert
 spec:
   replicaCount: 2
+  securityContext:
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
   # Pick up every VMRule in the cluster, as VMAgent does for the scrapes.
   selectAllByDefault: true
   evaluationInterval: 30s
@@ -64,6 +75,20 @@ metadata:
     openaether.io/component: vmalertmanager
 spec:
   replicaCount: 1
+  # Kyverno reads the container level (#47). The operator copies this flat block onto every container
+  # (pod and container fields share it: spec.securityContext, not containerSecurityContext).
+  # runAsUser is explicit because these images run as root and runAsNonRoot alone makes the container fail to start.
+  securityContext:
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
   # The webhook URL is mounted, never inlined — see
   # observability/externalsecret-alertmanager-slack.yaml. Mount path is
   # /etc/vm/secrets/<secret name>/<key>.

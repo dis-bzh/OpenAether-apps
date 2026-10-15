@@ -30,6 +30,17 @@ spec:
   replicationFactor: 2
   vminsert:
     replicaCount: 2
+    securityContext:
+      runAsUser: 65534
+      runAsGroup: 65534
+      fsGroup: 65534
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
     extraArgs:
       # Internal buffer size to absorb traffic spikes.
       maxInsertRequestSize: "64MB"
@@ -53,6 +64,17 @@ spec:
       minAvailable: 1
   vmstorage:
     replicaCount: 2
+    securityContext:
+      runAsUser: 65534
+      runAsGroup: 65534
+      fsGroup: 65534
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
     storageDataPath: /vm-data
     storage:
       volumeClaimTemplate:
@@ -85,6 +107,17 @@ spec:
       minAvailable: 1
   vmselect:
     replicaCount: 2
+    securityContext:
+      runAsUser: 65534
+      runAsGroup: 65534
+      fsGroup: 65534
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
     cacheMountPath: /select-cache
     storage:
       volumeClaimTemplate:

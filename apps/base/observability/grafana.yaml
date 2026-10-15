@@ -39,6 +39,15 @@ spec:
       retries: 3
   values:
     replicas: 2
+    # Kyverno reads the container level (#47): all four fields are set here.
+    containerSecurityContext:
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
     affinity:
       podAntiAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
@@ -160,6 +169,14 @@ spec:
             editable: false
     # Sidecar: automatic discovery of ConfigMaps labelled grafana_dashboard=1.
     sidecar:
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
       dashboards:
         enabled: true
         label: grafana_dashboard

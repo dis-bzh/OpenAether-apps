@@ -34,6 +34,15 @@ spec:
               - capi-system
               - orc-system
               - capi-operator-system
+              # The Outscale CAPI provider controller: an upstream manifest we do not patch, like the CAPI core above.
+              - capi-outscale-system
+        # ztunnel is the ambient mesh's node proxy: it needs NET_ADMIN/SYS_ADMIN and runs as root by design, so it
+        # cannot satisfy this policy. Exempt by name, in its namespace only (same as restrict-privileged does).
+        - resources:
+            namespaces:
+              - istio-system
+            names:
+              - "ztunnel-*"
       validate:
         message: >-
           Containers must have securityContext: runAsNonRoot=true,

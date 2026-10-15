@@ -38,7 +38,29 @@ spec:
   values:
     controller:
       type: daemonset
+    configReloader:
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
     alloy:
+      # Kyverno reads the container level (#47): all four fields are set here.
+      securityContext:
+        runAsUser: 473
+        runAsGroup: 473
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
       configMap:
         content: |
           // ── Kubernetes pod discovery ───────────────────────────────────

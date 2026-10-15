@@ -75,6 +75,20 @@ metadata:
 spec:
   replicaCount: 2
   shardCount: 2
+  # Kyverno reads the container level (#47). The operator copies this flat block onto every container
+  # (pod and container fields share it: spec.securityContext, not containerSecurityContext).
+  # runAsUser is explicit because these images run as root and runAsNonRoot alone makes the container fail to start.
+  securityContext:
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
   serviceAccountName: vmagent
   remoteWrite:
     - url: "http://vminsert-victoria-metrics.services-observability:8480/insert/0/prometheus"

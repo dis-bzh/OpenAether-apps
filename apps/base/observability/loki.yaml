@@ -8,9 +8,9 @@
 # fed from `secret/observability/loki-s3` in OpenBao. Credentials AND location
 # (endpoint + bucket) travel through that Secret, injected with `valuesFrom`:
 # moving from the internal MinIO to the provider's S3 therefore requires NO
-# code change at all, only a reseed. ⚠️ OpenAether-infra's seed currently gives it the SAME
-# bucket and keys as `backup/s3-primary` (a dedicated pair is infra #302): Loki holds the
-# backup write key until then.
+# code change at all, only a reseed. OpenAether-infra's seed gives it a bucket of its own
+# (`…-logs-<env>`); the keys are a dedicated pair only when the operator supplies one
+# (infra #302). Otherwise they are the primary store's, and Loki can still reach the backups.
 #
 # schemaConfig v13 (tsdb): the recommended schema since Loki 2.8+.
 # auth_enabled=false: no multi-tenant auth (private cluster).
@@ -93,6 +93,16 @@ spec:
       targetPath: loki.storage.bucketNames.admin
   values:
     deploymentMode: SingleBinary
+    sidecar:
+      securityContext:
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
     singleBinary:
       replicas: 2
       securityContext:
@@ -122,6 +132,16 @@ spec:
           cpu: 500m
           memory: 1Gi
     loki:
+      # Kyverno reads the container level (#47): all four fields are set here.
+      containerSecurityContext:
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
       auth_enabled: false
       commonConfig:
         replication_factor: 2
