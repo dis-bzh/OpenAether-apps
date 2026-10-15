@@ -36,11 +36,12 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   `spec.securityContext` takes the pod and container fields flat; `containerSecurityContext` is not a field of these CRs and was
   silently ignored) run with `runAsNonRoot`, `allowPrivilegeEscalation: false`, `drop: [ALL]` and `seccompProfile: RuntimeDefault`.
   The VictoriaMetrics images run as root, so they also get `runAsUser: 65534`: with `runAsNonRoot` alone the containers fail with
-  `CreateContainerConfigError`. **Measured on a Scaleway management cluster, 2026-10-15: 82 results before (0.1.1) and 2 genuine ones
-  after, on the policy report:** the Istio-generated `istio-proxy` of the north-south Gateway and of the waypoint carry seccomp on the pod
+  `CreateContainerConfigError`. **Measured on a Scaleway management cluster, 2026-10-15: 82 results before (0.1.1) and 8 on the policy report at the end of the lab,
+  2 of them genuine:** the Istio-generated `istio-proxy` of the north-south Gateway and of the waypoint carry seccomp on the pod
   but not on the container, and `Gateway.spec.infrastructure` (the only knob) is not in the Gateway API v1.1.0 CRDs this repository
-  installs (v1.2), so it stays until those are bumped. The rest of the report was stale entries for pods the policy now exempts.
-  `ztunnel` (the ambient node proxy, root with NET_ADMIN by design) and the Outscale CAPI provider controller (an upstream manifest)
+  installs (it arrives in v1.2), so they stay until those are bumped. The other 6 are `ztunnel` (5) and the Outscale provider
+  controller, which the policy now exempts but which Kyverno had not re-evaluated about 40 minutes after the policy changed (its
+  background scan is hourly; their removal was not observed). `ztunnel` (the ambient node proxy, root with NET_ADMIN by design) and the Outscale CAPI provider controller (an upstream manifest)
   are exempt by name/namespace; the registry allow-list gains the single image `wait4x/wait4x` (the Zitadel chart's init container,
   which was the one `restrict-image-registries` result). **The three policies stay in Audit** (#37): Enforce needs a refreshed report at
   zero and a lab that survives a node roll, and neither exists yet. Rung: real cloud, once, by hand.
