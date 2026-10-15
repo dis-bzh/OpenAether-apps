@@ -2,8 +2,8 @@
 # → restic → 2 S3 repositories (client encryption, see backup/openbao/cronjob.yaml).
 #
 # LOGICAL dumps (consistent, restorable cross-version through pg_restore),
-# provider-agnostic — no PITR. barmanObjectStore PITR remains the documented
-# cloud upgrade (apps/base/cnpg/cluster.yaml, commented block).
+# provider-agnostic — no PITR. barmanObjectStore PITR (active block of
+# apps/base/cnpg/*cluster.yaml) lives next to this engine, it does not replace it.
 #
 # DB creds: the ESO bootstrap Secrets (zitadel-db-app,
 # grafana-db-credentials) carry ONLY username/password (verified e2e locally —
@@ -58,10 +58,12 @@ spec:
               secret:
                 secretName: grafana-db-credentials
           initContainers:
-            # 1) Logical dumps — image aligned with the newer of the two
-            #    Clusters (pg_dump 16.x can dump older 16.x servers).
+            # 1) Logical dumps. pg_dump refuses a server NEWER than itself, so
+            #    this image must be >= the highest Cluster major (zitadel-db is
+            #    on 18); an 18 client also dumps the 16 server (grafana-db).
+            #    scripts/dev/check-pg-dump-version.sh enforces it in CI.
             - name: pg-dump
-              image: ghcr.io/cloudnative-pg/postgresql:16.3
+              image: ghcr.io/cloudnative-pg/postgresql:18.4
               command:
                 - /bin/sh
                 - -c

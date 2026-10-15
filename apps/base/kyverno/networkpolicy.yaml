@@ -41,6 +41,15 @@ spec:
         - ports:
             - port: "9443"
               protocol: TCP
+    # VMAgent: controller metrics on :8000 (VMServiceScrape kyverno).
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
   egress:
     # DNS
     - toEndpoints:

@@ -15,10 +15,32 @@
   extends: ["config:recommended", "helpers:pinGitHubActionDigests"],
   automerge: false,
   platformAutomerge: false,
+  // A release must be this old before it is proposed: a fresh one can be yanked, retagged or found
+  // vulnerable within days (same value as OpenAether-infra). Security fixes below skip it.
+  minimumReleaseAge: "7 days",
   schedule: ["before 6am on monday"],
   timezone: "Europe/Paris",
   labels: ["dependencies"],
   flux: { enabled: true },
+
+  // Security fixes (ANSSI HYG-M34: patch within a month, docs/patching.md). Renovate's default for this block
+  // already skips the schedule and minimumReleaseAge, so a fix is proposed at once: only the label is ours.
+  // Needs the repository's Dependency graph and Dependabot alerts on, and the App allowed to read them; OSV
+  // adds the ecosystems GitHub's feed lacks. A vendored dump (ignorePaths below) still needs a human re-vendor.
+  vulnerabilityAlerts: { labels: ["dependencies", "security"] },
+  osvVulnerabilityAlerts: true,
+
+  // Images in our own manifests (backup jobs, OpenBao, restic, alpine/k8s) were not tracked at all: the kubernetes
+  // manager has no default file pattern. Enabled here for the hand-written bricks, with digest pinning, so a bump
+  // is a reviewed PR that writes `tag@sha256:...` (a re-pushed tag then no longer reaches the cluster unnoticed).
+  // The vendored dumps stay out (ignorePaths), and so do the Postgres images, which the custom managers below
+  // bump and which scripts read as `postgresql:<major>.<minor>`.
+  kubernetes: {
+    managerFilePatterns: ["/^apps/base/(backup|foundation)/.*\\.ya?ml$/"],
+  },
+
+  // Off: it reads the SHA in `rev:` as a tag and so can never bump a hook. The custom manager below does it.
+  "pre-commit": { enabled: false },
 
   // CI actions are pinned to a commit SHA (tag kept as a trailing comment),
   // not a mutable tag — see OpenAether-infra/renovate.json5's header for why.
@@ -39,6 +61,18 @@
   ],
 
   packageRules: [
+    {
+      description: "Pin container images in our own manifests to a digest (the tag stays in the line). OpenBao and restic are also pinned by the infra bootstrap and the backup scripts: check the PR against them.",
+      matchManagers: ["kubernetes"],
+      pinDigests: true,
+      labels: ["dependencies", "container-image"],
+    },
+    {
+      description: "The Postgres images are bumped by the custom managers below (check-pg-dump-version.sh reads their tag).",
+      matchManagers: ["kubernetes"],
+      matchPackageNames: ["ghcr.io/cloudnative-pg/postgresql"],
+      enabled: false,
+    },
     {
       description: "CAPI providers (operator.cluster.x-k8s.io CRs) — independent controllers, independent release cadence, kept as separate PRs.",
       matchPackageNames: [
@@ -157,19 +191,31 @@
     },
     {
       customType: "regex",
-      description: "ci.yml: kubectl is downloaded + checksum-verified directly (not via an action), kept at the same version as OpenAether-infra's kubernetes_version so client/server stay in the same skew window.",
-      fileMatch: ["^\\.github/workflows/ci\\.yml$"],
+      description: "Backup brick's Postgres client images (pg_dump, pg_restore): must stay >= the Cluster majors, which scripts/dev/check-pg-dump-version.sh enforces in CI.",
+      fileMatch: ["^apps/base/backup/databases/(restore-test-)?cronjob\\.yaml$"],
       matchStrings: [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*KUBECTL_VERSION:\\s*\"(?<currentValue>[^\"]+)\"",
+        "image:\\s*ghcr\\.io/cloudnative-pg/postgresql:(?<currentValue>[0-9.]+)",
+      ],
+      datasourceTemplate: "docker",
+      depNameTemplate: "ghcr.io/cloudnative-pg/postgresql",
+    },
+    {
+      customType: "regex",
+      description: "Workflow values the github-actions manager cannot see: a tool downloaded and checksum-verified directly (kubectl, gitleaks, actionlint, kubeconform, the Renovate validator) or a pip pin. gitleaks/gitleaks-action needs a paid org license (dis-bzh is an org), so the free CLI is run instead. Matched on the shape (an anchor comment above the value), not on named keys, so a new pin needs no change here.",
+      managerFilePatterns: ["/^\\.github/workflows/.*\\.ya?ml$/"],
+      matchStrings: [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*[\\w.-]+:\\s*\"(?<currentValue>[^\"]+)\"",
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*run: pip install \\S+==(?<currentValue>\\S+)",
       ],
     },
     {
       customType: "regex",
-      description: "security.yml: gitleaks CLI, downloaded + checksum-verified directly — gitleaks/gitleaks-action requires a paid org license (dis-bzh is an org), so we run the (always free) CLI instead of the Action github-actions would have tracked.",
-      fileMatch: ["^\\.github/workflows/security\\.yml$"],
+      description: "Pre-commit hooks pinned to a commit SHA with the tag in a trailing comment (`rev: <sha>  # v1.2.3`): bumps the tag and the SHA together. Hooks run third-party code on every commit, the same supply-chain class as GitHub Actions, hence the SHA.",
+      managerFilePatterns: ["/^\\.pre-commit-config\\.ya?ml$/"],
       matchStrings: [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*GITLEAKS_VERSION:\\s*\"(?<currentValue>[^\"]+)\"",
+        "repo:\\s*https://github\\.com/(?<depName>[\\w.-]+/[\\w.-]+?)(?:\\.git)?\\s*\\n\\s*rev:\\s*(?<currentDigest>[0-9a-f]{40})\\s*#\\s*(?<currentValue>v?\\d[\\w.+-]*)",
       ],
+      datasourceTemplate: "github-tags",
     },
     {
       customType: "regex",

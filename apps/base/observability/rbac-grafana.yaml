@@ -1,0 +1,34 @@
+# Read access for Grafana's dashboards sidecar, which searches every namespace
+# (sidecar.dashboards.searchNamespace: ALL) for ConfigMaps labelled grafana_dashboard. The chart's
+# own roles add `secrets`; this one is the same without it (grafana.yaml: rbac.create false,
+# sidecar.dashboards.resource: configmap). Accepted residual: ConfigMaps stay readable cluster-wide;
+# moving the dashboards to services-observability and narrowing searchNamespace would remove it.
+# Named differently from the chart's grafana-clusterrole so Helm's cleanup cannot delete it.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grafana-dashboard-reader
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: grafana
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-dashboard-reader
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: grafana
+subjects:
+  - kind: ServiceAccount
+    name: grafana
+    namespace: services-observability
+roleRef:
+  kind: ClusterRole
+  name: grafana-dashboard-reader
+  apiGroup: rbac.authorization.k8s.io

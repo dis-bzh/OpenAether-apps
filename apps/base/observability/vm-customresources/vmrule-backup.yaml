@@ -77,3 +77,129 @@ spec:
           annotations:
             summary: "Backup suspended for > 6 h: {{ $labels.namespace }}/{{ $labels.cronjob }}"
             description: "kubectl patch cronjob -n {{ $labels.namespace }} {{ $labels.cronjob }} -p '{\"spec\":{\"suspend\":false}}'"  # yamllint disable-line rule:line-length
+
+    # What the three rules above cannot see: the MONTHLY restore tests that never run, and the CNPG base backups and
+    # WAL archive (barman), which the restic CronJobs do not cover. CNPG metrics come from the cnpg VMPodScrape.
+    - name: openaether-backups-verification
+      interval: 5m
+      rules:
+        # 4) A restore test that stopped running. BackupJobFailed catches a FAILED run, not an absent one, and a
+        #    backup nobody restores is a hope. Monthly schedule (1st, 04:xx): 35 days leaves four days of margin.
+        - alert: RestoreTestStale
+          expr: |
+            time() - max by (namespace, cronjob) (
+              kube_cronjob_status_last_schedule_time{namespace=~"foundation-.*", cronjob=~".*-restore-test"}
+            ) > 35 * 86400
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "Restore test not run for > 35 days: {{ $labels.namespace }}/{{ $labels.cronjob }}"
+            description: "Suspended? kubectl get cronjob -n {{ $labels.namespace }} {{ $labels.cronjob }}."
+
+        # 5) A CronJob of the set is missing while its siblings exist (a deleted file, a Kustomization that pruned it).
+        #    Silent when NONE exists: a cluster without the backup brick must not alert for ever.
+        - alert: BackupCronJobMissing
+          expr: |
+            (
+              absent(kube_cronjob_info{namespace="foundation-vault", cronjob="openbao-snapshot"})
+              or absent(kube_cronjob_info{namespace="foundation-vault", cronjob="openbao-snapshot-restore-test"})
+              or absent(kube_cronjob_info{namespace="foundation-databases", cronjob="cnpg-dump"})
+              or absent(kube_cronjob_info{namespace="foundation-databases", cronjob="cnpg-dump-restore-test"})
+            ) and on() (count(kube_cronjob_info{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"}) > 0)
+          for: 30m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "Backup CronJob {{ $labels.cronjob }} no longer exists"
+            description: "flux get kustomization backup; the other backup CronJobs are still present."
+
+        # 6) WAL archiving to the object store fails: PITR stops advancing, and the unarchived WAL piles up on the
+        #    database volume until the instance stops.
+        - alert: CnpgWalArchiveFailing
+          expr: |
+            sum by (cnpg_io_cluster) (increase(cnpg_pg_stat_archiver_failed_count[30m])) > 0
+          for: 15m
+          labels:
+            severity: critical
+            component: backup
+          annotations:
+            summary: "CNPG {{ $labels.cnpg_io_cluster }}: WAL archiving fails"
+            description: >-
+              barman cannot write to the object store (credentials, endpoint, egress).
+              kubectl logs -n foundation-databases <primary-pod> -c postgres | grep -i archiv.
+
+        # 7) The last base backup failed more recently than the last success.
+        - alert: CnpgBackupFailed
+          expr: |
+            max by (cnpg_io_cluster) (cnpg_collector_last_failed_backup_timestamp)
+              > max by (cnpg_io_cluster) (cnpg_collector_last_available_backup_timestamp)
+          for: 10m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "CNPG {{ $labels.cnpg_io_cluster }}: the last base backup failed"
+            description: "kubectl get backup -n foundation-databases; kubectl describe backup <name>."
+
+        # 8) No base backup for 48 h although the schedule is daily (03:10 / 03:25). A cluster that never had one
+        #    reports 0 and is left out; the first success arms the rule.
+        - alert: CnpgBackupStale
+          expr: |
+            max by (cnpg_io_cluster) (cnpg_collector_last_available_backup_timestamp) > 0
+              and time() - max by (cnpg_io_cluster) (cnpg_collector_last_available_backup_timestamp) > 48 * 3600
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "CNPG {{ $labels.cnpg_io_cluster }}: no base backup for 48 h"
+            description: "kubectl get scheduledbackup -n foundation-databases; the ScheduledBackup may be suspended."
+
+        # 9) The CNPG metrics are gone: rules 6 to 8 are blind.
+        - alert: CnpgMetricsAbsent
+          expr: absent(cnpg_collector_up)
+          for: 30m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "No CNPG metrics: WAL archive and base backup alerts are blind"
+            description: "The CNPG CiliumNetworkPolicy must accept vmagent on :9187 (cnpg VMPodScrape)."
+
+        # 4) The escrow check (foundation-vault, daily) has not SUCCEEDED for 36 h: a production OpenBao whose seal key
+        #    escrow nobody attested (or attested over a year ago), see the vault README, Day 0. A development cluster
+        #    always passes, so it never fires there. Warning first: it asks for an operator action, not for an outage.
+        #    kube-state-metrics emits the success time only once a run has succeeded, so a CronJob that has NEVER
+        #    succeeded (the case this alert exists for) is the second branch: it exists for over 36 h with no success.
+        - alert: OpenBaoEscrowNotAttested
+          expr: |
+            (
+              time() - max by (namespace, cronjob) (
+                kube_cronjob_status_last_successful_time{namespace="foundation-vault", cronjob="openbao-escrow-check"}
+              ) > 36 * 3600
+            )
+            or
+            (
+              absent(
+                kube_cronjob_status_last_successful_time{namespace="foundation-vault", cronjob="openbao-escrow-check"}
+              )
+              and on() (
+                time() - max(kube_cronjob_created{namespace="foundation-vault", cronjob="openbao-escrow-check"})
+                > 36 * 3600
+              )
+            )
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "The OpenBao seal-key escrow is not attested (or the attestation is stale)"
+            description: >-
+              The openbao-escrow-check Job fails: no ConfigMap openbao-escrow-ack, or it is older than a year,
+              or it is malformed. Losing the seal key loses every secret and every raft snapshot. Logs:
+              kubectl -n foundation-vault logs job/<latest openbao-escrow-check job>.
+              Procedure: the vault README, Day 0.
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md"

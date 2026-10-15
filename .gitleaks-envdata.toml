@@ -83,11 +83,15 @@ tags = ["environment-data"]
     # `task security` scans the working tree with --no-git, and a CHANGELOG full
     # of "7.0.4.2" release numbers drowns the signal there.
     '''\.terraform.*/''',
-    # Vendored upstream manifests: their contents are not ours to edit, and a chart's
-    # four-part versions and example addresses read as routable IPs.
+    # Vendored upstream dumps (renovate.json5 ignorePaths): their contents are not
+    # ours to edit and they are replaced whole on re-vendoring.
     '''apps/base/kyverno/kyverno-.*\.yaml''',
-    # Vendored Gateway API CRDs: their examples use 1.2.3.4.
+    '''apps/base/cnpg/cnpg-.*\.yaml''',
+    '''apps/base/external-secrets/install\.yaml''',
+    '''apps/base/orc/install\.yaml''',
     '''apps/base/platform/gateway-api/standard-install\.yaml''',
+    '''apps/base/platform/local-path-provisioner/local-path-storage\.yaml''',
+    '''apps/base/cluster-api-clusters/flux-gotk/gotk-components\.yaml''',
     # This file's own examples.
     '''\.gitleaks\.toml''',
   ]

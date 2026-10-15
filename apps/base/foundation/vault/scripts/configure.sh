@@ -102,6 +102,10 @@ application_secrets() {
   d="$(P="$(rand 32 32)" jq -nc '{username:"zitadel",password:$ENV.P}')"; D="$d" kv_create zitadel/db D
   # Zitadel's master key must be EXACTLY 32 characters.
   d="$(K="$(rand 32 32)" jq -nc '{masterkey:$ENV.K}')";                   D="$d" kv_create zitadel/masterkey D
+  # The first human admin of Zitadel (FirstInstance), instead of upstream's public Password1!. `rand` is
+  # alphanumeric, so the suffix guarantees the four character classes of Zitadel's password policy (a missing
+  # class makes the setup Job fail, and with it the whole identity layer). Forced to change at the first login.
+  d="$(P="$(rand 28 28)Aa1!" jq -nc '{username:"zitadel-admin",password:$ENV.P}')"; D="$d" kv_create zitadel/admin D
   # The restic repositories' password. Without it the backups are undecryptable the day OpenBao is lost, so an
   # operator reads it ONCE with the openaether-admin identity and escrows it (README): it is not in any log.
   d="$(P="$(rand 48 48)" jq -nc '{password:$ENV.P}')";                    D="$d" kv_create backup/restic D

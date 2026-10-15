@@ -52,7 +52,7 @@ To enable a profile: point the root Flux Kustomization at its path
 ## Health gates
 
 A Kustomization without `wait: true` or `healthChecks` is "Ready" as soon as its objects are applied, not when they work. In
-the `apps/flux/management` render (34 Kustomizations) these 10 have no health gate:
+the `apps/flux/management` render (35 Kustomizations) these 11 have no health gate:
 
 <!-- health-gates:begin (pinned by scripts/dev/test-flux-health-gates.sh) -->
 - backup-databases
@@ -62,12 +62,13 @@ the `apps/flux/management` render (34 Kustomizations) these 10 have no health ga
 - flux-egress
 - foundation-vault
 - identity
+- kyverno-policies-eso
 - observability
 - services-gateway
 - storage-backup-target
 <!-- health-gates:end -->
 
-On a real management cluster `OpenAether-infra` adds an 11th (`openaether-platform`), absent from this repository: 11 of 35.
+On a real management cluster `OpenAether-infra` adds a 12th (`openaether-platform`), absent from this repository: 12 of 36.
 Adding or removing a `wait`/`healthChecks` changes this list; the test fails until it is updated.
 
 ## Invariant to maintain

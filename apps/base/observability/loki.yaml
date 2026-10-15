@@ -1,7 +1,9 @@
 # OpenAether 0.5.0 Sprint C — Loki HA (log storage)
 # ──────────────────────────────────────────────────────────────────
-# Mode: SingleBinary x2 (simple to operate, HA through Loki replication).
-# Backend: S3 (MinIO locally, the cloud's native S3 through an overlay).
+# Mode: SingleBinary x3, replication_factor 2 (simple to operate). Three, not two: with 2
+# replicas and RF 2 a write needs both, so one pod down (drain, upgrade) rejects every push.
+# With 3, one can be down. Capacity: +100m CPU / +256Mi memory requested per replica.
+# Backend: S3 (local MinIO or the provider's S3, chosen by the seeded endpoint).
 # replication_factor=2: every chunk is replicated across both instances.
 #
 # S3 destination: ExternalSecret loki-s3-credentials (externalsecret-loki.yaml),
@@ -14,6 +16,10 @@
 #
 # schemaConfig v13 (tsdb): the recommended schema since Loki 2.8+.
 # auth_enabled=false: no multi-tenant auth (private cluster).
+#
+# Retention: 8760h (365 days; ANSSI hygiene M36, PA-012 R25), ENFORCED by the compactor: the
+# limit alone deletes nothing. Do not turn the compactor on with a shorter value: it deletes
+# at once what is older. The local overlay (local/) shortens it to protect the MinIO disk.
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
@@ -93,23 +99,16 @@ spec:
       targetPath: loki.storage.bucketNames.admin
   values:
     deploymentMode: SingleBinary
-    sidecar:
-      securityContext:
-        readOnlyRootFilesystem: true
-        runAsNonRoot: true
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-            - ALL
-        seccompProfile:
-          type: RuntimeDefault
     singleBinary:
-      replicas: 2
+      replicas: 3
       securityContext:
         fsGroup: 10001
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
+      # Preferred, not required: clusters have 1 to 3 workers, and a required rule would leave a
+      # replica Pending (the HelmRelease then fails and rolls back). The chart exposes no
+      # topologySpreadConstraints for the single binary, so this is the only spread.
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -145,6 +144,15 @@ spec:
       auth_enabled: false
       commonConfig:
         replication_factor: 2
+      # Without this block retention_enabled stays false and limits_config.retention_period is
+      # never applied. Every replica runs the compactor; Loki elects one (compactor ring), to
+      # be confirmed in the lab.
+      compactor:
+        working_directory: /var/loki/compactor
+        retention_enabled: true
+        delete_request_store: s3
+        compaction_interval: 10m
+        retention_delete_delay: 2h
       storage:
         type: s3
         # The endpoint, the region and the three bucket names are NOT set here: they come from the
@@ -154,7 +162,8 @@ spec:
         # "at least 2 live replicas required"), measured 2026-10-13.
         s3:
           s3ForcePathStyle: true
-          insecure: true
+          # No `insecure` here (chart default false): the seeded endpoint decides the scheme,
+          # https:// for a provider; the local overlay sets it true for the MinIO.
       schemaConfig:
         configs:
           - from: "2024-01-01"
@@ -165,11 +174,29 @@ spec:
               prefix: loki_index_
               period: 24h
       limits_config:
-        retention_period: 30d
+        retention_period: 8760h
         reject_old_samples: true
         reject_old_samples_max_age: 168h
         ingestion_rate_mb: 10
         ingestion_burst_size_mb: 20
+    # No cluster-wide read of ConfigMaps and Secrets. The chart's rules sidecar (loki_rule
+    # ConfigMaps) is the only reason for that ClusterRole, and no Loki ruler is deployed;
+    # namespaced keeps the chart from rendering it back if the sidecar is ever re-enabled;
+    # the 0.2.0 container-level securityContext stays so that re-enabling it brings no bare container.
+    sidecar:
+      securityContext:
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
+      rules:
+        enabled: false
+    rbac:
+      namespaced: true
     # No bundled MinIO (we use our own instance).
     minio:
       enabled: false
@@ -194,10 +221,22 @@ spec:
       replicas: 0
     write:
       replicas: 0
+    # Never evict the last replica. minAvailable 2 would keep the write quorum, but the pods are
+    # pinned to their node by local-path, so a drain of a node holding two of them would wait
+    # forever for the first to come back. An unready pod never blocks an eviction.
+    podDisruptionBudget:
+      minAvailable: 1
+      unhealthyPodEvictionPolicy: AlwaysAllow
     monitoring:
       serviceMonitor:
         enabled: false
       selfMonitoring:
         enabled: false
-      lokiCanary:
-        enabled: false
+    # Top-level in chart 6.25.0 (it was under monitoring:, which is ignored): no canary
+    # DaemonSet on every node, nothing reads its metrics.
+    lokiCanary:
+      enabled: false
+    # The chart refuses to render with the canary off while its helm test is on
+    # (validate.yaml), and Flux runs no helm test here.
+    test:
+      enabled: false

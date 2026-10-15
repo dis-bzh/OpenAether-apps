@@ -65,7 +65,7 @@ cp "$CONFIG" "$tmp/.gitleaks-envdata.toml"
 git -C "$tmp" add -A
 git -C "$tmp" -c user.email=t@t -c user.name=t commit -q -m base
 
-printf '%s\n' "${CATCH[@]}" "${PASS[@]}" > "$tmp/probe.tf"
+printf '%s\n' "${CATCH[@]}" "${PASS[@]}" > "$tmp/probe.yaml"
 git -C "$tmp" add -A
 git -C "$tmp" -c user.email=t@t -c user.name=t commit -q -m probe
 
@@ -74,7 +74,7 @@ git -C "$tmp" -c user.email=t@t -c user.name=t commit -q -m probe
    --report-format json --report-path out.json >/dev/null 2>&1) || true
 
 NCATCH=${#CATCH[@]} NPASS=${#PASS[@]} REPORT="$tmp/out.json" \
-python3 - "$tmp/probe.tf" <<'PY'
+python3 - "$tmp/probe.yaml" <<'PY'
 import json, os, sys
 
 lines = open(sys.argv[1]).read().splitlines()

@@ -10,6 +10,10 @@ kind: Kustomization
 # CI lane .github/workflows/local-docker.yml (docs/local-docker.md); check with
 # `kubectl get kustomization -A`.
 #
+# Observability is the exception to `apps/base/<x>`: apply `apps/base/observability-local` (one
+# Loki replica, RF 1, http to the MinIO). The Flux repoint below takes effect only if
+# Flux is unsuspended; a hand-applied `apps/base/observability` gets the 3-replica production Loki.
+#
 # Two local specifics, both patched below:
 #   * the LB-IPAM pool must point at the Docker bridge (10.5.0.240-254) — the
 #     base pool targets the Scaleway VPC and every LoadBalancer stays <pending>;
@@ -36,6 +40,13 @@ patches:
       name: storage
     patch: |-
       - { op: replace, path: /spec/path, value: ./apps/base/storage/local }
+  # Loki locally (see the overlay). Effective only once this Kustomization is unsuspended.
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: observability
+    patch: |-
+      - { op: replace, path: /spec/path, value: ./apps/base/observability-local }
   # LB-IPAM pool repointed at the local overlay (Docker bridge range 10.5.0.0/24
   # instead of the Scaleway private VPC 172.16.12.0/22) — otherwise every
   # LoadBalancer Service (including the openaether Gateway) stays <pending> locally.

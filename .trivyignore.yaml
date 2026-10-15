@@ -1,0 +1,47 @@
+# Accepted `trivy config` findings on the rendered DAG (HIGH, CRITICAL), the baseline of the manifest-scan job.
+# Every entry is a vendored upstream dump or a false positive, with the reason in `statement`. A NEW finding on any
+# other brick, or a new rule on a listed brick, fails the job. A rule listed for a brick masks a second finding of
+# the same rule in the same brick: read the job's table when a dump is re-vendored.
+misconfigurations:
+  - id: KSV-0014
+    paths:
+      - apps__base__orc.yaml
+      - apps__base__platform__local-path-provisioner.yaml
+    statement: "vendored upstream dump: its container posture is upstream's, replaced on re-vendoring"
+  - id: KSV-0041
+    paths:
+      - apps__base__cnpg.yaml
+      - apps__base__external-secrets.yaml
+      - apps__base__kyverno.yaml
+      - apps__base__orc.yaml
+    statement: "the operator manages Secrets by design; the RBAC is the upstream release, not ours to trim"
+  - id: KSV-0046
+    paths:
+      - apps__base__kyverno.yaml
+    statement: "the operator needs these verbs on its own CRDs and cluster resources; upstream release"
+  - id: KSV-0053
+    paths:
+      - apps__base__cnpg.yaml
+    statement: "CNPG execs into Postgres pods for failover and backups; upstream release"
+  - id: KSV-0056
+    paths:
+      - apps__base__cnpg.yaml
+      - apps__base__kyverno.yaml
+      - apps__base__orc.yaml
+    statement: "the operator manages Services and Ingress objects; upstream release"
+  - id: KSV-0109
+    paths:
+      - apps__base__foundation__vault.yaml
+    statement: "false positive: the scripts mention the word secret, no value is in the ConfigMap"
+  - id: KSV-0114
+    paths:
+      - apps__base__cnpg.yaml
+      - apps__base__external-secrets.yaml
+      - apps__base__kyverno.yaml
+    statement: "webhook configurations are edited by the operator itself (cert rotation); upstream release"
+  - id: KSV-0118
+    paths:
+      - apps__base__external-secrets.yaml
+      - apps__base__kyverno.yaml
+      - apps__base__platform__local-path-provisioner.yaml
+    statement: "a vendored upstream dump with the default security context; re-vendored on upgrade"
