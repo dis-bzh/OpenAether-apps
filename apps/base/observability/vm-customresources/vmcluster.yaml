@@ -30,7 +30,7 @@ spec:
   replicationFactor: 2
   vminsert:
     replicaCount: 2
-    containerSecurityContext:
+    securityContext:
       runAsNonRoot: true
       allowPrivilegeEscalation: false
       capabilities:
@@ -61,7 +61,7 @@ spec:
       minAvailable: 1
   vmstorage:
     replicaCount: 2
-    containerSecurityContext:
+    securityContext:
       runAsNonRoot: true
       allowPrivilegeEscalation: false
       capabilities:
@@ -101,7 +101,7 @@ spec:
       minAvailable: 1
   vmselect:
     replicaCount: 2
-    containerSecurityContext:
+    securityContext:
       runAsNonRoot: true
       allowPrivilegeEscalation: false
       capabilities:
