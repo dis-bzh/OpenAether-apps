@@ -9,6 +9,11 @@ metadata:
     openaether.io/component: "gateway"
 spec:
   gatewayClassName: istio
+  infrastructure:
+    parametersRef:
+      group: ""
+      kind: ConfigMap
+      name: openaether-gateway-options
   listeners:
     - name: http
       port: 80
@@ -29,3 +34,24 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openaether-gateway-options
+  namespace: services-gateway
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "gateway"
+data:
+  # Istio merges this onto the Deployment it generates (Gateway API deployment customization). Kyverno reads
+  # seccomp on the CONTAINER and the generated istio-proxy only carries it on the pod (#47).
+  deployment: |
+    spec:
+      template:
+        spec:
+          containers:
+            - name: istio-proxy
+              securityContext:
+                seccompProfile:
+                  type: RuntimeDefault
