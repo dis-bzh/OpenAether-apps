@@ -28,6 +28,11 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   `vmbackup` first if the history matters. New clusters are not affected. Rung: real cloud, once (Scaleway, a cluster moved by Flux
   from the candidate's earlier commit).
 
+- **A static guard for the two mistakes of this block** (`scripts/dev/test-container-security-context.py`, in CI): the VictoriaMetrics CRs must
+  carry a complete `spec.securityContext` with a non-zero uid and no `containerSecurityContext` (a field the operator ignores), and no
+  Gateway may use `spec.infrastructure` while the vendored Gateway API CRDs are older than v1.2. Its self-test fails on each mistake.
+  Rung: CI (static; it proves the manifests, not the operator).
+
 ### Changed
 
 - **Kyverno `require-security-context`: the container-level `securityContext` it reads is now set on the observability stack, cert-manager,
