@@ -17,7 +17,33 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **VictoriaMetrics data written as root cannot be opened by the new non-root workloads (#47).** vmstorage and vmselect now run as
+  uid 65534; on a cluster that ran 0.1.1 their local-path volumes hold files owned by root and the pods crash with
+  `cannot create lock file … permission denied` (seen on Scaleway, 2026-10-15). `fsGroup` does not help: the local-path
+  provisioner's volumes are not ownership-managed. What worked: delete the PVC and the pod of each vmstorage, then of each
+  vmselect (`vmselect-cachedir-*` is a cache), one at a time. **That loses the metric history of that node; with
+  `replicationFactor: 2` the second node keeps its own until it is treated too, so treating both loses all of it.** Take a
+  `vmbackup` first if the history matters. New clusters are not affected. Rung: real cloud, once (Scaleway, a cluster moved by Flux
+  from the candidate's earlier commit).
+
 ### Changed
+
+- **Kyverno `require-security-context`: the container-level `securityContext` it reads is now set on the observability stack, cert-manager,
+  the CNPG operator and istiod (#47, #37).** Grafana and its sidecar, kube-state-metrics, node-exporter, the VictoriaMetrics operator,
+  Alloy and its config reloader, Loki and its rules sidecar, and every VMAgent / VMAlert / VMAlertmanager / VMCluster pod (their
+  `spec.securityContext` takes the pod and container fields flat; `containerSecurityContext` is not a field of these CRs and was
+  silently ignored) run with `runAsNonRoot`, `allowPrivilegeEscalation: false`, `drop: [ALL]` and `seccompProfile: RuntimeDefault`.
+  The VictoriaMetrics images run as root, so they also get `runAsUser: 65534`: with `runAsNonRoot` alone the containers fail with
+  `CreateContainerConfigError`. **Measured on a Scaleway management cluster, 2026-10-15: 82 results before (0.1.1) and 2 genuine ones
+  after, on the policy report:** the Istio-generated `istio-proxy` of the north-south Gateway and of the waypoint carry seccomp on the pod
+  but not on the container, and `Gateway.spec.infrastructure` (the only knob) is not in the Gateway API v1.1.0 CRDs this repository
+  installs (v1.2), so it stays until those are bumped. The rest of the report was stale entries for pods the policy now exempts.
+  `ztunnel` (the ambient node proxy, root with NET_ADMIN by design) and the Outscale CAPI provider controller (an upstream manifest)
+  are exempt by name/namespace; the registry allow-list gains the single image `wait4x/wait4x` (the Zitadel chart's init container,
+  which was the one `restrict-image-registries` result). **The three policies stay in Audit** (#37): Enforce needs a refreshed report at
+  zero and a lab that survives a node roll, and neither exists yet. Rung: real cloud, once, by hand.
 
 - **Comments and docs follow OpenAether-infra's Loki bucket (#53 rest, infra #302).** The seed now gives Loki a bucket of its own
   and a dedicated key pair when the operator supplies one; with the shared keys it can still reach the backups. No manifest
