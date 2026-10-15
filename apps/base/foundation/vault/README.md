@@ -67,7 +67,8 @@ The cluster can not do these for you, and **losing the seal key loses every secr
 kubectl -n foundation-vault get secret openbao-seal-key -o jsonpath='{.data.key}' | base64 -d \
   | gpg --encrypt --recipient <ops-key-a> --recipient <ops-key-b> --output openbao-seal-key.gpg
 #    or a k-of-n split (no single custodian can open it: survives one leak), each share encrypted to a different person and kept
-#    in a different place; `ssss-split -t 2 -n 3 -x` or `gfsplit -n 2 -m 3` (neither tried on this platform).
+#    in a different place; `ssss-split -t 2 -n 3 -x` or `gfsplit -n 2 -m 3` (neither tried on this platform). ssss works on
+#    hex text: feed it `... | base64 -d | xxd -p -c 64` (not the raw bytes) and see step 5 for the way back.
 # 2. Keep a copy of the (already PGP-encrypted) recovery shares: the Secret dies with the cluster.
 for i in 1 2 3; do kubectl -n foundation-vault get secret openbao-recovery-shares -o jsonpath="{.data.share-$i}" | base64 -d > openbao-share-$i.b64; done
 # 3. Escrow the restic password: without it the backups are unreadable the day OpenBao is lost.
@@ -78,7 +79,9 @@ bao_admin kv get -mount=secret -field=password zitadel/admin
 
 **5. Prove the escrow, then attest it.** An escrow nobody has opened is a hope. Reconstruct the key from the escrow alone (a
 custodian decrypts, or k of n shares are combined) into `key.bin`, and compare its hash with the live Secret's; only then say
-so to the cluster:
+so to the cluster. `key.bin` must hold the RAW 32 bytes, as `gpg --decrypt` writes them: from `ssss-combine -x` (hex text) first run
+`xxd -r -p < hex.txt > key.bin`; `gfsplit`'s `gfcombine` already yields raw bytes. A hex `key.bin` reports MISMATCH below, which means
+"decode it", not "the escrow is wrong" (the ssss path is untried, like the split itself).
 
 ```bash
 LIVE="$(kubectl -n foundation-vault get secret openbao-seal-key -o jsonpath='{.data.key}' | base64 -d | sha256sum | cut -d' ' -f1)"

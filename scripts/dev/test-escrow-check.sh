@@ -90,6 +90,28 @@ cases() {
   if grep -qi "secret" "$FIX/calls"; then FAIL=$((FAIL+1)); echo "  FAIL [$m] the script asked kubectl for a Secret"; else PASS=$((PASS+1)); echo "  ok   [$m] only ConfigMaps are read, never a Secret"; fi
 }
 
+# The manifest claims "get on three ConfigMaps, never the Secret": assert them on the file, not just in the script.
+echo "=== escrow-check.yaml, the manifest ==="
+MANIFEST_OUT="$(python3 -I - "$ROOT/apps/base/foundation/vault/escrow-check.yaml" <<'PY'
+import sys, yaml
+docs = [d for d in yaml.safe_load_all(open(sys.argv[1])) if d]
+role = next(d for d in docs if d["kind"] == "Role")
+ok = (len(role["rules"]) == 1 and role["rules"][0]["apiGroups"] == [""] and role["rules"][0]["resources"] == ["configmaps"]
+      and role["rules"][0]["verbs"] == ["get"]
+      and sorted(role["rules"][0]["resourceNames"]) == ["openbao-escrow-ack", "openbao-init-state", "openbao-operator-keys"])
+print(("ok   " if ok else "FAIL ") + "the Role grants get on the three named ConfigMaps and nothing else (no Secret, no list)")
+pod = next(d for d in docs if d["kind"] == "CronJob")["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+c = pod["containers"][0]
+tmp = [m for m in c.get("volumeMounts", []) if m["mountPath"] == "/tmp"]
+ok = (c["securityContext"]["readOnlyRootFilesystem"] is True and len(tmp) == 1
+      and {e["name"]: e.get("value") for e in c.get("env", [])}.get("HOME") == "/tmp"
+      and any(v["name"] == tmp[0]["name"] and "emptyDir" in v for v in pod["volumes"]))
+print(("ok   " if ok else "FAIL ") + "read-only root with an emptyDir /tmp as HOME (kubectl's discovery cache)")
+PY
+)" || MANIFEST_OUT="FAIL the manifest check did not run"
+echo "$MANIFEST_OUT" | sed 's/^/  /'
+PASS=$((PASS + $(grep -c '^ok' <<<"$(echo "$MANIFEST_OUT" | sed 's/^ *//')")))
+FAIL=$((FAIL + $(grep -c '^FAIL' <<<"$(echo "$MANIFEST_OUT" | sed 's/^ *//')")))
 echo "=== escrow-check.sh, host bash ==="
 cases host
 echo "=== escrow-check.sh, $IMAGE ==="

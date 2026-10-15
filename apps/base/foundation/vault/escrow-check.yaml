@@ -80,12 +80,20 @@ spec:
               configMap:
                 name: openbao-escrow-check-script
                 defaultMode: 0555
+            # kubectl writes its discovery cache under $HOME (the image has HOME=/, on a read-only root).
+            - name: tmp
+              emptyDir:
+                medium: Memory
+                sizeLimit: 16Mi
           containers:
             - name: check
               # Same image as openbao-init (kubectl and a shell); the `docker.io/` prefix is mandatory
               # for restrict-image-registries.
               image: docker.io/alpine/k8s:1.36.5
               command: ["/bin/bash", "/scripts/escrow-check.sh"]
+              env:
+                - name: HOME
+                  value: /tmp
               securityContext:
                 capabilities:
                   drop: ["ALL"]
@@ -98,6 +106,8 @@ spec:
                 - name: scripts
                   mountPath: /scripts
                   readOnly: true
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 requests: { cpu: 10m, memory: 32Mi }
                 limits: { cpu: 200m, memory: 128Mi }
