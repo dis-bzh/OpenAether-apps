@@ -92,7 +92,7 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - local-path-provisioner
-            - --debug
+            # No --debug: it logs every volume path and helper-pod step; the default level is enough (ANSSI PA-012 R6).
             - start
             - --config
             - /etc/config/config.json

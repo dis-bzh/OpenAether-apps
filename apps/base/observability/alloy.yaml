@@ -123,12 +123,23 @@ spec:
             forward_to = [loki.process.scrub.receiver]
           }
 
-          // ── Scrub tokens that travel in a query string ─────────────────
+          // ── Scrub tokens that travel in a query string, label the OpenBao audit trail ─────
           // Zitadel's access log keeps the request URL, and an OIDC logout puts the ID token in it
           // (end_session?id_token_hint=...). Loki keeps lines for a year: blank the value, keep the parameter.
           // The line filter keeps the cost off every other line. scripts/dev/test-alloy-scrub.sh runs this block.
           loki.process "scrub" {
             forward_to = [loki.write.default.receiver]
+
+            // OpenBao writes its audit trail to the same stdout as its server log, both as JSON (log_format = json).
+            // Audit lines start with {"time":...,"type":"request"|"response"; the server log starts with {"@level".
+            // `{log_type="audit"}` then selects the trail without text matching (docs/detection.md).
+            stage.match {
+              // "type":"re..." is request or response, the only two audit types.
+              selector = `{namespace="foundation-vault",container="openbao"} |~ "^\\{\"time\":\"[^\"]+\",\"type\":\"re"`
+              stage.static_labels {
+                values = { log_type = "audit" }
+              }
+            }
 
             stage.match {
               selector = `{namespace="services-identity"} |~ "(?i)(_token_hint|_token|_secret|assertion)="`
@@ -145,6 +156,10 @@ spec:
               url = "http://loki.services-observability.svc.cluster.local:3100/loki/api/v1/push"
             }
             // External labels common to every log of this cluster.
+            // Constant on purpose: only the management cluster runs Alloy and Loki today (a spoke has no
+            // observability). Templating it needs a Flux substituteFrom on the cluster-identity ConfigMap, which the
+            // local Docker lane does not have (scripts/dev/local-docker-lane.sh). Change it with the first profile
+            // that ships logs from another cluster.
             external_labels = {
               cluster = "management",
             }
