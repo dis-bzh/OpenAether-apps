@@ -51,10 +51,11 @@ spec:
     # goes ImagePullBackOff → the Helm install hangs. The chart defaults pull:
     #   ghcr.io/zitadel/zitadel(-login)  (OK), docker.io/alpine/k8s (helper kubectl),
     #   docker.io/wait4x/wait4x:3.6      (initContainer wait-for-zitadel).
-    # Kyverno restrict-image-registries is in Audit (non-blocking) → docker.io/*
-    # is only reported, not refused — exactly like openbao-init/bootstrap
-    # (docker.io/alpine/k8s), which already run. If Kyverno ever goes Enforce,
-    # mirror those 2 images to an allowed registry through tools.{kubectl,wait4x}.image.
+    # Kyverno restrict-image-registries is in Audit (non-blocking). alpine/* and the tagged image
+    # wait4x/wait4x are on its allow-list (an untagged or digest reference would be reported again,
+    # see kyverno-policies/restrict-image-registries.yaml): when the chart changes either image,
+    # read the policy report. To take them off Docker Hub, mirror them through
+    # tools.{kubectl,wait4x}.image.
     #
     # tools.kubectl.image.tag left empty defaults to the cluster's own
     # Kubernetes version (chart default) — broke live 2026-07-30 on v1.36.3:

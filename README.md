@@ -7,7 +7,7 @@
 🇫🇷 [Version française](README.fr.md)
 
 **Versions.** apps 0.2.0 is for new clusters: a cluster initialised by 0.1.0 cannot be moved to it in place, and a 0.1.1 cluster
-needs its VictoriaMetrics volumes recreated (CHANGELOG, Upgrade notes). It pairs with OpenAether-infra 0.2.1 (not yet cut), not with
+needs its VictoriaMetrics volumes recreated, which loses their metric history (CHANGELOG, Upgrade notes; #71). It pairs with OpenAether-infra 0.2.1 (not yet cut), not with
 0.2.0. The pairing table, what was validated where and what is not fixed are in [CHANGELOG.md](CHANGELOG.md).
 
 ## Principle: fixed foundation + modular pick

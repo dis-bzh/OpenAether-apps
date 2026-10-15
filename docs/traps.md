@@ -63,7 +63,7 @@ belong to. What follows has no skill of its own yet.
 ## Pod security (Kyverno `require-security-context`)
 
 - **The policy reads the CONTAINER, not the pod.** A chart that sets `runAsNonRoot` and `seccompProfile` in the pod
-  `securityContext` and nothing on its containers is a violation. Measured on 0.1.1: 82 results across the observability
+  `securityContext` and nothing on its containers is a violation. Measured on the 0.1.1 candidate: 82 results across the observability
   stack, cert-manager, the CNPG operator and istiod; set the container-level values per chart (`containerSecurityContext`
   or the chart's own name for it) and read the policy report again.
 - **The VictoriaMetrics CRs take `spec.securityContext`, with pod and container fields in one flat block.**
