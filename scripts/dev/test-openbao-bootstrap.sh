@@ -198,7 +198,8 @@ if run_script dev 18211 init.sh OA_TEST_MAKE_TOKEN_FILE="$T/dev/boot.hdr"; then 
 grep -q "openaether.io/dev-bootstrap=true" "$T/dev/k8s/secret/openbao-recovery-dev.labels" 2>/dev/null && ok "…and labelled as development" || bad "development Secret not labelled"
 [ ! -d "$T/dev/k8s/secret/openbao-recovery-shares" ] && ok "no production shares Secret in development mode" || bad "production shares Secret exists in development mode"
 grep -q "root token revoked" "$T/dev/init.sh.out" && ok "the root token was revoked" || bad "no revocation line"
-AUDIT=0; for _ in $(seq 1 15); do
+# CI runners start OpenBao slowly: 15 s was a race (one red run on the 2026-10-15 wave-1 PR, green locally in a minute).
+AUDIT=0; for _ in $(seq 1 90); do
   docker logs bao-test-dev 2>&1 | grep -q "enabled audit backend: path=stdout/ type=file" && { AUDIT=1; break; }; sleep 1
 done
 [ "$AUDIT" = 1 ] && ok "the audit device from the configuration is enabled" || bad "the audit device is not enabled"
