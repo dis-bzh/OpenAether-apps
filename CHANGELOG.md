@@ -200,6 +200,12 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **Two 0.2.0 lines the merge had dropped are back (review of the ANSSI branch, L10, L11).** `.gitleaks-envdata.toml` has its
+  `\.terraform.*/` path exclusion again (this repository has no such directory, so nothing changed today), and Loki's
+  `sidecar.securityContext` of 0.2.0 sits next to `sidecar.rules.enabled: false`: the rules sidecar does not exist now, but re-enabling
+  it no longer brings a container without the context. `scripts/dev/test-loki-render.sh` asserts the context in the values.
+  Rung: render and static checks, not run on a cluster. It does NOT re-enable the sidecar.
+
 - **Loki can reach the provider's S3, enforces its retention and tolerates one pod down (ANSSI hardening B02;
   addresses PA-012 R9, R10, R25 and hygiene M36; refs #53).** The Loki network policy gains `rules.dns` on its DNS rule (without it
   Cilium never learns the S3 addresses and the FQDN rule matches nothing), and the Loki-to-Loki egress it lacked (memberlist

@@ -84,6 +84,12 @@ for env, replicas, rf, retention, insecure, pdb in (("base", 3, 2, 8760, False, 
           not kinds.get("ClusterRole") and not kinds.get("ClusterRoleBinding"))
     check(f"{env}: no rules sidecar container (loki-sc-rules)",
           not [c for d in sts for c in d["spec"]["template"]["spec"]["containers"] if "sc-rules" in c["name"]])
+    # The container does not exist (rules sidecar off), so only the values can prove the 0.2.0 context is still
+    # there for the day someone re-enables it.
+    sc = (yaml.safe_load(open(f"{work}/{env}-values.yaml")).get("sidecar") or {}).get("securityContext") or {}
+    check(f"{env}: sidecar.securityContext kept (non-root, no escalation, drop ALL, RuntimeDefault) next to rules.enabled false",
+          sc.get("runAsNonRoot") is True and sc.get("allowPrivilegeEscalation") is False
+          and sc.get("capabilities", {}).get("drop") == ["ALL"] and sc.get("seccompProfile", {}).get("type") == "RuntimeDefault")
     check(f"{env}: no loki-canary DaemonSet", not [d for d in kinds.get("DaemonSet", []) if "canary" in d["metadata"]["name"]])
     check(f"{env}: PodDisruptionBudget {'present with minAvailable 1' if pdb else 'absent'}",
           (len(kinds.get("PodDisruptionBudget", [])) == 1 and kinds["PodDisruptionBudget"][0]["spec"].get("minAvailable") == 1) if pdb

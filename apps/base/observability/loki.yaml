@@ -181,8 +181,18 @@ spec:
         ingestion_burst_size_mb: 20
     # No cluster-wide read of ConfigMaps and Secrets. The chart's rules sidecar (loki_rule
     # ConfigMaps) is the only reason for that ClusterRole, and no Loki ruler is deployed;
-    # namespaced keeps the chart from rendering it back if the sidecar is ever re-enabled.
+    # namespaced keeps the chart from rendering it back if the sidecar is ever re-enabled;
+    # the 0.2.0 container-level securityContext stays so that re-enabling it brings no bare container.
     sidecar:
+      securityContext:
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
       rules:
         enabled: false
     rbac:
