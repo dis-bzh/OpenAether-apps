@@ -17,6 +17,12 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+### Changed
+
+- **Comments and docs follow OpenAether-infra's Loki bucket (#53 rest, infra #302).** The seed now gives Loki a bucket of its own
+  and a dedicated key pair when the operator supplies one; with the shared keys it can still reach the backups. No manifest
+  changes: the ExternalSecret reads whatever `observability/loki-s3` holds. Not changed: 2 replicas with replication factor 2.
+
 ### Added
 
 - **Pull requests are scanned for environment data, not only credentials (#41).** A `leaks` job in `ci.yml` runs gitleaks with
