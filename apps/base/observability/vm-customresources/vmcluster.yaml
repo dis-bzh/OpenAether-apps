@@ -31,6 +31,9 @@ spec:
   vminsert:
     replicaCount: 2
     securityContext:
+      runAsUser: 65534
+      runAsGroup: 65534
+      fsGroup: 65534
       runAsNonRoot: true
       allowPrivilegeEscalation: false
       capabilities:
@@ -62,6 +65,9 @@ spec:
   vmstorage:
     replicaCount: 2
     securityContext:
+      runAsUser: 65534
+      runAsGroup: 65534
+      fsGroup: 65534
       runAsNonRoot: true
       allowPrivilegeEscalation: false
       capabilities:
@@ -102,6 +108,9 @@ spec:
   vmselect:
     replicaCount: 2
     securityContext:
+      runAsUser: 65534
+      runAsGroup: 65534
+      fsGroup: 65534
       runAsNonRoot: true
       allowPrivilegeEscalation: false
       capabilities:
