@@ -61,6 +61,28 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   Rung: CI and a local run over this tree (no finding after the allowlists). Not made a required check: that is a repository
   setting.
 
+### Validated
+
+- **The 0.2.0 candidate on three clouds, 2026-10-15, with OpenAether-infra `claude/infra-0.2.1` (not a tag).** Rung: real cloud, **once per
+  cloud**, driven by hand; nothing is repeated or unattended, and `cluster-up` still ends 201 on the documented `flux-system exists` line
+  until the Day-1 seeding has run. Management role, 3 control planes + 2 workers, `deploy_flux = true`, OpenBao in production mode with 3
+  throwaway PGP recovery keys, threshold 2, the apps followed by branch.
+  - **Scaleway, full DAG** (infra `4ae2357`, replica on OVH; Flux followed `claude/apps-0.2.0` through the commits of this block, so the
+    final tree was not the one that booted): 35 of 35 Kustomizations Ready about 3 minutes after the seeding; Loki chunks and index in its own
+    logs bucket while the backups bucket held only `cnpg/` (no Loki object); CNPG `grafana-db` and `zitadel-db` archiving True; Longhorn
+    BackupTarget available; `cluster-security` 30 of 31; strict plan "No changes". Found and fixed on this lab: the VictoriaMetrics CR field
+    name, the root user of its images, root-owned volumes (Upgrade notes), and a `Gateway.spec.infrastructure` attempt that broke the `istio`
+    Kustomization for about six minutes until reverted (that field needs Gateway API v1.2).
+  - **OVH, full DAG** (infra `39df1b8`, apps `82f5919`, replica on Scaleway): 35 of 35 about 2.5 minutes after the seeding, every pod Running 4
+    minutes later; Loki objects in its logs bucket, backups bucket `cnpg/` only; both CNPG clusters Ready and archiving; Longhorn available;
+    **the Kyverno report of this fresh cluster held exactly 2 results (the Istio-generated proxies), against 82 on 0.1.1**; no Cilium drop in a
+    40 s window; `cluster-security` 30 of 31; strict plan "No changes". One worker did not come up after boot (OVH, infra #49): hard-rebooted, `up` re-run.
+  - **Outscale, REDUCED profile only** (infra `39df1b8`, apps `82f5919` + a throwaway profile commit, 18 Kustomizations, no observability, CNPG,
+    Longhorn or Istio, so none of the entries above is observed there): 18 of 18 Ready; an OpenBao snapshot job pushed to both destinations
+    and the restic check found no error; `cluster-security` 25 of 31 (the four failures are the mesh checks, there is no Istio in that profile).
+  - **Not run:** a rolling upgrade or any upgrade from a 0.1.1 cluster beyond the Scaleway one that was moved by Flux commit by commit, Kyverno
+    Enforce, a DR restore, a CAPI child, the local Docker lane on prod mode. CI on the pull request is the other rung (see the PR).
+
 ## [0.1.1] — 2026-10-14
 
 **The fixes the first real Flux runs asked for, for new clusters.** Read *Upgrade notes* (a cluster
