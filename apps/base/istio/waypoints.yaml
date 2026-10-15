@@ -9,11 +9,6 @@ metadata:
     openaether.io/component: "istio"
 spec:
   gatewayClassName: istio
-  infrastructure:
-    parametersRef:
-      group: ""
-      kind: ConfigMap
-      name: istio-waypoint-options
   listeners:
     - name: mesh
       port: 15008
@@ -21,27 +16,6 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: istio-waypoint-options
-  namespace: foundation-service-mesh
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: "istio"
-data:
-  # Istio merges this onto the Deployment it generates (Gateway API deployment customization). Kyverno reads
-  # seccomp on the CONTAINER and the generated istio-proxy only carries it on the pod (#47).
-  deployment: |
-    spec:
-      template:
-        spec:
-          containers:
-            - name: istio-proxy
-              securityContext:
-                seccompProfile:
-                  type: RuntimeDefault
 ---
 # Waypoint par service via annotation (ex: openbao, keycloak, demo-app)
 # Meshed services declare: annotations: networking.istio.io/use-waypoint=istio-waypoint
