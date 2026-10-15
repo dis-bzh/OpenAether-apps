@@ -54,6 +54,36 @@ spec:
           - ALL
       seccompProfile:
         type: RuntimeDefault
+    # The chart's default collectors minus `secrets` and `configmaps` (chart 5.25.1 key): the default ClusterRole
+    # lists Secrets cluster-wide, which returns their data, and no rule, scrape or dashboard reads kube_secret_*
+    # or kube_configmap_*. A list REPLACES the default: a collector added upstream later must be added here.
+    collectors:
+      - certificatesigningrequests
+      - cronjobs
+      - daemonsets
+      - deployments
+      - endpoints
+      - horizontalpodautoscalers
+      - ingresses
+      - jobs
+      - leases
+      - limitranges
+      - mutatingwebhookconfigurations
+      - namespaces
+      - networkpolicies
+      - nodes
+      - persistentvolumeclaims
+      - persistentvolumes
+      - poddisruptionbudgets
+      - pods
+      - replicasets
+      - replicationcontrollers
+      - resourcequotas
+      - services
+      - statefulsets
+      - storageclasses
+      - validatingwebhookconfigurations
+      - volumeattachments
     # ⚠️ ONE replica, deliberately. `replicaCount: 2` used to sit here and this
     # chart's key is `replicas` — Helm ignored the value in silence and the
     # Deployment ran at 1 for as long as anyone had been reading it as HA.

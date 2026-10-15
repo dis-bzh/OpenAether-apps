@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Least privilege of the observability service accounts, checked on what the manifests really
-# produce: the charts rendered with the shipped values (alloy, grafana) plus the brick built by
+# produce: the charts rendered with the shipped values (alloy, grafana, kube-state-metrics) plus the brick built by
 # kustomize. Fails if any role reachable from these components reads Secrets, nodes/proxy, or
 # if a binding points at a role that does not exist. Loki's roles are in test-loki-render.sh.
 # Needs kubectl, helm, python3 with PyYAML (network for the charts). Rung: mocked/static.
@@ -9,7 +9,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 for bin in kubectl helm python3; do command -v "$bin" >/dev/null || { echo "$bin is required" >&2; exit 2; }; done
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
-CHARTS="alloy grafana"   # HelmRelease names rendered below
+CHARTS="alloy grafana kube-state-metrics"   # HelmRelease names rendered below
 
 kubectl kustomize "$ROOT/apps/base/observability" > "$WORK/brick.yaml"
 kubectl kustomize "$ROOT/apps/base/observability/vm-customresources" > "$WORK/vmcr.yaml"
@@ -21,14 +21,16 @@ src, name, work = sys.argv[1:4]
 for d in yaml.safe_load_all(open(src)):
     if d and d.get("kind") == "HelmRelease" and d["metadata"]["name"] == name:
         spec = d["spec"]["chart"]["spec"]
+        repo = next(r["spec"]["url"] for r in yaml.safe_load_all(open(src))
+                    if r and r.get("kind") == "HelmRepository" and r["metadata"]["name"] == spec["sourceRef"]["name"])
         yaml.safe_dump(d["spec"].get("values", {}), open(f"{work}/{name}-values.yaml", "w"))
-        open(f"{work}/{name}.chart", "w").write(f'{spec["chart"]} {spec["version"]}\n')
+        open(f"{work}/{name}.chart", "w").write(f'{spec["chart"]} {spec["version"]} {repo}\n')
         break
 else:
     sys.exit("no HelmRelease " + name)
 PY
-  read -r chart version < "$WORK/$name.chart"
-  helm pull "$chart" --repo https://grafana.github.io/helm-charts --version "$version" --untar --untardir "$WORK/chart" >/dev/null
+  read -r chart version repo < "$WORK/$name.chart"
+  helm pull "$chart" --repo "$repo" --version "$version" --untar --untardir "$WORK/chart" >/dev/null
   helm template "$name" "$WORK/chart/$chart" --namespace services-observability -f "$WORK/$name-values.yaml" > "$WORK/$name-rendered.yaml"
 done
 
@@ -102,6 +104,19 @@ if "grafana" in charts:
                for c in d["spec"]["template"]["spec"]["containers"] if c["name"] == "grafana-sc-dashboard"]
     env = {e["name"]: e.get("value") for c in sidecar for e in c.get("env", [])}
     check("grafana: the dashboards sidecar asks for configmaps only (else 403 on secrets)", env.get("RESOURCE") == "configmap")
+
+if "kube-state-metrics" in charts:
+    rs = roles_of("kube-state-metrics")
+    check("kube-state-metrics: bound to a ClusterRole", len(rs) >= 1)
+    check("kube-state-metrics: cannot read secrets (collector off, --resources has no secrets)",
+          not reads("kube-state-metrics", "secrets"))
+    check("kube-state-metrics: cannot read configmaps", not reads("kube-state-metrics", "configmaps"))
+    check("kube-state-metrics: still lists the four Flux kinds (gotk_resource_info) and cronjobs",
+          all(reads("kube-state-metrics", k) for k in ("kustomizations", "helmreleases", "gitrepositories", "helmrepositories", "cronjobs")))
+    args = [a for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "kube-state-metrics"
+            for c in d["spec"]["template"]["spec"]["containers"] for a in c.get("args", []) if a.startswith("--resources")]
+    check("kube-state-metrics: --resources lists neither secrets nor configmaps",
+          len(args) == 1 and not {"secrets", "configmaps"} & set(args[0].split("=", 1)[1].split(",")))
 
 print(f"{fails} failed")
 sys.exit(1 if fails else 0)
