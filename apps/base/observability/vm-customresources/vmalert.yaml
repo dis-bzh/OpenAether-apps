@@ -19,6 +19,14 @@ metadata:
     openaether.io/component: vmalert
 spec:
   replicaCount: 2
+  containerSecurityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
   # Pick up every VMRule in the cluster, as VMAgent does for the scrapes.
   selectAllByDefault: true
   evaluationInterval: 30s
@@ -64,6 +72,15 @@ metadata:
     openaether.io/component: vmalertmanager
 spec:
   replicaCount: 1
+  # Kyverno reads the container level (#47): all four fields are set here.
+  containerSecurityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
   # The webhook URL is mounted, never inlined — see
   # observability/externalsecret-alertmanager-slack.yaml. Mount path is
   # /etc/vm/secrets/<secret name>/<key>.
