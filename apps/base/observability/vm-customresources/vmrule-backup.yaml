@@ -172,11 +172,25 @@ spec:
         # 4) The escrow check (foundation-vault, daily) has not SUCCEEDED for 36 h: a production OpenBao whose seal key
         #    escrow nobody attested (or attested over a year ago), see the vault README, Day 0. A development cluster
         #    always passes, so it never fires there. Warning first: it asks for an operator action, not for an outage.
+        #    kube-state-metrics emits the success time only once a run has succeeded, so a CronJob that has NEVER
+        #    succeeded (the case this alert exists for) is the second branch: it exists for over 36 h with no success.
         - alert: OpenBaoEscrowNotAttested
           expr: |
-            time() - max by (namespace, cronjob) (
-              kube_cronjob_status_last_successful_time{namespace="foundation-vault", cronjob="openbao-escrow-check"}
-            ) > 36 * 3600
+            (
+              time() - max by (namespace, cronjob) (
+                kube_cronjob_status_last_successful_time{namespace="foundation-vault", cronjob="openbao-escrow-check"}
+              ) > 36 * 3600
+            )
+            or
+            (
+              absent(
+                kube_cronjob_status_last_successful_time{namespace="foundation-vault", cronjob="openbao-escrow-check"}
+              )
+              and on() (
+                time() - max(kube_cronjob_created{namespace="foundation-vault", cronjob="openbao-escrow-check"})
+                > 36 * 3600
+              )
+            )
           for: 1h
           labels:
             severity: warning

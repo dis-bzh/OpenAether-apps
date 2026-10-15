@@ -175,13 +175,14 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   `vmrule-security.yaml` (Kyverno violations at admission time, webhook down, Flux object not Ready or suspended), and additions to
   the cluster, platform and backup rules: `/var` (EPHEMERAL, where local-path volumes live) filling and full within 24 h, clock
   offset and sync status, Cilium policy denials in a loop (Hubble is off), restore-test CronJobs stale for 35 days, a missing backup
-  CronJob, CNPG WAL archive failing, base backup failed or stale. Each family has an `*Absent` guard so a vanished scrape does not
-  read as "all clear". `docs/detection.md` lists what is covered and what is not, and the `kubectl get cpol,polr -A` procedure to
+  CronJob, CNPG WAL archive failing, base backup failed or stale. Most families have an `*Absent` guard so a vanished scrape does not
+  read as "all clear" (`docs/detection.md` lists the ones without: the node disk and clock rules, `CiliumPolicyDeniedBurst`,
+  `GrafanaServerErrors`, `RestoreTestStale`). `docs/detection.md` lists what is covered and what is not, and the `kubectl get cpol,polr -A` procedure to
   review Audit violations. `scripts/dev/test-vmrules.sh` (new CI job) runs every rule through a pinned vmalert `-dryRun`
   and checks the conventions `check-alert-metrics.py` relies on. Addresses ANSSI PA-012 R12, R21, R22, C3.1 and C3.2, HYG-M36,
   GH-BKP-2, NSA12-LOG-04 and SSDLC-CICD-MON-01/02. Rung: parsed by vmalert and built by kustomize, **never fired and never
   evaluated against real data**: metric names were read in the sources of Alloy v1.6, Loki v3.3.2, Kyverno v1.12.1, CNPG v1.23.1 and
-  node-exporter v1.9 (the Kyverno counter's `_total` suffix is the OpenTelemetry exporter's convention, not read in code), thresholds are
+  node-exporter (read at v1.9, the chart pins 1.8.2: the metric names are the same in both) (the Kyverno counter's `_total` suffix is the OpenTelemetry exporter's convention, not read in code), thresholds are
   guesses, and `NodeClockNotSynchronised` may fire on healthy Talos nodes. It does **not** alert on OpenBao authentication or root
   use, `kubectl exec`, RBAC changes or an empty stream for one namespace (no audit log, no Loki ruler), keeps `require-security-context`
   out of `KyvernoPolicyViolation` until its 74 known violations are fixed, and does not set the time sources of the nodes (the
@@ -192,13 +193,28 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   the ingress rule for vmagent in the Loki, Alloy, Kyverno and Zitadel CiliumNetworkPolicies and the four ports in vmagent's egress
   list (Grafana already accepts its whole namespace; CNPG already accepted vmagent on :9187). kube-state-metrics now also exports
   `gotk_resource_info{ready,suspended}` for Kustomizations, HelmReleases, GitRepositories and HelmRepositories (the mapping of the
-  Flux docs, `customResourceState` plus list/watch on those four kinds, no secrets): the Flux controllers export no per-object
+  Flux docs, `customResourceState` plus list/watch on those four kinds, no secrets in those extra rules; the chart's own role is trimmed in the Fixed section below): the Flux controllers export no per-object
   condition (kustomize-controller v1.8.5 records only the reconcile duration, read in its source), so `gotk_reconcile_condition`
-  named by the audit can never carry data. Prepares ANSSI PA-012 R12, NSA12-LOG-04 and SSDLC-CICD-MON-01. Rung: kustomize build
+  named by the audit can never carry data. Prepares ANSSI PA-012 R12, NSA12-LOG-04 and SSDLC-CICD-MON-01; closes the gap #44 left open (Refs #44). Rung: kustomize build
   and chart render, not run on a cluster. No rule reads the Zitadel metrics (names unchecked), and the kube-state-metrics
   pod restarts once (one replica: a gap of a minute in the `kube_*` series).
 
 ### Fixed
+
+- **Two alerts of the observability work could not do their job (review of the ANSSI branch, M2, M3).**
+  `OpenBaoEscrowNotAttested` read only `kube_cronjob_status_last_successful_time`, which kube-state-metrics emits once a run has
+  succeeded: on an existing cluster where the check never succeeds the alert could not fire. A second branch now fires when that
+  series is absent and the CronJob is older than 36 h (a new cluster is given its first daily run). `KyvernoMetricsAbsent` is silent
+  when no Kyverno Deployment exists, as Kyverno is optional in `pick.py` (it warned every 12 h for ever on such profiles).
+  `scripts/dev/vmrules-unittest.yaml` runs both on synthetic series with `vmalert-tool`, from `scripts/dev/test-vmrules.sh` (CI job
+  `vmrules`); the old expressions fail it. Addresses ANSSI PA-012 R12. Rung: vmalert-tool on synthetic series; the alerts have
+  **not** fired on a cluster.
+
+- **kube-state-metrics no longer lists Secrets and ConfigMaps cluster-wide (review of the ANSSI branch, M4; same class as the
+  vmagent, Alloy, Loki and Grafana entries above).** The chart's default ClusterRole lists Secrets, which returns their data; no rule,
+  scrape or dashboard reads `kube_secret_*` or `kube_configmap_*`, so the `collectors` list drops both. `test-observability-rbac.sh`
+  now renders this chart as well (it examined only Alloy and Grafana, so this role escaped it). Rung: chart render, role not read back
+  on a cluster. A collector added upstream later must be added to the list by hand.
 
 - **Two 0.2.0 lines the merge had dropped are back (review of the ANSSI branch, L10, L11).** `.gitleaks-envdata.toml` has its
   `\.terraform.*/` path exclusion again (this repository has no such directory, so nothing changed today), and Loki's

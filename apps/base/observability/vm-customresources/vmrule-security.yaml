@@ -65,9 +65,12 @@ spec:
             summary: "Kyverno {{ $labels.deployment }} has fewer available replicas than wanted"
 
         # 3) The metrics themselves are gone: a Kyverno that evaluates nothing, or a scrape the NetworkPolicy drops.
-        #    Rule 1 would read "no violation".
+        #    Rule 1 would read "no violation". Silent when Kyverno is not deployed (it is optional in pick.py): a
+        #    cluster without the brick must not warn for ever.
         - alert: KyvernoMetricsAbsent
-          expr: absent(kyverno_policy_results_total)
+          expr: |
+            absent(kyverno_policy_results_total)
+            and on() (count(kube_deployment_spec_replicas{namespace="kyverno"}) > 0)
           for: 30m
           labels:
             severity: warning
