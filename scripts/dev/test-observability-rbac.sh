@@ -68,9 +68,17 @@ for key in sorted(bound | {k for k in roles if k[0] == "ClusterRole"}):
     role = roles.get(key)
     if role is None:
         continue
+    # The one allowed Secret read: a namespaced Role that names the operator's own vmagent Secret (its config-reloader dies
+    # without it) and nothing else, read-only.
+    allowed = key == ("Role", "vmagent-config")
     bad = [res for groups, res, verbs in grants(role)
-           if res in ("secrets", "nodes/proxy", "*") or res.startswith("secrets/")]
-    check(f"{key[0]}/{key[1]}: no secrets, nodes/proxy or wildcard resource", not bad)
+           if res in ("nodes/proxy", "*") or ((res == "secrets" or res.startswith("secrets/")) and not allowed)]
+    check(f"{key[0]}/{key[1]}: no secrets, nodes/proxy or wildcard resource" + (" (but its own Secret)" if allowed else ""), not bad)
+    if allowed:
+        rules = role.get("rules") or []
+        check("Role/vmagent-config: one rule, named secret vmagent-vmagent, get/list/watch only",
+              len(rules) == 1 and rules[0].get("resourceNames") == ["vmagent-vmagent"]
+              and set(rules[0].get("verbs") or []) <= {"get", "list", "watch"} and rules[0].get("resources") == ["secrets"])
 
 def roles_of(sa):
     out = []

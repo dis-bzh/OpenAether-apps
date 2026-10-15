@@ -11,6 +11,9 @@
 # scrape uses the pod's own bearerTokenFile) and no `nodes/proxy` (kubelet and
 # cAdvisor are scraped on :10250 directly, which `nodes/metrics` authorizes).
 # Adding a scrape that needs a Secret = a namespaced Role, not this ClusterRole.
+# The one Secret read is the operator's own: the config-reloader of each vmagent pod reads the Secret the operator
+# generates for it (`vmagent-vmagent`) and dies with 'secrets ... is forbidden' without it (seen on a real OVH cluster,
+# 2026-10-15): a namespaced Role limited to that one name, below.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -46,6 +49,37 @@ rules:
     verbs: ["get", "list", "watch"]
   - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
     verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: vmagent-config
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmagent
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["vmagent-vmagent"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vmagent-config
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmagent
+subjects:
+  - kind: ServiceAccount
+    name: vmagent
+    namespace: services-observability
+roleRef:
+  kind: Role
+  name: vmagent-config
+  apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
