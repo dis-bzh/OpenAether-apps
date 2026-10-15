@@ -27,8 +27,11 @@ this repo doesn't provision infrastructure itself.
     python3 scripts/check-dependson-contracts.py   # dependsOn covers the store openbao, Istio and Gateway API users
     yamllint -c .yamllint apps/ scripts/ .github/workflows/
     ./scripts/dev/check-language.sh                # English is canonical; scripts/dev/test-check-language.sh tests the detector
+    ./scripts/dev/check-gitleaks-rules.sh          # the environment-data rules (.gitleaks-envdata.toml) catch what they claim
+    python3 scripts/dev/test-container-security-context.py   # operators get the securityContext field they read (#47)
 
-All of these run in CI too — a PR can't merge until they're green (see the required
+All of these run in CI too (a `leaks` job also scans what a PR adds for IPs, account ids and bucket names with
+`.gitleaks-envdata.toml`) — a PR can't merge until they're green (see the required
 checks on `main`).
 
 ## Conventions

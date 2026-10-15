@@ -59,3 +59,21 @@ belong to. What follows has no skill of its own yet.
   CNP. And **a `VMRule` with no `VMAlert` is inert.**
 - **`repeat_interval` must be strictly greater than `group_interval`.** With both at
   5m, Alertmanager sent one webhook in eleven minutes.
+
+## Pod security (Kyverno `require-security-context`)
+
+- **The policy reads the CONTAINER, not the pod.** A chart that sets `runAsNonRoot` and `seccompProfile` in the pod
+  `securityContext` and nothing on its containers is a violation. Measured on 0.1.1: 82 results across the observability
+  stack, cert-manager, the CNPG operator and istiod; set the container-level values per chart (`containerSecurityContext`
+  or the chart's own name for it) and read the policy report again.
+- **The VictoriaMetrics CRs take `spec.securityContext`, with pod and container fields in one flat block.**
+  `containerSecurityContext` is not a field: the CRD keeps unknown fields, the API server accepts it, the operator ignores it,
+  and nothing says so. `scripts/dev/test-container-security-context.py` fails on it.
+- **`runAsNonRoot: true` alone breaks an image that runs as root.** The kubelet refuses with `CreateContainerConfigError`
+  ("container has runAsNonRoot and image will run as root"). Give a numeric `runAsUser` (VictoriaMetrics: 65534).
+- **Moving a workload from root to non-root leaves its local-path volume root-owned.** `fsGroup` does nothing on those volumes.
+  `vmstorage` and `vmselect` then crash on their lock file / cache (apps 0.2.0 Upgrade notes, #71).
+- **`Gateway.spec.infrastructure` needs Gateway API v1.2.** On the v1.1.0 CRDs this repository vendors, the dry-run of the `istio`
+  Kustomization fails and everything behind it stays not Ready until the change is reverted (#70).
+- **A policy report keeps results for pods a changed `exclude` no longer covers**, at least for the first hour on a cluster
+  moved from an earlier tree; a fresh cluster does not show them (#37).
