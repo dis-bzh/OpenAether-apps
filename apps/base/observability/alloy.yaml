@@ -120,7 +120,23 @@ spec:
           // Works on Talos (containerd rootfs not exposed) and Docker-in-Docker.
           loki.source.kubernetes "pods" {
             targets    = discovery.relabel.pods.output
+            forward_to = [loki.process.scrub.receiver]
+          }
+
+          // ── Scrub tokens that travel in a query string ─────────────────
+          // Zitadel's access log keeps the request URL, and an OIDC logout puts the ID token in it
+          // (end_session?id_token_hint=...). Loki keeps lines for a year: blank the value, keep the parameter.
+          // The line filter keeps the cost off every other line. scripts/dev/test-alloy-scrub.sh runs this block.
+          loki.process "scrub" {
             forward_to = [loki.write.default.receiver]
+
+            stage.match {
+              selector = `{namespace="services-identity"} |~ "(?i)(_token_hint|_token|_secret|assertion)="`
+              stage.replace {
+                expression = `(?i)(?:id_token_hint|access_token|refresh_token|client_secret|assertion)=([^&"\\\s]+)`
+                replace    = "REDACTED"
+              }
+            }
           }
 
           // ── Ship to Loki ────────────────────────────────────────────────

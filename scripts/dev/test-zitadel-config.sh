@@ -188,9 +188,16 @@ zit start cfg.yaml secret.yaml && [ "$(login "$ADMIN" "$GOOD_PW")" = 201 ] \
   || bad "start with the first-admin password in the secret config failed"
 setup_again cfg.yaml secret.yaml && [ "$(login "$ADMIN" "$GOOD_PW")" = 201 ] && ok "a second setup run (the next Helm upgrade) succeeds and keeps the password" \
   || bad "the second setup run failed: $(tail -3 "$W/setup.log")"
+# An OIDC logout carries the ID token in the query string (id_token_hint): see whether the access log keeps it.
+curl -s -o /dev/null "$A/oidc/v1/end_session?id_token_hint=CANARY.id-token.value&post_logout_redirect_uri=http%3A%2F%2Fx.invalid"
 docker logs "$NET-z" >> "$W/z.log" 2>&1
 [ "$(grep -c '^{' "$W/z.log")" -gt 20 ] && ! grep -v '^{' "$W/z.log" | grep -q 'level=' && ok "the logs are JSON" || bad "the logs are not JSON"
 grep -q 'log record emitted' "$W/z.log" && grep -q '"requestUrl' "$W/z.log" && ok "the HTTP access log is on stdout" || bad "no access log on stdout"
+# Known and handled downstream: the access log keeps the request URL, query string included, so Alloy blanks such values
+# before they reach Loki (alloy.yaml, scripts/dev/test-alloy-scrub.sh). If a Zitadel upgrade stops logging it, the scrub is redundant.
+if grep -qF 'CANARY.id-token.value' "$W/z.log"; then ok "...the access log keeps an id_token_hint query string (Alloy's loki.process scrub blanks it)"
+else ok "...Zitadel no longer logs the id_token_hint query string (Alloy's scrub is then redundant)"; fi
+[ -z "${ZITADEL_TEST_KEEP_LOG:-}" ] || cp "$W/z.log" "$ZITADEL_TEST_KEEP_LOG"
 if grep -qF "$(pat)" "$W/z.log" || grep -qF "$GOOD_PW" "$W/z.log"; then bad "a token or the admin password is in the logs"; else ok "...and neither the machine PAT nor the admin password is in them"; fi
 
 echo "$PASS passed, $FAIL failed"

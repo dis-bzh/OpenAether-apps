@@ -498,6 +498,12 @@ jobs:
           ./scripts/dev/test-zitadel-config.sh | tee zitadel-config.out
           grep -qE '^[0-9]+ passed, 0 failed$' zitadel-config.out
 
+      - name: Alloy scrubs tokens from Zitadel's access log (real Alloy)
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-alloy-scrub.sh | tee alloy-scrub.out
+          grep -qE '^[0-9]+ passed, 0 failed$' alloy-scrub.out
+
       - name: Grafana authentication settings (base and SSO-only overlay)
         run: |
           set -euo pipefail

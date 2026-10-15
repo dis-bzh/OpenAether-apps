@@ -106,7 +106,9 @@ than it was; it is still every account of the instance.
 - **No password expiry for admins** (ANSSI PA-079 R25, 1 to 3 years): `PasswordAgePolicy` is not set and whether Zitadel
   enforces it was not checked. No breached-password check (R27): Zitadel has none.
 - **Authentication events are not in Loki.** Logins, failures, role grants and federation events live in Zitadel's eventstore.
-  What is in Loki now is the HTTP access log (path, status, client headers, with Authorization and cookies redacted by Zitadel)
+  What is in Loki now is the HTTP access log (path, status, client headers, with Authorization and cookies redacted by Zitadel;
+  the URL keeps its query string, so Alloy blanks `id_token_hint`, `*_token`, `*_secret` and `assertion` values before Loki,
+  `scripts/dev/test-alloy-scrub.sh`; other secrets in a URL are not known to it)
   and the runtime log as JSON: it tells that `/oauth/v2/authorize` was hit, not by whom. Exporting events needs a service user
   with a standing token and a small exporter; not built (PA-012 Annex A, R29).
 - **Loki is still one tenant:** a Grafana Viewer reads every namespace's logs. A separate tenant for the OpenBao audit trail

@@ -201,6 +201,26 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **Zitadel's access log no longer carries tokens from a query string into Loki (review of the ANSSI branch, L9).** Zitadel's
+  access log keeps the request URL, and an OIDC logout puts the ID token in it (`end_session?id_token_hint=...`): checked on a real
+  Zitadel v4.14, the token reached stdout, and Loki keeps lines for a year. Alloy gets a `loki.process "scrub"` stage for the
+  `services-identity` namespace that blanks the value of `id_token_hint`, `*_token`, `*_secret` and `assertion` parameters
+  (the parameter and the rest of the URL stay). `scripts/dev/test-alloy-scrub.sh` runs the shipped block in a real Alloy v1.6.1
+  against the log shape Zitadel produces (new CI step); `test-zitadel-config.sh` records the behaviour. Also corrects a stale
+  script name in the Zitadel HelmRelease comment. Rung: a real Alloy and a real Zitadel in containers; **not** run on a cluster,
+  with Loki or with the Grafana logout. It does NOT scrub other namespaces, other secrets that might appear in a URL, or lines
+  already in Loki, and every log line of the cluster now passes through one more Alloy component (a line filter keeps the cost
+  to the matching lines).
+
+- **The escrow check's "never reads the Secret" is now tested, and its pod has a writable `/tmp` (review of the ANSSI branch, L1, L5).**
+  `scripts/dev/test-escrow-check.sh` asserts on the manifest that the Role grants `get` on the three named ConfigMaps and
+  nothing else (adding `secrets` to it used to leave the test green), and that the root filesystem is read-only with an
+  in-memory `emptyDir` as `/tmp` and `HOME`, where kubectl keeps its discovery cache (the image has `HOME=/`). Whether kubectl
+  actually failed without it was not observed; the change is the cheap hardening. The Day 0 text of the vault README now says how
+  a k-of-n reconstruction becomes the raw key that step 5 hashes (an ssss share set is hex text and needs `xxd` on both
+  sides; neither split tool was run). Rung: static and a stubbed kubectl, also under the CronJob's image; the CronJob was not run on
+  a cluster.
+
 - **Two alerts of the observability work could not do their job (review of the ANSSI branch, M2, M3).**
   `OpenBaoEscrowNotAttested` read only `kube_cronjob_status_last_successful_time`, which kube-state-metrics emits once a run has
   succeeded: on an existing cluster where the check never succeeds the alert could not fire. A second branch now fires when that

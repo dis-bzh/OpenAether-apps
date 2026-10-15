@@ -151,7 +151,7 @@ spec:
         # TWO scopes, and the difference is the whole risk of this block:
         #   * FirstInstance and DefaultInstance.* are read ONCE, when the instance is created (the setup Job on
         #     an empty database). On a cluster whose Zitadel is already initialised they change NOTHING:
-        #     docs/zitadel-hardening.md has the Admin API calls (scripts/zitadel-apply-policies.sh) that apply
+        #     docs/zitadel-hardening.md has the Admin API calls (scripts/zitadel-apply-policies.py) that apply
         #     the same policies to a running instance.
         #   * SystemDefaults.* and Log* are read at every start, so they apply to a running instance at the next
         #     rollout.
@@ -209,7 +209,8 @@ spec:
               - bcrypt
         # Structured logs, and the HTTP access log on stdout (Alloy ships both to Loki): who hit the login and
         # the API, with which status. Authorization, Cookie and Set-Cookie headers are redacted by Zitadel
-        # (internal/logstore/record/access.go). Authentication EVENTS (success, failure, role grants) stay in
+        # (internal/logstore/record/access.go); the URL keeps its query string, which Alloy scrubs (alloy.yaml).
+        # Authentication EVENTS (success, failure, role grants) stay in
         # the eventstore: they are NOT in Loki, see docs/zitadel-hardening.md.
         Log:
           Formatter:
