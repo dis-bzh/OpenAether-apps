@@ -107,6 +107,14 @@ spec:
               protocol: TCP
             - port: "9187"   # postgres-exporter
               protocol: TCP
+            - port: "3000"   # Grafana
+              protocol: TCP
+            - port: "3100"   # Loki
+              protocol: TCP
+            - port: "8000"   # Kyverno controllers
+              protocol: TCP
+            - port: "12345"  # Alloy
+              protocol: TCP
     # Scrape kubelet/cadvisor on the nodes (:10250) — a host target, not a pod.
     # Under ambient this traffic went over HBONE; outside the mesh it must be
     # allowed explicitly to the host + remote-node entities.
@@ -530,6 +538,15 @@ spec:
         - ports:
             - port: "3100"
               protocol: TCP
+    # VMAgent: /metrics (VMPodScrape loki). Without it the pipeline rules read nothing.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "3100"
+              protocol: TCP
     # Loki peers (memberlist replication)
     - fromEndpoints:
         - matchLabels:
@@ -626,6 +643,16 @@ spec:
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: alloy
+  ingress:
+    # VMAgent: /metrics on :12345 (VMPodScrape alloy). Alloy takes no other inbound traffic.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "12345"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:

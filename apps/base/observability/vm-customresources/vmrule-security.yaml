@@ -1,0 +1,122 @@
+# Security-relevant alerting: policy violations, the policy engine itself, GitOps drift.
+#
+# Kyverno's policies are in Audit: a violation is recorded in a policy report and, until now, nowhere else. These
+# rules read the Kyverno metrics (VMServiceScrape kyverno) and Flux's per-object state (gotk_resource_info).
+# They are a start, not a detection programme: no OpenBao authentication or root-use alert (the OpenBao rules are
+# ported separately), no exec / RBAC-change / audit-log scenario (needs the API server audit log in Loki).
+# docs/detection.md lists what is covered and what is not.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: security-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: security
+spec:
+  groups:
+    - name: openaether-policy-engine
+      interval: 1m
+      rules:
+        # 1) A new object broke a policy, at admission time. Background scans are left out on purpose: they recount
+        #    every existing violation on each pass and would fire for ever. require-security-context is left out
+        #    until its known violations (vendored charts) are fixed: it is in Audit and alone would keep this firing.
+        #    A policy added later alerts by default. Review: kubectl get cpol,polr -A (docs/detection.md).
+        - alert: KyvernoPolicyViolation
+          expr: |
+            sum by (policy_name, rule_name, resource_namespace) (
+              increase(kyverno_policy_results_total{
+                rule_result="fail", rule_execution_cause="admission_request", policy_name!="require-security-context"
+              }[15m])
+            ) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: kyverno
+          annotations:
+            summary: "Kyverno policy {{ $labels.policy_name }} failed in {{ $labels.resource_namespace }}"
+            description: >-
+              An object created in the last 15 min breaks the policy (blocked if Enforce, admitted if Audit).
+              kubectl get polr -A | grep fail, then kubectl describe on the report.
+
+        # 2) The admission controller serves the webhook the API server calls. At 0 replicas the policies either block
+        #    every create (failurePolicy Fail) or silently stop applying (Ignore); both are an outage of the control.
+        - alert: KyvernoAdmissionDown
+          expr: |
+            kube_deployment_status_replicas_available{namespace="kyverno",
+              deployment="kyverno-admission-controller"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            component: kyverno
+          annotations:
+            summary: "Kyverno admission controller has no available replica"
+            description: "kubectl -n kyverno get pods; kubectl -n kyverno describe deploy kyverno-admission-controller."
+
+        - alert: KyvernoControllerNotReady
+          expr: |
+            kube_deployment_status_replicas_available{namespace="kyverno"}
+              < kube_deployment_spec_replicas{namespace="kyverno"}
+          for: 15m
+          labels:
+            severity: warning
+            component: kyverno
+          annotations:
+            summary: "Kyverno {{ $labels.deployment }} has fewer available replicas than wanted"
+
+        # 3) The metrics themselves are gone: a Kyverno that evaluates nothing, or a scrape the NetworkPolicy drops.
+        #    Rule 1 would read "no violation".
+        - alert: KyvernoMetricsAbsent
+          expr: absent(kyverno_policy_results_total)
+          for: 30m
+          labels:
+            severity: warning
+            component: kyverno
+          annotations:
+            summary: "No Kyverno policy result is reported: violation alerts are blind"
+            description: "The kyverno CiliumNetworkPolicy must accept vmagent on :8000; kubectl get cpol."
+
+    - name: openaether-gitops
+      interval: 1m
+      rules:
+        # 4) A Flux object stuck in a non-Ready state: the cluster no longer converges to git. Unlike
+        #    FluxReconciliationStalled (a flat counter) this catches "reconciling but failing". 20 min lets a slow
+        #    install (Longhorn, Istio) finish. Ready is "" for an object Flux has not yet looked at.
+        - alert: FluxObjectNotReady
+          expr: |
+            max by (customresource_kind, exported_namespace, name) (
+              gotk_resource_info{ready!="True", suspended!="true"}
+            ) == 1
+          for: 20m
+          labels:
+            severity: warning
+            component: flux
+          annotations:
+            summary: "Flux {{ $labels.customresource_kind }} {{ $labels.name }} is not Ready"
+            description: >-
+              flux get all -A, then kubectl describe {{ $labels.customresource_kind }}
+              -n {{ $labels.exported_namespace }} {{ $labels.name }}. Objects that depend on it wait too.
+
+        # 5) Suspended and forgotten: git no longer applies to it. Often deliberate during an operation.
+        - alert: FluxObjectSuspended
+          expr: |
+            max by (customresource_kind, exported_namespace, name) (gotk_resource_info{suspended="true"}) == 1
+          for: 24h
+          labels:
+            severity: warning
+            component: flux
+          annotations:
+            summary: "Flux {{ $labels.customresource_kind }} {{ $labels.name }} has been suspended for 24 h"
+            description: "flux resume ... when the operation is over."
+
+        # 6) The state metrics are gone: rules 4 and 5 are blind (kube-state-metrics custom resource state, or its
+        #    list/watch rights on the Flux objects).
+        - alert: FluxStateMetricsAbsent
+          expr: absent(gotk_resource_info{customresource_kind="Kustomization"})
+          for: 15m
+          labels:
+            severity: warning
+            component: flux
+          annotations:
+            summary: "No Flux object state is exported: Flux failure alerts are blind"
+            description: "kubectl -n services-observability logs deploy/kube-state-metrics | grep -i forbidden."

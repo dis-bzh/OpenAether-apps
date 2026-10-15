@@ -1,0 +1,30 @@
+# Scheduled backup of Longhorn volumes to the BackupTarget (settings.yaml).
+#
+# OPT-IN on purpose: the group defaults to `oa-backup`, which no volume carries,
+# so applying this changes nothing for an existing cluster (a backup job on a
+# volume while the target URL is empty would only pile up snapshots). To use it:
+#   • per volume:  kubectl -n longhorn-system label volumes.longhorn.io <pv-name> \
+#                    recurring-job-group.longhorn.io/oa-backup=enabled
+#   • every volume that has no recurring job of its own: set
+#     LONGHORN_BACKUP_GROUP=default in the cluster-identity ConfigMap.
+# Both need BACKUP_TARGET_URL to be set. Metrics and logs (VictoriaMetrics, Loki)
+# are NOT covered: they sit on local-path and are deliberately not backed up
+# (apps/base/backup/README.md, "What is not backed up").
+---
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: oa-backup-daily
+  namespace: longhorn-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+spec:
+  name: oa-backup-daily
+  task: backup
+  groups:
+    - "${LONGHORN_BACKUP_GROUP:=oa-backup}"
+  # After the 02:xx restic jobs (backup brick), so the S3 link is not shared.
+  cron: "37 3 * * *"
+  retain: 14
+  concurrency: 1

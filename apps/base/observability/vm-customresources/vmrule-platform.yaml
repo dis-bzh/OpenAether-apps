@@ -85,6 +85,25 @@ spec:
               No CNI and no policy enforcement on the affected node.
               kubectl -n kube-system get pods -l k8s-app=cilium -o wide.
 
+    # Network policy denials. Hubble is off, so the only trace of a blocked flow is this counter; it says how many
+    # and on which node, not who. Info: a known-noisy flow (probes, a retrying client) can sit above the threshold;
+    # calibrate on the first week, then lower it or raise the severity.
+    - name: openaether-network-policy
+      interval: 1m
+      rules:
+        - alert: CiliumPolicyDeniedBurst
+          expr: |
+            sum by (instance, direction) (rate(cilium_drop_count_total{reason=~"Policy denied.*"}[5m])) > 5
+          for: 10m
+          labels:
+            severity: info
+            component: cilium
+          annotations:
+            summary: "Cilium drops more than 5 packets/s by policy on {{ $labels.instance }} ({{ $labels.direction }})"
+            description: >-
+              A pod is blocked by a CiliumNetworkPolicy, in a loop. A new flow that needs allowing, or something
+              trying to reach what it should not. cilium monitor --type drop in the agent pod on that node.
+
     - name: openaether-certificates
       interval: 5m
       rules:

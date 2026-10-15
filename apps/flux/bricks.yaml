@@ -20,6 +20,7 @@ companions:
   - istio-authorizationpolicies      # mesh AuthorizationPolicies (if istio picked)
   - istio-authorizationpolicies-storage  # foundation-storage policies (if istio AND storage picked)
   - kyverno-policies                 # policies (if kyverno picked)
+  - kyverno-policies-eso             # Audit guard on External Secrets objects (if kyverno AND ESO picked)
   - observability-vm-customresources  # VMCluster/VMAgent (if observability picked)
   - storage-backup-target            # S3 target for volume backups (if storage + ESO picked)
   - backup-openbao-identity          # CLUSTER_NAME ConfigMap (restic repository prefix)
@@ -83,6 +84,7 @@ descriptions:
   identity: Zitadel (IAM/SSO, CNPG backend)
   kyverno: Kyverno (policy engine)
   kyverno-policies: OpenAether Kyverno policies
+  kyverno-policies-eso: Audit-only Kyverno policy, External Secrets objects outside the platform namespaces
   cluster-api-operator: CAPI operator (management layer)
   cluster-api-providers: CAPI providers (Talos, Scaleway, OpenStack, Outscale)
   capi-clusters: CAPI client clusters (apps/clusters, kubeception/gitception)

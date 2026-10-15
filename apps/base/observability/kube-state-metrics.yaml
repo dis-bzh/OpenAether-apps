@@ -72,6 +72,80 @@ spec:
     prometheus:
       monitor:
         enabled: false
+    # Per-object Flux state, gotk_resource_info{ready,suspended}: the controllers themselves export only
+    # reconcile durations (kustomize-controller v1.8.5 records no gotk_reconcile_condition), so
+    # FluxObjectNotReady (vmrule-platform.yaml) reads this. The mapping is the one of the Flux docs
+    # (monitoring/custom-metrics), cut to the four kinds this repo reconciles. The core collectors stay on:
+    # the node, pod and backup rules read them. list+watch on the Flux objects only, no secrets.
+    customResourceState:
+      enabled: true
+      config:
+        spec:
+          resources:
+            - groupVersionKind: {group: kustomize.toolkit.fluxcd.io, version: v1, kind: Kustomization}
+              metricNamePrefix: gotk
+              metrics:
+                - name: resource_info
+                  help: The current state of a Flux Kustomization resource.
+                  each:
+                    type: Info
+                    info:
+                      labelsFromPath:
+                        name: [metadata, name]
+                  labelsFromPath:
+                    exported_namespace: [metadata, namespace]
+                    ready: [status, conditions, "[type=Ready]", status]
+                    suspended: [spec, suspend]
+            - groupVersionKind: {group: helm.toolkit.fluxcd.io, version: v2, kind: HelmRelease}
+              metricNamePrefix: gotk
+              metrics:
+                - name: resource_info
+                  help: The current state of a Flux HelmRelease resource.
+                  each:
+                    type: Info
+                    info:
+                      labelsFromPath:
+                        name: [metadata, name]
+                  labelsFromPath:
+                    exported_namespace: [metadata, namespace]
+                    ready: [status, conditions, "[type=Ready]", status]
+                    suspended: [spec, suspend]
+            - groupVersionKind: {group: source.toolkit.fluxcd.io, version: v1, kind: GitRepository}
+              metricNamePrefix: gotk
+              metrics:
+                - name: resource_info
+                  help: The current state of a Flux GitRepository resource.
+                  each:
+                    type: Info
+                    info:
+                      labelsFromPath:
+                        name: [metadata, name]
+                  labelsFromPath:
+                    exported_namespace: [metadata, namespace]
+                    ready: [status, conditions, "[type=Ready]", status]
+                    suspended: [spec, suspend]
+            - groupVersionKind: {group: source.toolkit.fluxcd.io, version: v1, kind: HelmRepository}
+              metricNamePrefix: gotk
+              metrics:
+                - name: resource_info
+                  help: The current state of a Flux HelmRepository resource.
+                  each:
+                    type: Info
+                    info:
+                      labelsFromPath:
+                        name: [metadata, name]
+                  labelsFromPath:
+                    exported_namespace: [metadata, namespace]
+                    ready: [status, conditions, "[type=Ready]", status]
+                    suspended: [spec, suspend]
+    rbac:
+      extraRules:
+        - apiGroups:
+            - source.toolkit.fluxcd.io
+            - kustomize.toolkit.fluxcd.io
+            - helm.toolkit.fluxcd.io
+          resources: [gitrepositories, helmrepositories, kustomizations, helmreleases]
+          verbs: [list, watch]
     # podDisruptionBudget: the kube-state-metrics 5.25.1 chart expects the raw PDB spec
     # (minAvailable/maxUnavailable), WITHOUT an `enabled` field, which breaks the schema.
     #

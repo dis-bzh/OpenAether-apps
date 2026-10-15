@@ -71,8 +71,6 @@ spec:
         user: grafana
         password: "$__env{GF_DATABASE_PASSWORD}"
         ssl_mode: disable
-      server:
-        root_url: "https://grafana.openaether.local"
       security:
         cookie_secure: true
         strict_transport_security: true
@@ -83,6 +81,18 @@ spec:
         # Default role for a user arriving through SSO with no recognised role.
         # Read-only: widen it in Zitadel afterwards, not here.
         auto_assign_org_role: Viewer
+      # Sessions (ANSSI PA-079 R12): Grafana's defaults are 7 days idle and 30 days in all. Both the SSO and the
+      # local admin sign in again after these; nothing else changes.
+      auth:
+        login_maximum_inactive_lifetime_duration: 2h
+        login_maximum_lifetime_duration: 12h
+      # Grafana OSS has no audit log: every HTTP request on the console log, as JSON, is the access trail
+      # (Alloy ships it to Loki). The health probes are in it too.
+      server:
+        root_url: "https://grafana.openaether.local"
+        router_logging: true
+      "log.console":
+        format: json
       # ── SSO OIDC via Zitadel ────────────────────────────────────────────────
       # Endpoints VERIFIED against the Zitadel docs (apis/openidoauth/endpoints):
       # /oauth/v2/authorize, /oauth/v2/token, /oidc/v1/userinfo,
@@ -90,7 +100,8 @@ spec:
       #
       # ⚠️ The LOCAL login form stays enabled (`disable_login_form` not set):
       # the local admin is the safety net if SSO is broken or not yet configured
-      # on the Zitadel side. Only disable it once SSO is proven.
+      # on the Zitadel side. Only disable it once SSO is proven: apps/base/observability-sso-only
+      # does that, and makes the role mapping strict (docs/zitadel-hardening.md).
       auth.generic_oauth:
         enabled: true
         name: Zitadel
@@ -167,6 +178,12 @@ spec:
             type: loki
             url: "http://loki.services-observability:3100"
             editable: false
+    # The chart's roles let the sidecar read ConfigMaps AND Secrets (cluster-wide, and in this namespace
+    # when namespaced). rbac.create false drops them all; rbac-grafana.yaml ships a ClusterRole on core
+    # configmaps only. A new name, not useExistingClusterRole: a binding's roleRef is immutable, so
+    # repointing the chart's binding would fail the Helm upgrade.
+    rbac:
+      create: false
     # Sidecar: automatic discovery of ConfigMaps labelled grafana_dashboard=1.
     sidecar:
       securityContext:
@@ -179,6 +196,8 @@ spec:
           type: RuntimeDefault
       dashboards:
         enabled: true
+        # configmap, not the default `both`: it would list Secrets and take a 403.
+        resource: configmap
         label: grafana_dashboard
         labelValue: "1"
         searchNamespace: ALL
