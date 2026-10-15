@@ -17,6 +17,21 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-15
+
+**The pod-security work the first real clusters asked for, a Loki that no longer shares the backups bucket, and a scan for environment
+data in pull requests. For new clusters.** Read *Upgrade notes* and *Not fixed* before pulling it, and the rung written under each entry:
+this file distinguishes static checks, CI, local Docker, and real clouds.
+
+**Pairing with OpenAether-infra.** Infra tags pin an apps tag and cannot be moved, so this is a table of what was proven:
+
+| OpenAether-infra | apps | Status |
+|---|---|---|
+| 0.2.1 (not yet cut) | 0.2.0 | The intended pair. Validated with an OpenAether-infra branch (`39df1b8` on OVH and Outscale, `4ae2357` on Scaleway), not a tag. |
+| 0.2.1 (not yet cut) | 0.1.1 | The pair of the previous release; infra 0.2.1's pin moves to 0.2.0. |
+| 0.2.0 | 0.2.0 or 0.1.1 | **Not supported**, for the reasons given under 0.1.1 (no operator PGP keys, a seed script that waits for a root-token Secret). |
+| 0.2.0 | 0.1.0 | The pair infra 0.2.0 validated on its three clouds with Flux off. |
+
 ### Upgrade notes
 
 - **VictoriaMetrics data written as root cannot be opened by the new non-root workloads (#47).** vmstorage and vmselect now run as
@@ -27,11 +42,9 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   `replicationFactor: 2` the second node keeps its own until it is treated too, so treating both loses all of it.** Take a
   `vmbackup` first if the history matters. New clusters are not affected. Rung: real cloud, once (Scaleway, a cluster moved by Flux
   from the candidate's earlier commit).
-
-- **A static guard for the two mistakes of this block** (`scripts/dev/test-container-security-context.py`, in CI): the VictoriaMetrics CRs must
-  carry a complete `spec.securityContext` with a non-zero uid and no `containerSecurityContext` (a field the operator ignores), and no
-  Gateway may use `spec.infrastructure` while the vendored Gateway API CRDs are older than v1.2. Its self-test fails on each mistake.
-  Rung: CI (static; it proves the manifests, not the operator).
+- A cluster initialised by 0.1.0 still cannot be moved to this release in place (see 0.1.1): build a new cluster, on new buckets.
+- Loki, Grafana, Alloy, kube-state-metrics, node-exporter, the VictoriaMetrics pods, cert-manager, the CNPG operator and istiod restart once
+  (new container `securityContext`); the ones using the Longhorn or local-path volumes come back on them.
 
 ### Changed
 
@@ -66,6 +79,11 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
   Rung: CI and a local run over this tree (no finding after the allowlists). Not made a required check: that is a repository
   setting.
 
+- **A static guard for the two mistakes of this block** (`scripts/dev/test-container-security-context.py`, in CI): the VictoriaMetrics CRs must
+  carry a complete `spec.securityContext` with a non-zero uid and no `containerSecurityContext` (a field the operator ignores), and no
+  Gateway may use `spec.infrastructure` while the vendored Gateway API CRDs are older than v1.2. Its self-test fails on each mistake.
+  Rung: CI (static; it proves the manifests, not the operator).
+
 ### Validated
 
 - **The 0.2.0 candidate on three clouds, 2026-10-15, with OpenAether-infra `claude/infra-0.2.1` (not a tag).** Rung: real cloud, **once per
@@ -87,6 +105,21 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
     and the restic check found no error; `cluster-security` 25 of 31 (the four failures are the mesh checks, there is no Istio in that profile).
   - **Not run:** a rolling upgrade or any upgrade from a 0.1.1 cluster beyond the Scaleway one that was moved by Flux commit by commit, Kyverno
     Enforce, a DR restore, a CAPI child, the local Docker lane on prod mode. CI on the pull request is the other rung (see the PR).
+
+### Not fixed
+
+The two results left by the Istio-generated proxies (#70) and the loss of the VictoriaMetrics history on a 0.1.1 → 0.2.0 move (#71) are
+new and open. Unchanged since 0.1.1: #34 (half: a first run interrupted inside the root window still fails again), #35, #36 (cause of
+the `promote` no-op unknown), #37 (the three Kyverno policies stay in Audit), #38 (guard, not a cure), #39 (static only), #42, #44 (no
+per-object Flux Ready signal), #51 (new clusters only), the rest of #53 (2 Loki replicas with replication factor 2; the dedicated Loki key
+pair was never run on a cloud, infra #302). **Not observed anywhere:** a disaster-recovery restore, a rolling upgrade of the OpenBao
+replicas, Kyverno Enforce, a CAPI child, prod-mode local Docker, a Longhorn backup or restore. This release does not make `task cluster-up`
+produce a working platform by itself: the Day-1 seeding, the PKI signing and the Grafana OIDC client stay manual.
+
+### Maintainers
+
+Merge by **squash**. The ruleset on `main` requires `Lint`, `Flux DAG`, `Kustomize Build + Collision Check` and `Secret Detection`; the new
+`Environment data in new commits` job is not required yet (a repository setting). The tags ruleset (id 25117854) forbids moving a tag.
 
 ## [0.1.1] — 2026-10-14
 
