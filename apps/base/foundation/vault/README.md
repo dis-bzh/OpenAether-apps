@@ -7,7 +7,8 @@ policies at L3/L4 + OpenBao's own authentication).
 ## How it fits together
 
 ```
- StatefulSet openbao (3 replicas, raft, local-path-retain)
+ StatefulSet openbao (3 replicas, raft, local-path-retain)  + sidecar cert-reload (SIGHUP on a renewed certificate)
+   listeners      :8200 API (TLS 1.3 only)   :8202 metrics (tokenless, vmagent only)   :8201 raft
    seal "static"  ← Secret openbao-seal-key (32 random bytes, mounted read-only)   → restarts unseal themselves
    audit "file"   → stdout → Alloy → Loki (values are HMAC-ed by OpenBao)          → declared in the config, not via the API
  Job openbao-init       one shot; the ONLY holder of the root token, for a few seconds
@@ -201,10 +202,37 @@ cluster that holds nothing yet, as above.
 likewise. The alert covers a Job that fails on a cluster whose observability is already running (a re-run, an upgrade): observed firing
 and clearing on a real cluster. It can NOT show a failed first install, because the VMRule is deployed by `observability`, which waits for
 OpenBao-fed secrets; after an interruption inside the root window, `openbao-init` fails again (see above) and you see it with
-`kubectl -n foundation-vault get jobs` and the dependents staying NotReady. `prometheusrule.yaml` (`OpenBaoWorkloadSealed`, `OpenBaoRaftNoLeader`, `OpenBaoRaftLagHigh`) is NOT in this
-kustomization and is not deployed. `networkpolicy.yaml`: the OpenBao policy admits ESO, cert-manager, the snapshot job, Prometheus,
-the raft peers and the two Jobs; each Job has an egress policy of its own (DNS and OpenBao; only `openbao-init` also reaches the
+`kubectl -n foundation-vault get jobs` and the dependents staying NotReady. The OpenBao alerts (`OpenBaoWorkloadSealed`,
+`OpenBaoNoActiveNode`, `OpenBaoRaftNoFailureTolerance`, `OpenBaoRaftApplyLag`, `OpenBaoMetricsDown`) and the scrape are in
+`apps/base/observability-openbao` (see "Metrics, TLS and certificate renewal" below); they are mocked/static, not yet fired on a
+cluster. `networkpolicy.yaml`: the OpenBao policy admits ESO, cert-manager, the snapshot job, vmagent (port 8202 only), the raft
+peers and the two Jobs; each Job has an egress policy of its own (DNS and OpenBao; only `openbao-init` also reaches the
 kube-apiserver, to create the Secrets).
+
+## Metrics, TLS and certificate renewal
+
+- **TLS 1.3 only** on the API (8200) and the metrics (8202) listeners (ANSSI NT-35 R10), with the key exchanges
+  `X25519MLKEM768, CurveP384, CurveP256, X25519` (a client that offers none of them is refused; P-521 is out). TLS 1.3 has a fixed
+  cipher set, so no `tls_cipher_suites`. The clients known here (cert-manager, ESO, the `bao` CLI and the Jobs' curl, kubelet's
+  probes, the Gateway's Envoy) speak 1.3; **proven against a real OpenBao with openssl and curl, not against those clients on a cluster.**
+  If one turns out not to, `OA_TLS_MIN_VERSION=tls12` on the container (a Flux `spec.patches` entry on the StatefulSet) puts the
+  old floor back at the next pod restart; an unknown value stops the entrypoint.
+- **Metrics.** `/v1/sys/metrics` needs a token on 8200. A second listener on 8202 serves it without one (`unauthenticated_metrics_access`):
+  8202 is a port of the headless Service only, so neither `openbao-ui` nor the Gateway route reaches it, and the OpenBao network policy admits
+  vmagent alone there. The scrape (`VMServiceScrape` in this namespace) verifies the server certificate against the `ca.crt` of
+  `openbao-server-tls`. The listener is otherwise a full API listener (health, seal-status, login stay as on 8200), and its cluster
+  port is bound to the loopback. The metric prefix is `vault_`; `prometheus_retention_time = 1m` so that a series with an old
+  label set does not outlive an unseal.
+- **Certificate renewal.** `openbao-server-tls` renews at one third of its life (2920 h of 8760 h) with a **new key each time**
+  (`rotationPolicy: Always`, ANSSI NT-35 R25, IGC BP-08). OpenBao reads the pair at start and on SIGHUP only, so the
+  `cert-reload` sidecar (same image, same uid, pod `shareProcessNamespace`) hashes the two files every 30 s and sends SIGHUP to
+  `bao` when they change; the pod keeps serving, unsealed, with the new pair. On a cluster that already has the Secret, the
+  new `renewBefore` may renew it at the first reconcile: that is the first test of the path.
+  `openbao-ca` (10 years) keeps its key, and so does its renewal: re-keying it means issuing a new CA, then re-issuing every leaf in the
+  same step (the pods trust `ca.crt` of their own Secret); not drilled, to plan for year nine.
+- **Logs.** `log_format = json`, `log_level = info`. The audit trail and the server log share stdout; Alloy adds the Loki label
+  `log_type="audit"` to the former (`{namespace="foundation-vault", log_type="audit"}`), by the first keys of the line. The levels
+  of the other components are in `docs/detection.md`.
 
 The configure Job runs about every 70 minutes (ttl 3600 s plus one sync), not once: each run rewrites the policies and the Kubernetes-auth
 roles from git, so a manual edit of either is reverted within about 70 minutes. Change the configuration in git, never by hand (a drill
@@ -242,5 +270,5 @@ that needs a temporary grant should expect it to disappear).
 `scripts/dev/test-openbao-bootstrap.sh` runs the real entrypoint, `init.sh` and `configure.sh` against an OpenBao container (needs
 Docker, gpg, jq, openssl): both modes, root revocation (witnessed by the audit trail), no secret in any output, idempotence,
 create-only, what every policy allows and denies, PGP shares and the break-glass, snapshot restore with the right and a wrong key,
-seal-key rotation. It runs in CI. On a cluster: `kubectl -n foundation-vault get pods,jobs` (3× openbao Ready, `openbao-init` and
+seal-key rotation, TLS 1.2 refused and 1.3 accepted, the metrics listener (sealed and active) and the names the alerts read, and a certificate reload by the real sidecar script. It runs in CI. On a cluster: `kubectl -n foundation-vault get pods,jobs` (3× openbao Ready, `openbao-init` and
 `openbao-vault-bootstrap` Complete).

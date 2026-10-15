@@ -40,7 +40,7 @@ src, out = sys.argv[1:3]
 os.makedirs(out, exist_ok=True)
 t = open(src).read()
 data = t[t.index('data:\n'):]
-for name in ('config.hcl.tpl', 'entrypoint.sh'):
+for name in ('config.hcl.tpl', 'entrypoint.sh', 'cert-reload.sh'):
     m = re.search(r'^  ' + re.escape(name) + r': \|\n((?:    .*\n|\n)+)', data, re.M)
     body = ''.join(l[4:] if l.startswith('    ') else l for l in m.group(1).splitlines(True))
     open(os.path.join(out, name), 'w').write(body)
@@ -89,11 +89,14 @@ mkpgp() { # N — N test identities with an encryption subkey; public keys as ba
 }
 
 run_bao() { # NAME PORT — (re)start the container for NAME on its existing data and seal directories; waits for the API
+  # TLS_DIR replaces the shared certificate directory; BAO_ENV holds extra "-e VAR=value" words. The metrics listener
+  # (8202) is published on PORT+1000.
   local name="$1" port="$2"
   docker rm -f "bao-test-$name" >/dev/null 2>&1
-  docker run -d --label "oa-test=$$" --user "$(id -u):$(id -g)" --name "bao-test-$name" --hostname openbao-0 -p "127.0.0.1:$port:8200" \
+  docker run -d --label "oa-test=$$" --user "$(id -u):$(id -g)" --name "bao-test-$name" --hostname openbao-0 \
+    -p "127.0.0.1:$port:8200" -p "127.0.0.1:$((port + 1000)):8202" ${BAO_ENV:-} \
     -e POD_NAMESPACE=foundation-vault \
-    -v "$T/conf:/bao/config:ro" -v "$T/$name/seal:/bao/seal:ro" -v "$T/tls:/bao/tls:ro" -v "$T/$name/data:/bao/data" \
+    -v "$T/conf:/bao/config:ro" -v "$T/$name/seal:/bao/seal:ro" -v "${TLS_DIR:-$T/tls}:/bao/tls:ro" -v "$T/$name/data:/bao/data" \
     -v "$T/sa:/var/run/secrets/kubernetes.io/serviceaccount:ro" \
     --entrypoint /bin/sh "$IMAGE" /bao/config/entrypoint.sh >/dev/null 2>&1
   local _; for _ in $(seq 1 40); do
@@ -199,7 +202,7 @@ grep -q "openaether.io/dev-bootstrap=true" "$T/dev/k8s/secret/openbao-recovery-d
 [ ! -d "$T/dev/k8s/secret/openbao-recovery-shares" ] && ok "no production shares Secret in development mode" || bad "production shares Secret exists in development mode"
 grep -q "root token revoked" "$T/dev/init.sh.out" && ok "the root token was revoked" || bad "no revocation line"
 AUDIT=0; for _ in $(seq 1 15); do
-  docker logs bao-test-dev 2>&1 | grep -q "enabled audit backend: path=stdout/ type=file" && { AUDIT=1; break; }; sleep 1
+  docker logs bao-test-dev 2>&1 | grep -q '"@message":"enabled audit backend".*"path":"stdout/","type":"file"' && { AUDIT=1; break; }; sleep 1
 done
 [ "$AUDIT" = 1 ] && ok "the audit device from the configuration is enabled" || bad "the audit device is not enabled"
 # The audit trail is the witness: the revocation request was made by a ROOT token and was answered.
@@ -424,6 +427,75 @@ GOT="$(curl -s --cacert "$DRCA" -H "@$T/rot.root" "$RA/v1/secret/data/x" | jq -r
 [ "$GOT" = survives ] && ok "the data is intact after the rotation" || bad "data after rotation: '$GOT'"
 sleep 3; rm -f "$T/rot/seal/previous-key"
 run_bao rot 18216; wait_active_port 18216 && ok "restart with key 2 only: unsealed (the previous key is no longer needed)" || bad "no unseal with key 2 alone"
+
+echo "=== TLS 1.3 only, the metrics listener, and the certificate reload (the real template, entrypoint and cert-reload.sh) ==="
+TLSD="$T/tls-rl"; mkdir -p "$TLSD"; cp "$T/tls/tls.crt" "$T/tls/tls.key" "$T/tls/ca.crt" "$TLSD/"; chmod a+r "$TLSD"/*
+export TLS_DIR="$TLSD"
+start_bao tls 18221 && ok "OpenBao started with the TLS directory of the test" || bad "tls instance did not start"
+AP="127.0.0.1:18221"; MP="127.0.0.1:19221"; CA="$T/tls/ca.crt"
+serial() { echo | openssl s_client -connect "$1" -CAfile "$CA" 2>/dev/null | openssl x509 -noout -serial 2>/dev/null; }
+# Captured into variables: under pipefail a `grep -q` that exits early makes the producer die of SIGPIPE and the test flap.
+hs() { echo | openssl s_client -connect "$@" 2>&1; }
+refused() { local o; o="$(hs "$@")"; grep -q -E 'alert (protocol version|handshake failure)|alert number (40|70)|no protocols available|unsupported protocol' <<<"$o"; }
+accepted() { local o; o="$(hs "$@")"; grep -q 'Verify return code: 0' <<<"$o"; }
+accepted "$AP" -tls1_3 -CAfile "$CA" && ok "TLS 1.3 is accepted and the certificate verifies" || bad "TLS 1.3 handshake failed"
+refused "$AP" -tls1_2 && ok "the API listener refuses TLS 1.2" || bad "TLS 1.2 was not refused on 8200"
+refused "$MP" -tls1_2 && ok "the metrics listener refuses TLS 1.2" || bad "TLS 1.2 was not refused on 8202"
+for g in X25519 secp384r1 secp256r1; do
+  accepted "$AP" -tls1_3 -groups "$g" -CAfile "$CA" && ok "key exchange $g is accepted" || bad "key exchange $g was refused"
+done
+refused "$AP" -tls1_3 -groups secp521r1 && ok "a curve outside tls_key_exchange_preferences (secp521r1) is refused" || bad "secp521r1 was accepted"
+if curl -s --cacert "$CA" --tls-max 1.2 -o /dev/null "https://$AP/v1/sys/health"; then bad "curl limited to TLS 1.2 got an answer"; else ok "a TLS 1.2 client (curl --tls-max 1.2) gets no answer"; fi
+MCODE() { curl -s --cacert "$CA" -o "${2:-/dev/null}" -w '%{http_code}' "https://$1/v1/sys/metrics?format=prometheus"; }
+[ "$(MCODE "$AP")" != 200 ] && ok "the API listener does not serve the metrics without a token" || bad "8200 served the metrics unauthenticated"
+[ "$(MCODE "$MP" "$T/metrics.sealed")" = 200 ] && ok "the metrics listener serves them without a token, SEALED and uninitialised" || bad "no metrics from a sealed pod"
+grep -E '^vault_core_unsealed(\{[^}]*\})? 0$' "$T/metrics.sealed" >/dev/null && ok "a sealed pod reports vault_core_unsealed 0 (the alert reads this)" || bad "sealed pod: $(grep core_unsealed "$T/metrics.sealed")"
+INIT="$(curl -s --cacert "$CA" -X PUT -d '{"recovery_shares":1,"recovery_threshold":1}' "https://$AP/v1/sys/init")"
+wait_active_port 18221 && ok "initialised and unsealed" || bad "tls instance not active"
+sleep 12   # the metrics loop emits the raft and autopilot gauges every ~10 s
+MCODE "$MP" "$T/metrics.active" >/dev/null
+python3 -I - "$V/../../observability-openbao/vmrule.yaml" "$T/metrics.active" <<'PY' && ok "every vault_* metric the OpenBao alerts read is served by this OpenBao" || bad "an alert reads a metric this OpenBao does not serve"
+import re, sys, yaml
+served = set(re.findall(r'^(vault_[A-Za-z0-9_]+)', open(sys.argv[2]).read(), re.M))
+names = set()
+for d in yaml.safe_load_all(open(sys.argv[1])):
+    for g in d["spec"]["groups"]:
+        for r in g["rules"]:
+            names |= set(re.findall(r'\b(vault_[A-Za-z0-9_]+)', r["expr"]))
+missing = sorted(names - served)
+print("  rules read:", ", ".join(sorted(names)), "| missing:", missing or "none")
+sys.exit(1 if missing or not names else 0)
+PY
+grep -q '^vault_core_unsealed{cluster="vault-cluster-[^"]*"} 1$' "$T/metrics.active" && ok "an unsealed pod reports vault_core_unsealed 1 under its cluster name" || bad "unsealed gauge missing"
+docker exec "bao-test-tls" sh -c 'netstat -tln' 2>/dev/null | grep -q '127.0.0.1:8203' && ! docker exec "bao-test-tls" sh -c 'netstat -tln' | grep -E '(:::|0\.0\.0\.0:)8203' >/dev/null \
+  && ok "the metrics listener's cluster port is on the loopback only" || bad "port 8203 is not confined to the loopback"
+
+# Certificate reload: a new pair is written (as kubelet does for a renewed Secret) and the sidecar signals the server.
+BEFORE="$(serial "$AP")"
+docker run -d --label "oa-test=$$" --name bao-test-tls-reload --pid container:bao-test-tls --user "$(id -u):$(id -g)" -e OA_RELOAD_INTERVAL=1 \
+  -v "$T/conf:/bao/config:ro" -v "$TLSD:/bao/tls:ro" --entrypoint /bin/sh "$IMAGE" /bao/config/cert-reload.sh >/dev/null
+sleep 3
+openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout "$TLSD/new.key" -out "$T/new.csr" -subj "/CN=localhost" >/dev/null 2>&1
+openssl x509 -req -in "$T/new.csr" -CA "$T/tls/ca.crt" -CAkey "$T/tls/ca.key" -set_serial 4242 -out "$TLSD/new.crt" -days 2 -extfile "$T/tls/san.ext" >/dev/null 2>&1
+mv "$TLSD/new.key" "$TLSD/tls.key"; mv "$TLSD/new.crt" "$TLSD/tls.crt"; chmod a+r "$TLSD"/*
+AFTER="$BEFORE"; for _ in $(seq 1 20); do AFTER="$(serial "$AP")"; [ "$AFTER" != "$BEFORE" ] && break; sleep 1; done
+[ "$AFTER" != "$BEFORE" ] && ok "the API listener serves the renewed certificate without a restart ($BEFORE -> $AFTER)" || bad "certificate not reloaded"
+[ "$(serial "$MP")" = "$AFTER" ] && ok "so does the metrics listener" || bad "the metrics listener kept the old certificate"
+RELOADLOG="$(docker logs bao-test-tls-reload 2>&1)"; grep -q 'SIGHUP sent to bao' <<<"$RELOADLOG" && ok "the sidecar logged the signal" || bad "no signal in the sidecar log: $(tail -2 <<<"$RELOADLOG")"
+[ "$(docker inspect -f '{{.State.Running}}' bao-test-tls)" = true ] && ok "the server survived the SIGHUP" || bad "the server stopped"
+curl -s --cacert "$CA" -H "X-Vault-Token: nope" -o /dev/null "https://$AP/v1/sys/mounts"
+sleep 1; TLSLOG="$(docker logs bao-test-tls 2>&1)"
+grep -q '"type":"request"' <<<"$TLSLOG" && ok "the audit device still writes to stdout after the reload" || bad "no audit line after the reload"
+grep -q -E '^\{"time":"[^"]+","type":"(request|response)"' <<<"$TLSLOG" && ok "audit lines start with {\"time\",\"type\" (the Alloy log_type selector keys on it)" || bad "unexpected audit line shape"
+TLSLOG="$(docker logs bao-test-tls 2>&1)"
+grep -q -E '^\{"@level"' <<<"$TLSLOG" && ok "the server log is JSON too (log_format = json)" || bad "server log is not JSON"
+unset TLS_DIR
+
+echo "=== OA_TLS_MIN_VERSION: tls12 is the documented way back; anything else is refused ==="
+BAO_ENV="-e OA_TLS_MIN_VERSION=tls12" start_bao old 18222 && ok "OpenBao started with OA_TLS_MIN_VERSION=tls12" || bad "old instance did not start"
+accepted 127.0.0.1:18222 -tls1_2 -CAfile "$CA" && ok "…and then accepts TLS 1.2" || bad "TLS 1.2 refused although tls12 was asked for"
+if docker run --rm --user "$(id -u):$(id -g)" -e OA_TLS_MIN_VERSION=tls11 -e POD_NAMESPACE=x -v "$T/conf:/bao/config:ro" -v "$T/tls:/bao/seal:ro" \
+     --entrypoint /bin/sh "$IMAGE" /bao/config/entrypoint.sh >"$T/badtls.out" 2>&1; then bad "tls11 was accepted"; else grep -q 'must be tls12 or tls13' "$T/badtls.out" && ok "an unknown value stops the entrypoint with a message" || bad "no message: $(cat "$T/badtls.out")"; fi
 
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$PASS" -gt 0 ] && [ "$FAIL" -eq 0 ]

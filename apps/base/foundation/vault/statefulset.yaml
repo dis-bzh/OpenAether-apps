@@ -33,6 +33,8 @@ spec:
         openaether.io/component: openbao
     spec:
       serviceAccountName: openbao
+      # The cert-reload sidecar signals the bao process (SIGHUP) when cert-manager renews the listener certificate.
+      shareProcessNamespace: true
       priorityClassName: platform-critical
       securityContext:
         runAsNonRoot: true
@@ -82,6 +84,10 @@ spec:
               protocol: TCP
             - containerPort: 8201
               name: cluster
+              protocol: TCP
+            # Metrics listener (configmap.yaml): the only port that serves /v1/sys/metrics without a token.
+            - containerPort: 8202
+              name: metrics
               protocol: TCP
           securityContext:
             # IPC_LOCK removed: mlock was dropped in OpenBao 2.x.
@@ -139,6 +145,33 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+        # Reloads the listener certificate on renewal (SIGHUP, cert-reload.sh). Same image (pidof, kill, sha256sum).
+        - name: cert-reload
+          image: docker.io/openbao/openbao:2.7.1
+          command: ["/bin/sh", "/bao/config/cert-reload.sh"]
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 100
+            seccompProfile: { type: RuntimeDefault }
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          volumeMounts:
+            - name: config
+              mountPath: /bao/config
+              readOnly: true
+            - name: tls
+              mountPath: /bao/tls
+              readOnly: true
       volumes:
         - name: config
           configMap:

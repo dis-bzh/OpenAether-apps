@@ -19,6 +19,7 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 | Network policy denials in a loop (no Hubble) | `CiliumPolicyDeniedBurst` | `vmrule-platform.yaml` |
 | `/var` (EPHEMERAL, local-path volumes) filling | `NodeFilesystemFillingUp`, `NodeFilesystemFullIn24h` | `vmrule-cluster.yaml` |
 | Node clock drift | `NodeClockSkew`, `NodeClockNotSynchronised` | `vmrule-cluster.yaml` |
+| An OpenBao pod sealed, no active node, raft without failure tolerance or lagging in applying entries, its metrics not scraped | `OpenBaoWorkloadSealed`, `OpenBaoNoActiveNode`, `OpenBaoRaftNoFailureTolerance`, `OpenBaoRaftApplyLag`, `OpenBaoMetricsDown` | `observability-openbao/vmrule.yaml` |
 | The OpenBao seal-key escrow not attested, or attested too long ago (also when the check has never succeeded) | `OpenBaoEscrowNotAttested` | `vmrule-backup.yaml` |
 | Backups: a restore test or CronJob that no longer runs, WAL archive failing, base backup failed or stale | `RestoreTestStale`, `BackupCronJobMissing`, `CnpgWalArchiveFailing`, `CnpgBackupFailed`, `CnpgBackupStale` | `vmrule-backup.yaml` |
 
@@ -29,9 +30,9 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
   `NodeClock*`, `CiliumPolicyDeniedBurst`, `GrafanaServerErrors` and `RestoreTestStale` have none. `task check-alerts` on a running cluster
   is the check.
 
-- **OpenBao authentication failures, root-token use, seal and raft state.** The audit log reaches Loki, but no Loki ruler
-  evaluates it, and the OpenBao rules in `foundation/vault/prometheusrule.yaml` are not deployed (they use the
-  Prometheus Operator CRDs, which this platform does not install); porting them is a separate change.
+- **OpenBao authentication failures and root-token use.** The audit trail reaches Loki, labelled `log_type="audit"`, but no Loki
+  ruler evaluates it, so nothing alerts on it; read it in Grafana Explore (`{log_type="audit"} | json | response_error != ""`,
+  not tried on a cluster).
 - **`kubectl exec`, new cluster-admin bindings, RBAC changes.** They need the API server audit log, which is not
   collected.
 - **An empty log stream for one namespace.** Needs a Loki ruler or an Alloy `stage.metrics`; only "nothing at all is
@@ -54,3 +55,22 @@ Kyverno records every Audit violation in a policy report, whether or not an aler
 `KyvernoPolicyViolation` ignores `require-security-context` until its known violations (vendored charts) are fixed, and
 ignores background scans (they recount existing violations on every pass); the report above is where those are read.
 Review it before switching any policy from Audit to Enforce.
+
+## Log formats and levels
+
+Set here, so that a detection rule can rely on the shape of a line (ANSSI PA-012 R1, R6 and R23 in part). Alloy ships every pod's
+stdout to Loki and adds `namespace, pod, container, app, component`; only the OpenBao audit lines get a `log_type`.
+
+| Component | Format | Level | Where |
+|---|---|---|---|
+| OpenBao (server log and audit trail, one stdout) | JSON | info (explicit) | `foundation/vault/configmap.yaml`; audit = `log_type="audit"` |
+| Flux controllers of the CAPI children (`cluster-api-clusters/flux-gotk`) | JSON | info | `--log-level`, `--log-encoding`; the management cluster's own Flux is installed by OpenAether-infra |
+| External Secrets | upstream default | info | `--loglevel=info` |
+| istio-cni | upstream default | info | `logLevel: info` |
+| Grafana | JSON | chart default | `log.console.format: json`, requests logged (`router_logging`) |
+| Zitadel | JSON | upstream default | access log scrubbed of tokens by Alloy |
+| Kyverno | text | upstream default | `--loggingFormat=text` of the vendored manifest, not changed here |
+| local-path-provisioner | text | default (no `--debug`) | `platform/local-path-provisioner` |
+
+Nothing else is set explicitly, and none of this was read back from a running cluster. The Loki label `cluster` is the constant
+`management`: only that cluster ships logs today.

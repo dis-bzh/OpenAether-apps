@@ -22,6 +22,11 @@ spec:
       port: 8201
       targetPort: 8201
       protocol: TCP
+    # Scraped by vmagent (observability-openbao). Not on `openbao-ui`, so the Gateway route can not reach it.
+    - name: metrics
+      port: 8202
+      targetPort: 8202
+      protocol: TCP
   selector:
     app: openbao
 ---

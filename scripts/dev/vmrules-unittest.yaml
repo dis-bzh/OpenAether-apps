@@ -105,3 +105,54 @@ tests:
       - eval_time: 3h
         alertname: KyvernoMetricsAbsent
         exp_alerts: []
+  # OpenBao (observability-openbao/vmrule.yaml). The series names are the ones a real OpenBao 2.7.1 serves; the harness
+  # scripts/dev/test-openbao-bootstrap.sh checks that every metric the rules read exists there.
+  - name: one OpenBao pod sealed, one unsealed that still has its old series
+    interval: 10m
+    input_series:
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-1", cluster=""}'
+        values: '0+0x300'
+      # The pod that unsealed still exposes its pre-unseal series (cluster="") for the retention time: the sum hides it.
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-0", cluster=""}'
+        values: '0+0x300'
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-0", cluster="vault-cluster-1"}'
+        values: '1+0x300'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: OpenBaoWorkloadSealed
+        exp_alerts:
+          - exp_labels: {pod: openbao-1, severity: critical, component: openbao}
+            exp_annotations:
+              summary: "OpenBao pod openbao-1 is sealed"
+              description: >-
+                It unseals itself from the static key in the Secret openbao-seal-key: check that the Secret exists and
+                is mounted (kubectl -n foundation-vault describe pod openbao-1), that the key is the one the data was
+                sealed with, and the pod logs.
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md"
+  - name: OpenBao has no active node (a standby reports 0, a sealed pod reports nothing)
+    interval: 10m
+    input_series:
+      - series: 'vault_core_active{namespace="foundation-vault", pod="openbao-0", cluster="vault-cluster-1"}'
+        values: '0+0x300'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: OpenBaoNoActiveNode
+        exp_alerts:
+          - exp_labels: {severity: critical, component: openbao}
+            exp_annotations:
+              summary: "OpenBao has no active node"
+              description: >-
+                No pod reports itself active (or none is scraped): no secret can be read or written and no certificate
+                is issued. Look at raft first: bao operator raft list-peers from a pod that answers.
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md"
+  - name: OpenBao with one active node
+    interval: 10m
+    input_series:
+      - series: 'vault_core_active{namespace="foundation-vault", pod="openbao-0", cluster="vault-cluster-1"}'
+        values: '1+0x300'
+      - series: 'vault_core_active{namespace="foundation-vault", pod="openbao-1", cluster="vault-cluster-1"}'
+        values: '0+0x300'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: OpenBaoNoActiveNode
+        exp_alerts: []

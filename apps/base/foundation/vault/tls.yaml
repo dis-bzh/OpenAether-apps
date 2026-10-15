@@ -22,10 +22,14 @@ metadata:
 spec:
   secretName: openbao-server-tls
   duration: 8760h
-  renewBefore: 720h
+  # One third of the lifetime (ANSSI IGC BP-08), and a NEW key at every renewal (NT-35 R25): the listener key lives at
+  # most one renewal period. The pods pick the new pair up through the cert-reload sidecar (SIGHUP, statefulset.yaml);
+  # without it a renewal would not reach a running pod. `openbao-ca` (10 years) keeps its key: README, "Certificates".
+  renewBefore: 2920h
   privateKey:
     algorithm: ECDSA
     size: 256
+    rotationPolicy: Always
   issuerRef:
     name: openbao-ca
     kind: ClusterIssuer

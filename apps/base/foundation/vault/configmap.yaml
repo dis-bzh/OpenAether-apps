@@ -7,6 +7,8 @@
 # it removes the secrets-in-logs and secrets-at-rest exposure of the former design, it does not separate the key
 # from the cluster it protects. LOSS OF THE KEY = LOSS OF THE DATA, so it is escrowed by an operator (README).
 #
+# Listeners: 8200 is the API (TLS 1.3 only, no unauthenticated path to the metrics), 8202 serves the metrics to vmagent.
+#
 # Audit: declared HERE and not through the API (OpenBao refuses `sys/audit` over the API on purpose, so that a
 # compromised token can not switch the trail off). It goes to stdout, which Alloy ships to Loki.
 #
@@ -23,13 +25,50 @@ data:
   config.hcl.tpl: |
     ui = true
 
+    # JSON on stdout for the server log too: the audit lines are already JSON on the same stream, and Alloy tells the
+    # two apart by their first key (observability/alloy.yaml). The level is spelled out so a default change upstream
+    # does not move it (docs/detection.md, "Log levels").
+    log_format = "json"
+    log_level  = "info"
+
+    # prometheus_retention_time: 24h by default. A gauge that changes label sets (core_unsealed gains its `cluster`
+    # label at the first unseal) would keep its old series for a day and a "sealed" alert would read it; 1m is
+    # twice the 30s scrape interval.
+    telemetry {
+      disable_hostname          = true
+      prometheus_retention_time = "1m"
+    }
+
+    # API listener. The minimum TLS version is tls13 unless OA_TLS_MIN_VERSION says otherwise (entrypoint). The key
+    # exchange list is the hybrid post-quantum group first, then the NIST curves and X25519; it also drops the P-521 and
+    # the curves Go would otherwise offer. Cipher suites are not set: TLS 1.3 has a fixed set, and TLS 1.2 (when
+    # OA_TLS_MIN_VERSION=tls12) keeps Go's defaults.
     listener "tcp" {
       address = "[::]:8200"
       cluster_address = "[::]:8201"
       tls_cert_file = "/bao/tls/tls.crt"
       tls_key_file  = "/bao/tls/tls.key"
+      tls_min_version = "@@TLS_MIN_VERSION@@"
+      tls_key_exchange_preferences = ["X25519MLKEM768", "CurveP384", "CurveP256", "X25519"]
       # No `tls_client_ca_file`: no mTLS here. TLS encrypts the transport and authenticates the SERVER;
       # clients authenticate with a token or through auth/kubernetes.
+    }
+
+    # Metrics listener: the ONLY one that serves /v1/sys/metrics without a token. A separate port keeps it off the
+    # `openbao-ui` Service and so off the Gateway route (the API listener answers metrics with 403); only vmagent may
+    # reach 8202 (networkpolicy.yaml). It is a full API listener otherwise: every other path still needs a token or
+    # is the usual unauthenticated set (health, seal-status, login). Its cluster listener binds the loopback: OpenBao
+    # opens one per listener and the default (8203) would be a second cluster port on the pod IP.
+    listener "tcp" {
+      address = "[::]:8202"
+      cluster_address = "127.0.0.1:8203"
+      tls_cert_file = "/bao/tls/tls.crt"
+      tls_key_file  = "/bao/tls/tls.key"
+      tls_min_version = "@@TLS_MIN_VERSION@@"
+      tls_key_exchange_preferences = ["X25519MLKEM768", "CurveP384", "CurveP256", "X25519"]
+      telemetry {
+        unauthenticated_metrics_access = true
+      }
     }
 
     storage "raft" {
@@ -70,6 +109,13 @@ data:
     # Rotating the key: add the new one as `key` and keep the old one as `previous-key` in the Secret
     # (README, section Seal key).
     set -e
+    # TLS 1.3 only by default (ANSSI NT-35 R10). OA_TLS_MIN_VERSION=tls12 is the way back if a client turns out not to
+    # speak 1.3; anything else is refused rather than passed into the configuration.
+    TLS_MIN_VERSION="${OA_TLS_MIN_VERSION:-tls13}"
+    case "$TLS_MIN_VERSION" in
+      tls12|tls13) ;;
+      *) echo "OA_TLS_MIN_VERSION must be tls12 or tls13, got '${TLS_MIN_VERSION}'" >&2; exit 1 ;;
+    esac
     POD_FQDN="${HOSTNAME}.openbao.${POD_NAMESPACE}.svc.cluster.local"
     export BAO_API_ADDR="https://${POD_FQDN}:8200"
     export BAO_CLUSTER_ADDR="https://${POD_FQDN}:8201"
@@ -81,10 +127,28 @@ data:
       previous_key    = \"file:///bao/seal/previous-key\""
     fi
     # sed with a here-string for the multi-line value would need escaping: build the file in two steps.
-    sed -e "s|@@CURRENT_KEY_ID@@|$(id /bao/seal/key)|" /bao/config/config.hcl.tpl > /tmp/config.stage
+    sed -e "s|@@CURRENT_KEY_ID@@|$(id /bao/seal/key)|" -e "s|@@TLS_MIN_VERSION@@|${TLS_MIN_VERSION}|g" \
+      /bao/config/config.hcl.tpl > /tmp/config.stage
     awk -v prev="$PREVIOUS" '
       /@@PREVIOUS_KEY@@/ { if (prev != "") print prev; next }
       { print }' /tmp/config.stage > /tmp/config.hcl
     rm -f /tmp/config.stage
     echo "raft addr: ${POD_FQDN}"
     exec bao server -config=/tmp/config.hcl
+  cert-reload.sh: |
+    #!/bin/sh
+    # Sidecar of the openbao container (pod shareProcessNamespace). OpenBao reads the listener certificate at start
+    # and on SIGHUP only; cert-manager renews the Secret (and, with rotationPolicy Always, the key) in place, so
+    # without this the pod would keep serving the old pair until it restarts. kubelet swaps both files of a Secret
+    # volume together. The hash covers certificate AND key, so a re-keyed renewal is seen as one change.
+    CERT=/bao/tls/tls.crt; KEY=/bao/tls/tls.key
+    fingerprint() { [ -s "$CERT" ] && [ -s "$KEY" ] && cat "$CERT" "$KEY" | sha256sum | cut -c1-64; }
+    last="$(fingerprint)"
+    echo "watching ${CERT} (every ${OA_RELOAD_INTERVAL:-30}s)"
+    while sleep "${OA_RELOAD_INTERVAL:-30}"; do
+      now="$(fingerprint)" || continue
+      [ "$now" = "$last" ] && continue
+      pid="$(pidof bao)" || { echo "the listener certificate changed but there is no bao process to signal"; continue; }
+      # shellcheck disable=SC2086
+      if kill -HUP $pid; then echo "listener certificate changed: SIGHUP sent to bao (${pid})"; last="$now"; fi
+    done

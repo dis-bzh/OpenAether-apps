@@ -10,7 +10,8 @@ metadata:
 spec:
   description: "OpenBao (HA, 3 replicas, static seal): ingress from Cilium
     Gateway, external-secrets, csi-driver, cert-manager, istiod, the snapshot
-    CronJob, the init and bootstrap Jobs, peers raft. Egress: kube-dns, k8s API, peers raft."
+    CronJob, the init and bootstrap Jobs, peers raft, vmagent on the metrics port.
+    Egress: kube-dns, k8s API, peers raft."
   endpointSelector:
     matchLabels:
       app: openbao
@@ -80,14 +81,15 @@ spec:
         - ports:
             - port: "8200"
               protocol: TCP
-    # 7. Prometheus scraper
+    # 7. vmagent scrapes the metrics listener (8202) and nothing else: the API port stays closed to it. The old
+    #    rule named a `kube-prometheus` pod that this platform never ran.
     - fromEndpoints:
         - matchLabels:
-            io.kubernetes.pod.namespace: kube-system
-            k8s-app: kube-prometheus
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
       toPorts:
         - ports:
-            - port: "8200"
+            - port: "8202"
               protocol: TCP
     # 8. Raft peers (3 replicas): the join challenge goes through the 8200 API,
     #    cluster traffic through 8201. Without both ports in ingress AND egress,

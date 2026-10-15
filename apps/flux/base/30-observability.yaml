@@ -50,3 +50,25 @@ spec:
   wait: true
   dependsOn:
     - name: observability
+---
+# Group 30c — OpenBao VMServiceScrape and VMRule. A companion: it needs the VM CRDs AND the foundation-vault namespace,
+# so it can live neither in 'observability-vm-customresources' (a cluster without OpenBao would fail to apply it) nor in
+# 'foundation-vault' (the VM CRDs may not exist yet). wait: false: a missing metric must not hold anything back.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: observability-openbao
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/observability-openbao
+  prune: true
+  wait: false
+  dependsOn:
+    - name: foundation-vault
+    - name: observability-vm-customresources

@@ -22,6 +22,7 @@ companions:
   - kyverno-policies                 # policies (if kyverno picked)
   - kyverno-policies-eso             # Audit guard on External Secrets objects (if kyverno AND ESO picked)
   - observability-vm-customresources  # VMCluster/VMAgent (if observability picked)
+  - observability-openbao            # OpenBao scrape + alerts (if observability AND OpenBao picked)
   - storage-backup-target            # S3 target for volume backups (if storage + ESO picked)
   - backup-openbao-identity          # CLUSTER_NAME ConfigMap (restic repository prefix)
   - backup-databases-identity        # same, on the CNPG side
@@ -81,6 +82,7 @@ descriptions:
   backup-databases: CNPG pg_dump → restic (client-encrypted, 2 S3 repositories)
   observability: VictoriaMetrics + Loki + Grafana + Alloy
   observability-vm-customresources: VMCluster/VMAgent/VM*Scrape
+  observability-openbao: OpenBao VMServiceScrape (TLS-verified, metrics listener) and VMRule alerts
   identity: Zitadel (IAM/SSO, CNPG backend)
   kyverno: Kyverno (policy engine)
   kyverno-policies: OpenAether Kyverno policies

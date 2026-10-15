@@ -21,6 +21,18 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Security
 
+- **OpenBao's listeners accept TLS 1.3 only, and its server certificate re-keys at every renewal and is reloaded without a restart**
+  (ANSSI NT-35 R10, R11 and R25, IGC BP-08; TLS-02, TLS-10). `tls_min_version = tls13` and `tls_key_exchange_preferences`
+  (`X25519MLKEM768, CurveP384, CurveP256, X25519`, a key that OpenBao 2.7.1 does honour: P-521 is refused) on the API listener;
+  `OA_TLS_MIN_VERSION=tls12` on the container is the documented way back and an unknown value stops the entrypoint.
+  `openbao-server-tls` gets `rotationPolicy: Always` and `renewBefore: 2920h` (a third of its life, was 720h). OpenBao reads the pair at
+  start and on SIGHUP only, so a `cert-reload` sidecar (same image, pod `shareProcessNamespace`) hashes the two files every 30 s and
+  sends SIGHUP. **Real OpenBao in Docker (`scripts/dev/test-openbao-bootstrap.sh`): TLS 1.2 refused, 1.3 accepted, a new pair served on
+  both listeners with the server staying unsealed and the audit device still writing.** Not run on a cluster: that cert-manager,
+  ESO, the `bao` CLI in the Jobs, kubelet's probes and the Gateway's Envoy all speak 1.3, and a real renewal reaching a running pod
+  through the Secret volume. The StatefulSet pod template changes, so the three pods roll once. It does NOT re-key `openbao-ca`
+  (10 years; re-keying it means re-issuing every leaf) nor the Gateway certificate (a later batch).
+
 - **Every route on the shared Gateway is registered with what authenticates its callers, and an opt-in component takes the OpenBao
   and Grafana routes off it** (ANSSI BP-028 R51 and R79 in part; the Zitadel first-admin half is the
   Zitadel entry of this section). The app load balancer has no source ACL, so each HTTPRoute on `openaether-gateway` answers anyone who sets its Host
@@ -170,6 +182,25 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Added
 
+- **OpenBao's metrics are scraped and its alerts are deployed** (ANSSI PA-012 R12 and C3.1 in part; LOG-06). The earlier
+  `prometheusrule.yaml` and `servicemonitor.yaml` were never in a kustomization, used Prometheus Operator kinds this platform does
+  not install, and read `openbao_*` metrics: OpenBao 2.7.1 serves `vault_*`. They are replaced by a VMServiceScrape and a VMRule
+  in a new companion brick `observability-openbao` (Flux Kustomization of the same name; picked automatically with
+  observability + OpenBao): `OpenBaoWorkloadSealed`, `OpenBaoNoActiveNode`, `OpenBaoRaftNoFailureTolerance`, `OpenBaoRaftApplyLag`,
+  `OpenBaoMetricsDown`. Metrics need a token on the API port, so a second listener on 8202 serves them without one, on the
+  headless Service only (not on `openbao-ui`, so not through the Gateway route), admitted by the OpenBao network policy for vmagent
+  alone (the old rule named a pod that never existed); vmagent's egress port moves from 8200 to 8202. The scrape verifies the
+  certificate against the CA of `openbao-server-tls`. **Mocked/static: the real OpenBao serves every metric the rules read, sealed
+  and active (harness); vmalert parses the rules and `vmalert-tool` runs the sealed and no-active-node logic on synthetic series.
+  Not run on a cluster:** the operator reading the CA Secret across the scrape's namespace, a sealed pod being scraped, the
+  alerts firing. It does NOT cover the audit log (no Loki ruler) and leaves `scripts/ops/check-alert-metrics.py` (OpenAether-infra)
+  to be pointed at the new rules.
+- **OpenBao logs as JSON, and the audit trail carries `log_type="audit"` in Loki** (ANSSI PA-012 R1, R6 and R23 in part; LOG-15).
+  `log_format = json`, `log_level = info` in OpenBao; an Alloy `stage.match` on `foundation-vault`/`openbao` lines that start
+  `{"time":...,"type":"request"|"response"` adds the label (a real Alloy, `scripts/dev/test-alloy-scrub.sh`: only the audit lines get it).
+  `docs/detection.md` lists the format and level of each component. The `cluster` label stays the constant `management`: only that
+  cluster runs Alloy, and templating it needs a `substituteFrom` the local Docker lane cannot satisfy. Not run on a cluster.
+
 - **Alerts for the log pipeline, the policy engine, Flux, the node disk and clock, and the backups.** 29 rules in
   `vmrule-logging.yaml` (Alloy missing or dropping, Loki push errors, replica down, discards, ingestion burst, Grafana 5xx),
   `vmrule-security.yaml` (Kyverno violations at admission time, webhook down, Flux object not Ready or suspended), and additions to
@@ -200,6 +231,9 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   pod restarts once (one replica: a gap of a minute in the `kube_*` series).
 
 ### Fixed
+
+- **local-path-provisioner no longer runs with `--debug`** (ANSSI PA-012 R6; LOG-15). It is the default StorageClass of the base
+  profile and logged every volume path and helper-pod step. Static only.
 
 - **Zitadel's access log no longer carries tokens from a query string into Loki (review of the ANSSI branch, L9).** Zitadel's
   access log keeps the request URL, and an OIDC logout puts the ID token in it (`end_session?id_token_hint=...`): checked on a real

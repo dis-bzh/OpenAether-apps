@@ -85,7 +85,7 @@ spec:
         - ports:
             - port: "8080"   # kube-state-metrics, vmalert, many operators
               protocol: TCP
-            - port: "8200"   # OpenBao metrics
+            - port: "8202"   # OpenBao metrics listener (the API port 8200 is not needed to scrape)
               protocol: TCP
             - port: "8428"   # VMSingle (if present)
               protocol: TCP
