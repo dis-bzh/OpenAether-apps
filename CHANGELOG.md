@@ -19,6 +19,14 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ANSSI hardening work, not released yet. **Nothing here is a claim of compliance with any ANSSI document**: each entry names the requirements it addresses and the rung it reached; the ones that only a cluster can show are listed in the lab checklist of the maintainers.
 
+### Upgrade notes
+
+- **Loki goes from 2 to 3 replicas, and the pods of a cluster on 0.2.0 hold a hard anti-affinity that blocks the third.** The chart's
+  default is a required pod anti-affinity (one Loki per node); the new values clear it and keep a preferred one, but the existing pods keep
+  the old spec until they are replaced. On a 3+2 cluster the new pod stays Pending behind them and the rollout waits. Seen on OVH
+  (2026-10-15, a cluster built on the first wave, then fixed in place): delete the old pods one at a time (`kubectl -n services-observability
+  delete pod loki-0`, then `loki-1`), let each come back Ready, then reconcile the HelmRelease. Logs written to the local-path volumes are kept.
+
 ### Security
 
 - **Every route on the shared Gateway is registered with what authenticates its callers, and an opt-in component takes the OpenBao
@@ -201,6 +209,12 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **Two defects only a real cluster showed, found on the first lab of this wave (OVH, full DAG, 2026-10-15).** The least-privilege RBAC left
+  the config-reloader of each vmagent pod unable to read the Secret the operator generates for it (`vmagent-vmagent`): the init container
+  crash-looped on `secrets ... is forbidden`. A namespaced Role limited to that one Secret (read-only) now exists, and its test checks it is
+  the only Secret read. And the third Loki replica could not schedule on a cluster with two workers because of the chart's hard
+  anti-affinity (see Upgrade notes). Rung: real cloud, once, by hand; the two fixes were applied live by Flux on that cluster, which then
+  settled (every pod Running).
 - **Zitadel's access log no longer carries tokens from a query string into Loki (review of the ANSSI branch, L9).** Zitadel's
   access log keeps the request URL, and an OIDC logout puts the ID token in it (`end_session?id_token_hint=...`): checked on a real
   Zitadel v4.14, the token reached stdout, and Loki keeps lines for a year. Alloy gets a `loki.process "scrub"` stage for the
