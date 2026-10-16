@@ -43,7 +43,7 @@ external-secrets). Checked against the versions **pinned here**:
 | Image | Keyless signature verifies |
 |---|---|
 | `ghcr.io/fluxcd/*` v1.5.5, v1.8.5 | yes, subject `https://github.com/fluxcd/gha-workflows/.github/workflows/controller-release.yaml@refs/tags/v0.9.0` |
-| `ghcr.io/external-secrets/external-secrets:v1.2.0` | yes, subject `https://github.com/external-secrets/external-secrets/.github/workflows/release.yml@refs/heads/main` |
+| `ghcr.io/external-secrets/external-secrets:v1.2.0` (the former pin; v2.13.0 not re-checked) | yes, subject `https://github.com/external-secrets/external-secrets/.github/workflows/release.yml@refs/heads/main` |
 | `ghcr.io/kyverno/kyverno:v1.12.1` (the former pin; v1.19.1 comes from `reg.kyverno.io`, not re-checked) | **no signature at all** |
 | `ghcr.io/cloudnative-pg/cloudnative-pg:1.23.1` (the former pin; 1.30.1 not re-checked) | **no signature at all** |
 | `quay.io/jetstack/cert-manager-controller:v1.15.3` (the former pin; not re-checked at v1.21.2) | a `.sig` tag exists but no keyless signature matches (key-signed or another scheme) |

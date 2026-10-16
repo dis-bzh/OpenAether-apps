@@ -265,11 +265,13 @@ components:
 - id: external-secrets
   brick: external-secrets
   component: External Secrets Operator (vendored dump)
-  pin: 1.2.0
+  pin: 2.13.0
   file: apps/base/external-secrets/install.yaml
   pattern: app\.kubernetes\.io/version:\s*"v([0-9.]+)"
-  cycle: ESO v1.2
+  cycle: ESO v2.13
   eol: unknown
+  note: upstream supports only the latest minor and ships one every 10 to 20 days; the dump is `helm template
+    --set installCRDs=true -n external-secrets` of the chart of the same version, then the local patches
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: orc
