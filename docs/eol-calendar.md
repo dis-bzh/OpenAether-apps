@@ -32,7 +32,7 @@ or a vendored dump has no row.
 | minio (`storage`) | 5.2.0 | MinIO RELEASE.2024-04-18 (chart appVersion) | unknown |  | 2026-12-14 |
 | Kyverno (vendored dump) (`kyverno`) | 1.12.1 | Kyverno 1.12 | 2025-07-31 | 2026-12-31 | 2026-12-14 |
 | CloudNativePG operator (vendored dump) (`cnpg`) | 1.23.1 | CNPG 1.23 | unsupported | 2026-12-31 | 2026-12-14 |
-| PostgreSQL (zitadel cluster) (`cnpg`) | 18.4 | PostgreSQL 18 | 2030-11-14 |  | 2026-12-14 |
+| PostgreSQL (zitadel cluster) (`cnpg`) | 18.6 | PostgreSQL 18 | 2030-11-14 |  | 2026-12-14 |
 | PostgreSQL (grafana cluster) (`cnpg`) | 16.3 | PostgreSQL 16 | 2028-11-09 |  | 2026-12-14 |
 | External Secrets Operator (vendored dump) (`external-secrets`) | 1.2.0 | ESO v1.2 | unknown |  | 2026-12-14 |
 | OpenStack Resource Controller (vendored dump) (`orc`) | 2.4.0 | ORC v2.4 | unknown |  | 2026-12-14 |
