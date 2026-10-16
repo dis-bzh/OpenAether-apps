@@ -53,7 +53,8 @@ Kyverno records every Audit violation in a policy report, whether or not an aler
         | [$n, .policy, .rule, (.resources[0].kind + "/" + .resources[0].name)] | @tsv'
 
 `KyvernoPolicyViolation` ignores `require-security-context` until its known violations (vendored charts) are fixed, and
-ignores background scans (they recount existing violations on every pass); the report above is where those are read.
+`require-ro-rootfs` and `require-limits` (informational by design), and ignores background scans (they recount existing
+violations on every pass); the report above is where those are read.
 Review it before switching any policy from Audit to Enforce.
 
 ## Log formats and levels

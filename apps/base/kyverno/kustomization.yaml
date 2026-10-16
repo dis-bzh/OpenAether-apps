@@ -3,8 +3,9 @@ kind: Kustomization
 
 resources:
   - networkpolicy.yaml
-  # VENDORED from https://github.com/kyverno/kyverno/releases/download/v1.18.2/install.yaml
-  #   sha256 888e26a13fa34b72d6fc321e4b29af4857539f46f89b606f624fddb518db4ebf
+  # VENDORED install.yaml of Kyverno v1.12.1 (every image and label in the file says v1.12.1: the policies are written
+  # for this version, `validationFailureAction` at the spec level; the URL this header once gave named v1.18.2, a typo)
+  #   sha256 of the vendored file: 888e26a13fa34b72d6fc321e4b29af4857539f46f89b606f624fddb518db4ebf
   #
   # This resource was a remote URL until 2026-07-27: Flux reconciliation then
   # depended on GitHub's availability, the render was not reproducible offline,

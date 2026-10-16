@@ -1,0 +1,48 @@
+# A memory limit on every container (ANSSI FT082 R10 in part). Informational: a limit chosen blind OOM-kills the
+# workload, so this reports and the values are set from measured usage. Memory only; no CPU limit (throttling).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-limits
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/title: Require Memory Limits
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: low
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      A container without a memory limit can take the whole node's memory. Informational.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: check-memory-limit
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+      exclude:
+        any:
+        - resources:
+            namespaces:
+              - kube-system
+              - kyverno
+              - longhorn-system
+              - local-path-storage
+              - capi-system
+              - orc-system
+              - capi-operator-system
+              - capi-outscale-system
+      validate:
+        message: "resources.limits.memory should be set on every container."
+        pattern:
+          spec:
+            containers:
+            - resources:
+                limits:
+                  memory: "?*"
+            =(initContainers):
+            - resources:
+                limits:
+                  memory: "?*"

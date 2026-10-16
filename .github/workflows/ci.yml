@@ -154,6 +154,20 @@ jobs:
       - name: Container securityContext is set where the operators read it (#47)
         run: python3 -I scripts/dev/test-container-security-context.py
 
+      # Runs the Audit policies against fixture pods. The release publishes no checksum file, only a cosign signature:
+      # the sha256 below is the one of the tarball as first downloaded (trust on first use), so a changed asset fails.
+      - name: Kyverno policies report what they should (Kyverno CLI 1.12.1, the vendored version)
+        env:
+          KYVERNO_CLI_SHA256: a5f6e9070c17acc47168c8ce4db78e45258376551b8bf68ad2d5ed27454cf666
+        run: |
+          set -euo pipefail
+          d="$(mktemp -d)"
+          url=https://github.com/kyverno/kyverno/releases/download/v1.12.1
+          curl -fsSL -o "$d/k.tgz" "$url/kyverno-cli_v1.12.1_linux_x86_64.tar.gz"
+          echo "${KYVERNO_CLI_SHA256}  $d/k.tgz" | sha256sum -c -
+          tar -xzf "$d/k.tgz" -C "$d" kyverno
+          KYVERNO="$d/kyverno" ./scripts/dev/test-kyverno-policies.sh
+
       - name: dependsOn covers the cross-Kustomization contracts (#38)
         run: |
           python3 -I scripts/check-dependson-contracts.py

@@ -10,3 +10,6 @@ resources:
   - require-security-context.yaml
   - restrict-privileged.yaml
   - restrict-image-registries.yaml
+  - restrict-capabilities.yaml
+  - require-ro-rootfs.yaml
+  - require-limits.yaml

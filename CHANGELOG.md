@@ -21,6 +21,21 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Security
 
+- **Kyverno: sensitive capabilities, init containers and read-only rootfs are reported, all in Audit** (ANSSI FT082 R1, R8, R15
+  in part, NSA12 POD-01, BP028 R64; apps half of K8S/F04). New `restrict-capabilities` (names `capabilities.add` values such as
+  SYS_ADMIN, NET_ADMIN, NET_RAW, SYS_PTRACE, SYS_MODULE on containers, initContainers and, through `Pod/ephemeralcontainers`,
+  ephemeral containers; NET_BIND_SERVICE is left alone; ztunnel and the Istio CNI agent are exempt by pod name, the
+  single-purpose system namespaces by namespace), plus the informational `require-ro-rootfs` and `require-limits` (memory only).
+  `restrict-privileged` now also reads initContainers; `require-security-context` is split into three rules so that
+  runAsNonRoot and seccomp are satisfied at the pod OR the container level (the two fields exist at both), while
+  allowPrivilegeEscalation and `drop: [ALL]` stay container-level, initContainers included. The alert `KyvernoPolicyViolation`
+  skips the two informational policies. The header of `apps/base/kyverno/kustomization.yaml` named v1.18.2; the vendored file is
+  v1.12.1 (same sha256), so the `validationFailureAction` syntax is the right one. **Rung: Kyverno CLI 1.12.1 on fixture pods
+  (`scripts/dev/test-kyverno-policies.sh`, 80 expectations, in CI), static render; not run on a cluster**: the report counts on a
+  fresh install and after a node reboot, the ephemeral-container match and `names` against real pod names are for the lab. It does
+  NOT flip any policy to Enforce, narrow the exclusions of `disallow-root-user` (the one Enforce policy that spares whole
+  namespaces), cover the Gateway-generated pods' needs, or add `verifyImages` (the registry allow-list was already per organisation).
+
 - **OpenBao PKI: ECDSA keys, a server-only role, revocation information and auto-tidy** (ANSSI IGC-BP-03, NT-35 R8, R27-R29, R33,
   IGC-BP-06; TLS-07, TLS-08, TLS-09, DP-08, apps half). `configure.sh` generates an ECDSA P-384 intermediate CSR and writes the
   `openaether` role as ECDSA P-256, serverAuth only, `DigitalSignature` only, no wildcard, bare domain, IP SAN or required CN; it

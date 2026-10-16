@@ -1,0 +1,46 @@
+# Read-only root filesystem (ANSSI FT082 R15 in part). Informational, Audit for good: a few upstream charts cannot
+# set it, and the report is what lets a chart value or a tmp emptyDir be added one workload at a time.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-ro-rootfs
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/title: Require Read-Only Root Filesystem
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: low
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      A container whose root filesystem is writable lets an attacker who got in drop tools there. Informational.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: check-readonly-rootfs
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+      exclude:
+        any:
+        - resources:
+            namespaces:
+              - kube-system
+              - kyverno
+              - longhorn-system
+              - local-path-storage
+              - capi-system
+              - orc-system
+              - capi-operator-system
+              - capi-outscale-system
+      validate:
+        message: "securityContext.readOnlyRootFilesystem should be true (put a tmp emptyDir where the process writes)."
+        pattern:
+          spec:
+            containers:
+            - securityContext:
+                readOnlyRootFilesystem: true
+            =(initContainers):
+            - securityContext:
+                readOnlyRootFilesystem: true
