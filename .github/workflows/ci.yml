@@ -259,6 +259,9 @@ jobs:
           # The pg_restore tests are the main check: a skipped part must not pass.
           ! grep -q 'SKIPPED' backup-checks.out
 
+      - name: The S3 rights probe of a dedicated backup key names a missing right (stub aws)
+        run: ./scripts/dev/test-backup-key-rights.sh
+
   loki-render:
     name: Loki chart render
     runs-on: ubuntu-latest

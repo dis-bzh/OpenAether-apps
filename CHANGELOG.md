@@ -411,6 +411,14 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **CNPG `ContinuousArchiving=False` with a dedicated backup key pair: the S3 rights contract is written down, with a probe**
+  (lab 11, Scaleway: HeadBucket 403 while listing and writing worked; docs and a stub-tested script, the corrected policy not
+  run on a store yet). `apps/base/backup/README.md` gets "S3 rights of a dedicated key pair": the action each consumer uses
+  (barman-cloud starts every archive with HeadBucket) and the Scaleway rule that the bucket policy AND an IAM policy must allow
+  the call, HeadBucket being in the IAM sets `ObjectStorageBucketsRead`/`ReadOnly`/`FullAccess` and not in the `ObjectsRead/Write/
+  Delete` sets. New `scripts/ops/check-backup-key-rights.sh` runs every listed call with the pair and names the missing one
+  (`scripts/dev/test-backup-key-rights.sh`, CI, with a stub `aws`). The IAM cause is inferred from the provider's tables, not
+  reproduced; OVH and Outscale are not verified. The infra isolation check does not probe HeadBucket (an infra change).
 - **CNPG instance pods left Completed by an undrained node reboot: documented and alerted, not fixed** (lab 11: both databases
   down 30+ minutes after `talosctl reboot` of two workers; mocked/static, `vmalert-tool` unit test). The kubelet's graceful
   shutdown ends the pod in phase `Succeeded` and the vendored CNPG 1.23.1 never recreates it; cloudnative-pg #2056 (released in
