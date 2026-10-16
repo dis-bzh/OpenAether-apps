@@ -311,13 +311,13 @@ components:
 - id: flux-gotk
   brick: cluster-api-clusters/flux-gotk
   component: Flux controllers pushed to child clusters (vendored dump)
-  pin: 2.8.8
+  pin: 2.9.6
   file: apps/base/cluster-api-clusters/flux-gotk/gotk-components.yaml
   pattern: Flux Version:\s*v([0-9.]+)
-  cycle: Flux 2.8
+  cycle: Flux 2.9
   eol: not-yet
   eol_source: https://endoflife.date/api/flux.json
-  note: 2.8 is still supported upstream
+  note: 2.9 is supported upstream; the dump is the upstream install.yaml asset under the `flux install --export` header
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: restic
