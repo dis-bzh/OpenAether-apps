@@ -272,6 +272,16 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Added
 
+- **Kubelet and apiserver scrapes verify TLS; metrics-server and the kubelet scrapes can too, opt-in** (ANSSI TLS-11, K8S-F14; apps half of
+  B23). The `kube-apiserver` VMServiceScrape no longer sets `insecureSkipVerify`: it verifies against the ServiceAccount CA with
+  `serverName: kubernetes.default.svc`. The new component `apps/flux/components/kubelet-verified-tls` (default off, a cluster adds it to its
+  own overlay, rollback = remove the line) drops `--kubelet-insecure-tls` from metrics-server (it gets `--kubelet-certificate-authority`)
+  and `insecureSkipVerify` from the `kubelet` and `cadvisor` VMNodeScrapes (they get `caFile`). **Enable it only once infra's
+  `kubelet_serving_cert_rotation` is on**: on Talos' default self-signed kubelet certificates `kubectl top` and the node targets would fail.
+  **Rung: mocked/static, not run on a cluster**: `scripts/dev/test-kubelet-verified-tls.py` (in CI) renders both states and applies the Flux
+  patches to the real bricks. **Does NOT**: approve kubelet CSRs or change the kubelets (infra), cover the Grafana-to-Zitadel trust or the
+  Postgres `sslmode` hops (B25), or prove that the apiserver certificate carries `kubernetes.default.svc` on every provider.
+
 - **OpenBao's metrics are scraped and its alerts are deployed** (ANSSI PA-012 R12 and C3.1 in part; LOG-06). The earlier
   `prometheusrule.yaml` and `servicemonitor.yaml` were never in a kustomization, used Prometheus Operator kinds this platform does
   not install, and read `openbao_*` metrics: OpenBao 2.7.1 serves `vault_*`. They are replaced by a VMServiceScrape and a VMRule

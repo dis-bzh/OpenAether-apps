@@ -287,6 +287,8 @@ spec:
   endpoints:
     - port: https
       scheme: https
+      # The apiserver certificate carries kubernetes.default.svc; the node-address endpoints do not, hence serverName.
       tlsConfig:
-        insecureSkipVerify: true
+        caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        serverName: kubernetes.default.svc
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token

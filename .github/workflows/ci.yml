@@ -196,6 +196,10 @@ jobs:
       - name: Private-admin-routes component
         run: python3 scripts/dev/test-private-admin-routes.py
 
+      # The opt-in component that makes metrics-server and the kubelet scrapes verify the kubelet cert (off by default).
+      - name: Kubelet-verified-tls component
+        run: python3 scripts/dev/test-kubelet-verified-tls.py
+
       # The openbao ClusterSecretStore only serves the namespaces it lists; an
       # ExternalSecret rendered anywhere else would stay NotReady on a cluster.
       - name: External Secrets objects stay in the store's namespaces

@@ -2,8 +2,9 @@
 # ──────────────────────────────────────────────────────────────────
 # Enables the metrics API for kubectl top nodes/pods.
 # On Talos, --kubelet-preferred-address-types=InternalIP
-# and --kubelet-insecure-tls are required because Talos does not use
-# kubelet certificates signed by the apiserver.
+# and --kubelet-insecure-tls are required while Talos kubelets serve self-signed
+# certificates. Once infra's kubelet_serving_cert_rotation is on, the opt-in component
+# apps/flux/components/kubelet-verified-tls replaces the flag by a CA check.
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository

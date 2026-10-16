@@ -1,0 +1,73 @@
+# OPT-IN, off by default. Makes metrics-server and the kubelet/cAdvisor scrapes VERIFY the kubelet serving certificate
+# (drops --kubelet-insecure-tls and insecureSkipVerify) against the cluster CA. Addresses ANSSI TLS-11 / K8S-F14;
+# mocked/static.
+#
+# ONLY enable it on a cluster whose kubelets serve certificates signed by the cluster CA: OpenAether-infra variable
+# kubelet_serving_cert_rotation = true (kubelet serverTLSBootstrap + CSR approver). On Talos' default self-signed
+# kubelet
+# certificates, metrics-server and the kubelet scrapes would fail verification: `kubectl top` breaks and the targets
+# go down.
+#
+# Use it from a cluster's own overlay (the generated profiles are rewritten by pick.py, so do not edit those):
+#   resources:  [../../workload]            # or the profile the cluster uses
+#   components: [../components/kubelet-verified-tls]
+# Rollback: remove the component line (Flux restores the insecure flags at the next reconcile).
+#
+# It adds a Flux `spec.patches` to two Kustomizations. That field REPLACES a list, so a cluster that already patches
+# these
+# two Kustomizations must merge by hand. scripts/dev/test-kubelet-verified-tls.py renders it and applies the patches.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: platform-metrics-server
+    patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: platform-metrics-server
+        namespace: flux-system
+      spec:
+        patches:
+          - target:
+              group: helm.toolkit.fluxcd.io
+              kind: HelmRelease
+              name: metrics-server
+            patch: |-
+              apiVersion: helm.toolkit.fluxcd.io/v2
+              kind: HelmRelease
+              metadata:
+                name: metrics-server
+                namespace: kube-system
+              spec:
+                values:
+                  args:
+                    - --kubelet-preferred-address-types=InternalIP
+                    - --kubelet-certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: observability-vm-customresources
+    patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: observability-vm-customresources
+        namespace: flux-system
+      spec:
+        patches:
+          - target:
+              group: operator.victoriametrics.com
+              kind: VMNodeScrape
+              name: kubelet|cadvisor
+            patch: |-
+              apiVersion: operator.victoriametrics.com/v1beta1
+              kind: VMNodeScrape
+              metadata:
+                name: not-used
+              spec:
+                tlsConfig:
+                  insecureSkipVerify: null
+                  caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
