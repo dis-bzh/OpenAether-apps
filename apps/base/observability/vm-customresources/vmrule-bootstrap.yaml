@@ -1,6 +1,8 @@
 # Alert on a Failed OpenBao bootstrap Job (#34). Both Jobs are removed by ttlSecondsAfterFinished and re-made by Flux,
 # so a failure that repeats shows up here and nowhere else. This VMRule lives in this directory for the CRD-before-CR
 # reason in the kustomization.yaml next to it. kube_job_failed{condition="true"} is the Job's own Failed condition.
+# kube-state-metrics emits it only for a Job that has that condition: no series is the quiet state, not a blind rule
+# (`task check-alerts` lists it anyway; docs/detection.md).
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:

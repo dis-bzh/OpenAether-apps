@@ -411,12 +411,26 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **Longhorn managers could not reach each other's webhooks: 9501/9502 added to the in-namespace rules; two alert notes** (lab 11,
+  66 denied flows longhorn-system to longhorn-system; static + server dry-run, not re-run on a cluster). The policy description
+  claimed the ports, the in-namespace ingress and egress rules listed only 9500 and 8500-8503. `scripts/dev/test-longhorn-netpol.py`
+  (CI) requires every port on both sides. `docs/detection.md` now says what `task check-alerts` reports on a healthy cluster:
+  `kube_job_failed` has no series until a Job fails (`OpenBaoBootstrapJobFailed` stays as it is), and `PersistentVolumeFillingUp`
+  cannot fire for local-path volumes (`NodeFilesystemFillingUp` on `/var` is their guard). The false positive itself is the infra
+  tool's.
+- **Memory limits on cert-manager's webhook and cainjector, Zitadel's login pods and Grafana's dashboard sidecar** (lab 11, Kyverno
+  `require-limits` reported 46 containers, all still Audit; rendered-chart test, not run on a cluster). The charts read `resources`
+  under `webhook:`, `cainjector:`, `login:` and `sidecar:`; the top-level block set only the controller or the server. Figures from
+  the measured use (webhook 128Mi, cainjector 256Mi, login 512Mi, `wait-for-zitadel` 64Mi, sidecar 192Mi); each rolls its pods once.
+  `docs/kyverno-enforcement.md` lists what is left and why (the `zitadel-db` Cluster, operator-managed VictoriaMetrics pods, read-only
+  root filesystems not tried, `alloy-audit` running as root by design). `test-alloy-resources.py` became
+  `scripts/dev/test-chart-limits.py` and covers all of them.
 - **Alloy ran with no resource limit: the values were under a key the chart ignores** (lab 11: the two worker Alloy pods used
   335-353 Mi, no limit; static + rendered chart, new figures not run on a cluster). The `resources:` of `alloy.yaml` stood at the
   top of the HelmRelease values; the chart reads `alloy.resources`. The request is now 256Mi and the limit 640Mi (about 1.9x the
   worker use; a control-plane pod uses 41 Mi, one figure for the DaemonSet), CPU 50m/500m. Both Alloy DaemonSets also get a
   limit on the `config-reloader` (32Mi, measured 1-9 Mi). The earlier 256Mi value would have OOM-killed the workers.
-  `scripts/dev/test-alloy-resources.py` (CI) renders both charts and requires a memory request and limit on every container.
+  `scripts/dev/test-chart-limits.py` (CI) renders the charts and requires a memory request and limit on every container.
   What drives the 340 Mi on a worker (log tailing of every pod on it) was not investigated.
 - **One of three kube-apiservers was unmonitored: the apiserver scrape may read 32 MiB** (lab 11, Scaleway: the control plane that
   holds the leader answered more than vmagent's 16 MiB default, "exceeds -promscrape.maxScrapeSize", the size check running before

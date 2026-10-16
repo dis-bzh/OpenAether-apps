@@ -192,6 +192,14 @@ spec:
       create: false
     # Sidecar: automatic discovery of ConfigMaps labelled grafana_dashboard=1.
     sidecar:
+      # No limit before (Kyverno require-limits, lab 11). Measured 74-93 Mi.
+      resources:
+        requests:
+          cpu: 20m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 192Mi
       securityContext:
         runAsNonRoot: true
         allowPrivilegeEscalation: false

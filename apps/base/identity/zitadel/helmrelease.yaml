@@ -80,6 +80,25 @@ spec:
         image:
           # renovate: datasource=docker depName=alpine/k8s
           tag: "1.37.1"
+      # The readiness-wait init container of the login pods had no limit (Kyverno require-limits, lab 11).
+      wait4x:
+        resources:
+          requests:
+            cpu: 5m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+
+    # The login UI had no limit at all (the `resources:` below are the server's). Measured 191 Mi on a lab cluster.
+    login:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 192Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
 
     # ── securityContext conforme Kyverno (global / fallback) ─────────────────
     # Used as-is by the initJob/setupJob containers (a direct reference to

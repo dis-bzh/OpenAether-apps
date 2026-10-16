@@ -303,9 +303,12 @@ jobs:
           ./scripts/dev/test-observability-rbac.sh | tee observability-rbac.out
           grep -qE '^0 failed$' observability-rbac.out
 
-      # The Alloy chart ignores a top-level `resources:`; render it and require a memory limit on every container.
-      - name: Alloy containers have memory limits (rendered chart)
-        run: python3 -I scripts/dev/test-alloy-resources.py
+      - name: The Longhorn policy lets the managers reach each other's webhooks (static)
+        run: python3 -I scripts/dev/test-longhorn-netpol.py
+
+      # Alloy, cert-manager, Zitadel login and Grafana read resources under their own key: render, require limits.
+      - name: Charts that read resources under their own key have memory limits (rendered)
+        run: python3 -I scripts/dev/test-chart-limits.py
 
   vmrules:
     name: VMRules (vmalert dry run)

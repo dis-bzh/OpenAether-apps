@@ -33,6 +33,21 @@ is an UPDATE of `pods/ephemeralcontainers` by nature, so they match `CREATE` and
 the policy never fires, as lab 11 found). Check with `kubectl get validatingwebhookconfiguration kyverno-resource-validating-webhook-cfg -o yaml`:
 the `pods/ephemeralcontainers` rule must list UPDATE.
 
+## What Audit reported on a fresh cluster (lab 11, Scaleway, after an install and two worker reboots)
+
+`require-limits` 46 fails, `require-ro-rootfs` 29, `require-security-context` (`check-run-as-non-root`) 3, nothing for the other
+policies. Fixed since (rendered-chart test `scripts/dev/test-chart-limits.py`): the memory limit of Alloy and its config-reloaders,
+cert-manager's webhook and cainjector, the Zitadel login and its `wait-for-zitadel` init container, Grafana's dashboard sidecar.
+Left, and why (do not flip `require-limits` or `require-ro-rootfs` to Enforce in these namespaces before they are done):
+
+| Workload | Policy | Why it stays |
+|---|---|---|
+| `zitadel-db` | `require-limits` (`postgres`, `bootstrap-controller`) | `zitadel-db` has no `spec.resources`; adding it rolls every instance and a limit below the working set kills Postgres: a cluster exercise |
+| `vmagent`, `vmalert`, `vmalertmanager`, `vminsert`, `vmselect`, `vmstorage` and their `config-reloader` / `config-init` | `require-limits`, `require-ro-rootfs` | operator-managed pods: the limits come from the CR (set for the main containers; not for the reloaders), and the read-only root filesystem needs the operator's volume layout checked per component |
+| `grafana-sc-dashboard`, `alertmanager` | `require-ro-rootfs` | not tried with a read-only root filesystem; the sidecar writes its dashboards to an emptyDir, which would need confirming |
+| `alloy-audit` | `require-security-context` (`runAsNonRoot`) | root by design: the apiserver writes the audit file 0600 for its own user (exempt by name in `restrict-capabilities`, not here) |
+| `zitadel-setup` Job | `require-limits` | one-shot Job pods that finished; the chart exposes no resources for them |
+
 ## When to flip, in this order
 
 The gate for each (policy, namespace) pair, from the audit plan: **zero `fail` results for it in the PolicyReports after one full
