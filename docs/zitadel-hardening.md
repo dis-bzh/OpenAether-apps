@@ -1,7 +1,7 @@
 # Zitadel and Grafana authentication: what is set, where it applies, what an existing cluster needs
 
 > Addresses ANSSI PA-079 (R10, R12, R21, R23, R29), PG-078 and PA-012 R27 in part. Rung: the Zitadel settings were run
-> through a real Zitadel (the chart's appVersion, v4.14.0) against PostgreSQL by `scripts/dev/test-zitadel-config.sh`, and
+> through a real Zitadel (the chart's appVersion, v4.19.2) against PostgreSQL by `scripts/dev/test-zitadel-config.sh`, and
 > Grafana's through a real Grafana 11.3.1; nothing was run on a cluster, with OpenBao, External Secrets or Istio.
 
 ## The one thing to know first

@@ -4,7 +4,7 @@
 # Each needs an ingress rule for vmagent in its own CiliumNetworkPolicy and the port in vmagent's egress list
 # (observability/networkpolicy.yaml): without them the target is dropped and `up` has no series, not a zero.
 # Selectors and port names read from the rendered charts (alloy 1.13.1, loki 6.25.0, grafana 8.6.4,
-# zitadel 10.0.2) and the vendored Kyverno 1.12.1 and CNPG 1.23.1 manifests.
+# zitadel 10.4.0) and the vendored Kyverno 1.12.1 and CNPG 1.23.1 manifests.
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape

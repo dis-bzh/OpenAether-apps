@@ -145,10 +145,10 @@ components:
 - id: zitadel
   brick: identity
   component: zitadel
-  pin: 10.0.2
+  pin: 10.4.0
   file: apps/base/identity/zitadel/helmrelease.yaml
   pattern: chart:\s*zitadel\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Zitadel v4.14.0 (chart appVersion)
+  cycle: Zitadel v4.19.2 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
