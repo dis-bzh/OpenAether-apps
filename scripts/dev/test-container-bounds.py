@@ -7,7 +7,8 @@ Reads the manifests, not a cluster. Each rule has a self-test that proves it wou
   - the local-path provisioner has a securityContext, no --debug, and a helper image with an explicit tag;
   - every emptyDir of the OpenBao StatefulSet and of openbao-init has a sizeLimit;
   - ESO and Kyverno controllers have a CPU limit once kustomize has patched them (checked on the patch files);
-  - Zitadel and MinIO Deployments drop the ServiceAccount token through a post-renderer.
+  - Zitadel and MinIO Deployments drop the ServiceAccount token through a post-renderer;
+  - the kube-apiserver scrape may read at least 32 MiB (vmagent's default cap is 16 MiB).
 """
 import sys
 from pathlib import Path
@@ -115,6 +116,19 @@ def check_patches():
     return out
 
 
+def check_scrape_size():
+    """The kube-apiserver scrape must be allowed more than vmagent's 16 MiB default, or a busy control plane goes unmonitored."""
+    out = []
+    scrapes = [d for d in docs("apps/base/observability/vm-customresources/vmscapes.yaml") if d["metadata"]["name"] == "kube-apiserver"]
+    if len(scrapes) != 1:
+        return ["vmscapes.yaml: the kube-apiserver VMServiceScrape is missing"]
+    for ep in scrapes[0]["spec"]["endpoints"]:
+        size = str(ep.get("max_scrape_size", ""))
+        if not size.endswith("MiB") or int(size[:-3]) < 32:
+            out.append(f"kube-apiserver scrape: max_scrape_size {size or 'unset'} must be at least 32MiB (default 16 MiB, lab 11)")
+    return out
+
+
 def self_test():
     ok = True
     deploy = {"spec": {"template": {"spec": {"containers": [{"command": ["x", "--debug"]}]}}}}
@@ -130,13 +144,13 @@ def self_test():
 def main():
     if not self_test():
         sys.exit(1)
-    problems = check_values() + check_local_path() + check_emptydirs() + check_patches()
+    problems = check_values() + check_local_path() + check_emptydirs() + check_patches() + check_scrape_size()
     for p in problems:
         print("✗", p)
     if problems:
         sys.exit(1)
     print("✓ Alloy, Grafana, CAPI operator: read-only root filesystem with a writable volume; local-path hardened and pinned;"
-          " OpenBao emptyDirs bounded; ESO/Kyverno CPU limits; Zitadel/MinIO drop the SA token; self-test passes")
+          " OpenBao emptyDirs bounded; ESO/Kyverno CPU limits; Zitadel/MinIO drop the SA token; apiserver scrape size; self-test passes")
 
 
 main()

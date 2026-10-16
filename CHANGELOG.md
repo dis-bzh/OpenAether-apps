@@ -411,6 +411,13 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **One of three kube-apiservers was unmonitored: the apiserver scrape may read 32 MiB** (lab 11, Scaleway: the control plane that
+  holds the leader answered more than vmagent's 16 MiB default, "exceeds -promscrape.maxScrapeSize", the size check running before
+  any relabelling; static + Operator v0.72 field check, not re-run on a cluster). `max_scrape_size: 32MiB` on the
+  `kube-apiserver` VMServiceScrape endpoint only (the vmagent keeps 512 MiB of memory; 100 MiB measured). No `sampleLimit`: no
+  series count was measured, and a limit that is too low drops the whole scrape. `test-container-bounds.py` requires the size. The
+  `zitadel` target reported down was a start-up window (connection refused while the pods restarted after the node
+  reboot, no error line since), not a defect of the scrape or of the network policies.
 - **CNPG `ContinuousArchiving=False` with a dedicated backup key pair: the S3 rights contract is written down, with a probe**
   (lab 11, Scaleway: HeadBucket 403 while listing and writing worked; docs and a stub-tested script, the corrected policy not
   run on a store yet). `apps/base/backup/README.md` gets "S3 rights of a dedicated key pair": the action each consumer uses

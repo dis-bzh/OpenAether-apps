@@ -292,3 +292,8 @@ spec:
         caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
         serverName: kubernetes.default.svc
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      # The default cap is 16 MiB of uncompressed response, checked BEFORE any relabelling; the apiserver that
+      # holds the leader exposed more (lab 11: one of three control planes unmonitored). 32 MiB leaves 2x headroom
+      # without letting a runaway target fill the 512 MiB of vmagent. This scrape only; no sampleLimit (no series
+      # count was measured).
+      max_scrape_size: 32MiB
