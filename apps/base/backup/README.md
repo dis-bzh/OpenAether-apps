@@ -86,8 +86,12 @@ and `ObjectStorageFullAccess`, not to `ObjectStorageObjectsRead`/`Write`/`Delete
 `ObjectStorageObjects*` sets lists and writes (restic and Longhorn work) and gets a 403 on HeadBucket (lab 11, measured with a
 bucket policy granting ListBucket, GetBucketLocation and the object rights). Give the application's IAM policy
 `ObjectStorageBucketsRead` next to the object sets: it also lets the pair list the bucket NAMES of the project, which the bucket
-policy cannot narrow. This reading comes from the provider's permission-equivalence tables and the lab symptom; the corrected
-lab policy has not been run yet. OVH and Outscale: not verified; the AWS rule (HeadBucket needs `s3:ListBucket`) is the
+policy cannot narrow. Run in lab 12 (Scaleway): with `ObjectStorageBucketsRead` next to the three object sets the pair's HeadBucket succeeds
+(`check-backup-key-rights.sh`: every right held) and both CNPG clusters report `ContinuousArchiving=True`. **The IAM sets are
+project-wide, so the bucket policies carry the isolation, and a bucket WITHOUT a policy is open to the pair**: with policies
+only on the backups and logs buckets the pairs listed the tfstate and management buckets (`s3-isolation-check.sh`: 4 of 8
+assertions failed); with an operator-only policy on each of the other buckets, 10 of 10 held, the delete of a real object
+version included (`OA_ISOLATION_REAL_VERSION=1`). OVH and Outscale: not verified; the AWS rule (HeadBucket needs `s3:ListBucket`) is the
 expectation.
 
 ## Order of a full recovery
