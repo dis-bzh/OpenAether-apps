@@ -340,13 +340,14 @@ components:
 - id: cilium-edge-1
   brick: clusters
   component: Cilium on child cluster edge-1
-  pin: 1.19.2
+  pin: 1.19.9
   file: apps/clusters/edge-1.yaml
   pattern: chart:\s*cilium\s*\n\s*version:\s*"?([^"\s]+)
   cycle: Cilium 1.19
   eol: not-yet
   eol_source: https://endoflife.date/api/cilium.json
-  note: Cilium 1.19 is still supported; the pin follows the parent foundation (infra)
+  note: Cilium 1.19 is still supported; the latest 1.19 patch, one minor behind the parent foundation (infra, 1.20);
+    the hop to 1.20 goes with the NetworkPolicy review its NodePort change asks for
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: talos-ccm-edge-1
@@ -362,13 +363,14 @@ components:
 - id: cilium-edge-2
   brick: clusters
   component: Cilium on child cluster edge-2
-  pin: 1.19.2
+  pin: 1.19.9
   file: apps/clusters/edge-2.yaml
   pattern: chart:\s*cilium\s*\n\s*version:\s*"?([^"\s]+)
   cycle: Cilium 1.19
   eol: not-yet
   eol_source: https://endoflife.date/api/cilium.json
-  note: Cilium 1.19 is still supported; the pin follows the parent foundation (infra)
+  note: Cilium 1.19 is still supported; the latest 1.19 patch, one minor behind the parent foundation (infra, 1.20);
+    the hop to 1.20 goes with the NetworkPolicy review its NodePort change asks for
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: talos-ccm-edge-2
@@ -384,13 +386,14 @@ components:
 - id: cilium-edge-3
   brick: clusters
   component: Cilium on child cluster edge-3
-  pin: 1.19.2
+  pin: 1.19.9
   file: apps/clusters/edge-3.yaml
   pattern: chart:\s*cilium\s*\n\s*version:\s*"?([^"\s]+)
   cycle: Cilium 1.19
   eol: not-yet
   eol_source: https://endoflife.date/api/cilium.json
-  note: Cilium 1.19 is still supported; the pin follows the parent foundation (infra)
+  note: Cilium 1.19 is still supported; the latest 1.19 patch, one minor behind the parent foundation (infra, 1.20);
+    the hop to 1.20 goes with the NetworkPolicy review its NodePort change asks for
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: talos-ccm-edge-3

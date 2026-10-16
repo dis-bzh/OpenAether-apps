@@ -57,7 +57,7 @@ spec:
   chart:
     spec:
       chart: cilium
-      version: "1.19.2"            # same version as the parent foundation
+      version: "1.19.9"            # latest 1.19 patch; the parent foundation is on 1.20 (one minor ahead)
       sourceRef: { kind: HelmRepository, name: cilium }
   values:
     kubeProxyReplacement: true
