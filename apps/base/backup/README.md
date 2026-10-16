@@ -154,9 +154,10 @@ spec:
         targetTime: "2026-01-01 12:00:00+00"   # UTC, inside the archive range
   externalClusters:
     - name: zitadel-db-origin
-      # The archive lives under <destinationPath>/<serverName>.
-      serverName: zitadel-db
       barmanObjectStore:
+        # The archive lives under <destinationPath>/<serverName>; serverName belongs INSIDE barmanObjectStore (at the
+        # externalCluster level the API server refuses the manifest: unknown field).
+        serverName: zitadel-db
         destinationPath: s3://<bucket>/cnpg/zitadel-db   # as in cnpg/cluster.yaml
         endpointURL: <endpoint>
         s3Credentials:
@@ -165,8 +166,8 @@ spec:
 ```
 
 Check with `kubectl cnpg status zitadel-db-restore` and a `SELECT` on the data, then delete the scratch Cluster (its PVC is
-`Retain`: delete it too). This procedure is written from the CNPG 1.23 documentation and has NOT been run on a cluster: treat the
-first run as the test. The PITR chain lives on the cluster's own provider only (one destination in CNPG 1.23); the second provider
+`Retain`: delete it too). Run on a real cluster in lab 12 (CNPG 1.30.1, Scaleway): a Backup of zitadel-db, then this restore into a new
+Cluster, healthy in about 1 minute with the same 150 tables as the origin. The PITR chain lives on the cluster's own provider only (one destination in CNPG 1.23); the second provider
 holds the daily `pg_dump` (RPO 24 h). The barman objects carry no client-side encryption (CNPG 1.23 offers server-side AES256/KMS
 only, unset here): they rely on the bucket's own protection.
 
