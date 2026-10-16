@@ -14,6 +14,8 @@ resources:
   - networkpolicy.yaml
 
 patches:
+  # Multi-document: each Deployment is matched by its own name.
+  - path: patch-resources.yaml
   - path: patch-cert-controller-ns.yaml
     target:
       kind: Deployment

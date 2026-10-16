@@ -41,6 +41,7 @@ spec:
     replicas: 2
     # Kyverno reads the container level (#47): all four fields are set here.
     containerSecurityContext:
+      readOnlyRootFilesystem: true
       runAsNonRoot: true
       allowPrivilegeEscalation: false
       capabilities:
@@ -48,6 +49,10 @@ spec:
           - ALL
       seccompProfile:
         type: RuntimeDefault
+    # Grafana writes /var/lib/grafana (the chart's own emptyDir) and /tmp.
+    extraEmptyDirMounts:
+      - name: tmp
+        mountPath: /tmp
     affinity:
       podAntiAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:

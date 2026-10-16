@@ -90,6 +90,18 @@ spec:
         - name: local-path-provisioner
           image: rancher/local-path-provisioner:v0.0.31
           imagePullPolicy: IfNotPresent
+          # Only reads its ConfigMap and talks to the API; the helper pods (root, hostPath) do the disk work.
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
           command:
             - local-path-provisioner
             # No --debug: it logs every volume path and helper-pod step; the default level is enough (ANSSI PA-012 R6).
@@ -173,5 +185,6 @@ data:
           effect: NoSchedule
       containers:
       - name: helper-pod
-        image: busybox
+        # Pinned: a bare name is `latest`, a different image at every pull.
+        image: busybox:1.37.0
         imagePullPolicy: IfNotPresent

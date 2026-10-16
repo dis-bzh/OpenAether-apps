@@ -154,6 +154,9 @@ jobs:
       - name: Container securityContext is set where the operators read it (#47)
         run: python3 -I scripts/dev/test-container-security-context.py
 
+      - name: Container hardening and resource bounds hold (B21, static)
+        run: python3 -I scripts/dev/test-container-bounds.py
+
       # Runs the Audit policies against fixture pods. The release publishes no checksum file, only a cosign signature:
       # the sha256 below is the one of the tarball as first downloaded (trust on first use), so a changed asset fails.
       - name: Kyverno policies report what they should (Kyverno CLI 1.12.1, the vendored version)

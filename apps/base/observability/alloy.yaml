@@ -38,8 +38,15 @@ spec:
   values:
     controller:
       type: daemonset
+      volumes:
+        extra:
+          - name: storage
+            emptyDir:
+              sizeLimit: 256Mi
     configReloader:
       securityContext:
+        # The reloader only calls Alloy's reload endpoint: it writes nothing (FT082-R12).
+        readOnlyRootFilesystem: true
         runAsUser: 65534
         runAsGroup: 65534
         runAsNonRoot: true
@@ -50,8 +57,17 @@ spec:
         seccompProfile:
           type: RuntimeDefault
     alloy:
+      # Default is /tmp/alloy, a directory of the image's writable layer. An emptyDir keeps the position and
+      # component state across a CONTAINER restart (not a pod re-creation: hostPath is refused by PSA baseline).
+      storagePath: /var/lib/alloy/data
+      mounts:
+        extra:
+          - name: storage
+            mountPath: /var/lib/alloy/data
       # Kyverno reads the container level (#47): all four fields are set here.
       securityContext:
+        # Alloy's only writable path is the storage path below (an emptyDir), so the root filesystem can be read-only.
+        readOnlyRootFilesystem: true
         runAsUser: 473
         runAsGroup: 473
         runAsNonRoot: true
@@ -154,6 +170,12 @@ spec:
           loki.write "default" {
             endpoint {
               url = "http://loki.services-observability.svc.cluster.local:3100/loki/api/v1/push"
+              // Alloy v1.6 has no WAL for loki.write: a batch is held in memory and dropped when its retries run out.
+              // The default gives up after 10 tries (about 5 min of Loki down, e.g. a node drain or an upgrade);
+              // 30 tries capped at 1 min between them rides out about 30 min. The memory limit bounds the queue.
+              min_backoff_period  = "500ms"
+              max_backoff_period  = "1m"
+              max_backoff_retries = 30
             }
             // External labels common to every log of this cluster.
             // Constant on purpose: only the management cluster runs Alloy and Loki today (a spoke has no

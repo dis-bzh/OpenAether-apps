@@ -41,6 +41,19 @@ spec:
   upgrade:
     remediation:
       retries: 3
+  # Zitadel's server and login pods never call the Kubernetes API
+  # (only the setup Job does, and its pod spec is not touched).
+  # The chart has no automount value, hence the post-renderer. Rollback: delete this block.
+  # Addresses FT082-R12 and NSA12-POD-06.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+            patch: |-
+              - op: add
+                path: /spec/template/spec/automountServiceAccountToken
+                value: false
   values:
     replicaCount: 2
 

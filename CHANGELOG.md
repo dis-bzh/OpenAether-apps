@@ -21,6 +21,29 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Security
 
+- **Container hardening and resource bounds** (ANSSI FT082 R10, R11, R12, NSA12 POD-06, BP028 R64, PA012 R10, R14; apps half of
+  K8S/F09, K8S/F10, LOG-13, LOG-14):
+  - Alloy and its config-reloader, Grafana and the CAPI operator run with a **read-only root filesystem**; what each writes
+    goes to an emptyDir (Alloy's storage path, Grafana's and the operator's `/tmp`). The CAPI operator also gets a pod and a
+    container `securityContext` (uid 65532, drop ALL, seccomp RuntimeDefault). Alloy's `loki.write` retries 30 times with
+    at most 1 minute between tries instead of giving up after about 5 minutes (Alloy v1.6 has no write-ahead log).
+  - **local-path-provisioner**: the provisioner has a restricted `securityContext`, its helper image is `busybox:1.37.0`
+    instead of the bare `busybox`. It does NOT change `mkdir -m 0777` to 0770: the volumes are used by non-root pods with
+    other uids and the hostPath volumes ignore `fsGroup`, so 0770 would stop them from writing; that needs a different
+    storage design (Longhorn, or a Talos user volume), not a mode.
+  - **ServiceAccount token dropped** from the Zitadel server and login pods and the MinIO pod (Helm post-renderer: neither
+    chart has a value for it). Grafana keeps it (its dashboards sidecar reads ConfigMaps through the API); the Zitadel setup
+    Job keeps it (it runs kubectl).
+  - **Bounds**: `sizeLimit` on the OpenBao `tmp` and openbao-init emptyDirs (64Mi); memory and CPU limits on the three ESO
+    Deployments, CPU limits on the four Kyverno controllers (their memory limits were already in the vendored file).
+    **The ESO and Kyverno values are generous guesses, not measured** (no cluster here); the lab step tightens them.
+  - **Rung: static** (`scripts/dev/test-container-bounds.py` in CI, `helm template` of the Alloy, Grafana, CAPI operator,
+    Zitadel and MinIO charts at the pinned versions, `kubectl kustomize`, and the new `loki.write` block loaded by a real
+    Alloy v1.6.1); **not run on a cluster**. Whether each workload really starts and works with a read-only root filesystem is
+    unproven until then. It does NOT add LimitRange or ResourceQuota (deferred), `ephemeral-storage` requests, or the Talos
+    `podPidsLimit` (infra), and does not bump any chart (Renovate PRs); Alloy to Loki stays cleartext HTTP, covered by
+    WireGuard and the CiliumNetworkPolicy, not by TLS.
+
 - **Four namespaces drop from the privileged to the baseline Pod Security level** (ANSSI FT082 R4, R6, NSA12 POD-05; apps half of
   K8S/F08, OSN/F16, SCC/F09): `services-observability` (node-exporter has left it), `services-gateway` (the Envoy proxy istiod
   generates), `foundation-service-mesh` (HelmReleases and the waypoint Gateway; ztunnel and istiod run in `istio-system`) and

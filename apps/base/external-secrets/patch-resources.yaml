@@ -1,0 +1,57 @@
+# Targets carry the vendored namespace (the kustomization renames it afterwards).
+# Limits for the three ESO Deployments (the vendored install.yaml sets requests only). FT082-R10, FT082-R11.
+# NOT measured on a cluster: the values are generous on purpose, so that a limit never turns a busy reconcile into an
+# OOMKill. Tighten them from `kubectl top pod -n foundation-pki-management` after a day (docs: LAB-CHECKLIST B21).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-secrets
+  namespace: external-secrets
+spec:
+  template:
+    spec:
+      containers:
+        - name: external-secrets
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-secrets-cert-controller
+  namespace: external-secrets
+spec:
+  template:
+    spec:
+      containers:
+        - name: cert-controller
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-secrets-webhook
+  namespace: external-secrets
+spec:
+  template:
+    spec:
+      containers:
+        - name: webhook
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

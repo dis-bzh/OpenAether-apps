@@ -102,6 +102,7 @@ spec:
         - name: tmp
           emptyDir:
             medium: Memory
+            sizeLimit: 64Mi
         - name: tls
           secret:
             secretName: openbao-server-tls

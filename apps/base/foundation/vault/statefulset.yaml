@@ -187,7 +187,8 @@ spec:
             secretName: openbao-seal-key
             defaultMode: 0440
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
   volumeClaimTemplates:
     - metadata:
         name: data
