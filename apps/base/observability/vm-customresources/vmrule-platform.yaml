@@ -22,17 +22,21 @@ spec:
       rules:
         # 1) An object Flux has STOPPED reconciling — wedged controller, stuck
         #    finalizer, or suspended and forgotten. Every Kustomization has an
-        #    interval <= 10 min, so a flat counter over 30 min is a real stop.
+        #    interval <= 10 min, so a flat counter over 30 min is a real stop. HelmReleases run on a 1 h
+        #    interval (lab 12: 27 false alerts on an idle, healthy cluster with the single 30 min window),
+        #    so they get a 2.5 h window. HelmRepository (24 h) and the other kinds are not watched here.
         #    Does NOT catch "reconciling but failing": Flux 2.8 and 2.9 export no
         #    per-object Ready condition (OpenAether-infra CHANGELOG, Known limits).
         - alert: FluxReconciliationStalled
           expr: |
-            increase(gotk_reconcile_duration_seconds_count[30m]) == 0
+            increase(gotk_reconcile_duration_seconds_count{kind=~"Kustomization|GitRepository"}[30m]) == 0
+            or
+            increase(gotk_reconcile_duration_seconds_count{kind="HelmRelease"}[150m]) == 0
           for: 10m
           labels:
             severity: critical
           annotations:
-            summary: "Flux: {{ $labels.kind }}/{{ $labels.name }} has not reconciled for 30 min"
+            summary: "Flux: {{ $labels.kind }}/{{ $labels.name }} has not reconciled for 30 min (HelmRelease: 2.5 h)"
             description: >-
               flux get all -A. If the object is suspended on purpose, that is
               the alert doing its job — resume it or remove it.
