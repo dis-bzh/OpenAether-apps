@@ -58,7 +58,7 @@ metadata:
   name: talos
   namespace: capi-system
 spec:
-  version: v0.5.13
+  version: v0.5.14
   deployment:
     containers:
       - name: manager
