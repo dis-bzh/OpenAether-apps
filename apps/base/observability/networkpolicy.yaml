@@ -45,6 +45,8 @@ spec:
         - ports:
             - port: "8429"
               protocol: TCP
+            - port: "8435"   # config-reloader sidecar (peer scrape, VM operator 0.68)
+              protocol: TCP
   egress:
     # DNS
     - toEndpoints:
@@ -90,6 +92,8 @@ spec:
             - port: "8428"   # VMSingle (if present)
               protocol: TCP
             - port: "8429"   # vmagent self-metrics (peer scrape)
+              protocol: TCP
+            - port: "8435"   # config-reloader sidecar of vmagent and vmalert (VM operator 0.68 scrape; lab 12: Policy denied)
               protocol: TCP
             - port: "8480"   # vminsert
               protocol: TCP
@@ -395,6 +399,8 @@ spec:
       toPorts:
         - ports:
             - port: "8080"
+              protocol: TCP
+            - port: "8435"   # config-reloader sidecar (VM operator 0.68 scrape)
               protocol: TCP
   egress:
     - toEndpoints:
