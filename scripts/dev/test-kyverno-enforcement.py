@@ -44,9 +44,24 @@ for name in FLIPPABLE:
     spec = pol[name]["spec"]
     print(name)
     check("Audit globally", spec["validationFailureAction"] == "Audit", spec["validationFailureAction"])
-    want = [{"action": "Enforce", "namespaceSelector": {"matchLabels": {PREFIX + LABEL_OF.get(name, name): "true"}}}]
-    check("one override: Enforce where the namespace carries its label", spec.get("validationFailureActionOverrides") == want,
-          spec.get("validationFailureActionOverrides"))
+    sel = {"matchLabels": {PREFIX + LABEL_OF.get(name, name): "true"}}
+    want = [{"action": "Enforce", "namespaceSelector": sel}]
+    if name in LABEL_OF:
+        # Kyverno 1.19.1 ignores a validationFailureActionOverrides namespaceSelector on the ephemeralcontainers subresource
+        # (admitted with a warning in a labelled namespace; lab 12). Two rules do it: Audit outside the labelled namespaces,
+        # Enforce inside, the namespaceSelector sitting in `match` / `exclude`.
+        rules = spec["rules"]
+        enf = [r for r in rules if r["validate"].get("failureAction") == "Enforce"]
+        aud = [r for r in rules if r["validate"].get("failureAction") == "Audit"]
+        check("ephemeral policy: no spec-level override (it is not honoured on the subresource)",
+              "validationFailureActionOverrides" not in spec, spec.get("validationFailureActionOverrides"))
+        check("ephemeral policy: one Enforce rule whose match carries the namespace label",
+              len(enf) == 1 and all(blk["resources"].get("namespaceSelector") == sel for blk in enf[0]["match"]["any"]), enf)
+        check("ephemeral policy: one Audit rule that excludes the labelled namespaces",
+              len(aud) == 1 and any(blk["resources"].get("namespaceSelector") == sel for blk in aud[0]["exclude"]["any"]), aud)
+    else:
+        check("one override: Enforce where the namespace carries its label", spec.get("validationFailureActionOverrides") == want,
+              spec.get("validationFailureActionOverrides"))
     if any(k == "Pod/ephemeralcontainers" for rule in spec["rules"] for blk in rule["match"]["any"] for k in blk["resources"]["kinds"]):
         check("a policy that matches a subresource has background scanning off (Kyverno 1.12.1 refuses it otherwise)", spec.get("background") is False, spec.get("background"))
     for rule in spec["rules"]:

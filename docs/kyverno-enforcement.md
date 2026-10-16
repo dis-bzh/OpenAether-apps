@@ -33,6 +33,10 @@ is an UPDATE of `pods/ephemeralcontainers` by nature, so they match `CREATE` and
 the policy never fires, as lab 11 found). Check with `kubectl get validatingwebhookconfiguration kyverno-resource-validating-webhook-cfg -o yaml`:
 the `pods/ephemeralcontainers` rule must list UPDATE.
 
+The two ephemeral-container policies flip with two rules (an Audit rule that excludes the labelled namespaces, an Enforce rule whose `match` carries the label) and no
+`validationFailureActionOverrides`: Kyverno 1.19.1 admitted a privileged `kubectl debug` with a warning in a labelled namespace when the override was used (lab 12), while a
+`namespaceSelector` in `match` plus the rule-level `failureAction` denies it.
+
 ## What Audit reported on a fresh cluster (lab 11, Scaleway, after an install and two worker reboots)
 
 `require-limits` 46 fails, `require-ro-rootfs` 29, `require-security-context` (`check-run-as-non-root`) 3, nothing for the other

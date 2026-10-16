@@ -3,6 +3,9 @@
 # subresource match with background scanning on. UPDATE is listed because an ephemeral container arrives as an UPDATE of
 # pods/ephemeralcontainers. The namespace label of restrict-privileged flips both
 # (kyverno.openaether.io/enforce-restrict-privileged).
+# Two rules instead of validationFailureActionOverrides: Kyverno 1.19.1 does not apply a namespaceSelector override to the
+# ephemeralcontainers subresource (the request was admitted with a warning in a labelled namespace; lab 12). A
+# namespaceSelector in `match` and the rule-level failureAction do work there.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -17,11 +20,6 @@ metadata:
       An ephemeral container (kubectl debug) must not be privileged; see restrict-privileged.
 spec:
   validationFailureAction: Audit
-  validationFailureActionOverrides:
-    - action: Enforce
-      namespaceSelector:
-        matchLabels:
-          kyverno.openaether.io/enforce-restrict-privileged: "true"
   background: false
   rules:
     - name: deny-privileged-ephemeral
@@ -45,7 +43,49 @@ spec:
               - capi-system
               - orc-system
               - capi-operator-system
+        # Namespaces that enforce are handled by the next rule.
+        - resources:
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-restrict-privileged: "true"
       validate:
+        failureAction: Audit
+        message: >-
+          A privileged ephemeral container is not allowed (kubectl debug --profile=sysadmin). Use --profile=general or
+          netadmin in a namespace that does not enforce restrict-privileged.
+        foreach:
+          - list: request.object.spec.ephemeralContainers[] || `[]`
+            deny:
+              conditions:
+                any:
+                  - key: "{{ to_string(element.securityContext.privileged || `false`) }}"
+                    operator: Equals
+                    value: "true"
+    - name: deny-privileged-ephemeral-enforce
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod/ephemeralcontainers
+            operations:
+              - CREATE
+              - UPDATE
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-restrict-privileged: "true"
+      exclude:
+        any:
+        - resources:
+            namespaces:
+              - kube-system
+              - kyverno
+              - longhorn-system
+              - local-path-storage
+              - capi-system
+              - orc-system
+              - capi-operator-system
+      validate:
+        failureAction: Enforce
         message: >-
           A privileged ephemeral container is not allowed (kubectl debug --profile=sysadmin). Use --profile=general or
           netadmin in a namespace that does not enforce restrict-privileged.
