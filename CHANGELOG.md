@@ -349,6 +349,29 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
     1.12.1 rejects it). `KyvernoPolicyViolation` still ignores `require-security-context`.
   - **Rung: static** (`scripts/dev/test-kyverno-enforcement.py`, `test-psa-restricted.py`, the Kyverno CLI fixtures; all in CI).
 
+
+### Changed
+
+Upgrade campaign, phase 1 (independent low-risk bumps, one commit each; static / rendered offline, **not run on a cluster**).
+Not in this phase: Istio, cert-manager, CNPG operator, Kyverno, ESO, Loki, Grafana, Zitadel, VM operator, Flux, child Cilium, Longhorn.
+
+- **local-path-provisioner v0.0.31 -> v0.0.37** (re-vendored; the dump joins `apps/vendored-dumps.sha256`). Local changes kept: provisioner
+  securityContext, no `--debug`, the `local-path-retain` StorageClass, the `busybox:1.37.0` helper pin. v0.0.36 validates the helper-pod template
+  (security fix GHSA-7fxv-8wr2-mfc4); this repository's template passes. Upgrade note: the provisioner Deployment restarts once (new probes on :8080);
+  existing PVs are untouched.
+- **prometheus-node-exporter chart 4.39.0 -> 4.60.0** (node_exporter 1.8.2 -> 1.12.1). Upgrade note: the DaemonSet rolls node by node; the chart now
+  excludes kubelet/containerd/docker mount points and erofs from `node_filesystem_*`; the `/var` alerts keep their series. No metric the repository reads was renamed.
+- **kube-state-metrics chart 5.25.1 -> 8.6.0** (2.13.0 -> 2.20.0). Upgrade note: the pod restarts once; `kube_pod_status_reason` now has a row only for the
+  reason that is set; `kube_endpoint_address_*` is gone (no rule used it). The explicit collectors list is kept, so endpointslices stay off.
+  The `customResourceState` for the Flux kinds was not run against 2.20.0: check `gotk_resource_info` after the roll.
+- **metrics-server chart 3.12.2 -> 3.14.0** (0.7.2 -> 0.9.0). Upgrade note: the pod restarts once and is Ready only when both node and pod metrics exist.
+- **restic 0.18.0 -> 0.19.1** (the four backup CronJobs). Upgrade note: the push scripts handle the new exit codes explicitly (3 = incomplete snapshot: the Job
+  fails at once; a failed retention fails the Job after the replica got its snapshot); `prune` repacks small packs more, so expect more S3 traffic.
+  The repository format is unchanged in the release notes read.
+- **Gateway API CRDs v1.1.0 -> v1.2.1** (standard). Upgrade note: the CRDs are not rolled back by Helm or Flux pruning; GRPCRoute/ReferenceGrant `v1alpha2`
+  disappear (check `storedVersions` first, see the lab checklist); `Gateway.spec.infrastructure` is now accepted. **Deliberately not 1.5.x**: Istio 1.24
+  has no maximum-version filter and istiod does not become Ready with the 1.5 CRDs (istio/istio#59443); 1.5.x waits for the Istio hops.
+
 ### Added
 
 - **Kubelet and apiserver scrapes verify TLS; metrics-server and the kubelet scrapes can too, opt-in** (ANSSI TLS-11, K8S-F14; apps half of

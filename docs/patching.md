@@ -60,7 +60,9 @@ validated on a staging cluster before the next (never in one Renovate batch). Th
    leaves already do; `foundation/vault-ca` keeps `Never` on purpose), then the baseline of issued certificates is
    recorded, then the hops. CRDs ride `crds: CreateReplace`; webhook and cainjector must be Ready before
    `13b-cert-manager-issuers`.
-2. **Gateway API CRDs** (vendored v1.1.0), to the release the target Istio expects.
+2. **Gateway API CRDs** (vendored v1.2.1), to the release the target Istio expects. v1.2.1 is what Istio 1.24 is built against and
+   the highest this repository can justify with it: with the v1.5 CRDs installed, Istio up to 1.29 never becomes Ready (istio/istio#59443,
+   the 1.24 CRD watcher has no maximum-version filter). The CRDs move to 1.5.x only with the Istio hop that supports them (1.30).
 3. **Istio** (`base`, `istiod`, `istio-cni`, `ztunnel`), minor by minor, reading each upgrade note; the control plane
    first, then the node-level `istio-cni` and `ztunnel`. No mesh TLS floor is set in
    `meshConfig` (`tlsDefaults` does not apply to ISTIO_MUTUAL); after the hop, re-check with `openssl s_client` that the
@@ -74,6 +76,14 @@ without a cluster, `helm rollback` does not roll CRDs back, and the upstream tag
 this was written. The per-hop commands, expected observations and rollback are in the maintainers' lab checklist
 (section B28). When the last hop is merged, the `End of support` check can be made blocking by removing the waivers
 from [`eol-calendar.yaml`](eol-calendar.yaml).
+
+## Phase 1 (0.3.0): independent bumps
+
+Done outside the order above because they touch nothing the order depends on, one commit per component: local-path-provisioner v0.0.37
+(re-vendored), prometheus-node-exporter 4.60.0, kube-state-metrics 8.6.0, metrics-server 3.14.0, restic 0.19.1, Gateway API CRDs v1.2.1 (not
+1.5.x, see item 2). Offline only: the rendered Helm output at the old and new pins was diffed, the scripts under `scripts/dev/` that touch each
+component pass; the per-bump observations and rollbacks are in the maintainers' lab checklist (section UPGRADE-PHASE1). `helm rollback` does not
+roll CRDs back, and the Gateway API CRDs are not a Helm release at all.
 
 ## Where it stands (2026-10-14)
 
