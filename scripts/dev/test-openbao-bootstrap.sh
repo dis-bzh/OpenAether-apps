@@ -276,6 +276,72 @@ NKEYS="$(curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X LIST https://127.0.0.1:
 grep -q "already generated" "$T/dev/configure.sh.out" && ok "the second run says the CSR is pending" || bad "no 'already generated' line"
 [ "$(bao_get /v1/secret/data/pki/intermediate-csr | jq -r '.data.data.csr // empty')" = "$CSR1" ] && [ "$(bao_get /v1/secret/data/pki/intermediate-csr | jq -r '.data.metadata.version')" = 1 ] \
   && ok "the stored CSR is unchanged by the second run (still version 1)" || bad "the stored CSR changed or was rewritten"
+echo "--- PKI: key types, role, revocation information, tidy (a throwaway EC root signs the intermediate, as the runbook does)"
+bao_post() { local d="${2:-}"; [ -n "$d" ] || d='{}'; printf '%s' "$d" | curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X POST -d @- "https://127.0.0.1:18211$1"; }
+P="$T/pki"; mkdir -p "$P"
+openssl req -in <(printf '%s' "$CSR1") -noout -text 2>/dev/null | grep -q "secp384r1" && ok "the intermediate CSR is an ECDSA P-384 key" || bad "the intermediate CSR is not P-384"
+openssl ecparam -genkey -name secp384r1 -noout -out "$P/root.key" 2>/dev/null
+openssl req -x509 -new -key "$P/root.key" -sha384 -days 30 -subj "/CN=Throwaway Root" -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign -out "$P/root.crt"
+printf '[v3]\nbasicConstraints=critical,CA:TRUE,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n' > "$P/ext.cnf"
+printf '%s' "$CSR1" > "$P/int.csr"
+openssl x509 -req -in "$P/int.csr" -CA "$P/root.crt" -CAkey "$P/root.key" -CAcreateserial -days 20 -sha384 -extfile "$P/ext.cnf" -extensions v3 -out "$P/int.crt" >/dev/null 2>&1
+SET="$(bao_post /v1/pki/intermediate/set-signed "$(jq -nc --rawfile c "$P/int.crt" '{certificate:$c}')" | jq -r '.data.imported_issuers[0] // empty')"
+[ -n "$SET" ] && ok "the intermediate signed by the offline root is imported" || bad "set-signed refused the intermediate"
+ROLE="$(bao_get /v1/pki/roles/openaether | jq -c .data)"
+for kv in key_type=ec key_bits=256 client_flag=false server_flag=true allow_wildcard_certificates=false allow_bare_domains=false allow_ip_sans=false; do
+  [ "$(jq -r ".${kv%%=*}" <<<"$ROLE")" = "${kv#*=}" ] && ok "role openaether: $kv" || bad "role openaether: $kv ($ROLE)"
+done
+[ "$(jq -c .key_usage <<<"$ROLE")" = '["DigitalSignature"]' ] && ok "role openaether: key usage is DigitalSignature only" || bad "role key_usage: $(jq -c .key_usage <<<"$ROLE")"
+mkcsr() { # NAME SAN [SUBJECT] [ec|rsa2048|rsa3072]
+  local k=(-newkey ec -pkeyopt ec_paramgen_curve:prime256v1)
+  case "${4:-ec}" in rsa2048) k=(-newkey rsa:2048) ;; rsa3072) k=(-newkey rsa:3072) ;; esac
+  openssl req -new "${k[@]}" -nodes -keyout "$P/$1.key" -out "$P/$1.csr" -subj "${3:-/}" -addext "subjectAltName=$2" 2>/dev/null
+}
+sign() { bao_post /v1/pki/sign/openaether "$(jq -nc --rawfile c "$P/$1.csr" '{csr:$c,ttl:"24h"}')"; }
+mkcsr gw "DNS:grafana.openaether.local,DNS:vault.openaether.local"
+sign gw > "$P/gw.json"; jq -r '.data.certificate // empty' "$P/gw.json" > "$P/gw.crt"
+TXT="$(openssl x509 -in "$P/gw.crt" -noout -text 2>/dev/null)"
+grep -q "Public Key Algorithm: id-ecPublicKey" <<<"$TXT" && ok "the role issues an ECDSA leaf" || bad "no EC leaf: $(jq -c .errors "$P/gw.json")"
+grep -q "TLS Web Server Authentication" <<<"$TXT" && ! grep -q "TLS Web Client Authentication" <<<"$TXT" && ok "…with serverAuth and no clientAuth" || bad "extended key usage is wrong"
+grep -A1 "Key Usage" <<<"$TXT" | grep -v Extended | grep -q "Digital Signature" && ! grep -q "Key Encipherment\|Key Agreement" <<<"$TXT" && ok "…and Digital Signature as its only key usage" || bad "key usage is wrong"
+grep -q "CRL Distribution Points" <<<"$TXT" && grep -q "svc.cluster.local:8200/v1/pki/crl" <<<"$TXT" && ok "…carrying the CRL distribution point" || bad "no CRL distribution point"
+grep -q "OCSP - URI:https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/ocsp" <<<"$TXT" && grep -q "CA Issuers - URI:.*v1/pki/ca" <<<"$TXT" && ok "…and the OCSP and CA Issuers URLs of the in-cluster service" || bad "no OCSP/AIA URL"
+openssl verify -CAfile "$P/root.crt" -untrusted "$P/int.crt" "$P/gw.crt" >/dev/null 2>&1 && ok "the chain verifies up to the throwaway root" || bad "chain does not verify"
+refused() { # DESCRIPTION CSRNAME
+  local r; r="$(sign "$2" | jq -r '.errors[0] // "ISSUED"')"; [ "$r" != ISSUED ] && ok "$1 is refused ($r)" || bad "$1 was issued"
+}
+mkcsr rsa "DNS:grafana.openaether.local" / rsa2048; refused "an RSA key" rsa
+mkcsr wc "DNS:*.openaether.local";                refused "a wildcard name" wc
+mkcsr bare "DNS:openaether.local";                refused "the bare domain" bare
+mkcsr out "DNS:evil.example.com";                 refused "a name outside the domain" out
+mkcsr ip "IP:10.0.0.1,DNS:grafana.openaether.local"; refused "an IP address SAN" ip
+mkcsr cn "DNS:grafana.openaether.local" "/CN=openaether.local"; refused "a bare-domain common name" cn
+U1="$(bao_get /v1/pki/config/urls | jq -c '.data | [.issuing_certificates, .crl_distribution_points, .ocsp_servers]')"
+[ "$U1" = '[["https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/ca"],["https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/crl"],["https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/ocsp"]]' ] \
+  && ok "config/urls points at the in-cluster service" || bad "config/urls: $U1"
+CRLC="$(bao_get /v1/pki/config/crl | jq -c '.data | [.auto_rebuild, .enable_delta, .expiry]')"
+[ "$CRLC" = '[true,true,"72h"]' ] && ok "the CRL is rebuilt automatically (delta CRLs on, 72h)" || bad "config/crl: $CRLC"
+TIDY="$(bao_get /v1/pki/config/auto-tidy | jq -c '.data | [.enabled, .tidy_cert_store, .tidy_revoked_certs]')"
+[ "$TIDY" = '[true,true,true]' ] && ok "auto-tidy is enabled for the cert store and revoked certificates" || bad "config/auto-tidy: $TIDY"
+SERIAL="$(jq -r '.data.serial_number' "$P/gw.json")"
+REVOKED_AT="$(bao_post /v1/pki/revoke "$(jq -nc --arg s "$SERIAL" '{serial_number:$s}')" | jq -r '.data.revocation_time // .errors[0] // "?"')"
+bao_get /v1/pki/crl/rotate >/dev/null
+curl -s --cacert "$T/tls/ca.crt" https://127.0.0.1:18211/v1/pki/crl/pem > "$P/crl.pem"
+SN_HEX="$(tr -d ':' <<<"$SERIAL" | tr a-f A-F)"
+openssl crl -in "$P/crl.pem" -noout -text 2>/dev/null | grep -i "Serial Number" | tr -d ' :' | grep -qi "$SN_HEX" && ok "a revoked leaf is on the CRL, served without a token" || bad "the revoked serial $SN_HEX is not in the CRL (revoke answered: $REVOKED_AT; $(openssl crl -in "$P/crl.pem" -noout -text 2>&1 | grep -i 'serial' | head -3 | tr '\n' ' '))"
+openssl crl -in "$P/crl.pem" -noout -CAfile "$P/int.crt" >/dev/null 2>&1 && ok "…and the CRL is signed by the intermediate" || bad "CRL signature does not verify"
+echo "--- PKI: a second run changes nothing; the default issuer only follows imports on request; the RSA-3072 variant"
+run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT" && ok "configure.sh on a mount with a signed intermediate exits 0" || bad "configure.sh failed: $(tail -4 "$T/dev/configure.sh.out")"
+grep -q "intermediate CA present" "$T/dev/configure.sh.out" && ok "…and finds it present" || bad "no 'intermediate CA present'"
+[ "$(bao_get /v1/pki/config/issuers | jq -r '.data.default_follows_latest_issuer')" = false ] && ok "the default issuer does not follow imports by default" || bad "default_follows_latest_issuer is on"
+run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT" OA_PKI_DEFAULT_FOLLOWS_LATEST=true && ok "configure.sh with OA_PKI_DEFAULT_FOLLOWS_LATEST=true exits 0" || bad "configure.sh failed: $(tail -4 "$T/dev/configure.sh.out")"
+[ "$(bao_get /v1/pki/config/issuers | jq -r '.data.default_follows_latest_issuer')" = true ] && ok "…and the default issuer follows the latest import" || bad "default_follows_latest_issuer is still off"
+run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT" OA_PKI_KEY_TYPE=rsa && ok "configure.sh with OA_PKI_KEY_TYPE=rsa exits 0" || bad "configure.sh failed: $(tail -4 "$T/dev/configure.sh.out")"
+mkcsr r3 "DNS:grafana.openaether.local" / rsa3072; [ "$(sign r3 | jq -r '.errors[0] // "ISSUED"')" = ISSUED ] && ok "the RSA variant signs an RSA-3072 key" || bad "RSA-3072 refused"
+mkcsr r2 "DNS:grafana.openaether.local" / rsa2048; refused "an RSA-2048 key under the RSA variant" r2
+[ "$(bao_get /v1/pki/roles/openaether | jq -r '.data.use_pss')" = true ] && ok "…with PSS signatures" || bad "use_pss is off"
+if run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT" OA_PKI_KEY_TYPE=dsa; then bad "an unknown key type was accepted"; else grep -q "must be ec or rsa" "$T/dev/configure.sh.out" && ok "an unknown OA_PKI_KEY_TYPE stops configure.sh with a message" || bad "no message"; fi
+run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT" && [ "$(bao_get /v1/pki/roles/openaether | jq -r '.data.key_type')" = ec ] && ok "back to the default: the role is EC again" || bad "the role did not return to ec"
 echo "--- the seeding identity can create and test, never overwrite or read a value"
 printf '{"policies":["secret-seeder"],"ttl":"10m"}' | curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X POST -d @- https://127.0.0.1:18211/v1/auth/token/create > "$T/dev/seeder.json"
 SEEDER_CODE="$(jq -r '.errors[0] // "created"' "$T/dev/seeder.json")"

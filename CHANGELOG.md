@@ -21,6 +21,20 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Security
 
+- **OpenBao PKI: ECDSA keys, a server-only role, revocation information and auto-tidy** (ANSSI IGC-BP-03, NT-35 R8, R27-R29, R33,
+  IGC-BP-06; TLS-07, TLS-08, TLS-09, DP-08, apps half). `configure.sh` generates an ECDSA P-384 intermediate CSR and writes the
+  `openaether` role as ECDSA P-256, serverAuth only, `DigitalSignature` only, no wildcard, bare domain, IP SAN or required CN; it
+  also sets `pki/config/urls` (AIA, CRL, OCSP on the in-cluster service), `pki/config/crl` (automatic rebuild, delta, 72 h) and
+  `pki/config/auto-tidy`. The gateway Certificate becomes ECDSA P-256 with `rotationPolicy: Always`, the four explicit hostnames
+  (no wildcard, no commonName) and `renewBefore` of one third. `OA_PKI_KEY_TYPE=rsa` is the documented RSA-3072 + PSS variant;
+  `OA_PKI_DEFAULT_FOLLOWS_LATEST` (off) lets a renewed intermediate become the default issuer, which a plain import does not.
+  Rung: mocked/static plus the real-OpenBao harness (`scripts/dev/test-openbao-bootstrap.sh`: EC leaf, RSA/wildcard/bare/IP/outside
+  names refused, URLs in the leaf, revoked serial on the CRL, idempotent re-run, both key types, a throwaway EC root signing the
+  intermediate); not run on a cluster. It does NOT: convert an existing RSA-2048 intermediate (regenerate it, runbook section 5), make
+  any client check revocation (none does; Envoy does not hard-fail), replace the Istio mesh root (deferred to the Istio upgrade),
+  replace the `openbao-ca-bundle` leaf Certificate (needs trust-manager), or alert on CRL age (OpenBao exposes no such metric, and
+  its 1 m metric retention would drop the tidy ones). **Upgrade note**: a new HTTPRoute hostname must be added to
+  `certificate-openaether-tls.yaml`; the gateway key is re-issued as ECDSA at the first sync.
 - **OpenBao's listeners accept TLS 1.3 only, and its server certificate re-keys at every renewal and is reloaded without a restart**
   (ANSSI NT-35 R10, R11 and R25, IGC BP-08; TLS-02, TLS-10). `tls_min_version = tls13` and `tls_key_exchange_preferences`
   (`X25519MLKEM768, CurveP384, CurveP256, X25519`, a key that OpenBao 2.7.1 does honour: P-521 is refused) on the API listener;

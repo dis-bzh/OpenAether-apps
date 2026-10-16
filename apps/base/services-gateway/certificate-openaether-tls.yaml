@@ -11,15 +11,24 @@ metadata:
     openaether.io/component: gateway
 spec:
   secretName: openaether-tls
-  duration: 2160h   # 90 jours
-  renewBefore: 360h  # 15 jours
+  duration: 2160h   # 90 days
+  renewBefore: 720h  # one third of the life: 30 days
   issuerRef:
     kind: ClusterIssuer
     name: openbao
-  commonName: openaether.local
+  # Explicit names, no wildcard and no commonName: the `openaether` role refuses both (ANSSI NT35-R29). A new HTTPRoute
+  # hostname must be added here. These are the hostnames of the zitadel, grafana, vault (OpenBao) and longhorn routes.
   dnsNames:
-    - openaether.local
-    - "*.openaether.local"
+    - grafana.openaether.local
+    - longhorn.openaether.local
+    - vault.openaether.local
+    - zitadel.openaether.local
+  usages:
+    - digital signature
+    - server auth
+  # ECDSA P-256 and a new key at each renewal: the role signs EC keys only (configure.sh, OA_PKI_KEY_TYPE). For the RSA
+  # variant set RSA 3072 here and OA_PKI_KEY_TYPE=rsa on the bootstrap Job, together (README, "PKI").
   privateKey:
-    algorithm: RSA
-    size: 2048
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
