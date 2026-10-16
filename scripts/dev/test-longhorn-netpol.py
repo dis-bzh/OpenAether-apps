@@ -12,7 +12,9 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
-NEED = {"9500", "9501", "9502", "8500", "8501", "8502", "8503"}
+# 9503: share-manager -> manager recovery backend (Longhorn 1.12); 10000-30000: instance-manager replica/engine data path
+# between nodes. Lab 12 saw both denied: RWX never mounted, 2-replica volumes stayed degraded.
+NEED = {"9500", "9501", "9502", "9503", "8500", "8501", "8502", "8503", "10000-30000"}
 pol = next(d for d in yaml.safe_load_all((REPO / "apps/base/storage/networkpolicy.yaml").read_text())
            if d and d["kind"] == "CiliumNetworkPolicy" and d["metadata"]["name"] == "longhorn")
 fails = 0
@@ -22,7 +24,7 @@ def ports_of(rules, key):
     """Ports of the rule that selects every endpoint of the namespace (matchLabels {})."""
     for r in rules:
         if r.get(key) == [{"matchLabels": {}}] and r["toPorts"][0]["ports"]:
-            return {p["port"] for tp in r["toPorts"] for p in tp["ports"]} - {"3260"}
+            return {(p["port"] + "-" + str(p["endPort"])) if "endPort" in p else p["port"] for tp in r["toPorts"] for p in tp["ports"]} - {"3260"}
     return set()
 
 
