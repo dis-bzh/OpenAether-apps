@@ -39,7 +39,7 @@ or a vendored dump has no row.
 | Gateway API CRDs (vendored dump) (`platform/gateway-api`) | 1.1.0 | Gateway API v1.1 | unknown |  | 2026-12-14 |
 | local-path-provisioner (vendored dump) (`platform/local-path-provisioner`) | 0.0.37 | local-path v0.0.37 | unknown |  | 2026-12-14 |
 | Flux controllers pushed to child clusters (vendored dump) (`cluster-api-clusters/flux-gotk`) | 2.8.8 | Flux 2.8 | not-yet |  | 2026-12-14 |
-| restic (`backup`) | 0.18.0 | restic 0.18 | unknown |  | 2026-12-14 |
+| restic (`backup`) | 0.19.1 | restic 0.19 | unknown |  | 2026-12-14 |
 | OpenBao (snapshot job image; the server is pinned in infra's bootstrap) (`backup`) | 2.7.1 | OpenBao 2.7 | not-yet |  | 2026-12-14 |
 | Cilium on child cluster edge-1 (`clusters`) | 1.19.2 | Cilium 1.19 | not-yet |  | 2026-12-14 |
 | Talos cloud controller manager on child cluster edge-1 (`clusters`) | 0.5.5 | talos-ccm 0.5 | unknown |  | 2026-12-14 |

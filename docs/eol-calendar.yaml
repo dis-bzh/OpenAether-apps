@@ -333,10 +333,10 @@ components:
 - id: restic
   brick: backup
   component: restic
-  pin: 0.18.0
+  pin: 0.19.1
   file: apps/base/backup/openbao/cronjob.yaml
   pattern: image:\s*docker\.io/restic/restic:([0-9.]+)
-  cycle: restic 0.18
+  cycle: restic 0.19
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
