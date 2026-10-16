@@ -7,7 +7,7 @@ metadata:
   name: scaleway
   namespace: capi-system
 spec:
-  version: v0.2.2
+  version: v0.2.3
   deployment:
     containers:
       - name: manager
