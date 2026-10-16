@@ -54,9 +54,10 @@ spec:
           - ALL
       seccompProfile:
         type: RuntimeDefault
-    # The chart's default collectors minus `secrets` and `configmaps` (chart key, unchanged to 8.6.0): the default ClusterRole
-    # lists Secrets cluster-wide, which returns their data, and no rule, scrape or dashboard reads kube_secret_*
-    # or kube_configmap_*. A list REPLACES the default: a collector added upstream later must be added here.
+    # The chart's default collectors minus `secrets` and `configmaps` (chart key, unchanged to 8.6.0): the default
+    # ClusterRole lists Secrets cluster-wide, which returns their data, and no rule, scrape or dashboard reads
+    # kube_secret_* or kube_configmap_*. A list REPLACES the default: a collector added upstream later must be
+    # added here.
     collectors:
       - certificatesigningrequests
       - cronjobs
