@@ -18,7 +18,7 @@ or a vendored dump has no row.
 | Istio CNI (`istio`) | 1.24.2 | Istio 1.24 | 2025-06-24 | 2026-12-31 | 2026-12-14 |
 | Istio ztunnel (`istio`) | 1.24.2 | Istio 1.24 | 2025-06-24 | 2026-12-31 | 2026-12-14 |
 | cert-manager (`cert-manager`) | v1.15.3 | cert-manager 1.15 | 2025-02-03 | 2026-12-31 | 2026-12-14 |
-| longhorn (`storage`) | 1.9.2 | Longhorn 1.9 | 2026-11-27 |  | 2026-12-14 |
+| longhorn (`storage`) | 1.12.1 | Longhorn 1.12 | 2027-08-14 |  | 2026-12-14 |
 | grafana (`observability`) | 8.6.4 | Grafana 11.3 (chart appVersion) | 2025-07-22 | 2026-12-31 | 2026-12-14 |
 | loki (`observability`) | 6.25.0 | Loki 3.3 (chart appVersion) | 2025-04-17 | 2026-12-31 | 2026-12-14 |
 | alloy (`observability`) | 0.11.0 | Alloy 1.6 (chart appVersion) | unknown |  | 2026-12-14 |

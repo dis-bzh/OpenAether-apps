@@ -85,6 +85,35 @@ Done outside the order above because they touch nothing the order depends on, on
 component pass; the per-bump observations and rollbacks are in the maintainers' lab checklist (section UPGRADE-PHASE1). `helm rollback` does not
 roll CRDs back, and the Gateway API CRDs are not a Helm release at all.
 
+## Longhorn in-place hops (a running cluster pinned at 1.9.x)
+
+A **fresh install** takes the pin (1.12.1) directly. A cluster already running 1.9.x cannot: Longhorn only upgrades one
+minor at a time (the chart's pre-upgrade job refuses a skip) and does not support downgrades. The path is
+**1.9.2 -> 1.10.2 -> 1.11.3 -> 1.12.1**, one `version:` change per PR, each hop finished (below) before the next.
+Avoid 1.10.0 and 1.11.0 (manager and instance-manager regressions fixed by later patches). 1.13.0 needs Kubernetes
+1.34 or later and is not taken. The `HelmRelease` has `retries: 0` for install and upgrade and `timeout: 15m`: a failed
+upgrade is **not** rolled back automatically (the refused downgrade would strand the release); a person reads the
+failed pre-upgrade job and fixes forward. The only real rollback is restoring volumes from backup.
+
+Preconditions, to check before every hop (none was run from this repository; they need a cluster):
+
+1. Every CRD has only `v1beta2` in `status.storedVersions` (required before 1.10; the 1.10.0 release notes carry the migration).
+2. The backup target is Available, every volume has a backup under 24 hours old, and one restore to a throwaway PVC
+   was done on the current version (keep `longhorn-encryption-secret` for the encrypted volumes).
+3. All volumes `healthy` with 2 running replicas, nothing rebuilding, nodes Ready; `/var/mnt/longhorn` has the 15 % free
+   `storageMinimalAvailablePercentage` plus room for the temporary doubled replicas of a live engine upgrade.
+4. No Talos reboot, CNPG operator roll or Kubernetes upgrade in the same window (with 2 replicas a drained node leaves one).
+5. `talosctl etcd snapshot` and a Longhorn `SystemBackup` just before.
+6. After the manager hop, upgrade the engine image of every volume (live when attached and healthy, offline when
+   detached) and wait for the old instance-manager pods to go; whether the next hop refuses volumes left on an old
+   engine image is not documented upstream, so treat it as a precondition.
+
+Behaviour changes met between 1.9 and 1.12 that touch this repository: the chart renders `NetworkPolicy` objects
+by default (`networkPolicies.restrictInternalTraffic`; set to `false` here so the brick's `CiliumNetworkPolicy` stays the
+single authority); the conversion-webhook `Service` is gone with the v1beta1 API; V2 backing images are removed
+(the repository uses the V1 engine only). `defaultSettings.orphanAutoDeletion` is not a key of the chart (it reads
+`orphanResourceAutoDeletion`) and was already ignored at 1.9.2, so orphan auto-deletion is not enabled; left as is.
+
 ## Where it stands (2026-10-14)
 
 The 30-day rule is **not met** for components already past upstream support: Istio 1.24 (EOL 2025-06-24),

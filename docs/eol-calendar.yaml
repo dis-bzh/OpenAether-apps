@@ -86,13 +86,13 @@ components:
 - id: longhorn
   brick: storage
   component: longhorn
-  pin: 1.9.2
+  pin: 1.12.1
   file: apps/base/storage/longhorn.yaml
   pattern: chart:\s*longhorn\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Longhorn 1.9
-  eol: '2026-11-27'
+  cycle: Longhorn 1.12
+  eol: '2027-08-14'
   eol_source: https://endoflife.date/api/longhorn.json
-  note: 'EOL is within two months of the snapshot: plan the hop to 1.10 or later before it'
+  note: a fresh install lands on 1.12.1; a running 1.9 cluster must hop 1.10.2, 1.11.3, 1.12.1 (docs/patching.md)
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: grafana
