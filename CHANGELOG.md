@@ -235,6 +235,12 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   2026-10-14. **Does not upgrade anything:** each hop is a cluster exercise, one minor per PR; whether the old releases carry
   unpatched advisories was not checked.
 
+- **The component upgrade campaign is written down, not run** (ANSSI NT-35 R2, HYG-M34; apps half of TLS-01, F02, DP-18): `docs/patching.md`
+  gains the order of the hops (cert-manager, Gateway API CRDs, Istio, Kyverno, CNPG operator, PostgreSQL, Longhorn), the `rotationPolicy`
+  prerequisite for cert-manager 1.18 and the reason each hop needs a cluster. Rung: documentation only. **No version is bumped**: no
+  upgrade path is provable offline (CRDs, ambient node DaemonSets, webhooks), and upstream tags and digests were not reachable. The
+  waivers in `docs/eol-calendar.yaml` stay until the hops are done. The rest of these findings (calendar, check, Renovate alerts) is in the entry above.
+
 - **The apps CI gets the checks the infra CI has, and every PR gets a run.** `pull_request` no longer filters on `branches: [main]` (a PR
   stacked on another PR's branch got no run at all, measured on OpenAether-infra PR #100; `edited` is added so a retarget re-runs).
   `persist-credentials: false` on all checkouts. New: actionlint; kubeconform (`-strict`, CRD schemas from a pinned commit of the

@@ -50,6 +50,30 @@ Every bump is a reviewed PR, never auto-merged: Flux only reconciles what a pers
 - Images are tracked by tag until Renovate's `pinDigests` has rewritten them (see [`supply-chain.md`](supply-chain.md)):
   a re-pushed tag is not noticed meanwhile.
 
+## Upgrade campaign: order and gates
+
+The components past upstream support are upgraded **one component per PR, one supported minor per hop**, each hop
+validated on a staging cluster before the next (never in one Renovate batch). The order, and why:
+
+1. **cert-manager** to the newest supported minor. From 1.18 the default `rotationPolicy` of a `Certificate` flips from
+   `Never` to `Always`: every `Certificate` of this repository must name its policy first (the Gateway and OpenBao
+   leaves already do; `foundation/vault-ca` keeps `Never` on purpose), then the baseline of issued certificates is
+   recorded, then the hops. CRDs ride `crds: CreateReplace`; webhook and cainjector must be Ready before
+   `13b-cert-manager-issuers`.
+2. **Gateway API CRDs** (vendored v1.1.0), to the release the target Istio expects.
+3. **Istio** (`base`, `istiod`, `istio-cni`, `ztunnel`), minor by minor, reading each upgrade note; the control plane
+   first, then the node-level `istio-cni` and `ztunnel`. `meshConfig.tlsDefaults.minProtocolVersion` is already
+   `TLSV1_2` and must still apply to the Gateway API gateway afterwards.
+4. **Kyverno** (re-vendor the dump, then re-run `scripts/dev/test-kyverno-policies.sh` with the matching CLI),
+   **CNPG operator** (re-vendor), then the **PostgreSQL images** (`scripts/dev/check-pg-dump-version.sh` keeps the dump
+   image at or above every `Cluster`), then **Longhorn**.
+
+What is *not* done offline, and why: a hop changes CRDs and node-level DaemonSets whose behaviour cannot be shown
+without a cluster, `helm rollback` does not roll CRDs back, and the upstream tags and digests were not reachable when
+this was written. The per-hop commands, expected observations and rollback are in the maintainers' lab checklist
+(section B28). When the last hop is merged, the `End of support` check can be made blocking by removing the waivers
+from [`eol-calendar.yaml`](eol-calendar.yaml).
+
 ## Where it stands (2026-10-14)
 
 The 30-day rule is **not met** for components already past upstream support: Istio 1.24 (EOL 2025-06-24),
