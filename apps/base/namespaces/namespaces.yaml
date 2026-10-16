@@ -90,3 +90,19 @@ metadata:
     pod-security.kubernetes.io/audit: privileged
     openaether.io/managed: "true"
     openaether.io/component: "node-exporter"
+---
+# The control-plane audit-log collector ALONE (alloy-audit): it mounts the node's /var/log/audit/kube read-only, a
+# hostPath, which only the privileged Pod Security level allows. Same reasoning as services-observability-node above,
+# in its own namespace so that neither node-exporter nor the rest of the stack inherits the exemption. Nothing else may
+# be deployed here (scripts/dev/test-audit-collector.py); Kyverno exempts alloy-audit by pod name. Out of the mesh like
+# the rest of the observability stack.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: services-observability-audit
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/audit: privileged
+    openaether.io/managed: "true"
+    openaether.io/component: "audit-collector"

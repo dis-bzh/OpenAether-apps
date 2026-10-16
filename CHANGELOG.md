@@ -254,6 +254,22 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   a cluster. Does not touch Alloy, Loki or Grafana (own entries) and cannot prove the scrapes stay up: that is the lab check
   (`up` per job before and after).
 
+- **The Kubernetes API audit log reaches Loki** (ANSSI PA-012 R2, R9 and Annex A; HYG-42 M36; batch B22 step 1, apps half
+  of LOG-01, K8S/F12, OSN/F08, ADM/F08). A second Alloy release, `alloy-audit`, runs on the **control planes only**
+  (nodeSelector, control-plane toleration) in its own privileged namespace `services-observability-audit`, reads
+  `/var/log/audit/kube/kube-apiserver.log` through a read-only hostPath (DirectoryOrCreate) and pushes it to Loki as
+  `{log_type="k8s-audit", node, cluster}`, the timestamp taken from the event's `stageTimestamp`. It runs as root with a
+  read-only root filesystem and ALL capabilities dropped (the file's owner is to be confirmed on a node), starts from the end of the file, and
+  has no RBAC and no kube-apiserver egress: its CiliumNetworkPolicy allows DNS and Loki :3100 only, and Loki's ingress
+  accepts it. Kyverno exempts it **by pod name** (`alloy-audit-*`) from `deny-hostpath` and `disallow-root-user`, not its
+  namespace. Three alerts: `K8sAuditCollectorNotRunning`, `K8sAuditLogSilent` (no line read for 15 min), `K8sAuditLogNeverRead`.
+  The local Docker overlay removes it. Retention needed no change here: Loki already keeps 8760h.
+  **Rung: mocked/static, not run on a cluster**: `scripts/dev/test-alloy-audit.sh` runs the shipped config in a real Alloy
+  on a fixture file (labels, backlog skipped), `scripts/dev/test-audit-collector.py` pins the narrow shape, the Kyverno CLI
+  fixtures and the vmalert unit test cover the exemption and the silence alert. **Does NOT**: change the audit policy
+  (Talos's default Metadata level stays: no request bodies), ship Talos service or kernel logs or the bastion's (infra),
+  survive a pod re-creation without a gap (positions are in an emptyDir), or prove the file is readable on a real node.
+
 ### Added
 
 - **OpenBao's metrics are scraped and its alerts are deployed** (ANSSI PA-012 R12 and C3.1 in part; LOG-06). The earlier
@@ -305,6 +321,12 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   pod restarts once (one replica: a gap of a minute in the `kube_*` series).
 
 ### Fixed
+
+- **Alloy's control-plane toleration was ignored** (found while adding the audit collector; LOG-01). `tolerations` sat at the
+  top of the `alloy` HelmRelease values, where the chart does not read it (`controller.tolerations` is the key), so the
+  pod-log collector never ran on a tainted control plane. It now does. The same file's top-level `resources` is also not a
+  chart value (`alloy.resources` is): left as is, the limits would be a behaviour change on a running cluster, to be decided
+  with measurements. Rung: `helm template`, not run on a cluster.
 
 - **local-path-provisioner no longer runs with `--debug`** (ANSSI PA-012 R6; LOG-15). It is the default StorageClass of the base
   profile and logged every volume path and helper-pod step. Static only.

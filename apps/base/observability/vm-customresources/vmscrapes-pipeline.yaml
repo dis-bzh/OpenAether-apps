@@ -25,6 +25,26 @@ spec:
     - port: http-metrics
       path: /metrics
 ---
+# The control-plane audit-log collector (alloy.yaml's twin, own namespace): its read counters feed K8sAuditLogSilent.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: alloy-audit
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmagent-scrapes
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  namespaceSelector:
+    matchNames:
+      - services-observability-audit
+  podMetricsEndpoints:
+    - port: http-metrics
+      path: /metrics
+---
 # Pods, not the Service: the chart also publishes a headless Service on the same port, which would
 # scrape each replica twice.
 apiVersion: operator.victoriametrics.com/v1beta1

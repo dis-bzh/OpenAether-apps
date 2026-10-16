@@ -44,6 +44,13 @@ spec:
               - services-observability
               # node-exporter alone (hostPath/hostNetwork): split out of services-observability, same exemption.
               - services-observability-node
+        # The control-plane audit-log collector reads a root-owned file: named, not its namespace, so another
+        # pod added to services-observability-audit still has to run as non-root.
+        - resources:
+            namespaces:
+              - services-observability-audit
+            names:
+              - "alloy-audit-*"
       validate:
         # EITHER form, not both. Kubernetes' own "restricted" Pod Security
         # Standard is satisfied when runAsNonRoot is set on the pod OR on every

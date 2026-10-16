@@ -33,8 +33,11 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 - **OpenBao authentication failures and root-token use.** The audit trail reaches Loki, labelled `log_type="audit"`, but no Loki
   ruler evaluates it, so nothing alerts on it; read it in Grafana Explore (`{log_type="audit"} | json | response_error != ""`,
   not tried on a cluster).
-- **`kubectl exec`, new cluster-admin bindings, RBAC changes.** They need the API server audit log, which is not
-  collected.
+- **`kubectl exec`, new cluster-admin bindings, RBAC changes.** The API server audit log (Talos's default Metadata level)
+  reaches Loki as `{log_type="k8s-audit"}` since `alloy-audit` (control planes only; read it in Explore with
+  `{log_type="k8s-audit"} | json | verb="create" | objectRef_subresource="exec"`, not tried on a cluster). No rule reads it
+  (no Loki ruler); `K8sAuditLogSilent` only says the file stopped arriving. The audit policy is Talos's default: it does not
+  record request bodies, and nothing here changes it.
 - **An empty log stream for one namespace.** Needs a Loki ruler or an Alloy `stage.metrics`; only "nothing at all is
   shipped" is detected.
 - **Zitadel.** Scraped (`/debug/metrics`), but no rule reads it: its metric names are not checked against a running
@@ -60,7 +63,7 @@ Review it before switching any policy from Audit to Enforce.
 ## Log formats and levels
 
 Set here, so that a detection rule can rely on the shape of a line (ANSSI PA-012 R1, R6 and R23 in part). Alloy ships every pod's
-stdout to Loki and adds `namespace, pod, container, app, component`; only the OpenBao audit lines get a `log_type`.
+stdout to Loki and adds `namespace, pod, container, app, component`; only the OpenBao audit lines (`audit`) and the API server audit log (`k8s-audit`, from `alloy-audit`, plus `node`) get a `log_type`.
 
 | Component | Format | Level | Where |
 |---|---|---|---|

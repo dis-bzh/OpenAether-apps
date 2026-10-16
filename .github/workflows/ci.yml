@@ -173,6 +173,8 @@ jobs:
 
       - name: node-exporter, its scrape and its privileged namespace agree
         run: python3 -I scripts/dev/test-node-exporter-namespace.py
+      - name: the audit-log collector keeps its narrow shape (read-only hostPath, control planes, exempt by name)
+        run: python3 -I scripts/dev/test-audit-collector.py
 
       - name: dependsOn covers the cross-Kustomization contracts (#38)
         run: |
@@ -523,6 +525,12 @@ jobs:
           set -euo pipefail
           ./scripts/dev/test-alloy-scrub.sh | tee alloy-scrub.out
           grep -qE '^[0-9]+ passed, 0 failed$' alloy-scrub.out
+
+      - name: Alloy reads the API audit log, labels it and skips the backlog (real Alloy)
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-alloy-audit.sh | tee alloy-audit.out
+          grep -qE '^[0-9]+ passed, 0 failed$' alloy-audit.out
 
       - name: Grafana authentication settings (base and SSO-only overlay)
         run: |

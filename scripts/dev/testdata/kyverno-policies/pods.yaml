@@ -151,6 +151,28 @@ spec:
     - name: c
       image: ghcr.io/fluxcd/x:1
 ---
+# The audit-log collector: a read-only hostPath by design, exempt by name.
+apiVersion: v1
+kind: Pod
+metadata: {name: alloy-audit-abc, namespace: services-observability-audit}
+spec:
+  volumes:
+    - {name: audit, hostPath: {path: /var/log/audit/kube}}
+  containers:
+    - name: c
+      image: docker.io/grafana/alloy:v1
+---
+# Same namespace, another name: the exemption is the pod, not the namespace.
+apiVersion: v1
+kind: Pod
+metadata: {name: intruder-audit, namespace: services-observability-audit}
+spec:
+  volumes:
+    - {name: root, hostPath: {path: /}}
+  containers:
+    - name: c
+      image: ghcr.io/fluxcd/x:1
+---
 # The ambient mesh namespace no longer gets a wholesale pass.
 apiVersion: v1
 kind: Pod

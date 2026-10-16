@@ -529,6 +529,15 @@ spec:
         - ports:
             - port: "3100"
               protocol: TCP
+    # alloy-audit (control-plane audit log), from its own namespace
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability-audit
+            app.kubernetes.io/name: alloy
+      toPorts:
+        - ports:
+            - port: "3100"
+              protocol: TCP
     # Grafana: query logs
     - fromEndpoints:
         - matchLabels:
@@ -670,6 +679,51 @@ spec:
     # fallback toEntities → k8s SD (Alloy/vmagent/Grafana sidecar) breaks.
     - toEntities:
         - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: loki
+      toPorts:
+        - ports:
+            - port: "3100"
+              protocol: TCP
+
+# ── alloy-audit (DaemonSet on the control planes, own namespace) ───
+# egress: DNS + Loki :3100 only (it reads a local file: no kube-apiserver rule on purpose)
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: alloy-audit
+  namespace: services-observability-audit
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: alloy-audit
+spec:
+  description: "alloy-audit: egress DNS + Loki :3100 only; ingress vmagent :12345 (metrics)."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "12345"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability

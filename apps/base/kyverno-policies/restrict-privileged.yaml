@@ -87,6 +87,12 @@ spec:
               - services-observability-node
             names:
               - "*node-exporter*"
+        # alloy-audit: /var/log/audit/kube, read-only (deny-privileged is not relaxed for it: no host namespace).
+        - resources:
+            namespaces:
+              - services-observability-audit
+            names:
+              - "alloy-audit-*"
         - resources:
             namespaces:
               - istio-system

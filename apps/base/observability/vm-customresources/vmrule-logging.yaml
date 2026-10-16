@@ -157,3 +157,54 @@ spec:
           annotations:
             summary: "Grafana returns 5xx"
             description: "kubectl -n services-observability logs deploy/grafana; the grafana-db CNPG cluster first."
+
+        # 12) The control-plane audit-log collector (alloy-audit.yaml) is missing on a control plane: that node's
+        #     Kubernetes API audit trail is not shipped and dies with the node.
+        - alert: K8sAuditCollectorNotRunning
+          expr: |
+            kube_daemonset_status_number_ready{namespace="services-observability-audit", daemonset="alloy-audit"}
+              < kube_daemonset_status_desired_number_scheduled{namespace="services-observability-audit",
+                  daemonset="alloy-audit"}
+          for: 10m
+          labels:
+            severity: warning
+            component: logging
+          annotations:
+            summary: "The Kubernetes audit-log collector is not running on every control plane"
+            description: >-
+              kubectl -n services-observability-audit get pods -o wide;
+              flux get helmrelease -n services-observability-audit alloy-audit.
+
+        # 13) A collector reads the file but no line came in for 15 min: the apiserver always writes (every kubelet and
+        #     controller call is an event), so silence means a wrong path or mode, a rotation lost, or the audit log
+        #     off. Silent loss is what this rule exists for. It reads a running collector's counter: no series, no
+        #     alert.
+        - alert: K8sAuditLogSilent
+          expr: |
+            sum by (instance) (
+              rate(loki_source_file_read_lines_total{path="/var/log/audit/kube/kube-apiserver.log"}[10m])) == 0
+          for: 15m
+          labels:
+            severity: critical
+            component: logging
+          annotations:
+            summary: "No Kubernetes API audit line read on {{ $labels.instance }} for 15 min"
+            description: >-
+              kubectl -n services-observability-audit logs ds/alloy-audit (permission denied? file missing?), then
+              talosctl -n <control plane> ls /var/log/audit/kube. The audit trail is not reaching Loki.
+
+        # 14) The collector is up (the DaemonSet is ready) yet its read counter never appeared: same silence, for a
+        #     collector that never read a single line.
+        - alert: K8sAuditLogNeverRead
+          expr: |
+            absent(loki_source_file_read_lines_total{path="/var/log/audit/kube/kube-apiserver.log"})
+              and on() (kube_daemonset_status_number_ready{namespace="services-observability-audit",
+                  daemonset="alloy-audit"} > 0)
+          for: 30m
+          labels:
+            severity: critical
+            component: logging
+          annotations:
+            summary: "The audit-log collector runs but has read no Kubernetes API audit line"
+            description: >-
+              Check /var/log/audit/kube/kube-apiserver.log on a control plane and the pod's logs (ds/alloy-audit).

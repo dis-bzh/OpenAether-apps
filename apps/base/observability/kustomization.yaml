@@ -36,6 +36,8 @@ resources:
   - externalsecret-loki.yaml
   - alloy.yaml
   - rbac-alloy.yaml
+  # Control-plane audit log (own privileged namespace, see the file)
+  - alloy-audit.yaml
   # Grafana HA (CNPG DB in apps/base/cnpg/)
   - grafana.yaml
   - rbac-grafana.yaml

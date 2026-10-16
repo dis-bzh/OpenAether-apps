@@ -1,0 +1,155 @@
+# Kubernetes API audit log -> Loki (ANSSI PA-012 R2/R9, HYG-42 M36; batch B22 step 1).
+# ──────────────────────────────────────────────────────────────────
+# Talos's kube-apiserver writes a Metadata-level audit log to /var/log/audit/kube/kube-apiserver.log on every control
+# plane (authentication, RBAC changes, Secret reads, pods/exec). Without a collector it dies with the node. This is a
+# SECOND Alloy release, on the control planes only, so that the hostPath and the root user stay out of the pod-log
+# collector (alloy.yaml) and out of services-observability (PSA baseline): it has its own privileged namespace.
+# It reads one file, read-only, has no RBAC and no kube-apiserver egress (nothing to discover).
+# It does NOT change the audit policy (Talos default kept) nor ship Talos service or kernel logs (infra step 2).
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: alloy-audit
+  namespace: services-observability-audit
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: alloy-audit
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: alloy
+      version: "0.11.0"
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+        namespace: services-observability  # the HelmRepository stays with the other charts
+      interval: 1h
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    controller:
+      type: daemonset
+      # Control planes only: the audit file exists nowhere else.
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      volumes:
+        extra:
+          - name: storage
+            emptyDir:
+              sizeLimit: 128Mi
+          # DirectoryOrCreate: a node where the file is not there yet must not leave the pod in ContainerCreating.
+          - name: apiserver-audit
+            hostPath:
+              path: /var/log/audit/kube
+              type: DirectoryOrCreate
+    configReloader:
+      securityContext:
+        readOnlyRootFilesystem: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
+    alloy:
+      storagePath: /var/lib/alloy/data
+      mounts:
+        extra:
+          - name: storage
+            mountPath: /var/lib/alloy/data
+          - name: apiserver-audit
+            mountPath: /var/log/audit/kube
+            readOnly: true
+      extraEnv:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+      # Root, because the audit file belongs to the apiserver's user and is not group-readable (to be confirmed on a
+      # real node, LAB-CHECKLIST B22); everything else is dropped. If the read is refused, add DAC_READ_SEARCH before
+      # thinking of anything wider.
+      securityContext:
+        readOnlyRootFilesystem: true
+        runAsUser: 0
+        runAsGroup: 0
+        runAsNonRoot: false
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests:
+          cpu: 25m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 192Mi
+      configMap:
+        content: |
+          // One file, on purpose: rotated siblings (kube-apiserver-<date>.log) are already shipped or too old.
+          // Labels are low-cardinality only (log_type, node; `cluster` is added by loki.write). The audit event itself,
+          // user, verb and resource, stays in the line for LogQL `| json`.
+          local.file_match "audit" {
+            path_targets = [{
+              "__path__" = "/var/log/audit/kube/kube-apiserver.log",
+              "log_type" = "k8s-audit",
+              "node"     = sys.env("NODE_NAME"),
+            }]
+          }
+
+          loki.source.file "audit" {
+            targets    = local.file_match.audit.targets
+            forward_to = [loki.process.audit.receiver]
+            // Positions live in an emptyDir: after a pod re-creation the file would be read again from the start
+            // (up to ~1 GB, past Loki's 7-day sample age limit). From the end instead; a restart of the container keeps
+            // its position, a re-created pod misses what was written while it was away.
+            tail_from_end = true
+          }
+
+          loki.process "audit" {
+            forward_to = [loki.write.default.receiver]
+
+            // The event time is stageTimestamp (end of the request), not the moment Alloy read the line.
+            stage.json {
+              expressions = { ts = "stageTimestamp" }
+            }
+            stage.timestamp {
+              source          = "ts"
+              format          = "RFC3339Nano"
+              fallback_formats = ["RFC3339"]
+            }
+          }
+
+          loki.write "default" {
+            endpoint {
+              url = "http://loki.services-observability.svc.cluster.local:3100/loki/api/v1/push"
+              // Same retry budget as alloy.yaml (no WAL in Alloy v1.6: a batch is dropped when its retries run out).
+              min_backoff_period  = "500ms"
+              max_backoff_period  = "1m"
+              max_backoff_retries = 30
+            }
+            // Same constant as alloy.yaml: only the management cluster runs Alloy and Loki today.
+            external_labels = {
+              cluster = "management",
+            }
+          }
+    # Nothing to discover: no ClusterRole.
+    rbac:
+      create: false
+    serviceAccount:
+      create: true

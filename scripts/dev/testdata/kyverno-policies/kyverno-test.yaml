@@ -601,6 +601,20 @@ results:
   namespace: services-observability-node
   result: fail
 - policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - alloy-audit-abc
+  kind: Pod
+  namespace: services-observability-audit
+  result: skip
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - intruder-audit
+  kind: Pod
+  namespace: services-observability-audit
+  result: fail
+- policy: restrict-privileged
   rule: deny-privileged
   resources:
   - waypoint-abc

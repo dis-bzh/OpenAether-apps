@@ -156,3 +156,24 @@ tests:
       - eval_time: 30m
         alertname: OpenBaoNoActiveNode
         exp_alerts: []
+  # The audit file is read by one collector per control plane: a flat counter on one of them is silence.
+  - name: audit log read on one control plane stalls
+    interval: 1m
+    input_series:
+      - series: 'loki_source_file_read_lines_total{path="/var/log/audit/kube/kube-apiserver.log", instance="cp-a"}'
+        values: '0+60x80'
+      - series: 'loki_source_file_read_lines_total{path="/var/log/audit/kube/kube-apiserver.log", instance="cp-b"}'
+        values: '0+60x30 1800+0x50'   # stalls after 30 min
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: K8sAuditLogSilent
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: K8sAuditLogSilent
+        exp_alerts:
+          - exp_labels: {instance: cp-b, severity: critical, component: logging}
+            exp_annotations:
+              summary: "No Kubernetes API audit line read on cp-b for 15 min"
+              description: >-
+                kubectl -n services-observability-audit logs ds/alloy-audit (permission denied? file missing?), then
+                talosctl -n <control plane> ls /var/log/audit/kube. The audit trail is not reaching Loki.

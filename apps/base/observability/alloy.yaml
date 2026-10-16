@@ -38,6 +38,12 @@ spec:
   values:
     controller:
       type: daemonset
+      # Deployed on the control-plane nodes too. This stood at the top level of the values, where the chart ignores it
+      # (the key is controller.tolerations): control-plane pods were not collected.
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       volumes:
         extra:
           - name: storage
@@ -198,8 +204,3 @@ spec:
       create: false
     serviceAccount:
       create: true
-    # Tolerations so it is deployed on the control-plane nodes too.
-    tolerations:
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
-        effect: NoSchedule
