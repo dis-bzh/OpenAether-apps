@@ -14,54 +14,46 @@ results:
   resources:
   - eph-general
   kind: Pod
-  namespace: app
   result: pass
 - policy: restrict-capabilities-ephemeral
   rule: deny-sensitive-capabilities-ephemeral
   resources:
   - eph-netadmin
   kind: Pod
-  namespace: app
   result: fail
 - policy: restrict-capabilities-ephemeral
   rule: deny-sensitive-capabilities-ephemeral
   resources:
   - eph-sysadmin
   kind: Pod
-  namespace: app
   result: pass
 - policy: restrict-capabilities-ephemeral
   rule: deny-sensitive-capabilities-ephemeral
   resources:
   - eph-sysadmin-ks
   kind: Pod
-  namespace: kube-system
   result: skip
 - policy: restrict-privileged-ephemeral
   rule: deny-privileged-ephemeral
   resources:
   - eph-general
   kind: Pod
-  namespace: app
   result: pass
 - policy: restrict-privileged-ephemeral
   rule: deny-privileged-ephemeral
   resources:
   - eph-netadmin
   kind: Pod
-  namespace: app
   result: pass
 - policy: restrict-privileged-ephemeral
   rule: deny-privileged-ephemeral
   resources:
   - eph-sysadmin
   kind: Pod
-  namespace: app
   result: fail
 - policy: restrict-privileged-ephemeral
   rule: deny-privileged-ephemeral
   resources:
   - eph-sysadmin-ks
   kind: Pod
-  namespace: kube-system
   result: skip
