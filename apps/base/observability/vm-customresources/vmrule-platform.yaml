@@ -130,3 +130,26 @@ spec:
           annotations:
             summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} not Ready for 1 h"
             description: "kubectl describe certificate -n {{ $labels.namespace }} {{ $labels.name }}"
+
+    - name: openaether-databases
+      interval: 1m
+      rules:
+        # 1) A CNPG instance pod left in phase Succeeded. After a node reboot without a drain the kubelet's graceful
+        #    shutdown leaves the pod Completed (postgres exits 0); CNPG 1.23.1 never recreates it, the cluster waits
+        #    for ever (lab 11, both databases down). Fixed in CNPG 1.23.3 (#2056). Owned by a Cluster, so the
+        #    Succeeded pods of Jobs (dump, restore test) do not count.
+        - alert: CnpgInstancePodSucceeded
+          expr: |
+            kube_pod_status_phase{namespace="foundation-databases", phase="Succeeded"} == 1
+              and on (namespace, pod) kube_pod_owner{namespace="foundation-databases", owner_kind="Cluster"}
+          for: 5m
+          labels:
+            severity: critical
+            component: databases
+          annotations:
+            summary: "CNPG instance pod {{ $labels.pod }} is Completed and will not be restarted"
+            description: >-
+              Left by a node shutdown (reboot without drain).
+              kubectl delete pod -n {{ $labels.namespace }} {{ $labels.pod }}
+              (the PVC stays; the operator recreates the pod). Never delete the PVC. docs/traps.md, Databases.
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/traps.md"

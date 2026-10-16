@@ -55,12 +55,28 @@ spec:
     startupapicheck:
       enabled: false
     replicaCount: 2
+    # The top-level `resources` below is the controller's only: the webhook and the cainjector read their own key
+    # (lab 11: both ran with no memory limit). Measured 9-62 Mi (webhook), 60-80 Mi (cainjector, which caches).
     webhook:
       replicaCount: 2
       containerSecurityContext: *csc
+      resources:
+        limits:
+          cpu: 200m
+          memory: 128Mi
+        requests:
+          cpu: 25m
+          memory: 32Mi
     cainjector:
       replicaCount: 2
       containerSecurityContext: *csc
+      resources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 50m
+          memory: 64Mi
     resources:
       limits:
         cpu: 200m

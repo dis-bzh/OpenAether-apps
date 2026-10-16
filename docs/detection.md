@@ -18,12 +18,20 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 | Flux object not Ready, or suspended for a day | `FluxObjectNotReady`, `FluxObjectSuspended` | `vmrule-security.yaml` |
 | Network policy denials in a loop (no Hubble) | `CiliumPolicyDeniedBurst` | `vmrule-platform.yaml` |
 | `/var` (EPHEMERAL, local-path volumes) filling | `NodeFilesystemFillingUp`, `NodeFilesystemFullIn24h` | `vmrule-cluster.yaml` |
+| A CNPG instance pod left Completed after a node reboot without a drain (CNPG 1.23.1 never restarts it) | `CnpgInstancePodSucceeded` | `vmrule-platform.yaml` |
 | Node clock drift | `NodeClockSkew`, `NodeClockNotSynchronised` | `vmrule-cluster.yaml` |
 | An OpenBao pod sealed, no active node, raft without failure tolerance or lagging in applying entries, its metrics not scraped | `OpenBaoWorkloadSealed`, `OpenBaoNoActiveNode`, `OpenBaoRaftNoFailureTolerance`, `OpenBaoRaftApplyLag`, `OpenBaoMetricsDown` | `observability-openbao/vmrule.yaml` |
 | The OpenBao seal-key escrow not attested, or attested too long ago (also when the check has never succeeded) | `OpenBaoEscrowNotAttested` | `vmrule-backup.yaml` |
 | Backups: a restore test or CronJob that no longer runs, WAL archive failing, base backup failed or stale | `RestoreTestStale`, `BackupCronJobMissing`, `CnpgWalArchiveFailing`, `CnpgBackupFailed`, `CnpgBackupStale` | `vmrule-backup.yaml` |
 
 ## Not covered (and why)
+
+- **`task check-alerts` reports three metrics without series on a healthy cluster** (lab 11, Scaleway). `kube_job_failed` is emitted
+  by kube-state-metrics only for a Job that has a Failed condition, so "no series" is the quiet state of `OpenBaoBootstrapJobFailed`,
+  not a blind rule (the alert keeps `kube_job_failed`: `kube_job_status_failed` would fire on every retry of a Job still inside its
+  backoff limit). `kubelet_volume_stats_available_bytes` and `_capacity_bytes` come from the kubelet only for CSI volumes that
+  are mounted (Longhorn): the Loki and VictoriaMetrics volumes are local-path (hostPath), so **`PersistentVolumeFillingUp` cannot
+  fire for them**; `NodeFilesystemFillingUp` on `/var` is their guard.
 
 - **A silent disk, clock, policy-denial, Grafana-error or restore-test rule.** Not every family has an `*Absent` guard:
   `NodeFilesystem*` (a mount point Talos does not report as `/var` disables both disk rules without a sound),

@@ -55,8 +55,10 @@ spec:
             - ALL
         seccompProfile:
           type: RuntimeDefault
-    # The chart's default volume plus a writable /tmp (the rest of the filesystem is read-only). A list value
-    # replaces the chart's list, so the webhook certificate is repeated here.
+    # The chart's default volume plus a writable /tmp and /home/nonroot (the rest of the filesystem is read-only). The
+    # clusterctl config reader the operator embeds creates $HOME/.config/cluster-api before every reconcile; without a
+    # writable home no provider is ever installed ("could not create any of the following paths: [/home/nonroot/.config
+    # /etc/xdg]", lab 11). A list value replaces the chart's list, so the webhook certificate is repeated here.
     volumes:
       - name: cert
         secret:
@@ -65,6 +67,9 @@ spec:
       - name: tmp
         emptyDir:
           sizeLimit: 64Mi
+      - name: home
+        emptyDir:
+          sizeLimit: 16Mi
     volumeMounts:
       manager:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
@@ -72,6 +77,8 @@ spec:
           readOnly: true
         - mountPath: /tmp
           name: tmp
+        - mountPath: /home/nonroot
+          name: home
     resources:
       manager:
         limits:

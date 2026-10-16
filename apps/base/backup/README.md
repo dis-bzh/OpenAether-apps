@@ -61,6 +61,35 @@ anymore is not erased: only deleting the objects is.
    `backups-<env>` bucket of these backups (and its `-backup` twin, per the `backup.tf` convention) is created **by the operator**;
    the image buckets come from `talos-image.sh`. Local: the MinIO chart (`backups-primary` / `backups-replica` in its values).
 
+## S3 rights of a dedicated key pair
+
+The contract for a pair limited to the backups bucket (`backup/s3-primary`, `backup/s3-replica`). Each consumer needs these
+and nothing else; the bucket policy (or the provider's equivalent) must carry them on the right resource, bucket or objects:
+
+| Consumer | S3 action (API call) | On |
+|---|---|---|
+| restic, Barman, Longhorn | `ListBucket` (ListObjects, ListObjectsV2) | the bucket |
+| **Barman (CNPG WAL archive and base backup)** | **`ListBucket` as HeadBucket**: `barman-cloud-check-wal-archive` and every WAL archive start with HeadBucket; a refusal is `ContinuousArchiving=False`, "exit status 4", `HeadBucket ... 403` | the bucket |
+| all | `GetObject` (GetObject, HeadObject), `PutObject` (PutObject, CopyObject, CreateMultipartUpload, UploadPart, CompleteMultipartUpload), `DeleteObject` (DeleteObject, DeleteObjects: retention and `restic forget --prune`) | the objects (`<bucket>/*`) |
+| restic, Barman, Longhorn (large objects) | `AbortMultipartUpload`, `ListBucketMultipartUploads` (ListMultipartUploads), `ListMultipartUploadParts` (ListParts) | objects / the bucket |
+| Longhorn | `GetBucketLocation` (granted in the lab; not shown to be required) | the bucket |
+
+Withhold, so that a stolen pair cannot rewrite history: `DeleteObjectVersion`, bucket versioning, lifecycle, object-lock and
+retention changes, bucket deletion. Check a pair with `scripts/ops/check-backup-key-rights.sh` (every right above; reads and
+writes only under `.oa-rights-probe/`, removed at the end) BEFORE seeding it, and the Cluster condition after:
+`kubectl get cluster -n foundation-databases <name> -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")].status}'` is `True`.
+
+**Scaleway: the bucket policy is not enough.** Both layers must allow the call (bucket policy version `2023-04-17`: an action
+is permitted only if the bucket policy allows it AND an IAM policy allows the principal). HeadBucket maps to `s3:ListBucket`
+in the bucket policy, but in IAM it belongs only to the permission sets `ObjectStorageBucketsRead`, `ObjectStorageReadOnly`
+and `ObjectStorageFullAccess`, not to `ObjectStorageObjectsRead`/`Write`/`Delete`. A pair whose IAM policy holds only the
+`ObjectStorageObjects*` sets lists and writes (restic and Longhorn work) and gets a 403 on HeadBucket (lab 11, measured with a
+bucket policy granting ListBucket, GetBucketLocation and the object rights). Give the application's IAM policy
+`ObjectStorageBucketsRead` next to the object sets: it also lets the pair list the bucket NAMES of the project, which the bucket
+policy cannot narrow. This reading comes from the provider's permission-equivalence tables and the lab symptom; the corrected
+lab policy has not been run yet. OVH and Outscale: not verified; the AWS rule (HeadBucket needs `s3:ListBucket`) is the
+expectation.
+
 ## Order of a full recovery
 
 The apps-side links of the chain, in the order that works (the infra documents carry the cluster-up step before them):

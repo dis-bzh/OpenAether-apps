@@ -22,6 +22,15 @@ belong to. What follows has no skill of its own yet.
   conditions" error (its existing Secret stays, but stops refreshing). A new brick
   adds its namespace to `stores/clustersecretstore.yaml` and to the Kyverno audit
   exclusion; `scripts/check-externalsecret-namespaces.py` fails CI otherwise.
+- **A node reboot WITHOUT a drain leaves the CNPG instance pods Completed, and CNPG 1.23.1 never restarts them.** The kubelet's
+  graceful shutdown stops postgres (exit 0), the pod ends in phase `Succeeded` and the operator waits for it for ever: both
+  databases down, Zitadel and the Gateway answer 503 (lab 11, measured 30+ minutes; Kubernetes only fixed this for StatefulSets).
+  Drain first (`kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`, one node at a time; `task cluster-roll` does).
+  After an undrained reboot: `kubectl get pods -A --field-selector=status.phase==Succeeded`, then delete the CNPG ones
+  (`kubectl delete pod -n foundation-databases <name>`; NEVER the PVC): healthy about a minute later. The alert
+  `CnpgInstancePodSucceeded` fires after 5 minutes. No Cluster setting avoids it (`enablePDB` and `failoverDelay` do not
+  look at terminated pods). Fixed upstream by cloudnative-pg #2056 (the operator deletes Succeeded and Failed pods the kubelet
+  left behind), released in 1.23.3, 1.22.5 and 1.24.0: bumping the vendored operator is the real fix.
 - **Seed OpenBao app-DB secrets BEFORE the CNPG cluster's first `initdb`.** Seeding
   late leaves the live Postgres role out of sync with the Secret.
 - **Do not trust `kubectl cnpg promote` output; read the Cluster.** Measured once on a real cluster against the 1.23.1 operator
@@ -51,6 +60,10 @@ belong to. What follows has no skill of its own yet.
 
 ## CAPI
 
+- **A read-only root filesystem on the CAPI operator needs a writable `/home/nonroot`, not only `/tmp`.** Its embedded clusterctl
+  config reader creates `$HOME/.config/cluster-api`; the failure is a path-creation error in the operator log
+  ("could not create any of the following paths"), not EROFS, so a grep for "read-only file system" misses it, and every
+  provider stays with an empty `INSTALLEDVERSION` (lab 11). Check `kubectl get coreprovider,infrastructureprovider -A` after a hardening change.
 - **`clusterctl move --dry-run` does not check providers.** It passes, and the real
   move then fails.
 - **`clusterctl init` does not install ORC.** CAPO v0.14 needs it; without it the

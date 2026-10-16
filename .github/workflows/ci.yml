@@ -256,6 +256,9 @@ jobs:
           # The pg_restore tests are the main check: a skipped part must not pass.
           ! grep -q 'SKIPPED' backup-checks.out
 
+      - name: The S3 rights probe of a dedicated backup key names a missing right (stub aws)
+        run: ./scripts/dev/test-backup-key-rights.sh
+
   loki-render:
     name: Loki chart render
     runs-on: ubuntu-latest
@@ -296,6 +299,13 @@ jobs:
           set -euo pipefail
           ./scripts/dev/test-observability-rbac.sh | tee observability-rbac.out
           grep -qE '^0 failed$' observability-rbac.out
+
+      - name: The Longhorn policy lets the managers reach each other's webhooks (static)
+        run: python3 -I scripts/dev/test-longhorn-netpol.py
+
+      # Alloy, cert-manager, Zitadel login and Grafana read resources under their own key: render, require limits.
+      - name: Charts that read resources under their own key have memory limits (rendered)
+        run: python3 -I scripts/dev/test-chart-limits.py
 
   vmrules:
     name: VMRules (vmalert dry run)

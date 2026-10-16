@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+"""The Longhorn CiliumNetworkPolicy lets the managers reach each other's webhooks (static, no cluster).
+
+Lab 11 counted 66 denied flows, longhorn-system to longhorn-system on TCP 9501 and 9502: the policy description
+claimed those ports, but the in-namespace rules listed only 9500 and 8500-8503. Cilium needs the port on BOTH the egress of
+the caller and the ingress of the callee, so both in-namespace rules must carry every port the description names.
+Rung: mocked/static.   Usage: python3 scripts/dev/test-longhorn-netpol.py   (needs PyYAML)
+"""
+import sys
+from pathlib import Path
+
+import yaml
+
+REPO = Path(__file__).resolve().parents[2]
+NEED = {"9500", "9501", "9502", "8500", "8501", "8502", "8503"}
+pol = next(d for d in yaml.safe_load_all((REPO / "apps/base/storage/networkpolicy.yaml").read_text())
+           if d and d["kind"] == "CiliumNetworkPolicy" and d["metadata"]["name"] == "longhorn")
+fails = 0
+
+
+def ports_of(rules, key):
+    """Ports of the rule that selects every endpoint of the namespace (matchLabels {})."""
+    for r in rules:
+        if r.get(key) == [{"matchLabels": {}}] and r["toPorts"][0]["ports"]:
+            return {p["port"] for tp in r["toPorts"] for p in tp["ports"]} - {"3260"}
+    return set()
+
+
+for direction, rules, key in (("ingress", pol["spec"]["ingress"], "fromEndpoints"), ("egress", pol["spec"]["egress"], "toEndpoints")):
+    got = ports_of(rules, key)
+    ok = NEED <= got
+    print(("ok   " if ok else "FAIL ") + f"in-namespace {direction} carries {sorted(NEED)}" + ("" if ok else f" (missing {sorted(NEED - got)})"))
+    fails += not ok
+sys.exit(1 if fails else 0)
