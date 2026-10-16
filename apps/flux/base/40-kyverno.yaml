@@ -36,3 +36,24 @@ spec:
   wait: true
   dependsOn:
     - name: kyverno
+---
+# Audit-only guard on External Secrets objects. Needs both CRD sets, hence its
+# own Kustomization (Kyverno refuses a policy naming a kind it cannot resolve).
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kyverno-policies-eso
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/kyverno-policies-eso
+  prune: true
+  wait: false
+  dependsOn:
+    - name: kyverno-policies
+    - name: external-secrets

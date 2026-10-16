@@ -1,0 +1,107 @@
+# Behaviour tests of alert rules, run by scripts/dev/test-vmrules.sh with vmalert-tool (rules.yaml is the built
+# VMRules, restricted to the groups tested here). vmalert-tool starts its clock at 2000-01-01T00:00:00Z
+# (946684800), which is the "created" value of the series below. Rung: mocked/static, synthetic series only.
+rule_files:
+  - rules-under-test.yaml
+evaluation_interval: 10m
+tests:
+  # kube-state-metrics emits the success time only after a first success: a CronJob that never succeeded has none.
+  - name: escrow check never succeeded, CronJob older than 36 h
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_info{namespace="foundation-vault", cronjob="openbao-escrow-check"}'
+        values: '1+0x300'
+      - series: 'kube_cronjob_created{namespace="foundation-vault", cronjob="openbao-escrow-check"}'
+        values: '946684800+0x300'
+    alert_rule_test:
+      - eval_time: 30h   # a new cluster: the first daily run has not happened yet
+        alertname: OpenBaoEscrowNotAttested
+        exp_alerts: []
+      - eval_time: 40h
+        alertname: OpenBaoEscrowNotAttested
+        exp_alerts:
+          - exp_labels:
+              {namespace: foundation-vault, cronjob: openbao-escrow-check, severity: warning, component: backup}
+            exp_annotations: &escrow_annotations
+              summary: "The OpenBao seal-key escrow is not attested (or the attestation is stale)"
+              description: >-
+                The openbao-escrow-check Job fails: no ConfigMap openbao-escrow-ack, or it is older than a year,
+                or it is malformed. Losing the seal key loses every secret and every raft snapshot. Logs:
+                kubectl -n foundation-vault logs job/<latest openbao-escrow-check job>.
+                Procedure: the vault README, Day 0.
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md"
+  - name: escrow check succeeded 1 h ago
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_info{namespace="foundation-vault", cronjob="openbao-escrow-check"}'
+        values: '1+0x300'
+      - series: 'kube_cronjob_created{namespace="foundation-vault", cronjob="openbao-escrow-check"}'
+        values: '946684800+0x300'
+      - series: >-
+          kube_cronjob_status_last_successful_time{namespace="foundation-vault", cronjob="openbao-escrow-check"}
+        values: '946828800+0x300'   # 40 h after the start
+    alert_rule_test:
+      - eval_time: 41h
+        alertname: OpenBaoEscrowNotAttested
+        exp_alerts: []
+  - name: escrow check last succeeded 40 h ago
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_info{namespace="foundation-vault", cronjob="openbao-escrow-check"}'
+        values: '1+0x300'
+      - series: 'kube_cronjob_created{namespace="foundation-vault", cronjob="openbao-escrow-check"}'
+        values: '946684800+0x300'
+      - series: >-
+          kube_cronjob_status_last_successful_time{namespace="foundation-vault", cronjob="openbao-escrow-check"}
+        values: '946684800+0x300'
+    alert_rule_test:
+      - eval_time: 40h
+        alertname: OpenBaoEscrowNotAttested
+        exp_alerts:
+          - exp_labels:
+              {namespace: foundation-vault, cronjob: openbao-escrow-check, severity: warning, component: backup}
+            exp_annotations: *escrow_annotations
+  - name: no escrow CronJob at all (no vault brick)
+    interval: 10m
+    input_series:
+      - series: 'up{job="x"}'
+        values: '1+0x300'
+    alert_rule_test:
+      - eval_time: 40h
+        alertname: OpenBaoEscrowNotAttested
+        exp_alerts: []
+
+  # KyvernoMetricsAbsent is silent when Kyverno is not deployed (it is optional in scripts/pick.py).
+  - name: Kyverno not deployed
+    interval: 10m
+    input_series:
+      - series: 'kube_deployment_spec_replicas{namespace="services-observability", deployment="grafana"}'
+        values: '1+0x300'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: KyvernoMetricsAbsent
+        exp_alerts: []
+  - name: Kyverno deployed and its metrics gone
+    interval: 10m
+    input_series:
+      - series: 'kube_deployment_spec_replicas{namespace="kyverno", deployment="kyverno-admission-controller"}'
+        values: '3+0x300'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: KyvernoMetricsAbsent
+        exp_alerts:
+          - exp_labels: {severity: warning, component: kyverno}
+            exp_annotations:
+              summary: "No Kyverno policy result is reported: violation alerts are blind"
+              description: "The kyverno CiliumNetworkPolicy must accept vmagent on :8000; kubectl get cpol."
+  - name: Kyverno deployed and reporting
+    interval: 10m
+    input_series:
+      - series: 'kube_deployment_spec_replicas{namespace="kyverno", deployment="kyverno-admission-controller"}'
+        values: '3+0x300'
+      - series: 'kyverno_policy_results_total{policy_name="p", rule_result="pass"}'
+        values: '1+1x300'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: KyvernoMetricsAbsent
+        exp_alerts: []

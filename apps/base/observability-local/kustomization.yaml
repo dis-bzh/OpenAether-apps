@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# LOCAL overlay of the observability brick (Docker/WSL2, MinIO over http, one small disk).
+# Applied by hand locally: `kubectl apply -k apps/base/observability-local` (locally every Flux
+# Kustomization is suspended, so the repoint in apps/flux/local/kustomization.yaml only takes
+# effect if Flux is unsuspended; applying apps/base/observability instead gives the production Loki).
+# Loki only: one replica with RF 1 (RF 2 needs two live replicas), plain http to the MinIO,
+# and a one-week retention so the compactor frees the local disk. Production uses the base.
+# A sibling of observability/ (not nested): an overlay under the directory it references
+# through `../` makes a kustomize cycle.
+resources:
+  - ../observability
+
+patches:
+  - target:
+      group: helm.toolkit.fluxcd.io
+      kind: HelmRelease
+      name: loki
+    patch: |-
+      apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      metadata:
+        name: loki
+      spec:
+        values:
+          singleBinary:
+            replicas: 1
+          podDisruptionBudget: null
+          loki:
+            commonConfig:
+              replication_factor: 1
+            storage:
+              s3:
+                insecure: true
+            limits_config:
+              retention_period: 168h

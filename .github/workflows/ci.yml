@@ -3,8 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+  # No `branches` filter and `edited` added: a PR based on another PR's branch gets NO run at all under
+  # `branches: [main]` (measured on OpenAether-infra PR #100), and an unvalidated stacked PR looks exactly
+  # like a green one in the list. Retargeting to main fires only `edited`.
   pull_request:
-    branches: [main]
+    types: [opened, synchronize, reopened, edited]
 
 # All jobs here are read-only validation — always safe to cancel a superseded run.
 concurrency:
@@ -21,15 +24,39 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
 
       - name: Install yamllint
-        run: pip install yamllint
+        run: pip install -r scripts/ci-requirements.txt
 
       - name: yamllint
         run: yamllint -c .yamllint apps/ scripts/ .github/workflows/
 
       - name: Validate Renovate config
-        run: npx --yes -p renovate -- renovate-config-validator renovate.json5
+        env:
+          # renovate: datasource=npm depName=renovate
+          RENOVATE_VERSION: "44.52.1"
+        run: npx --yes -p "renovate@${RENOVATE_VERSION}" -- renovate-config-validator renovate.json5
+
+      # yamllint says a workflow is well-formed YAML, not that `needs.x.outputs.y` exists or that a `run:` block's
+      # shell is sound (actionlint runs shellcheck over each). Pinned and checksum-verified like kubectl below.
+      - name: Install actionlint (pinned + checksum-verified)
+        env:
+          # renovate: datasource=github-releases depName=rhysd/actionlint extractVersion=^v(?<version>.*)$
+          ACTIONLINT_VERSION: "1.7.12"
+        run: |
+          set -euo pipefail
+          asset="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          base="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+          curl -fsSL -o "${asset}" "${base}/${asset}"
+          curl -fsSL "${base}/actionlint_${ACTIONLINT_VERSION}_checksums.txt" | grep " ${asset}$" > checksums.txt
+          sha256sum -c checksums.txt
+          tar xzf "${asset}" actionlint
+          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+
+      - name: actionlint
+        run: actionlint
 
       # English is canonical here too, and a French comment in a manifest reaches
       # a user's cluster. .languageignore lists what is French on purpose.
@@ -40,42 +67,9 @@ jobs:
       - name: Language check tests
         run: ./scripts/dev/test-check-language.sh
 
-  # Environment data (real IPs, account ids, bucket names) is what leaked from this
-  # repository on 2026-07-31, and the credential rules gitleaks ships do not look
-  # for it. Scoped to what a PR ADDS, and the config is passed with -c rather than
-  # named .gitleaks.toml, so the full-history scan in security.yml keeps its scope.
-  leaks:
-    name: Environment data in new commits
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Install gitleaks
-        env:
-          # renovate: datasource=github-releases depName=gitleaks/gitleaks extractVersion=^v(?<version>.*)$
-          GITLEAKS_VERSION: "8.30.1"
-        run: |
-          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
-          asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -fsSL -O "${base}/${asset}"
-          curl -fsSL "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" | grep " ${asset}$" > checksums.txt
-          sha256sum -c checksums.txt
-          tar xzf "${asset}" gitleaks
-          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
-
-      # Before trusting the scan: a rule that matches nothing passes silently.
-      - name: The rules still catch what they claim
-        run: ./scripts/dev/check-gitleaks-rules.sh
-
-      - name: Scan what this PR adds
-        run: |
-          gitleaks git -c .gitleaks-envdata.toml \
-            --log-opts="origin/${{ github.base_ref }}..HEAD" -v --redact
+      # The settings check (repo-settings.yml) against a canned API: each check seen red and green.
+      - name: Repository-settings check self-test
+        run: ./scripts/dev/check-required-checks.sh --self-test
 
   dag:
     name: Flux DAG
@@ -83,9 +77,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
 
       - name: Install PyYAML
-        run: pip install pyyaml
+        run: pip install -r scripts/ci-requirements.txt
 
       - name: "pick.py --validate (DAG health: unknown deps, cycles, dead paths)"
         run: python3 scripts/pick.py --validate
@@ -99,6 +95,22 @@ jobs:
         run: |
           python3 scripts/check-child-clusters.py
           scripts/dev/test-check-child-clusters.sh
+      # Every HTTPRoute on the shared Gateway is in docs/public-exposure.yaml with what authenticates its callers (the
+      # app LB has no source ACL).
+      - name: Routes on the shared Gateway are registered
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test-check-gateway-routes.py
+          python3 scripts/check-gateway-routes.py
+
+      # Every pinned chart and vendored dump has a row in docs/eol-calendar.yaml and the row names the pin that is
+      # in the file. Errors fail; dates (past EOL, expired waiver) only annotate: see docs/eol-calendar.md.
+      - name: End-of-support calendar
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test-check-eol.py
+          python3 scripts/check-eol.py
+          python3 scripts/check-eol.py --check-doc
 
   build:
     name: Kustomize Build + Collision Check
@@ -106,6 +118,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
 
       - name: Install kubectl (pinned + checksum-verified)
         env:
@@ -123,7 +137,7 @@ jobs:
           kubectl version --client
 
       - name: Install PyYAML
-        run: pip install pyyaml
+        run: pip install -r scripts/ci-requirements.txt
 
       - name: Cross-brick object collision check (builds every DAG path with kubectl kustomize)
         run: python3 scripts/check-object-collisions.py
@@ -155,6 +169,45 @@ jobs:
           set -euo pipefail
           ./scripts/dev/test-local-docker-lane.sh | tee lane-test.out
           grep -qE '^0 failed$' lane-test.out
+      # The opt-in component that takes the OpenBao and Grafana routes off the shared Gateway: render it, apply the
+      # patches it hands to Flux to the real bricks, and see exactly those two routes go.
+      - name: Private-admin-routes component
+        run: python3 scripts/dev/test-private-admin-routes.py
+
+      # The openbao ClusterSecretStore only serves the namespaces it lists; an
+      # ExternalSecret rendered anywhere else would stay NotReady on a cluster.
+      - name: External Secrets objects stay in the store's namespaces
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test-check-externalsecret-namespaces.py
+          python3 scripts/check-externalsecret-namespaces.py
+
+  backup-checks:
+    name: Backup brick checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Install PyYAML
+        run: pip install -r scripts/ci-requirements.txt
+
+      # pg_dump cannot dump a server newer than itself: a Cluster bump that leaves
+      # the backup client image behind silently stops the daily dumps.
+      - name: Postgres client majors vs Cluster majors
+        run: ./scripts/dev/check-pg-dump-version.sh
+
+      # The restore-test scripts accept an intact dump / raft snapshot and reject a
+      # damaged one (docker is on the runner image; the pg part pulls the CNPG image).
+      - name: Test the restore-test checks
+        run: |
+          set -euo pipefail
+          REQUIRE_PG_RESTORE=1 ./scripts/dev/test-backup-checks.sh | tee backup-checks.out
+          grep -qE '^[0-9]+ passed, 0 failed$' backup-checks.out
+          # The pg_restore tests are the main check: a skipped part must not pass.
+          ! grep -q 'SKIPPED' backup-checks.out
 
   loki-render:
     name: Loki chart render
@@ -162,11 +215,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
 
       - name: Install PyYAML
-        run: pip install pyyaml
+        run: pip install -r scripts/ci-requirements.txt
 
-      # The shipped values through the pinned chart, the ExternalSecret region and the CiliumNetworkPolicy (#53).
+      # The shipped values through the pinned chart: compactor, retention, PDB, no canary, S3 scheme, region, and
+      # the Loki network policy (DNS proxy rule, ring ports, S3 FQDNs).
       # helm and kubectl are on the runner image. The script exits 2 when one is missing.
       - name: Test the Loki values
         run: |
@@ -174,12 +230,54 @@ jobs:
           ./scripts/dev/test-loki-render.sh | tee loki-render.out
           grep -qE '^0 failed$' loki-render.out
 
+  observability-rbac:
+    name: Observability RBAC (least privilege)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Install PyYAML
+        run: pip install -r scripts/ci-requirements.txt
+
+      # The pinned charts with the shipped values plus the kustomize build: no role of these service
+      # accounts reads Secrets or nodes/proxy, and every binding points at a role that exists.
+      - name: Test the observability roles
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-observability-rbac.sh | tee observability-rbac.out
+          grep -qE '^0 failed$' observability-rbac.out
+
+  vmrules:
+    name: VMRules (vmalert dry run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Install PyYAML
+        run: pip install -r scripts/ci-requirements.txt
+
+      # Every VMRule through the real vmalert (pinned release, sha256 checked): a typo in an expression is
+      # otherwise found when the rule fails to load on the cluster. Metric existence needs a cluster.
+      - name: Test the alert rules
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-vmrules.sh | tee vmrules.out
+          grep -qE '^0 failed$' vmrules.out
+
   openbao-bootstrap:
     name: OpenBao bootstrap (real OpenBao)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
 
       # Jobs with a deadline have a ttl, the configure deadline covers its waits, the alert names both Jobs (#34).
       - name: Bootstrap Jobs and alert (static, with a self-test)
@@ -200,3 +298,214 @@ jobs:
           rc=0; ./scripts/dev/test-openbao-bootstrap.sh > bootstrap-test.out 2>&1 || rc=$?
           cat bootstrap-test.out
           [ "$rc" -eq 0 ] && grep -qE '^[0-9]+ passed, 0 failed$' bootstrap-test.out
+
+      # The daily check that the seal-key escrow was attested: the shipped script against stubbed ConfigMaps, on this
+      # host and under the CronJob's own image. CI=true makes a skipped image run a failure.
+      - name: Test the escrow check
+        run: |
+          set -euo pipefail
+          CI=true ./scripts/dev/test-escrow-check.sh | tee escrow-check.out
+          grep -qE '^[0-9]+ passed, 0 failed$' escrow-check.out
+
+  # Commit-msg hooks live in .git/hooks, which no clone carries (see .pre-commit-config.yaml): the same
+  # checks run here on every commit a PR adds.
+  commits:
+    name: Commit messages
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+          # cz needs the range, and the default single-commit checkout has none.
+          fetch-depth: 0
+
+      - name: Install commitizen
+        # renovate: datasource=pypi depName=commitizen
+        run: pip install commitizen==4.19.2
+
+      - name: Conventional Commits
+        run: cz check --rev-range "origin/${{ github.base_ref }}..HEAD"
+
+      # The trailer check reads the message; this reads who git says wrote the commit. GitHub builds a squash
+      # commit's `Co-authored-by` from the BRANCH commits' authors, so by the time a message carries the
+      # trailer it is already on main. A model is not an author: it gets `Assisted-by:`.
+      - name: The check refuses a commit authored by a tool
+        run: ./scripts/dev/test-commit-authors.sh
+
+      - name: No commit authored by a tool
+        run: ./scripts/dev/check-commit-authors.sh "origin/${{ github.base_ref }}..HEAD"
+
+      # Scoped by the tree, not by a date: a commit is checked only if the rule already existed in it, so
+      # commits that predate the rule are skipped rather than rewritten.
+      - name: No authorship trailer naming a tool
+        run: |
+          check=scripts/dev/check-commit-trailers.sh
+          for sha in $(git log --format=%H "origin/${{ github.base_ref }}..HEAD"); do
+            git cat-file -e "$sha:$check" 2>/dev/null || continue
+            git log -1 --format=%B "$sha" > "$RUNNER_TEMP/msg"
+            "./$check" "$RUNNER_TEMP/msg"
+          done
+
+  # Environment data (real IPs, account ids, bucket names) is what leaked here on 2026-07-31, and the credential
+  # rules gitleaks ships do not look for it. Scoped to what a PR ADDS: the config is passed with -c, not named
+  # .gitleaks.toml, so the full-history scan in security.yml keeps its own scope.
+  leaks:
+    name: Environment data in new commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install gitleaks (pinned + checksum-verified)
+        env:
+          # renovate: datasource=github-releases depName=gitleaks/gitleaks extractVersion=^v(?<version>.*)$
+          GITLEAKS_VERSION: "8.30.1"
+        run: |
+          set -euo pipefail
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -O "${base}/${asset}"
+          curl -fsSL "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" | grep " ${asset}$" > checksums.txt
+          sha256sum -c checksums.txt
+          tar xzf "${asset}" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+
+      # A rule that matches nothing passes silently: prove the rules still catch what they claim first.
+      - name: The rules still catch what they claim
+        run: ./scripts/dev/check-gitleaks-rules.sh
+
+      - name: Scan what this PR adds
+        run: |
+          gitleaks git -c .gitleaks-envdata.toml \
+            --log-opts="origin/${{ github.base_ref }}..HEAD" -v --redact
+
+  # What the cluster is told to run is the rendered output of every DAG path, so that is what is scanned:
+  # kubeconform for schema errors (a typo in a field is otherwise found when Flux fails to apply), trivy for
+  # misconfiguration. Both on the render, neither on the source tree.
+  manifests:
+    name: Manifest scan (kubeconform, trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Install kubectl (pinned + checksum-verified)
+        env:
+          # Same version as the build job and OpenAether-infra's kubernetes_version.
+          # renovate: datasource=github-releases depName=kubernetes/kubernetes
+          KUBECTL_VERSION: "v1.36.3"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          expected="$(curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256")"
+          echo "${expected}  kubectl" | sha256sum -c -
+          sudo install -m 0755 kubectl /usr/local/bin/kubectl
+
+      - name: Install PyYAML
+        run: pip install -r scripts/ci-requirements.txt
+
+      - name: Install kubeconform (pinned + checksum-verified)
+        env:
+          # renovate: datasource=github-releases depName=yannh/kubeconform extractVersion=^v(?<version>.*)$
+          KUBECONFORM_VERSION: "0.8.0"
+        run: |
+          set -euo pipefail
+          asset="kubeconform-linux-amd64.tar.gz"
+          base="https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}"
+          curl -fsSL -O "${base}/${asset}"
+          curl -fsSL "${base}/CHECKSUMS" | grep " ${asset}$" > checksums.txt
+          sha256sum -c checksums.txt
+          tar xzf "${asset}" kubeconform
+          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
+
+      - name: Render every DAG path
+        run: python3 scripts/dev/render-dag.py "$RUNNER_TEMP/rendered"
+
+      # No image floats (no tag, or `latest`); the tag-only count is printed. `--require-digest` is for after
+      # Renovate's pinDigests has rewritten the lines.
+      - name: Image pins and the SBOM extractor
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test-sbom.py
+          python3 scripts/check-image-pins.py --rendered "$RUNNER_TEMP/rendered"
+
+      # -strict rejects unknown fields; core kinds come from the Kubernetes schemas, the CRDs from the community
+      # catalog pinned to a commit (data only, nothing executes). A CRD the catalog lacks is skipped, not failed:
+      # the Skipped count in the summary says how much goes unchecked.
+      - name: kubeconform
+        env:
+          # The Kubernetes minor of OpenAether-infra's kubernetes_version.
+          K8S_SCHEMA_VERSION: "1.36.0"
+          # yamllint disable-line rule:line-length
+          CRD_CATALOG: "https://raw.githubusercontent.com/datreeio/CRDs-catalog/63669a570e231d4f1f8396d229a1de512bcf0a34"
+        run: |
+          set -euo pipefail
+          kubeconform -kubernetes-version "${K8S_SCHEMA_VERSION}" -strict -ignore-missing-schemas -summary \
+            -schema-location default \
+            -schema-location "${CRD_CATALOG}/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
+            "$RUNNER_TEMP"/rendered/*.yaml
+
+      # HIGH and CRITICAL fail the job except what .trivyignore.yaml accepts: the vendored upstream dumps
+      # (operators that manage Secrets by design) and one false positive, each with its reason.
+      - name: Trivy config scan of the rendered output
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # 0.35.0
+        with:
+          scan-type: config
+          scan-ref: ${{ runner.temp }}/rendered
+          severity: HIGH,CRITICAL
+          exit-code: 1
+          trivyignores: .trivyignore.yaml
+
+  # The Zitadel and Grafana settings, run through the real thing: Zitadel (the chart's appVersion) in a container
+  # against PostgreSQL, Grafana's ini through the chart. Mocked rung: no Kubernetes, no OpenBao, no Istio.
+  identity-auth:
+    name: Zitadel and Grafana authentication (real Zitadel)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Install kubectl (pinned + checksum-verified)
+        env:
+          # Same version as the build job and OpenAether-infra's kubernetes_version.
+          # renovate: datasource=github-releases depName=kubernetes/kubernetes
+          KUBECTL_VERSION: "v1.36.3"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          expected="$(curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256")"
+          echo "${expected}  kubectl" | sha256sum -c -
+          sudo install -m 0755 kubectl /usr/local/bin/kubectl
+
+      - name: Install PyYAML and jmespath
+        run: pip install -r scripts/ci-requirements.txt
+
+      # docker, helm, curl and jq are on the runner image. A skipped part is not a pass: the script exits 2 when
+      # a tool is missing, and the step demands the "0 failed" line.
+      - name: Zitadel configuration against a real Zitadel
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-zitadel-config.sh | tee zitadel-config.out
+          grep -qE '^[0-9]+ passed, 0 failed$' zitadel-config.out
+
+      - name: Alloy scrubs tokens from Zitadel's access log (real Alloy)
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-alloy-scrub.sh | tee alloy-scrub.out
+          grep -qE '^[0-9]+ passed, 0 failed$' alloy-scrub.out
+
+      - name: Grafana authentication settings (base and SSO-only overlay)
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-grafana-auth.sh | tee grafana-auth.out
+          grep -qE '^0 failed$' grafana-auth.out

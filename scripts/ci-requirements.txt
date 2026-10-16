@@ -1,0 +1,5 @@
+# Python tools the CI jobs install. Renovate's pip_requirements manager bumps these (minimumReleaseAge applies);
+# PyYAML is what pick.py and the check scripts import, yamllint what the lint job runs.
+pyyaml==6.0.3
+yamllint==1.38.0
+jmespath==1.0.1

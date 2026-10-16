@@ -1,0 +1,31 @@
+# Weekly: docs/eol-calendar.yaml against the date. check-eol.py in ci.yml only warns (a date moves, a PR did not);
+# here `--strict` makes a component past upstream support without a live waiver, an expired waiver, an overdue
+# review or an end of support within 90 days FAIL, which is the notification (ANSSI HYG-R34/-R35). A red run
+# here is the intended signal, not a broken pipeline. Never on a pull request, so it joins no required check.
+name: End of support
+
+on:
+  schedule:
+    # Off the hour: a shared runner pool is busiest at :00.
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  calendar:
+    name: Calendar against today
+    if: github.repository == 'dis-bzh/OpenAether-apps'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Install PyYAML
+        run: pip install -r scripts/ci-requirements.txt
+
+      - name: check-eol.py --strict
+        run: python3 scripts/check-eol.py --strict

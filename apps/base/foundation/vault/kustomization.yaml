@@ -19,6 +19,7 @@ resources:
   - httproute.yaml
   - openbao-init.yaml
   - bootstrap-roles-job.yaml
+  - escrow-check.yaml
   # NB: the Secrets openbao-seal-key, openbao-recovery-shares and openbao-recovery-dev are NOT managed by Flux:
   # openbao-init creates them (create-only), and declaring them here would let a reconcile overwrite or prune
   # the real key material.
@@ -40,6 +41,11 @@ configMapGenerator:
       - scripts/policies/secret-seeder.hcl
       - scripts/policies/openaether-admin.hcl
       - scripts/policies/openaether-reader.hcl
+
+# A separate ConfigMap, so that editing this script does not change the hash of the one above and recreate the Jobs.
+  - name: openbao-escrow-check-script
+    files:
+      - scripts/escrow-check.sh
 
 labels:
   - includeSelectors: false

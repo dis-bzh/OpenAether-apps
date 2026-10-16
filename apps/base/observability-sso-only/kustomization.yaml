@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# SSO-ONLY overlay of the observability brick: OFF by default, applied on purpose once the Zitadel login is PROVEN.
+# Point the Flux Kustomization `observability` (apps/flux/base) at this path instead of apps/base/observability,
+# and point it back to undo (nothing else changes; Grafana rolls once). Docs: docs/zitadel-hardening.md.
+#   1. the local login form is hidden (`disable_login_form`). It only hides the form: the admin from the
+#      grafana-admin Secret still works by HTTP basic auth against the API, which is the break-glass.
+#   2. the role mapping is STRICT: only an account holding the Zitadel project role `grafana-admin` (Admin) or
+#      `grafana-viewer` (Viewer) gets in. In the base any Zitadel account becomes a Viewer of every log, Loki's
+#      included. BEFORE applying this, create the `grafana-viewer` role in the Grafana project and grant it to
+#      the people who read logs today, or they are locked out.
+# A sibling of observability/ (not nested): an overlay under the directory it references makes a kustomize cycle.
+resources:
+  - ../observability
+
+patches:
+  - target:
+      group: helm.toolkit.fluxcd.io
+      kind: HelmRelease
+      name: grafana
+    patch: |-
+      apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      metadata:
+        name: grafana
+      spec:
+        values:
+          grafana.ini:
+            auth:
+              disable_login_form: true
+            auth.generic_oauth:
+              # No `|| 'Viewer'` fallback: a mapping that matches no role evaluates to false, and strict denies it.
+              role_attribute_path: >-
+                contains(keys("urn:zitadel:iam:org:project:roles"), 'grafana-admin') && 'Admin' ||
+                contains(keys("urn:zitadel:iam:org:project:roles"), 'grafana-viewer') && 'Viewer'
+              role_attribute_strict: true

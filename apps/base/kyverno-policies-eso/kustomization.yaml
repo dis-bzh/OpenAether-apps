@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Its own brick, not part of kyverno-policies: Kyverno rejects a policy that
+# names a kind whose CRD is not installed, and Kyverno must stay usable without
+# External Secrets (the DAG is composable).
+resources:
+  - restrict-external-secrets-namespaces.yaml

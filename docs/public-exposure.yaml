@@ -1,0 +1,44 @@
+# Register of every HTTPRoute attached to the shared Gateway (openaether-gateway). scripts/check-gateway-routes.py fails
+# CI when a route is not listed here, when a row has no `authentication`, when a route served by default says it has
+# none, or when the flags below disagree with the repository. Read docs/public-exposure.md first.
+#
+#   route           namespace/name of the HTTPRoute
+#   host            the hostname it answers to ("" when it matches every host)
+#   authentication  what stands between a caller who sets that Host header and the service; "none" is only
+#                   allowed when `default` is false
+#   default         true when the route's file is listed in its brick's kustomization.yaml (served on a default cluster)
+#   private_admin   true when apps/flux/components/private-admin-routes removes it
+routes:
+  - route: foundation-vault/openbao
+    host: vault.openaether.local
+    authentication: >-
+      OpenBao's own: every API call and UI login needs a token (Kubernetes auth or the recovery quorum). Nothing else
+      sits in front; the login page and sys/health answer anyone.
+    default: true
+    private_admin: true
+  - route: services-observability/grafana
+    host: grafana.openaether.local
+    authentication: >-
+      Grafana's own: a local admin login and Zitadel OIDC. No ACL in front; the login page answers anyone.
+    default: true
+    private_admin: true
+  - route: services-identity/zitadel
+    host: zitadel.openaether.local
+    authentication: >-
+      Zitadel's own login, with the password, lockout and MFA policy of docs/zitadel-hardening.md; the first admin
+      password comes from OpenBao. It is the identity provider, so browsers must reach it. Policies apply to new
+      instances only.
+    default: true
+    private_admin: false
+  - route: services-gateway/global-http-redirect
+    host: ""
+    authentication: "n/a: answers every plain-HTTP request with a 301 to https and serves nothing else."
+    default: true
+    private_admin: false
+  - route: longhorn-system/longhorn
+    host: longhorn.openaether.local
+    authentication: >-
+      none: the Longhorn UI has no login. Opt-in on purpose; do not add it to the kustomization until something
+      authenticates in front of it.
+    default: false
+    private_admin: false

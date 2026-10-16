@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
-# Render the Loki chart with the values the repository ships and assert what the manifests only claim (#53): the seeded
-# S3 destination (endpoint, buckets, region) is not overridden by spec.values, the ExternalSecret builds the region, and
-# the CiliumNetworkPolicy lets the ring form and the S3 FQDN rule learn its addresses. Needs kubectl, helm and python3
-# with PyYAML (network for the chart). Rung: mocked/static, nothing runs on a cluster; the ExternalSecret template is
-# checked as text plus a Python re-evaluation of its host regex, never by ESO.
-#   Usage: scripts/dev/test-loki-render.sh [REPO_ROOT]
+# Render the Loki chart with the values the repository ships (base and local overlay) and assert
+# what the manifests only claim: the compactor enforces retention, the S3 link is not forced to
+# http, a PDB exists, no canary DaemonSet, no ClusterRole, and the CiliumNetworkPolicy lets the ring
+# form and the S3 FQDN rule learn its addresses. Needs kubectl, helm and python3 with PyYAML (network
+# for the chart). Rung: mocked/static, nothing runs on a cluster.
+#   Usage: scripts/dev/test-loki-render.sh
 set -euo pipefail
-ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 for bin in kubectl helm python3; do command -v "$bin" >/dev/null || { echo "$bin is required" >&2; exit 2; }; done
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 
 kubectl kustomize "$ROOT/apps/base/observability" > "$WORK/base.yaml"
+kubectl kustomize "$ROOT/apps/base/observability-local" > "$WORK/local.yaml"
 
 # The HelmRelease's own spec.values, plus stand-ins for what valuesFrom injects at run time.
-python3 -I - "$WORK/base.yaml" "$WORK" <<'PY'
+extract() { python3 -I - "$1" "$2" "$3" <<'PY'
 import sys, yaml
-src, work = sys.argv[1:3]
+src, values_out, version_out = sys.argv[1:4]
 for d in yaml.safe_load_all(open(src)):
     if d and d.get("kind") == "HelmRelease" and d["metadata"]["name"] == "loki":
         v = d["spec"]["values"]
         s3 = v.setdefault("loki", {}).setdefault("storage", {}).setdefault("s3", {})
+        # What valuesFrom injects; a literal in spec.values would win over it (checked below).
         fed = {(f.get("valuesKey"), f.get("targetPath")) for f in d["spec"].get("valuesFrom", [])}
         for key, target in (("region", "loki.storage.s3.region"), ("endpoint", "loki.storage.s3.endpoint"),
                             ("bucket", "loki.storage.bucketNames.chunks"), ("bucket", "loki.storage.bucketNames.ruler"),
@@ -34,14 +36,21 @@ for d in yaml.safe_load_all(open(src)):
             sys.exit("spec.values sets loki.storage.bucketNames: it would override the seeded one")
         s3.update(endpoint="https://s3.example.invalid", accessKeyId="AK", secretAccessKey="SK", region="fr-par")
         v["loki"]["storage"]["bucketNames"] = {"chunks": "bkt-chunks", "ruler": "bkt-ruler", "admin": "bkt-admin"}
-        yaml.safe_dump(v, open(work + "/values.yaml", "w"))
-        open(work + "/version", "w").write(d["spec"]["chart"]["spec"]["version"])
+        yaml.safe_dump(v, open(values_out, "w"))
+        open(version_out, "w").write(d["spec"]["chart"]["spec"]["version"])
         break
 else:
     sys.exit("no HelmRelease loki in " + src)
 PY
-helm pull loki --repo https://grafana.github.io/helm-charts --version "$(cat "$WORK/version")" --untar --untardir "$WORK/chart" >/dev/null
-helm template loki "$WORK/chart/loki" --namespace services-observability -f "$WORK/values.yaml" > "$WORK/rendered.yaml"
+}
+extract "$WORK/base.yaml"  "$WORK/base-values.yaml"  "$WORK/version"
+extract "$WORK/local.yaml" "$WORK/local-values.yaml" "$WORK/version"
+VERSION="$(cat "$WORK/version")"
+
+helm pull loki --repo https://grafana.github.io/helm-charts --version "$VERSION" --untar --untardir "$WORK/chart" >/dev/null
+for env in base local; do
+  helm template loki "$WORK/chart/loki" --namespace services-observability -f "$WORK/$env-values.yaml" > "$WORK/$env-rendered.yaml"
+done
 
 python3 -I - "$WORK" <<'PY'
 import re, sys, yaml
@@ -52,17 +61,58 @@ def check(label, ok):
     print(("ok   " if ok else "FAIL ") + label)
     fails += 0 if ok else 1
 
-cfg = None
-for d in yaml.safe_load_all(open(work + "/rendered.yaml")):
-    if d and d["kind"] in ("ConfigMap", "Secret"):
+def load(env):
+    docs = [d for d in yaml.safe_load_all(open(f"{work}/{env}-rendered.yaml")) if d]
+    kinds = {}
+    for d in docs:
+        kinds.setdefault(d["kind"], []).append(d)
+    cfg = None
+    for d in kinds.get("ConfigMap", []) + kinds.get("Secret", []):
         raw = (d.get("data") or {}).get("config.yaml")
         if raw:
             cfg = yaml.safe_load(raw)
-s3 = cfg["common"]["storage"]["s3"]
-check("config: s3 region is the injected one, not a literal", s3.get("region") == "fr-par")
-check("config: s3 endpoint is the injected one", s3.get("endpoint") == "https://s3.example.invalid")
-check("config: s3 chunks bucket is the injected one", s3.get("bucketnames") == "bkt-chunks")
-check("config: replication_factor 2 (the ring egress below depends on it)", cfg["common"]["replication_factor"] == 2)
+    return kinds, cfg
+
+def hours(v):
+    return int(v[:-1]) * {"h": 1, "d": 24}[v[-1]]
+
+for env, replicas, rf, retention, insecure, pdb in (("base", 3, 2, 8760, False, True), ("local", 1, 1, 168, True, False)):
+    kinds, cfg = load(env)
+    sts = [d for d in kinds.get("StatefulSet", []) if d["metadata"]["name"] == "loki"]
+    anti = ((sts[0]["spec"]["template"]["spec"].get("affinity") or {}).get("podAntiAffinity") or {}) if sts else {}
+    check(f"{env}: no hard pod anti-affinity (replicas may share a node when there are fewer nodes than replicas)",
+          not anti.get("requiredDuringSchedulingIgnoredDuringExecution"))
+    check(f"{env}: one StatefulSet loki with {replicas} replica(s)", len(sts) == 1 and sts[0]["spec"]["replicas"] == replicas)
+    check(f"{env}: no ClusterRole nor ClusterRoleBinding (no cluster-wide read of ConfigMaps/Secrets)",
+          not kinds.get("ClusterRole") and not kinds.get("ClusterRoleBinding"))
+    check(f"{env}: no rules sidecar container (loki-sc-rules)",
+          not [c for d in sts for c in d["spec"]["template"]["spec"]["containers"] if "sc-rules" in c["name"]])
+    # The container does not exist (rules sidecar off), so only the values can prove the 0.2.0 context is still
+    # there for the day someone re-enables it.
+    sc = (yaml.safe_load(open(f"{work}/{env}-values.yaml")).get("sidecar") or {}).get("securityContext") or {}
+    check(f"{env}: sidecar.securityContext kept (non-root, no escalation, drop ALL, RuntimeDefault) next to rules.enabled false",
+          sc.get("runAsNonRoot") is True and sc.get("allowPrivilegeEscalation") is False
+          and sc.get("capabilities", {}).get("drop") == ["ALL"] and sc.get("seccompProfile", {}).get("type") == "RuntimeDefault")
+    check(f"{env}: no loki-canary DaemonSet", not [d for d in kinds.get("DaemonSet", []) if "canary" in d["metadata"]["name"]])
+    check(f"{env}: PodDisruptionBudget {'present with minAvailable 1' if pdb else 'absent'}",
+          (len(kinds.get("PodDisruptionBudget", [])) == 1 and kinds["PodDisruptionBudget"][0]["spec"].get("minAvailable") == 1) if pdb
+          else not kinds.get("PodDisruptionBudget"))
+    comp = (cfg or {}).get("compactor", {})
+    check(f"{env}: compactor enforces retention (retention_enabled, delete_request_store s3, working_directory)",
+          comp.get("retention_enabled") is True and comp.get("delete_request_store") == "s3" and comp.get("working_directory"))
+    got = cfg["limits_config"]["retention_period"]
+    check(f"{env}: retention_period {got} == {retention}h", hours(got) == retention)
+    check(f"{env}: replication_factor {rf}", cfg["common"]["replication_factor"] == rf)
+    s3 = cfg["common"]["storage"]["s3"]
+    check(f"{env}: s3 insecure {insecure}", bool(s3.get("insecure", False)) is insecure)
+    check(f"{env}: s3 path style kept", s3.get("s3forcepathstyle") is True)
+    check(f"{env}: s3 region is the injected one, not a literal", s3.get("region") == "fr-par")
+    # The rule that makes enabling the compactor safe: it deletes what the limit says is old.
+    check(f"{env}: compactor never runs with a retention under 168h", hours(got) >= 168)
+    if env == "base":
+        check("base: a replica can be down and a write still reaches RF (replicas > RF)", replicas > rf)
+        check("base: the shipped retention is the one-year baseline", hours(got) >= 8760)
+        check("base: s3 endpoint is https in the render", s3["endpoint"].startswith("https://"))
 
 docs = [d for d in yaml.safe_load_all(open(work + "/base.yaml")) if d]
 # The ExternalSecret: the region key is emitted, with the host regex and the us-east-1 fallback (the stand-in region above
@@ -102,8 +152,10 @@ if es:
     else:
         check("externalsecret: the host regexes are readable", False)
 
-# The network policy: the 2026-10-13 failure was a missing rule, so deleting one of these must fail the gate.
-policy = next((d for d in docs if d.get("kind") == "CiliumNetworkPolicy" and d["metadata"]["name"] == "loki"), None)
+# The network policy (kustomize output of the base): the 2026-10-13 failure was a missing rule, so
+# deleting one of these must fail the gate.
+policy = next((d for d in yaml.safe_load_all(open(f"{work}/base.yaml"))
+               if d and d.get("kind") == "CiliumNetworkPolicy" and d["metadata"]["name"] == "loki"), None)
 check("netpol: CiliumNetworkPolicy loki exists", policy is not None)
 if policy:
     spec = policy["spec"]
@@ -111,6 +163,9 @@ if policy:
         return {(p["port"], p["protocol"]) for tp in rule.get("toPorts", []) for p in tp.get("ports", [])}
     def peers(rule, key):
         return any(e.get("matchLabels", {}).get("app.kubernetes.io/name") == "loki" for e in rule.get(key, []))
+    def from_app(app):
+        return [r for r in spec["ingress"]
+                if any(e.get("matchLabels", {}).get("app.kubernetes.io/name") == app for e in r.get("fromEndpoints", []))]
     ring = {("3100", "TCP"), ("9095", "TCP"), ("7946", "TCP"), ("7946", "UDP")}
     dns = [r for r in spec["egress"] if any(e.get("matchLabels", {}).get("k8s-app") == "kube-dns" for e in r.get("toEndpoints", []))]
     check("netpol: DNS egress carries rules.dns (Cilium learns the S3 addresses from the lookup)",
@@ -119,6 +174,8 @@ if policy:
           any(peers(r, "toEndpoints") and ring <= ports(r) for r in spec["egress"]))
     check("netpol: Loki ingress from Loki peers on 3100, 9095, 7946/tcp and 7946/udp",
           any(peers(r, "fromEndpoints") and ring <= ports(r) for r in spec["ingress"]))
+    check("netpol: ingress from Alloy and Grafana on 3100",
+          all(any(("3100", "TCP") in ports(r) for r in from_app(a)) for a in ("alloy", "grafana")))
     fq = [r for r in spec["egress"] if r.get("toFQDNs")]
     check("netpol: S3 egress is FQDN-scoped on 443/tcp, not toEntities world",
           len(fq) == 1 and ports(fq[0]) == {("443", "TCP")} and not any("world" in r.get("toEntities", []) for r in spec["egress"]))
@@ -126,8 +183,7 @@ if policy:
           {"s3.*.scw.cloud", "s3.*.io.cloud.ovh.net", "oos.*.outscale.com"}
           <= {f.get("matchPattern") for r in fq for f in r["toFQDNs"]})
     check("netpol: local MinIO egress on 9000/tcp",
-          any(("9000", "TCP") in ports(r) for r in spec["egress"]
-              if any(e.get("matchLabels", {}).get("io.kubernetes.pod.namespace") == "foundation-storage" for e in r.get("toEndpoints", []))))
+          any(("9000", "TCP") in ports(r) for r in spec["egress"] if any(e.get("matchLabels", {}).get("io.kubernetes.pod.namespace") == "foundation-storage" for e in r.get("toEndpoints", []))))
 
 print(f"{fails} failed")
 sys.exit(1 if fails else 0)

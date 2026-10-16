@@ -1,0 +1,159 @@
+# Alerting on the log pipeline: Alloy -> Loki -> Grafana.
+#
+# The dead-man's switch and KubeStateMetricsAbsent say the metrics chain lives. Nothing said the LOG chain did: a
+# stopped Alloy, a Loki refusing pushes, a rate limit discarding lines all looked like "no logs, so nothing wrong".
+# Metrics come from vmscrapes-pipeline.yaml (Alloy, Loki, Grafana) and kube-state-metrics. Every metric name below
+# was read in the component's source or docs (Alloy v1.6 loki.write, Loki v3.3.2, Grafana); `task check-alerts` still
+# asks the cluster which of them have data. Thresholds are starting values, to tune on the first week of a real cluster.
+# asks the cluster which of them have data. Thresholds are starting values, to tune in the first week on a real cluster.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: logging-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: logging
+spec:
+  groups:
+    - name: openaether-logging
+      interval: 1m
+      rules:
+        # 1) An Alloy pod missing on a node: that node's logs are not collected. NOT `up == 0`: pods are
+        #    discovered, so a removed pod takes its target with it (same reasoning as CiliumAgentMissing).
+        - alert: AlloyNotRunningEverywhere
+          expr: |
+            kube_daemonset_status_number_ready{namespace="services-observability", daemonset="alloy"}
+              < kube_daemonset_status_desired_number_scheduled{namespace="services-observability", daemonset="alloy"}
+          for: 10m
+          labels:
+            severity: warning
+            component: logging
+          annotations:
+            summary: "Alloy is not running on every node: logs of the missing nodes are not collected"
+            description: "kubectl -n services-observability get pods -l app.kubernetes.io/name=alloy -o wide."
+
+        # 2) The DaemonSet itself is gone (deleted, or the HelmRelease failed): the rule above has nothing to compare.
+        - alert: AlloyAbsent
+          expr: absent(kube_daemonset_status_number_ready{namespace="services-observability", daemonset="alloy"})
+          for: 10m
+          labels:
+            severity: critical
+            component: logging
+          annotations:
+            summary: "No Alloy DaemonSet: no pod log is collected"
+            description: "flux get helmrelease -n services-observability alloy (kube-state-metrics must be up)."
+
+        # 3) Entries given up on after every retry: logs LOST, not delayed.
+        - alert: AlloyDroppingLogs
+          expr: |
+            sum by (instance) (increase(loki_write_dropped_entries_total[15m])) > 0
+          for: 5m
+          labels:
+            severity: critical
+            component: logging
+          annotations:
+            summary: "Alloy on {{ $labels.instance }} dropped log entries after retries"
+            description: >-
+              Loki refused or was unreachable for longer than Alloy retries. See LokiPushErrors, then
+              kubectl -n services-observability logs ds/alloy.
+
+        # 4) Alloy runs, but nothing reaches Loki cluster-wide: wedged discovery, a 403 on the API, Loki unreachable.
+        - alert: AlloyNotShipping
+          expr: sum(rate(loki_write_sent_entries_total[10m])) == 0
+          for: 15m
+          labels:
+            severity: critical
+            component: logging
+          annotations:
+            summary: "Alloy sent no log entry to Loki for 15 min"
+            description: "kubectl -n services-observability logs ds/alloy | grep -i 'forbidden\\|error'."
+
+        # 5) Alloy's own metrics vanished (scrape dropped by a NetworkPolicy, port renamed): rules 3 and 4 are blind.
+        - alert: AlloyMetricsAbsent
+          expr: absent(loki_write_sent_entries_total)
+          for: 15m
+          labels:
+            severity: warning
+            component: logging
+          annotations:
+            summary: "Alloy metrics are not scraped: its log alerts are blind"
+            description: "up{job=~\".*alloy.*\"}, then the alloy CiliumNetworkPolicy ingress from vmagent."
+
+        # 6) Loki rejects pushes. 5xx on the push route is what "at least 2 live replicas required" looks like.
+        - alert: LokiPushErrors
+          expr: |
+            sum(rate(loki_request_duration_seconds_count{route=~".*push.*", status_code=~"5.."}[5m]))
+              / sum(rate(loki_request_duration_seconds_count{route=~".*push.*"}[5m])) > 0.05
+          for: 10m
+          labels:
+            severity: critical
+            component: logging
+          annotations:
+            summary: "Loki answers more than 5% of log pushes with a 5xx"
+            description: >-
+              Common causes: fewer live replicas than the replication factor, S3 unreachable (CiliumNetworkPolicy
+              loki egress), bad S3 credentials. kubectl -n services-observability logs sts/loki.
+
+        # 7) A replica down: the write quorum has one spare left, then none. A warning, the push errors are the page.
+        - alert: LokiReplicaNotReady
+          expr: |
+            kube_statefulset_status_replicas_ready{namespace="services-observability", statefulset="loki"}
+              < kube_statefulset_replicas{namespace="services-observability", statefulset="loki"}
+          for: 15m
+          labels:
+            severity: warning
+            component: logging
+          annotations:
+            summary: "Loki has a replica that is not Ready for 15 min"
+            description: "kubectl -n services-observability get pods -l app.kubernetes.io/name=loki -o wide."
+
+        # 8) Lines refused by Loki's limits (rate, age, size): logs lost on purpose, silently.
+        - alert: LokiDiscardingLogs
+          expr: |
+            sum by (reason) (increase(loki_discarded_samples_total[15m])) > 0
+          for: 15m
+          labels:
+            severity: warning
+            component: logging
+          annotations:
+            summary: "Loki discards log lines: reason {{ $labels.reason }}"
+            description: "limits_config in loki.yaml (rate, max age). A burst of discards is also a signal."
+
+        # 9) Loki's own metrics vanished.
+        - alert: LokiMetricsAbsent
+          expr: absent(loki_distributor_bytes_received_total)
+          for: 15m
+          labels:
+            severity: warning
+            component: logging
+          annotations:
+            summary: "Loki metrics are not scraped: its alerts are blind"
+            description: "The loki CiliumNetworkPolicy must accept vmagent on :3100."
+
+        # 10) An abnormal logging burst (PA-012 R22): three times the 24 h average and above 100 KB/s, so a quiet
+        #     cluster's noise cannot trip it. It fills the local-path disks (NodeFilesystemFillingUp).
+        - alert: LokiIngestionBurst
+          expr: |
+            sum(rate(loki_distributor_bytes_received_total[15m])) > 100000
+              and sum(rate(loki_distributor_bytes_received_total[15m]))
+                > 3 * avg_over_time(sum(rate(loki_distributor_bytes_received_total[15m]))[1d:15m])
+          for: 30m
+          labels:
+            severity: warning
+            component: logging
+          annotations:
+            summary: "Log ingestion is more than 3x its 24 h average"
+            description: "Which namespace? sum by (namespace) (count_over_time({namespace=~\".+\"}[10m])) in Explore."
+
+        # 11) Grafana answers with server errors (datasource down, database unreachable).
+        - alert: GrafanaServerErrors
+          expr: |
+            sum(rate(grafana_http_request_duration_seconds_count{status_code=~"5.."}[5m])) > 0.1
+          for: 15m
+          labels:
+            severity: warning
+            component: logging
+          annotations:
+            summary: "Grafana returns 5xx"
+            description: "kubectl -n services-observability logs deploy/grafana; the grafana-db CNPG cluster first."

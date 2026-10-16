@@ -1,0 +1,61 @@
+# OPT-IN, off by default. Takes the OpenBao and Grafana routes off the shared Gateway, so that neither UI is served to
+# anyone who sets the Host header on the public app LB (which has no source ACL: docs/public-exposure.md). Zitadel stays
+# routed: it is the identity provider and browsers must reach it.
+#
+# Use it from a cluster's own overlay (the generated profiles are rewritten by pick.py, so do not edit those):
+#   resources:  [../../workload]            # or the profile the cluster uses
+#   components: [../components/private-admin-routes]
+# Rollback: remove the component line; Flux recreates the routes at the next reconcile.
+#
+# It adds a Flux `spec.patches` to two Kustomizations. That field REPLACES a list, so a cluster that already patches
+# these two Kustomizations must merge by hand. scripts/dev/test-private-admin-routes.py renders this component and
+# applies the patches it carries to the real bricks.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: foundation-vault
+    patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: foundation-vault
+        namespace: flux-system
+      spec:
+        patches:
+          - target:
+              group: gateway.networking.k8s.io
+              kind: HTTPRoute
+              name: openbao
+            patch: |-
+              apiVersion: gateway.networking.k8s.io/v1
+              kind: HTTPRoute
+              metadata:
+                name: openbao
+                namespace: foundation-vault
+              $patch: delete
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: observability
+    patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: observability
+        namespace: flux-system
+      spec:
+        patches:
+          - target:
+              group: gateway.networking.k8s.io
+              kind: HTTPRoute
+              name: grafana
+            patch: |-
+              apiVersion: gateway.networking.k8s.io/v1
+              kind: HTTPRoute
+              metadata:
+                name: grafana
+                namespace: services-observability
+              $patch: delete

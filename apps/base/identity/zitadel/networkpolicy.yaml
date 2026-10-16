@@ -44,6 +44,15 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
+    # VMAgent: /debug/metrics (VMPodScrape zitadel).
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
     # Intra-namespace: the login pod calls zitadel:8080 (server-side ingress).
     - fromEndpoints:
         - matchLabels:

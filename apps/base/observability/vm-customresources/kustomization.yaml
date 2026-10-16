@@ -17,10 +17,13 @@ resources:
   - vmagent.yaml
   - vmalert.yaml
   - vmscapes.yaml
+  - vmscrapes-pipeline.yaml
   - vmrule-backup.yaml
   - vmrule-bootstrap.yaml
   - vmrule-cluster.yaml
   - vmrule-platform.yaml
+  - vmrule-logging.yaml
+  - vmrule-security.yaml
 
 labels:
   - includeSelectors: false
