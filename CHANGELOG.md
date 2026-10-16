@@ -21,6 +21,11 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Security
 
+- **Flux Git source verification, opt-in** (ANSSI SSDLC-CICD-AIP-03, SSDLC-CONT-REC06; apps half of F04, F10; mocked/static, not run on a cluster):
+  - New component `apps/flux/components/git-verify`: adds `spec.verify {mode: HEAD, secretRef: git-signers}` to the `GitRepository`, only when a cluster's overlay lists it. Default unchanged (`scripts/dev/test-git-verify.py`, in CI).
+  - `scripts/dev/check-commit-signatures.sh` in the `commits` job: a WARNING for unsigned commits of a PR (the history has none signed), `--strict` to fail; own test with a throwaway key. `CODEOWNERS` names the Flux, RBAC and workflow paths. `docs/signed-commits.md`: GPG as the standard, signer table (to fill), enable order, break-glass.
+  - Does NOT: change any GitHub ruleset, publish a key, create the `git-signers` Secret or the bootstrap `verify` (OpenAether-infra, `flux_git_verify`), verify tags, or prove source-controller accepts it on a cluster.
+
 - **Named operator identities** (ANSSI PA022 R38, R40, NSA12 AUTH-02; apps half of F04, F13, F20):
   - New brick `platform/rbac` (Flux `platform-rbac`, in the baseline of every generated profile): `ClusterRoleBinding`
     `oa-admins` (group `oa:admins` to `cluster-admin`) and `oa-readers` (group `oa:readers` to `view`). Inert until a credential

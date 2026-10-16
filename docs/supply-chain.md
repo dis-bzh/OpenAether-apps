@@ -62,7 +62,7 @@ other route, and isolates a failure to one Kustomization.
 - Layers inside the images (Trivy reads them weekly, and only the CRITICAL-with-a-fix ones fail).
 - The Talos boot image and the bootstrap manifests (OpenAether-infra).
 - Charts are pinned by version, not by digest, and fetched over HTTPS from the chart repositories.
-- Nothing verifies a signature anywhere yet.
+- Nothing verifies a signature anywhere yet. Git commits: an opt-in Flux verification and a warning-only CI check exist (default off, never run on a cluster), see [signed-commits.md](signed-commits.md).
 
 ## Repository settings
 
