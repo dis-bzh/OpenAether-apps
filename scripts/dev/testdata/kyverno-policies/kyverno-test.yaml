@@ -5,6 +5,7 @@ metadata:
   name: kyverno-policies
 policies:
 - ../../../../apps/base/kyverno-policies/restrict-capabilities.yaml
+- ../../../../apps/base/kyverno-policies/restrict-capabilities-ephemeral.yaml
 - ../../../../apps/base/kyverno-policies/require-security-context.yaml
 - ../../../../apps/base/kyverno-policies/restrict-privileged.yaml
 - ../../../../apps/base/kyverno-policies/require-ro-rootfs.yaml

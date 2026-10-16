@@ -13,7 +13,7 @@ default is what ran before: Audit everywhere.
 | Policy | Label (value `"true"`) | What it denies |
 |---|---|---|
 | `restrict-privileged` | `kyverno.openaether.io/enforce-restrict-privileged` | privileged, hostNetwork/PID/IPC, hostPath (init containers included) |
-| `restrict-capabilities` | `kyverno.openaether.io/enforce-restrict-capabilities` | the sensitive `capabilities.add` list, ephemeral containers included |
+| `restrict-capabilities` (+ `restrict-capabilities-ephemeral`) | `kyverno.openaether.io/enforce-restrict-capabilities` (one label flips both) | the sensitive `capabilities.add` list, ephemeral containers included (their own policy: Kyverno 1.12.1 refuses a subresource match with background scanning on) |
 | `require-security-context` | `kyverno.openaether.io/enforce-require-security-context` | no drop ALL, no `allowPrivilegeEscalation: false`, no runAsNonRoot, no seccomp |
 | `restrict-image-registries` | `kyverno.openaether.io/enforce-restrict-image-registries` | an image outside the organisation list |
 | `require-limits` | `kyverno.openaether.io/enforce-require-limits` | no memory limit |
@@ -28,7 +28,7 @@ To keep it in git, put the label on the Namespace manifest. Rollback is then one
 
 Rules that can be enforced match the Pod at **CREATE only**, so an update of a pod that already runs (a CNPG label patch, a finalizer) is
 never denied. The consequence in Audit: a pod that changes after creation is no longer re-reported at admission (the background scan
-still covers it). The ephemeral-container rule of `restrict-capabilities` is the exception: `kubectl debug` is an UPDATE by nature.
+still covers it). The ephemeral-container rule (`restrict-capabilities-ephemeral`) is the exception: `kubectl debug` is an UPDATE by nature.
 
 ## When to flip, in this order
 

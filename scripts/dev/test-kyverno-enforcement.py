@@ -17,8 +17,10 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 PREFIX = "kyverno.openaether.io/enforce-"
-FLIPPABLE = ["restrict-privileged", "restrict-capabilities", "require-security-context", "restrict-image-registries",
-             "require-limits"]
+FLIPPABLE = ["restrict-privileged", "restrict-capabilities", "restrict-capabilities-ephemeral", "require-security-context",
+             "restrict-image-registries", "require-limits"]
+# one namespace label flips both capability policies (the ephemeral rule needed its own policy: background scan is off for it)
+LABEL_OF = {"restrict-capabilities-ephemeral": "restrict-capabilities"}
 ALREADY_ENFORCE = {"disallow-root-user", "disallow-default-namespace"}
 ALWAYS_AUDIT = {"require-ro-rootfs"}
 PASS = FAIL = 0
@@ -40,9 +42,11 @@ for name in FLIPPABLE:
     spec = pol[name]["spec"]
     print(name)
     check("Audit globally", spec["validationFailureAction"] == "Audit", spec["validationFailureAction"])
-    want = [{"action": "Enforce", "namespaceSelector": {"matchLabels": {PREFIX + name: "true"}}}]
+    want = [{"action": "Enforce", "namespaceSelector": {"matchLabels": {PREFIX + LABEL_OF.get(name, name): "true"}}}]
     check("one override: Enforce where the namespace carries its label", spec.get("validationFailureActionOverrides") == want,
           spec.get("validationFailureActionOverrides"))
+    if any(k == "Pod/ephemeralcontainers" for rule in spec["rules"] for blk in rule["match"]["any"] for k in blk["resources"]["kinds"]):
+        check("a policy that matches a subresource has background scanning off (Kyverno 1.12.1 refuses it otherwise)", spec.get("background") is False, spec.get("background"))
     for rule in spec["rules"]:
         kinds = [k for blk in rule["match"]["any"] for k in blk["resources"]["kinds"]]
         ops = [blk["resources"].get("operations") for blk in rule["match"]["any"]]
@@ -67,7 +71,7 @@ hits = [str(p.relative_to(REPO)) for p in (REPO / "apps").rglob("*.yaml")
 check("no manifest under apps/ labels a namespace for Enforce (the shipped default is Audit everywhere)", not hits, hits)
 
 doc = (REPO / "docs/kyverno-enforcement.md").read_text()
-check("docs/kyverno-enforcement.md names every label", all(PREFIX + n in doc for n in FLIPPABLE),
+check("docs/kyverno-enforcement.md names every label", all(PREFIX + LABEL_OF.get(n, n) in doc for n in FLIPPABLE),
       [n for n in FLIPPABLE if PREFIX + n not in doc])
 
 print(f"{PASS} passed, {FAIL} failed")
