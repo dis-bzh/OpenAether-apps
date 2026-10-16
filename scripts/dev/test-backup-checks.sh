@@ -41,7 +41,7 @@ mk; sed -i 's#postgresql:18\.[0-9]*#postgresql:16.3#' "$W/t/apps/base/backup/dat
 expect "dump image below the highest Cluster major fails" fail "$CHK" "$W/t"
 mk; sed -i 's#postgresql:18\.[0-9]*#postgresql:16.3#' "$W/t/apps/base/backup/databases/restore-test-cronjob.yaml"
 expect "restore-test image below the highest Cluster major fails" fail "$CHK" "$W/t"
-mk; sed -i 's#imageName: \(.*\)postgresql:16\.3#imageName: \1postgresql:19.0#' "$W/t/apps/base/cnpg/grafana-db-cluster.yaml"
+mk; sed -i 's#imageName: \(.*\)postgresql:16\.[0-9]*#imageName: \1postgresql:19.0#' "$W/t/apps/base/cnpg/grafana-db-cluster.yaml"
 expect "a Cluster bumped above the dump image fails" fail "$CHK" "$W/t"
 mk; rm -rf "$W/t/apps/base/backup"; mkdir "$W/t/apps/base/backup"
 expect "no client image found fails instead of passing vacuously" fail "$CHK" "$W/t"
