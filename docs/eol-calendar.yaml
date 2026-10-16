@@ -309,10 +309,10 @@ components:
 - id: local-path
   brick: platform/local-path-provisioner
   component: local-path-provisioner (vendored dump)
-  pin: 0.0.31
+  pin: 0.0.37
   file: apps/base/platform/local-path-provisioner/local-path-storage.yaml
-  pattern: image:\s*rancher/local-path-provisioner:v([0-9.]+)
-  cycle: local-path v0.0.31
+  pattern: image:\s*(?:docker\.io/)?rancher/local-path-provisioner:v([0-9.]+)
+  cycle: local-path v0.0.37
   eol: unknown
   note: local/dev profile; the 'vendored from' comment in kustomization.yaml is a Renovate tracking comment,
     not the vendored version
