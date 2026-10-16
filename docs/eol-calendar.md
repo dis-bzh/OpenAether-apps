@@ -22,6 +22,7 @@ or a vendored dump has no row.
 | grafana (`observability`) | 8.6.4 | Grafana 11.3 (chart appVersion) | 2025-07-22 | 2026-12-31 | 2026-12-14 |
 | loki (`observability`) | 6.25.0 | Loki 3.3 (chart appVersion) | 2025-04-17 | 2026-12-31 | 2026-12-14 |
 | alloy (`observability`) | 0.11.0 | Alloy 1.6 (chart appVersion) | unknown |  | 2026-12-14 |
+| alloy-audit (second Alloy release, API audit log) (`observability`) | 0.11.0 | Alloy 1.6 (chart appVersion) | unknown |  | 2026-12-14 |
 | zitadel (`identity`) | 10.0.2 | Zitadel v4.14.0 (chart appVersion) | unknown |  | 2026-12-14 |
 | victoria-metrics-operator (`observability`) | 0.65.1 | VictoriaMetrics operator v0.72.0 (chart appVersion) | unknown |  | 2026-12-14 |
 | kube-state-metrics (`observability`) | 5.25.1 | kube-state-metrics 2.13.0 (chart appVersion) | unknown |  | 2026-12-14 |
