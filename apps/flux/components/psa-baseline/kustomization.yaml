@@ -1,0 +1,105 @@
+# OPT-IN, off by default. Lowers the Pod Security Admission ENFORCE level of four namespaces from privileged to
+# baseline:
+# services-observability, services-gateway, foundation-service-mesh and foundation-storage (ANSSI FT082 R4/R6, NSA12
+# POD-05; mocked/static, never run on a cluster). warn/audit stay restricted, so the pods that drift stay visible.
+# node-exporter and alloy-audit have their own privileged namespaces and are not touched. Off by default because it
+# is the
+# one change here that can make a controller unable to create a pod: PSA judges at pod creation, so a running pod is not
+# evicted but a re-created one is refused.
+#
+# GATE before turning it on (LAB-CHECKLIST, section review-apps-B18-B30): a server-side dry run, e.g.
+#   kubectl label --dry-run=server --overwrite ns services-observability pod-security.kubernetes.io/enforce=baseline
+# (the API server prints the warnings for the pods that would be refused), for each of the four namespaces; then
+# enable it
+# on a staging cluster and reboot one node to see the pods come back.
+#
+# Use it from a cluster's own overlay (generated profiles are rewritten by pick.py, do not edit those):
+#   resources:  [../../workload]            # or the profile the cluster uses
+#   components: [../components/psa-baseline]
+# Rollback: remove the component line (Flux reapplies privileged at the next reconcile), or at once
+# `kubectl label ns <ns> pod-security.kubernetes.io/enforce=privileged --overwrite`.
+#
+# It adds a Flux `spec.patches` to three Kustomizations (namespaces, istio, storage). That field REPLACES a list, so
+# a cluster
+# that already patches one of them, or that also uses psa-restricted (which patches `namespaces`), must merge by hand.
+# A Kustomization absent from a profile is simply not patched.
+# scripts/dev/test-psa-restricted.py renders this component and applies the patches it carries to the real bricks.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: namespaces
+    patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: namespaces
+        namespace: flux-system
+      spec:
+        patches:
+          - target:
+              kind: Namespace
+              name: services-observability
+            patch: |-
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: services-observability
+                labels:
+                  pod-security.kubernetes.io/enforce: baseline
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: istio
+    patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: istio
+        namespace: flux-system
+      spec:
+        patches:
+          - target:
+              kind: Namespace
+              name: foundation-service-mesh
+            patch: |-
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: foundation-service-mesh
+                labels:
+                  pod-security.kubernetes.io/enforce: baseline
+          - target:
+              kind: Namespace
+              name: services-gateway
+            patch: |-
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: services-gateway
+                labels:
+                  pod-security.kubernetes.io/enforce: baseline
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: storage
+    patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: storage
+        namespace: flux-system
+      spec:
+        patches:
+          - target:
+              kind: Namespace
+              name: foundation-storage
+            patch: |-
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: foundation-storage
+                labels:
+                  pod-security.kubernetes.io/enforce: baseline

@@ -88,13 +88,16 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
     `podPidsLimit` (infra), and does not bump any chart (Renovate PRs); Alloy to Loki stays cleartext HTTP, covered by
     WireGuard and the CiliumNetworkPolicy, not by TLS.
 
-- **Four namespaces drop from the privileged to the baseline Pod Security level** (ANSSI FT082 R4, R6, NSA12 POD-05; apps half of
-  K8S/F08, OSN/F16, SCC/F09): `services-observability` (node-exporter has left it), `services-gateway` (the Envoy proxy istiod
-  generates), `foundation-service-mesh` (HelmReleases and the waypoint Gateway; ztunnel and istiod run in `istio-system`) and
-  `foundation-storage` (MinIO). `warn` and `audit` stay at, or are set to, restricted. **This is the one change of the series that
-  can stop a pod at admission, and it is a separate commit so it can be dropped alone**: it was written from the manifests, the
-  required server-side dry run (`LAB-CHECKLIST` B20) was NOT run, and baseline is only checked on pods created or rescheduled
-  after it. To go back, set `enforce` to `privileged` on the namespace. It does NOT lower `istio-system`, `longhorn-system`,
+- **Four namespaces can drop from the privileged to the baseline Pod Security level, opt-in** (ANSSI FT082 R4, R6, NSA12 POD-05;
+  apps half of K8S/F08, OSN/F16, SCC/F09): `services-observability` (node-exporter has left it), `services-gateway` (the Envoy proxy
+  istiod generates), `foundation-service-mesh` (HelmReleases and the waypoint Gateway; ztunnel and istiod run in `istio-system`) and
+  `foundation-storage` (MinIO). **Off by default**: `enforce` stays `privileged` as released, `warn`/`audit` are restricted (they only
+  log); the new component `apps/flux/components/psa-baseline` (tested by `scripts/dev/test-psa-restricted.py`) lowers them. It is the
+  one change of the series that can stop a pod at admission, and the required server-side dry run (`LAB-CHECKLIST`) was NOT run:
+  do that dry run first. Baseline is only checked on pods created or rescheduled after it. To go back, remove the component.
+  **Upgrade note**: a cluster owner who wants it adds `components: [../components/psa-baseline]` to the cluster overlay; it patches
+  `spec.patches` of three Flux Kustomizations (`namespaces`, `istio`, `storage`), which replaces a list, so merge by hand if the
+  overlay already patches them or also uses `psa-restricted`. It does NOT lower `istio-system`, `longhorn-system`,
   `kube-system` or the new node-exporter namespace, nor raise `foundation-networking` (Cilium hostPort), `zitadel`, `kyverno`,
   `cnpg-system`, `orc-system` or `flux-system` (their warn logs have to be read first).
 
@@ -102,7 +105,7 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   apps half of K8S/F08, OSN/F16, SCC/F09). It is the only observability workload that needs hostPath, hostNetwork and hostPID,
   and Pod Security has no per-pod level, so the whole `services-observability` namespace was privileged for it. The HelmRelease,
   the `node-exporter` VMServiceScrape and the Kyverno exemptions (`restrict-privileged` by pod name, `disallow-root-user` by
-  namespace as before) follow; `services-observability` itself is NOT lowered here (next entry). The CiliumNetworkPolicies and Istio
+  namespace as before) follow; `services-observability` itself is NOT lowered here (previous entry, opt-in). The CiliumNetworkPolicies and Istio
   policies need no change: node-exporter is hostNetwork, out of the mesh, and reached through vmagent's host egress on :9100.
   `restrict-privileged` also stops sparing `foundation-service-mesh` wholesale (ztunnel and the Istio CNI agent by name).
   **Rung: static (`scripts/dev/test-node-exporter-namespace.py` in CI, render, Kyverno CLI fixtures); not run on a cluster.**
@@ -335,7 +338,7 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
     two rules so the `kubectl debug` ephemeral containers (an UPDATE) are still judged; the Pod rule is `deny-sensitive-capabilities`.
   - New opt-in component `apps/flux/components/psa-restricted`: Pod Security enforce baseline to restricted on foundation-networking,
     foundation-policy-engine, services-identity and the `capi-*` namespaces, for a cluster whose warn/audit lines are clean.
-  - Does NOT: enforce anything by default, move services-observability, services-gateway or kyverno off baseline, add Kyverno HA,
+  - Does NOT: enforce anything by default, move kyverno off baseline, add Kyverno HA,
     `verifyImages`, digest pins, `LimitRange`/`ResourceQuota`, nor use Kyverno 1.13's `validate.failureActionOverrides` (the vendored
     1.12.1 rejects it). `KyvernoPolicyViolation` still ignores `require-security-context`.
   - **Rung: static** (`scripts/dev/test-kyverno-enforcement.py`, `test-psa-restricted.py`, the Kyverno CLI fixtures; all in CI).

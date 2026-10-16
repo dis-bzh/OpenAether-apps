@@ -60,15 +60,15 @@ kind: Namespace
 metadata:
   name: services-observability
   labels:
-    # enforce: baseline. node-exporter, the one workload here that needs hostPath/hostNetwork/hostPID, has its own
-    # privileged namespace (services-observability-node, below). Baseline still forbids host namespaces, hostPath and
-    # privileged containers for everything left here (Grafana, Loki, vm-*, Alloy, kube-state-metrics).
-    # To go back: set enforce to privileged (and nothing else breaks). The rest of the stack stays:
+    # enforce: privileged by default (the released behaviour). node-exporter, the one workload here that needs
+    # hostPath/hostNetwork/hostPID, has its own privileged namespace (services-observability-node, below), so baseline
+    # would hold for everything left here (Grafana, Loki, vm-*, Alloy, kube-state-metrics): opt in with
+    # apps/flux/components/psa-baseline after its server-side dry run (see that file). The rest of the stack stays:
     #   - outside the ambient mesh (see the block above)
     #   - excluded from Kyverno disallow-root-user (a broad exclusion, see that policy)
     #   - real security = L3/L4 CiliumNetworkPolicy (observability/networkpolicy.yaml)
     # warn/audit stay restricted → drift of the pods (grafana/loki/vm-*) stays visible in the apiserver logs.
-    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
     openaether.io/managed: "true"

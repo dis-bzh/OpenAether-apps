@@ -71,8 +71,13 @@ policy per release. Note `KyvernoPolicyViolation` ignores `require-security-cont
 The namespaces that still enforce baseline can move to restricted with the opt-in component `apps/flux/components/psa-restricted`
 (foundation-networking, foundation-policy-engine, services-identity, capi-system, capi-operator-system, capi-outscale-system), after
 their `warn`/`audit` = restricted lines are clean, with the same reboot gate. PSA covers init containers, ephemeral containers,
-hostPorts and capabilities without a webhook. `kyverno`, services-observability, services-gateway, foundation-service-mesh and
-foundation-storage stay at baseline for the reasons written on their Namespace manifests.
+hostPorts and capabilities without a webhook. `kyverno` stays at baseline for the reasons written on its Namespace manifest.
+
+Four namespaces enforce `privileged` as released although nothing privileged runs in them: services-observability,
+services-gateway, foundation-service-mesh and foundation-storage. The opt-in component `apps/flux/components/psa-baseline` lowers
+them to baseline (`warn`/`audit` restricted are already set, so their logs are readable before the flip). Gate: a server-side dry run,
+`kubectl label --dry-run=server --overwrite ns <ns> pod-security.kubernetes.io/enforce=baseline`, for each, then a staging cluster
+and a node reboot. Rollback: remove the component, or relabel `privileged`.
 
 ## Not done
 

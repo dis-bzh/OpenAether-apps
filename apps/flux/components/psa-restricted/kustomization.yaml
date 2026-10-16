@@ -1,8 +1,9 @@
 # OPT-IN, off by default. Raises the Pod Security Admission ENFORCE level from baseline to restricted on the namespaces
 # that still enforce baseline: foundation-networking, foundation-policy-engine, services-identity, capi-system,
 # capi-operator-system, capi-outscale-system (ANSSI FT082 R4/R8, NSA12 POD-05; mocked/static, never run on a cluster).
-# kyverno, services-observability, services-gateway, foundation-service-mesh and foundation-storage stay at baseline on
-# purpose (docs/kyverno-enforcement.md, section PSA).
+# kyverno stays at baseline on purpose (docs/kyverno-enforcement.md, section PSA). services-observability, services-
+# gateway,
+# foundation-service-mesh and foundation-storage are privileged by default; the component psa-baseline lowers them.
 #
 # GATE before turning it on: the `warn` / `audit` = restricted labels these namespaces already carry log every pod that
 # would be refused. Read them first (apiserver audit annotation `pod-security.kubernetes.io/audit-violations`, or the
