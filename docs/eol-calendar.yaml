@@ -277,10 +277,10 @@ components:
 - id: orc
   brick: orc
   component: OpenStack Resource Controller (vendored dump)
-  pin: 2.4.0
+  pin: 2.6.0
   file: apps/base/orc/install.yaml
   pattern: image:\s*quay\.io/orc/openstack-resource-controller:v([0-9.]+)
-  cycle: ORC v2.4
+  cycle: ORC v2.6
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'

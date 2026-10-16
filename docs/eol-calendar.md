@@ -35,7 +35,7 @@ or a vendored dump has no row.
 | PostgreSQL (zitadel cluster) (`cnpg`) | 18.6 | PostgreSQL 18 | 2030-11-14 |  | 2026-12-14 |
 | PostgreSQL (grafana cluster) (`cnpg`) | 16.15 | PostgreSQL 16 | 2028-11-09 |  | 2026-12-14 |
 | External Secrets Operator (vendored dump) (`external-secrets`) | 2.13.0 | ESO v2.13 | unknown |  | 2026-12-14 |
-| OpenStack Resource Controller (vendored dump) (`orc`) | 2.4.0 | ORC v2.4 | unknown |  | 2026-12-14 |
+| OpenStack Resource Controller (vendored dump) (`orc`) | 2.6.0 | ORC v2.6 | unknown |  | 2026-12-14 |
 | Gateway API CRDs (vendored dump) (`platform/gateway-api`) | 1.2.1 | Gateway API v1.2 | unknown |  | 2026-12-14 |
 | local-path-provisioner (vendored dump) (`platform/local-path-provisioner`) | 0.0.37 | local-path v0.0.37 | unknown |  | 2026-12-14 |
 | Flux controllers pushed to child clusters (vendored dump) (`cluster-api-clusters/flux-gotk`) | 2.9.6 | Flux 2.9 | not-yet |  | 2026-12-14 |
