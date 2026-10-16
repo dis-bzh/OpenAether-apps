@@ -1,9 +1,10 @@
-# OPT-IN, off by default. Makes Flux verify the OpenPGP signature of the commit at HEAD of the GitRepository
+# OPT-IN, off by default. Makes Flux verify the signature of the commit at HEAD of the GitRepository
 # before it applies anything. Addresses ANSSI SSDLC-CICD-AIP-03 and SSDLC-CONT-REC06 (supply-chain finding F04);
 # mocked/static, never run on a cluster.
 #
-# PREREQUISITES, in this order (docs/signed-commits.md): the Secret `git-signers` (armored public keys as `*.asc`,
-# including GitHub's web-flow key for squash merges) must exist in flux-system, created by the infra side
+# PREREQUISITES, in this order (docs/signed-commits.md): the Secret `git-signers` (armored OpenPGP public keys as
+# `*.asc`, including GitHub's web-flow key for squash merges; OpenPGP is this repository's choice, SSH keys `.sshpub`
+# are not wired) must exist in flux-system, created by the infra side
 # (tofu variable flux_git_verify) or by hand; every maintainer and bot commit on the tracked ref must be signed.
 # Otherwise the GitRepository goes NotReady, Flux keeps the last good artifact and applies nothing new.
 #

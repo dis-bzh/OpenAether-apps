@@ -21,6 +21,12 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Security
 
+- **Review fixes (mirrors the infra review). Static / mocked, not run on a cluster.**
+  - `check-commit-signatures.sh` skips merge commits: on a PR run HEAD is GitHub's unsigned synthetic merge commit, so the documented `--strict`
+    switch-on would have failed every PR. Its test now has a merge-commit case and expired-key/signature cases (status X/Y, throwaway key signed in the past).
+  - `docs/signed-commits.md` and the `git-verify` component comment no longer say Flux checks OpenPGP only: the Flux CRD vendored in infra documents
+    SSH keys (`.sshpub`) too. OpenPGP is this repository's choice, and SSH keys are NOT wired.
+
 - **Critic follow-ups: apps areas the audit had not read** (no ANSSI requirement id was assigned to them by the audit; they sit near DP-02, DP-03/F06, LOG-13 and SSDLC-CICD-AIP-01; mocked/static, not run on a cluster):
   - CAPI provider egress: `capi-system` no longer allows the Outscale endpoints and `capi-outscale-system` no longer allows Scaleway and OVH
     (each namespace runs the providers of its own cloud). Rollback: restore the removed `toFQDNs` lines.

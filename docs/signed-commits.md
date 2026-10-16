@@ -8,8 +8,11 @@ it is **not** a claim of compliance. Rung of everything below: mocked/static, ne
 
 ## Stage 1 - the repository side (no cluster risk)
 
-- **Standard: OpenPGP (GPG) signatures.** Flux's `GitRepository.spec.verify` checks OpenPGP signatures only; an SSH
-  signature would satisfy GitHub's ruleset and be rejected by Flux. Use GPG, whatever the transport.
+- **Standard: OpenPGP (GPG) signatures.** This repository standardises on OpenPGP, a choice and not a Flux limit: the
+  Flux CRD vendored in OpenAether-infra documents the `spec.verify.secretRef` keys as `.asc` (PGP) and `.sshpub` (SSH);
+  the copy vendored here (`gotk-components.yaml`) does not spell the suffixes out. SSH keys are NOT wired here (the
+  `git-signers` Secret holds armored OpenPGP keys only). A commit signed with an SSH key would satisfy GitHub's ruleset
+  but fail Flux's verification of this setup, so use GPG, whatever the transport.
   Setup: `git config --global user.signingkey <fingerprint>` and `git config --global commit.gpgsign true`, publish the
   public key on the GitHub account (Settings, SSH and GPG keys) so GitHub shows "Verified".
 - **CI**: `scripts/dev/check-commit-signatures.sh` runs on every PR over the commits it adds. It is a **warning** until
