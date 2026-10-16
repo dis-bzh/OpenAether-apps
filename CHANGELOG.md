@@ -19,6 +19,24 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ANSSI hardening work, not released yet. **Nothing here is a claim of compliance with any ANSSI document**: each entry names the requirements it addresses and the rung it reached; the ones that only a cluster can show are listed in the lab checklist of the maintainers.
 
+### Validated
+
+- **The first wave on three real clouds, 2026-10-15: once per cloud, by hand, with OpenAether-infra `claude/anssi-wave1` and this branch
+  followed by Flux.** Scaleway and OVH ran the full DAG (36 Kustomizations Ready), Outscale the reduced profile (19 Kustomizations: no
+  observability, CNPG, Longhorn or Istio, so most of the entries below are not observed there). Seen:
+  - **Defects only a real cluster showed, fixed on the branch while the clusters ran** (see Fixed): the vmagent config-reloader could not read
+    its Secret under the least-privilege RBAC, and the third Loki replica could not schedule on two workers. After the fixes every pod was
+    Running on OVH, and Scaleway (created before the fixes landed) converged on the same commits.
+  - **Escrow:** the infra tooling attested a two-custodian escrow and the CronJob `openbao-escrow-check` read it ("attested 0 day(s) ago by
+    2 holders", Outscale); an OpenBao snapshot job pushed to both destinations (Outscale).
+  - **Zitadel (B14):** the administrator password generated into OpenBao (32 characters) opens a session (201), the public default
+    `Password1!` does not (400); Grafana's sessions are 2 h idle and 12 h (Scaleway).
+  - **Kyverno:** 2 results on the report (the Istio-generated proxies, #70); **CloudNativePG** `grafana-db` and `zitadel-db` archiving True
+    (after the reload that OpenAether-infra's seeding now does), Longhorn's backup target available, Loki's objects in its own bucket.
+  - **Not run:** the OpenBao TLS 1.3, metrics and audit-label work (a later branch), Kyverno Enforce, the SSO-only Grafana overlay, the
+    private-admin-routes component on a cluster, a restore, an upgrade of a cluster built on 0.2.0 except the Loki rollout described in
+    the Upgrade notes.
+
 ### Upgrade notes
 
 - **Loki goes from 2 to 3 replicas, and the pods of a cluster on 0.2.0 hold a hard anti-affinity that blocks the third.** The chart's
