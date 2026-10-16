@@ -304,6 +304,22 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   fixtures and the vmalert unit test cover the exemption and the silence alert. **Does NOT**: change the audit policy
   (Talos's default Metadata level stays: no request bodies), ship Talos service or kernel logs or the bastion's (infra),
   survive a pod re-creation without a gap (positions are in an emptyDir), or prove the file is readable on a real node.
+- **Kyverno Enforce, per policy and per namespace, off by default** (ANSSI FT082 R1, R4, R8, R15 in part, NSA12 POD-01, POD-05,
+  SSDLC-CONT-REC04; apps half of K8S/F04, SCC/F09, SCC/F03, K8S/F10; mocked/static, not run on a cluster):
+  - `restrict-privileged`, `restrict-capabilities`, `require-security-context`, `restrict-image-registries` and `require-limits`
+    carry `validationFailureActionOverrides`: Enforce in a namespace labelled `kyverno.openaether.io/enforce-<policy>: "true"`, Audit
+    everywhere else. No namespace carries a label, so **behaviour is unchanged**; the only measurement on file (a fresh OVH cluster, 2
+    Istio-generated proxies still failing `require-security-context`) is not zero, and the rules added since were never measured.
+    Rollback: remove the label. Order, gate, exceptions and the Kyverno-outage note are in `docs/kyverno-enforcement.md`.
+  - The flippable rules now match Pods at **CREATE only** (an update of a running pod is never denied). In Audit that means a pod
+    changed after creation is no longer re-reported at admission; the background scan still sees it. `restrict-capabilities` is split in
+    two rules so the `kubectl debug` ephemeral containers (an UPDATE) are still judged; the Pod rule is `deny-sensitive-capabilities`.
+  - New opt-in component `apps/flux/components/psa-restricted`: Pod Security enforce baseline to restricted on foundation-networking,
+    foundation-policy-engine, services-identity and the `capi-*` namespaces, for a cluster whose warn/audit lines are clean.
+  - Does NOT: enforce anything by default, move services-observability, services-gateway or kyverno off baseline, add Kyverno HA,
+    `verifyImages`, digest pins, `LimitRange`/`ResourceQuota`, nor use Kyverno 1.13's `validate.failureActionOverrides` (the vendored
+    1.12.1 rejects it). `KyvernoPolicyViolation` still ignores `require-security-context`.
+  - **Rung: static** (`scripts/dev/test-kyverno-enforcement.py`, `test-psa-restricted.py`, the Kyverno CLI fixtures; all in CI).
 
 ### Added
 
