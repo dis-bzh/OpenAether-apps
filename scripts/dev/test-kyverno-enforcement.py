@@ -4,7 +4,8 @@
 Five policies can be flipped to Enforce one namespace at a time, by labelling the namespace
 `kyverno.openaether.io/enforce-<policy>: "true"` (spec.validationFailureActionOverrides, the Kyverno 1.12 spelling). Checks:
 every one of them stays Audit globally, carries exactly that one override, matches pods at CREATE only (so an update of a running
-pod is never denied; the ephemeral-container rule is an UPDATE by nature and is the one exception), no namespace in the repo
+pod is never denied; the two ephemeral-container policies are an UPDATE by nature and are the exception: they must list CREATE and UPDATE,
+because with no `operations` Kyverno registers CREATE only on the webhook and `kubectl debug` is never seen, lab 11), no namespace in the repo
 carries such a label (the default is today's Audit everywhere), the two policies that already enforce are untouched, and the
 document names every label. It does NOT run Kyverno: that the override denies a pod is in LAB-CHECKLIST (B29).
 Rung: mocked/static.   Usage: python3 scripts/dev/test-kyverno-enforcement.py   (needs kubectl and PyYAML)
@@ -17,10 +18,11 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 PREFIX = "kyverno.openaether.io/enforce-"
-FLIPPABLE = ["restrict-privileged", "restrict-capabilities", "restrict-capabilities-ephemeral", "require-security-context",
+FLIPPABLE = ["restrict-privileged", "restrict-capabilities", "restrict-capabilities-ephemeral", "restrict-privileged-ephemeral",
+             "require-security-context",
              "restrict-image-registries", "require-limits"]
-# one namespace label flips both capability policies (the ephemeral rule needed its own policy: background scan is off for it)
-LABEL_OF = {"restrict-capabilities-ephemeral": "restrict-capabilities"}
+# one namespace label flips a policy and its ephemeral twin (the ephemeral rule needed its own policy: background scan is off for it)
+LABEL_OF = {"restrict-capabilities-ephemeral": "restrict-capabilities", "restrict-privileged-ephemeral": "restrict-privileged"}
 ALREADY_ENFORCE = {"disallow-root-user", "disallow-default-namespace"}
 ALWAYS_AUDIT = {"require-ro-rootfs"}
 PASS = FAIL = 0
@@ -51,7 +53,8 @@ for name in FLIPPABLE:
         kinds = [k for blk in rule["match"]["any"] for k in blk["resources"]["kinds"]]
         ops = [blk["resources"].get("operations") for blk in rule["match"]["any"]]
         if kinds == ["Pod/ephemeralcontainers"]:
-            check(f"{rule['name']}: the ephemeral-container subresource is matched explicitly", True)
+            check(f"{rule['name']}: the ephemeral-container subresource is matched at CREATE and UPDATE (kubectl debug is an UPDATE)",
+                  ops == [["CREATE", "UPDATE"]], ops)
         else:
             check(f"{rule['name']}: matches Pod at CREATE only", kinds == ["Pod"] and ops == [["CREATE"]], (kinds, ops))
         check(f"{rule['name']}: no Kyverno-1.13 `validate.failureActionOverrides` (the vendored 1.12.1 rejects it)",

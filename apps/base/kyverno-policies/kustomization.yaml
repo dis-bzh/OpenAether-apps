@@ -12,5 +12,6 @@ resources:
   - restrict-image-registries.yaml
   - restrict-capabilities.yaml
   - restrict-capabilities-ephemeral.yaml
+  - restrict-privileged-ephemeral.yaml
   - require-ro-rootfs.yaml
   - require-limits.yaml

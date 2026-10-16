@@ -1,0 +1,35 @@
+# Pods that already carry ephemeral containers (what `kubectl debug` leaves: the policy sees the pod at the UPDATE).
+# Run by scripts/dev/test-kyverno-policies.sh against the ephemeral policies rewritten to match Pod.
+apiVersion: v1
+kind: Pod
+metadata: {name: eph-general, namespace: app}
+spec:
+  containers: [{name: c, image: ghcr.io/fluxcd/x:1}]
+  ephemeralContainers:
+    - {name: dbg, image: docker.io/library/busybox:1, securityContext: {capabilities: {drop: [ALL]}}}
+---
+# --profile=netadmin
+apiVersion: v1
+kind: Pod
+metadata: {name: eph-netadmin, namespace: app}
+spec:
+  containers: [{name: c, image: ghcr.io/fluxcd/x:1}]
+  ephemeralContainers:
+    - {name: dbg, image: docker.io/library/busybox:1, securityContext: {capabilities: {add: [NET_ADMIN, NET_RAW]}}}
+---
+# --profile=sysadmin: privileged and nothing else.
+apiVersion: v1
+kind: Pod
+metadata: {name: eph-sysadmin, namespace: app}
+spec:
+  containers: [{name: c, image: ghcr.io/fluxcd/x:1}]
+  ephemeralContainers:
+    - {name: dbg, image: docker.io/library/busybox:1, securityContext: {privileged: true}}
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: eph-sysadmin-ks, namespace: kube-system}
+spec:
+  containers: [{name: c, image: ghcr.io/fluxcd/x:1}]
+  ephemeralContainers:
+    - {name: dbg, image: docker.io/library/busybox:1, securityContext: {privileged: true}}

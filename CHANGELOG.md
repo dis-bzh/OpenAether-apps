@@ -411,6 +411,16 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **Kyverno: `kubectl debug` was admitted unseen; the ephemeral policies now match UPDATE, and a privileged ephemeral container is
+  judged** (lab 11, both providers: netadmin and sysadmin profiles were admitted under the enforce label; static + Kyverno CLI 1.12.1
+  fixtures + server dry-run on a live Kyverno, the denial itself not re-run on a cluster yet). `kubectl debug` adds the container with
+  an UPDATE of `pods/ephemeralcontainers`, and a match without `operations` registers CREATE only on the webhook.
+  `restrict-capabilities-ephemeral` now lists `CREATE` and `UPDATE`; the new `restrict-privileged-ephemeral` denies
+  `privileged: true` (what `--profile=sysadmin` sets, which the capabilities rule cannot see), flipped by the existing
+  `enforce-restrict-privileged` namespace label, same system-namespace exemptions as `restrict-privileged`. Still Audit everywhere
+  by default. `scripts/dev/test-kyverno-policies.sh` runs the two policies on a copy rewritten to match Pod (the CLI reports every
+  subresource row "Excluded"); `test-kyverno-enforcement.py` requires CREATE+UPDATE. It does NOT cover the admission of a
+  `kubectl debug` from a user excluded by Kyverno's own resource filters.
 - **Certificates: rotation policy written down on every one, and a guard that routes are covered** (review of B18/B19; static,
   not run on a cluster). `openbao-ca` and `openbao-ca-bundle` now say `privateKey.rotationPolicy: Never` (the value cert-manager
   applies today, so no behaviour change on 1.15; without it the 1.18 hop would re-key the 10-year listener CA, as

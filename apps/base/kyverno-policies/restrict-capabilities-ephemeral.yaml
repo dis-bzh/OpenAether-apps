@@ -1,7 +1,9 @@
-# restrict-capabilities for ephemeral containers (`kubectl debug`). Its own policy and NOT a rule of restrict-capabilities because
-# Kyverno 1.12.1 refuses ("background scan enabled with subresource Pod/ephemeralcontainers", found when Flux applied it on a
-# real cluster, lab 11) a policy that matches a subresource with background scanning on, and the Pod rule above wants it on.
-# An ephemeral container only ever exists as an UPDATE of a running pod, so there is nothing for a background scan to report.
+# restrict-capabilities for ephemeral containers (`kubectl debug`). Own policy:
+# Kyverno 1.12.1 refuses a policy that matches a subresource with background scanning on (found when Flux applied it
+# on a real cluster, lab 11), and the Pod rule wants it on.
+# An ephemeral container only ever exists as an UPDATE of a running pod, so a background scan has nothing to report.
+# For the same reason the match lists UPDATE: with no `operations` Kyverno registers CREATE only on the webhook and
+# `kubectl debug` (an UPDATE of pods/ephemeralcontainers) was admitted unseen (lab 11, both providers).
 # The same namespace label flips both (kyverno.openaether.io/enforce-restrict-capabilities).
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
@@ -31,6 +33,9 @@ spec:
             kinds:
               # A plain Pod match does not register the ephemeralcontainers subresource with the webhook.
               - Pod/ephemeralcontainers
+            operations:
+              - CREATE
+              - UPDATE
       exclude:
         any:
         # Single-purpose system namespaces: Cilium and the CNI agents, Longhorn, local-path, the CAPI controllers.
