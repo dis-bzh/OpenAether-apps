@@ -398,6 +398,12 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **Certificates: rotation policy written down on every one, and a guard that routes are covered** (review of B18/B19; static,
+  not run on a cluster). `openbao-ca` and `openbao-ca-bundle` now say `privateKey.rotationPolicy: Never` (the value cert-manager
+  applies today, so no behaviour change on 1.15; without it the 1.18 hop would re-key the 10-year listener CA, as
+  `docs/patching.md` already warned). `scripts/dev/test-certificates.py` (CI) fails if a Certificate omits the policy or an
+  HTTPRoute hostname is missing from the Gateway Certificate's `dnsNames` (the role refuses wildcards). It does not stop a
+  route added from a cluster's own overlay outside this repository. `docs/key-inventory.md` renewal windows corrected.
 - **Alloy's control-plane toleration was ignored** (found while adding the audit collector; LOG-01). `tolerations` sat at the
   top of the `alloy` HelmRelease values, where the chart does not read it (`controller.tolerations` is the key), so the
   pod-log collector never ran on a tainted control plane. It now does. The same file's top-level `resources` is also not a

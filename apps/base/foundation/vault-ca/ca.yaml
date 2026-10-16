@@ -36,11 +36,13 @@ spec:
   secretName: openbao-ca
   duration: 87600h
   renewBefore: 8760h
-  # rotationPolicy stays at its default (Never) on purpose: a re-keyed CA needs every leaf re-issued in the same step
-  # (vault README, "Metrics, TLS and certificate renewal"). The leaves, in contrast, re-key at each renewal.
+  # rotationPolicy Never, written down on purpose: a re-keyed CA needs every leaf re-issued in the same step
+  # (vault README, "Metrics, TLS and certificate renewal"), and cert-manager 1.18 flips the unwritten default to Always.
+  # The leaves, in contrast, re-key at each renewal.
   privateKey:
     algorithm: ECDSA
     size: 256
+    rotationPolicy: Never
   issuerRef:
     name: openbao-selfsigned
     kind: ClusterIssuer
