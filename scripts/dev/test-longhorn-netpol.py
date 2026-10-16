@@ -12,9 +12,9 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
-# 9503: share-manager -> manager recovery backend (Longhorn 1.12); 10000-30000: instance-manager replica/engine data path
+# 9503: share-manager -> manager recovery backend (Longhorn 1.12); 9600: manager -> share-manager gRPC; 10000-30000: instance-manager replica/engine data path
 # between nodes. Lab 12 saw both denied: RWX never mounted, 2-replica volumes stayed degraded.
-NEED = {"9500", "9501", "9502", "9503", "8500", "8501", "8502", "8503", "10000-30000"}
+NEED = {"9500", "9501", "9502", "9503", "9600", "8500", "8501", "8502", "8503", "10000-30000"}
 pol = next(d for d in yaml.safe_load_all((REPO / "apps/base/storage/networkpolicy.yaml").read_text())
            if d and d["kind"] == "CiliumNetworkPolicy" and d["metadata"]["name"] == "longhorn")
 fails = 0
