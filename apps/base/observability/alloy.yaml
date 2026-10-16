@@ -50,6 +50,14 @@ spec:
             emptyDir:
               sizeLimit: 256Mi
     configReloader:
+      # The chart's default is a request with no limit. Measured 1-9 Mi.
+      resources:
+        requests:
+          cpu: 1m
+          memory: 8Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi
       securityContext:
         # The reloader only calls Alloy's reload endpoint: it writes nothing (FT082-R12).
         readOnlyRootFilesystem: true
@@ -63,6 +71,16 @@ spec:
         seccompProfile:
           type: RuntimeDefault
     alloy:
+      # Under `alloy.`, the only path the chart reads: a top-level `resources` was ignored, so the container ran with
+      # no limit at all (lab 11). Measured on the workers (the log tailing sits there) 335-353 Mi, 41 Mi on a control
+      # plane; one DaemonSet, so one figure: request near the workers' use, limit about 1.9x it.
+      resources:
+        requests:
+          cpu: 50m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 640Mi
       # Default is /tmp/alloy, a directory of the image's writable layer. An emptyDir keeps the position and
       # component state across a CONTAINER restart (not a pod re-creation: hostPath is refused by PSA baseline).
       storagePath: /var/lib/alloy/data
@@ -204,13 +222,6 @@ spec:
               cluster = "management",
             }
           }
-    resources:
-      requests:
-        cpu: 50m
-        memory: 128Mi
-      limits:
-        cpu: 200m
-        memory: 256Mi
     # The chart's ClusterRole reads every Secret and ConfigMap; rbac-alloy.yaml is the narrow one.
     rbac:
       create: false

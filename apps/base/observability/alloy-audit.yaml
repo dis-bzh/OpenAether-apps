@@ -57,6 +57,14 @@ spec:
               path: /var/log/audit/kube
               type: DirectoryOrCreate
     configReloader:
+      # The chart's default is a request with no limit. Measured 1 Mi.
+      resources:
+        requests:
+          cpu: 1m
+          memory: 8Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi
       securityContext:
         readOnlyRootFilesystem: true
         runAsUser: 65534

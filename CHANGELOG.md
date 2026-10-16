@@ -411,6 +411,13 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **Alloy ran with no resource limit: the values were under a key the chart ignores** (lab 11: the two worker Alloy pods used
+  335-353 Mi, no limit; static + rendered chart, new figures not run on a cluster). The `resources:` of `alloy.yaml` stood at the
+  top of the HelmRelease values; the chart reads `alloy.resources`. The request is now 256Mi and the limit 640Mi (about 1.9x the
+  worker use; a control-plane pod uses 41 Mi, one figure for the DaemonSet), CPU 50m/500m. Both Alloy DaemonSets also get a
+  limit on the `config-reloader` (32Mi, measured 1-9 Mi). The earlier 256Mi value would have OOM-killed the workers.
+  `scripts/dev/test-alloy-resources.py` (CI) renders both charts and requires a memory request and limit on every container.
+  What drives the 340 Mi on a worker (log tailing of every pod on it) was not investigated.
 - **One of three kube-apiservers was unmonitored: the apiserver scrape may read 32 MiB** (lab 11, Scaleway: the control plane that
   holds the leader answered more than vmagent's 16 MiB default, "exceeds -promscrape.maxScrapeSize", the size check running before
   any relabelling; static + Operator v0.72 field check, not re-run on a cluster). `max_scrape_size: 32MiB` on the
