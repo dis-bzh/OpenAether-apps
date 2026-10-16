@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 LOCK="${VENDORED_LOCK:-apps/vendored-dumps.sha256}"
 DUMPS=(
-  apps/base/cnpg/cnpg-1.23.1.yaml
+  apps/base/cnpg/cnpg-1.30.1.yaml
   apps/base/cluster-api-clusters/flux-gotk/gotk-components.yaml
   apps/base/external-secrets/install.yaml
   apps/base/kyverno/kyverno-1.19.1.yaml

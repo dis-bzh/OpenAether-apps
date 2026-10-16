@@ -229,18 +229,15 @@ components:
 - id: cnpg-operator
   brick: cnpg
   component: CloudNativePG operator (vendored dump)
-  pin: 1.23.1
-  file: apps/base/cnpg/cnpg-1.23.1.yaml
+  pin: 1.30.1
+  file: apps/base/cnpg/cnpg-1.30.1.yaml
   pattern: image:\s*ghcr\.io/cloudnative-pg/cloudnative-pg:([0-9.]+)
-  cycle: CNPG 1.23
-  eol: unsupported
+  cycle: CNPG 1.30
+  eol: not-yet
   eol_source: https://github.com/cloudnative-pg/cloudnative-pg/blob/main/docs/src/supported_releases.md
   note: the project's table lists 1.29 and 1.30 as supported; a minor is supported until 3 months after
-    the next one
-  waiver:
-    until: '2026-12-31'
-    reason: the operator owns the Postgres clusters of Zitadel and Grafana; a bump needs a backup restore
-      on a cluster first; no hop is scheduled
+    the next one. barmanObjectStore (both Clusters) is removed in 1.31, so the 1.30 pin cannot go to 1.31 before
+    the move to the Barman Cloud plugin
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: postgres-main
@@ -257,14 +254,12 @@ components:
 - id: postgres-grafana
   brick: cnpg
   component: PostgreSQL (grafana cluster)
-  pin: '16.3'
+  pin: '16.15'
   file: apps/base/cnpg/grafana-db-cluster.yaml
   pattern: imageName:\s*ghcr\.io/cloudnative-pg/postgresql:([0-9.]+)
   cycle: PostgreSQL 16
   eol: '2028-11-09'
   eol_source: https://endoflife.date/api/postgresql.json
-  note: the major is supported until 2028; the pin 16.3 is many patch releases behind (CNPG's operator
-    is what rolls it)
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: external-secrets

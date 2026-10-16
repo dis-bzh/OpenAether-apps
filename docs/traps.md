@@ -33,8 +33,8 @@ belong to. What follows has no skill of its own yet.
   bans a plugin version. "Install a plugin at least as new as the operator" is not a remedy (1.23.6 is newer than the operator).
   In every case check `.status.targetPrimary`, `.status.currentPrimary`, the conditions, that the target replica is streaming and
   not lagging, and the `cnpg-system` operator log, and let the cluster settle between two switchovers. For 1.30.0 the two status
-  fields printed empty before and after, so that promotion is evidenced by the pod roles only. Operator 1.23 is end of support and
-  does not list PostgreSQL 18, which `zitadel-db` runs (`grafana-db` runs 16.3).
+  fields printed empty before and after, so that promotion is evidenced by the pod roles only. Operator 1.23 was end of support and
+  did not list PostgreSQL 18, which `zitadel-db` runs; the repository now vendors 1.30.1 (not re-measured).
 
 - **A cluster rebuilt on a bucket that still holds the old cluster's WAL archive does not archive.** CNPG's
   `barman-cloud-check-wal-archive` refuses a non-empty archive for a new cluster ("WAL archive check failed for server ...:

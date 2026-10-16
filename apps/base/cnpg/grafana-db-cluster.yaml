@@ -24,7 +24,7 @@ metadata:
     openaether.io/component: grafana-db
 spec:
   instances: 2
-  imageName: ghcr.io/cloudnative-pg/postgresql:16.3
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.15
   primaryUpdateStrategy: unsupervised
   storage:
     # local-path-retain: node-local storage, immediate mount (no CSI
