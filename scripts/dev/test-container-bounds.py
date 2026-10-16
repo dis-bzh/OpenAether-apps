@@ -51,8 +51,12 @@ def check_values():
         out.append("capi-operator: containerSecurityContext.manager.readOnlyRootFilesystem must be true")
     if c.get("securityContext", {}).get("runAsNonRoot") is not True:
         out.append("capi-operator: pod securityContext.runAsNonRoot must be true")
-    if "/tmp" not in {m["mountPath"] for m in c["volumeMounts"]["manager"]}:
-        out.append("capi-operator: /tmp must be a volume when the root filesystem is read-only")
+    mounts = {m["mountPath"]: m["name"] for m in c["volumeMounts"]["manager"]}
+    # /home/nonroot: the embedded clusterctl config reader creates $HOME/.config/cluster-api, and without it no provider installs.
+    for path in ("/tmp", "/home/nonroot"):
+        vol = next((v for v in c["volumes"] if v["name"] == mounts.get(path)), None)
+        if vol is None or "emptyDir" not in vol:
+            out.append(f"capi-operator: {path} must be an emptyDir when the root filesystem is read-only")
     return out
 
 

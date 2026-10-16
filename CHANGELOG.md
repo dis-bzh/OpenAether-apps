@@ -411,6 +411,13 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **The Cluster API operator installs providers again under its read-only root filesystem** (lab 11: no provider was ever
+  installed, `INSTALLEDVERSION` empty after 85 minutes; static + `helm template` of chart 0.27.0, not re-run on a cluster). The
+  clusterctl config reader inside the operator creates `$HOME/.config/cluster-api` before every reconcile ("could not create any
+  of the following paths: [/home/nonroot/.config /etc/xdg]"); B21 left only `/tmp` writable. An emptyDir (16Mi) now backs
+  `/home/nonroot`; the read-only root filesystem is kept. `scripts/dev/test-container-bounds.py` requires both `/tmp` and
+  `/home/nonroot` to be emptyDirs. If a later step of the install writes elsewhere, the lab will show it in the operator log; the
+  documented fallback is to drop `readOnlyRootFilesystem` for this one container, with the reason.
 - **Vault UI through the Gateway answered 503: the gateway may now read the CA Secret of its DestinationRule** (lab 11, Scaleway;
   static + server dry-run, not re-run on a cluster). `credentialName: openbao-ca-bundle` makes the gateway's Envoy fetch that Secret
   over SDS; istiod refuses it to a Gateway-API gateway whose ServiceAccount (`openaether-gateway-istio`) has no RBAC ("is not

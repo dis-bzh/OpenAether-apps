@@ -51,6 +51,10 @@ belong to. What follows has no skill of its own yet.
 
 ## CAPI
 
+- **A read-only root filesystem on the CAPI operator needs a writable `/home/nonroot`, not only `/tmp`.** Its embedded clusterctl
+  config reader creates `$HOME/.config/cluster-api`; the failure is a path-creation error in the operator log
+  ("could not create any of the following paths"), not EROFS, so a grep for "read-only file system" misses it, and every
+  provider stays with an empty `INSTALLEDVERSION` (lab 11). Check `kubectl get coreprovider,infrastructureprovider -A` after a hardening change.
 - **`clusterctl move --dry-run` does not check providers.** It passes, and the real
   move then fails.
 - **`clusterctl init` does not install ORC.** CAPO v0.14 needs it; without it the
