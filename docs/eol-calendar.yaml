@@ -297,10 +297,10 @@ components:
 - id: gateway-api
   brick: platform/gateway-api
   component: Gateway API CRDs (vendored dump)
-  pin: 1.1.0
+  pin: 1.2.1
   file: apps/base/platform/gateway-api/standard-install.yaml
   pattern: gateway\.networking\.k8s\.io/bundle-version:\s*v([0-9.]+)
-  cycle: Gateway API v1.1
+  cycle: Gateway API v1.2
   eol: unknown
   note: the 'vendored from' comment in kustomization.yaml is a Renovate tracking comment, not the vendored
     version
