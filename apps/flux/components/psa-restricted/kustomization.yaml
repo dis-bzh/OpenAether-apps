@@ -1,0 +1,133 @@
+# OPT-IN, off by default. Raises the Pod Security Admission ENFORCE level from baseline to restricted on the namespaces
+# that still enforce baseline: foundation-networking, foundation-policy-engine, services-identity, capi-system,
+# capi-operator-system, capi-outscale-system (ANSSI FT082 R4/R8, NSA12 POD-05; mocked/static, never run on a cluster).
+# kyverno, services-observability, services-gateway, foundation-service-mesh and foundation-storage stay at baseline on
+# purpose (docs/kyverno-enforcement.md, section PSA).
+#
+# GATE before turning it on: the `warn` / `audit` = restricted labels these namespaces already carry log every pod that
+# would be refused. Read them first (apiserver audit annotation `pod-security.kubernetes.io/audit-violations`, or the
+# warnings `kubectl apply` prints), and also after a node reboot: PSA judges the pod at creation, so a pod admitted
+# before keeps running and is refused only when it is recreated. foundation-networking (Cilium/Gateway hostPort) is the
+# likely blocker: if the logs name it, copy this component and delete its patch.
+#
+# Use it from a cluster's own overlay (generated profiles are rewritten by pick.py, do not edit those):
+#   resources:  [../../workload]            # or the profile the cluster uses
+#   components: [../components/psa-restricted]
+# Rollback: remove the component line (Flux reapplies baseline at the next reconcile), or at once
+# `kubectl label ns <ns> pod-security.kubernetes.io/enforce=baseline --overwrite`. A refused pod is a controller that
+# cannot create it (under-replicated), nothing running is evicted.
+#
+# It adds a Flux `spec.patches` to four Kustomizations. That field REPLACES a list, so a cluster that already patches
+# one of them must merge by hand. A Kustomization absent from a profile is simply not patched.
+# scripts/dev/test-psa-restricted.py renders this component and applies the patches it carries to the real bricks.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: namespaces
+    patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: namespaces
+        namespace: flux-system
+      spec:
+        patches:
+          - target:
+              kind: Namespace
+              name: foundation-networking
+            patch: |-
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: foundation-networking
+                labels:
+                  pod-security.kubernetes.io/enforce: restricted
+          - target:
+              kind: Namespace
+              name: foundation-policy-engine
+            patch: |-
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: foundation-policy-engine
+                labels:
+                  pod-security.kubernetes.io/enforce: restricted
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: identity
+    patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: identity
+        namespace: flux-system
+      spec:
+        patches:
+          - target:
+              kind: Namespace
+              name: services-identity
+            patch: |-
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: services-identity
+                labels:
+                  pod-security.kubernetes.io/enforce: restricted
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: cluster-api-operator
+    patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: cluster-api-operator
+        namespace: flux-system
+      spec:
+        patches:
+          - target:
+              kind: Namespace
+              name: capi-system
+            patch: |-
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: capi-system
+                labels:
+                  pod-security.kubernetes.io/enforce: restricted
+          - target:
+              kind: Namespace
+              name: capi-operator-system
+            patch: |-
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: capi-operator-system
+                labels:
+                  pod-security.kubernetes.io/enforce: restricted
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: cluster-api-providers
+    patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: cluster-api-providers
+        namespace: flux-system
+      spec:
+        patches:
+          - target:
+              kind: Namespace
+              name: capi-outscale-system
+            patch: |-
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: capi-outscale-system
+                labels:
+                  pod-security.kubernetes.io/enforce: restricted
