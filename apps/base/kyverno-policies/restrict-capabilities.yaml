@@ -58,6 +58,14 @@ spec:
             names:
               - "ztunnel-*"
               - "istio-cni-node-*"
+        # alloy-audit adds DAC_READ_SEARCH alone, to read the apiserver's 0600 audit file (alloy-
+        # audit.yaml); by pod name,
+        # never the whole namespace.
+        - resources:
+            namespaces:
+              - services-observability-audit
+            names:
+              - "alloy-audit-*"
       validate:
         message: >-
           A sensitive capability is added (capabilities.add). Drop ALL and add back only what the process needs;

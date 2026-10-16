@@ -16,6 +16,10 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: alloy-audit
 spec:
+  # Suspended by default (the released behaviour: no audit collector). Start it with the opt-in component
+  # apps/flux/components/audit-log-collector, after reading its gate: it runs as root with DAC_READ_SEARCH on the
+  # control planes.
+  suspend: true
   interval: 1h
   chart:
     spec:
@@ -78,9 +82,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
-      # Root, because the audit file belongs to the apiserver's user and is not group-readable (to be confirmed on a
-      # real node, LAB-CHECKLIST B22); everything else is dropped. If the read is refused, add DAC_READ_SEARCH before
-      # thinking of anything wider.
+      # Root, because the audit file belongs to the apiserver's user and is written 0600 (lumberjack) in a directory
+      # the same user owns: root WITHOUT a capability gets EACCES on both. DAC_READ_SEARCH is the narrowest answer
+      # (read files and search directories, no write); everything else is dropped. Kyverno exempts this pod by name
+      # (restrict-capabilities). Still to be confirmed on a real node (LAB-CHECKLIST B22): the file mode there.
       securityContext:
         readOnlyRootFilesystem: true
         runAsUser: 0
@@ -90,6 +95,8 @@ spec:
         capabilities:
           drop:
             - ALL
+          add:
+            - DAC_READ_SEARCH
         seccompProfile:
           type: RuntimeDefault
       resources:

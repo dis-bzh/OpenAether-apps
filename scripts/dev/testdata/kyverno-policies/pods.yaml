@@ -161,6 +161,7 @@ spec:
   containers:
     - name: c
       image: docker.io/grafana/alloy:v1
+      securityContext: {capabilities: {add: [DAC_READ_SEARCH]}}
 ---
 # Same namespace, another name: the exemption is the pod, not the namespace.
 apiVersion: v1
@@ -172,6 +173,7 @@ spec:
   containers:
     - name: c
       image: ghcr.io/fluxcd/x:1
+      securityContext: {capabilities: {add: [DAC_READ_SEARCH]}}
 ---
 # The ambient mesh namespace no longer gets a wholesale pass.
 apiVersion: v1

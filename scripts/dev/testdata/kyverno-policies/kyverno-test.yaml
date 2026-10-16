@@ -600,6 +600,20 @@ results:
   kind: Pod
   namespace: services-observability-node
   result: fail
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - alloy-audit-abc
+  kind: Pod
+  namespace: services-observability-audit
+  result: skip
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - intruder-audit
+  kind: Pod
+  namespace: services-observability-audit
+  result: fail
 - policy: restrict-privileged
   rule: deny-hostpath
   resources:

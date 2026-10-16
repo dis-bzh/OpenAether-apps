@@ -34,7 +34,8 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
   ruler evaluates it, so nothing alerts on it; read it in Grafana Explore (`{log_type="audit"} | json | response_error != ""`,
   not tried on a cluster).
 - **`kubectl exec`, new cluster-admin bindings, RBAC changes.** The API server audit log (Talos's default Metadata level)
-  reaches Loki as `{log_type="k8s-audit"}` since `alloy-audit` (control planes only; read it in Explore with
+  reaches Loki as `{log_type="k8s-audit"}` once `alloy-audit` is started (off by default: opt-in component
+  `apps/flux/components/audit-log-collector`; control planes only; read it in Explore with
   `{log_type="k8s-audit"} | json | verb="create" | objectRef_subresource="exec"`, not tried on a cluster). No rule reads it
   (no Loki ruler); `K8sAuditLogSilent` only says the file stopped arriving. The audit policy is Talos's default: it does not
   record request bodies, and nothing here changes it.

@@ -308,10 +308,14 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   of LOG-01, K8S/F12, OSN/F08, ADM/F08). A second Alloy release, `alloy-audit`, runs on the **control planes only**
   (nodeSelector, control-plane toleration) in its own privileged namespace `services-observability-audit`, reads
   `/var/log/audit/kube/kube-apiserver.log` through a read-only hostPath (DirectoryOrCreate) and pushes it to Loki as
-  `{log_type="k8s-audit", node, cluster}`, the timestamp taken from the event's `stageTimestamp`. It runs as root with a
-  read-only root filesystem and ALL capabilities dropped (the file's owner is to be confirmed on a node), starts from the end of the file, and
+  `{log_type="k8s-audit", node, cluster}`, the timestamp taken from the event's `stageTimestamp`. **Off by default**: the
+  HelmRelease is `suspend: true` and the opt-in component `apps/flux/components/audit-log-collector` starts it (the alerts stay
+  silent while the DaemonSet does not exist; a cluster owner adds `components: [../components/audit-log-collector]` to the overlay
+  after the lab gate; removing it suspends the release but does not uninstall it, delete the HelmRelease too). It runs as root with
+  a read-only root filesystem and ALL capabilities dropped except `DAC_READ_SEARCH` (the apiserver writes the file 0600 in a
+  directory it owns, so root alone is refused; the file's owner and mode are still to be confirmed on a node), starts from the end of the file, and
   has no RBAC and no kube-apiserver egress: its CiliumNetworkPolicy allows DNS and Loki :3100 only, and Loki's ingress
-  accepts it. Kyverno exempts it **by pod name** (`alloy-audit-*`) from `deny-hostpath` and `disallow-root-user`, not its
+  accepts it. Kyverno exempts it **by pod name** (`alloy-audit-*`) from `deny-hostpath`, `disallow-root-user` and the capabilities rule, not its
   namespace. Three alerts: `K8sAuditCollectorNotRunning`, `K8sAuditLogSilent` (no line read for 15 min), `K8sAuditLogNeverRead`.
   The local Docker overlay removes it. Retention needed no change here: Loki already keeps 8760h.
   **Rung: mocked/static, not run on a cluster**: `scripts/dev/test-alloy-audit.sh` runs the shipped config in a real Alloy
