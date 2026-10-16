@@ -195,10 +195,10 @@ components:
 - id: capi-operator
   brick: cluster-api-operator
   component: cluster-api-operator
-  pin: 0.27.0
+  pin: 0.29.0
   file: apps/base/cluster-api-operator/operator.yaml
   pattern: chart:\s*cluster-api-operator\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: cluster-api-operator 0.27.0
+  cycle: cluster-api-operator 0.29.0
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
