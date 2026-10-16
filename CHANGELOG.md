@@ -21,6 +21,15 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Security
 
+- **Named operator identities** (ANSSI PA022 R38, R40, NSA12 AUTH-02; apps half of F04, F13, F20):
+  - New brick `platform/rbac` (Flux `platform-rbac`, in the baseline of every generated profile): `ClusterRoleBinding`
+    `oa-admins` (group `oa:admins` to `cluster-admin`) and `oa-readers` (group `oa:readers` to `view`). Inert until a credential
+    carries one of these groups; nothing existing changes. Rollback: remove the Kustomization.
+  - **Not done here**: the CSR-based kubeconfig tool, the RBAC review script, the break-glass rules and the apiserver OIDC
+    configuration belong to `OpenAether-infra`; OIDC groups, the OpenBao OIDC/JWT auth method and the Zitadel MFA login policy
+    need an issuer reachable outside the cluster and are **not** attempted. A client certificate stays non-revocable: the control is
+    its short lifetime, a group binding cannot single out one holder.
+  - **Rung: static** (`scripts/dev/test-rbac-brick.py` in CI), mocked/static, not run on a cluster.
 - **In-cluster transport and metadata egress** (ANSSI HYG-M21, PG078-R11, NT-35, NSA12 NET-07, NET-09, HYG-M22; apps half of
   F14, F12, DP-11, F20, F05):
   - Zitadel (User and Admin) and Grafana connect to CNPG with `sslmode=require`: the credentials stop crossing the pod network

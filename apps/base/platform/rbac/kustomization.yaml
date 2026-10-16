@@ -1,0 +1,7 @@
+# Named human identities (ANSSI PA022 R38, R40; NSA12 AUTH-02): group bindings for client certificates issued
+# through the CertificateSigning API, later OIDC groups. Inert until a credential carrying one of these groups exists.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - cluster-role-bindings.yaml

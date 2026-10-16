@@ -11,6 +11,7 @@ baseline:
   - namespaces                 # PSA labels + foundation-*/services-* split
   - platform-network-policies  # default-deny + allow-dns/kube-api (everything else assumes this posture)
   - flux-egress                # locks down flux-system egress
+  - platform-rbac              # oa:admins / oa:readers group bindings (inert until a named credential exists)
 
 # Added automatically as soon as ALL their dependencies (dependsOn) are already
 # selected — never a driver for pulling in new dependencies.
@@ -64,6 +65,7 @@ descriptions:
   platform-cilium-lb-ipam: Cilium LB-IPAM pool (LoadBalancer Services)
   platform-network-policies: Default-deny + allow-dns/kube-api (CiliumNetworkPolicy)
   platform-metrics-server: metrics-server (kubectl top, HPA)
+  platform-rbac: ClusterRoleBindings oa:admins (cluster-admin) and oa:readers (view) for named operator identities
   vault-ca: internal CA of the OpenBao listener (ns cert-manager)
   foundation-vault: HA OpenBao, raft 3 (static auto-unseal, audit, PKI intermediate)
   external-secrets: External Secrets Operator

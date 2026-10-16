@@ -157,6 +157,9 @@ jobs:
       - name: In-cluster transport and metadata egress deny (B25, static)
         run: python3 -I scripts/dev/test-in-cluster-transport.py
 
+      - name: Named-identity RBAC brick (B26, static)
+        run: python3 -I scripts/dev/test-rbac-brick.py
+
       - name: Container hardening and resource bounds hold (B21, static)
         run: python3 -I scripts/dev/test-container-bounds.py
 
