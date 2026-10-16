@@ -178,10 +178,10 @@ components:
 - id: node-exporter
   brick: observability
   component: prometheus-node-exporter
-  pin: 4.39.0
+  pin: 4.60.0
   file: apps/base/observability/node-exporter.yaml
   pattern: chart:\s*prometheus-node-exporter\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: node_exporter 1.8.2 (chart appVersion)
+  cycle: node_exporter 1.12.1 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
