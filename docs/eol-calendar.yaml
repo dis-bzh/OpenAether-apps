@@ -155,10 +155,10 @@ components:
 - id: vm-operator
   brick: observability
   component: victoria-metrics-operator
-  pin: 0.65.1
+  pin: 0.68.1
   file: apps/base/observability/vm-operator.yaml
   pattern: chart:\s*victoria-metrics-operator\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: VictoriaMetrics operator v0.72.0 (chart appVersion)
+  cycle: VictoriaMetrics operator v0.75.0 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'

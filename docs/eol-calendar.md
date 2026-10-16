@@ -24,7 +24,7 @@ or a vendored dump has no row.
 | alloy (`observability`) | 0.11.0 | Alloy 1.6 (chart appVersion) | unknown |  | 2026-12-14 |
 | alloy-audit (second Alloy release, API audit log) (`observability`) | 0.11.0 | Alloy 1.6 (chart appVersion) | unknown |  | 2026-12-14 |
 | zitadel (`identity`) | 10.0.2 | Zitadel v4.14.0 (chart appVersion) | unknown |  | 2026-12-14 |
-| victoria-metrics-operator (`observability`) | 0.65.1 | VictoriaMetrics operator v0.72.0 (chart appVersion) | unknown |  | 2026-12-14 |
+| victoria-metrics-operator (`observability`) | 0.68.1 | VictoriaMetrics operator v0.75.0 (chart appVersion) | unknown |  | 2026-12-14 |
 | kube-state-metrics (`observability`) | 8.6.0 | kube-state-metrics 2.20.0 (chart appVersion) | unknown |  | 2026-12-14 |
 | prometheus-node-exporter (`observability`) | 4.60.0 | node_exporter 1.12.1 (chart appVersion) | unknown |  | 2026-12-14 |
 | metrics-server (`platform`) | 3.14.0 | metrics-server 0.9.0 (chart appVersion) | unknown |  | 2026-12-14 |
