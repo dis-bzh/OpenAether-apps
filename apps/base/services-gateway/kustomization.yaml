@@ -14,6 +14,7 @@ resources:
   - gateway-openaether.yaml
   - service-nodeport.yaml
   - openbao-ca-bundle.yaml
+  - gateway-sds-rbac.yaml  # the gateway reads openbao-ca-bundle over SDS (DestinationRule credentialName)
   - openbao-destinationrule.yaml  # Istio CRD: lives here, not in foundation-vault, which is applied before Istio (#38)
   - certificate-openaether-tls.yaml
   - httproute-redirect.yaml

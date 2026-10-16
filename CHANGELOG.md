@@ -411,6 +411,14 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **Vault UI through the Gateway answered 503: the gateway may now read the CA Secret of its DestinationRule** (lab 11, Scaleway;
+  static + server dry-run, not re-run on a cluster). `credentialName: openbao-ca-bundle` makes the gateway's Envoy fetch that Secret
+  over SDS; istiod refuses it to a Gateway-API gateway whose ServiceAccount (`openaether-gateway-istio`) has no RBAC ("is not
+  authorized to read secrets", then "Secret is not supplied by SDS"). New `gateway-sds-rbac.yaml`: a Role (`get`, `list`, `watch`
+  on secrets) and RoleBinding in `services-gateway`, the namespace of the proxy and so of the Secret. It is NOT limited by
+  `resourceNames`: istiod 1.24.2 asks `list secrets` with no name, which a name-limited Role never satisfies; the namespace holds
+  only the gateway's own Secrets. `scripts/dev/test-certificates.py` now fails if a `credentialName` is not issued in the gateway
+  namespace or its ServiceAccount cannot list secrets there.
 - **Kyverno: `kubectl debug` was admitted unseen; the ephemeral policies now match UPDATE, and a privileged ephemeral container is
   judged** (lab 11, both providers: netadmin and sysadmin profiles were admitted under the enforce label; static + Kyverno CLI 1.12.1
   fixtures + server dry-run on a live Kyverno, the denial itself not re-run on a cluster yet). `kubectl debug` adds the container with
