@@ -43,6 +43,12 @@ belong to. What follows has no skill of its own yet.
   Either bootstrap the new cluster from that archive (recovery), or, once you are sure you do not need it, remove that path
   from the bucket. Seen on a Scaleway lab that reused its bucket (105 objects under `cnpg/`).
 
+- **A CloudNativePG instance does not see an S3 Secret that appeared after its pod started.** `ContinuousArchiving` stays False with
+  `failed to get envs: cache miss` in the instance log, although the ExternalSecret is synced. Annotate the Cluster
+  (`kubectl -n foundation-databases annotate cluster.postgresql.cnpg.io <name> cnpg.io/reloadedAt="$(date -u +%FT%TZ)" --overwrite`): archiving
+  came back in about a minute. OpenAether-infra's `seed-openbao.sh` does it after seeding. Seen on Scaleway when the Day-1 seeding came 30 minutes
+  after the database pods.
+
 ## CAPI
 
 - **`clusterctl move --dry-run` does not check providers.** It passes, and the real
@@ -54,6 +60,12 @@ belong to. What follows has no skill of its own yet.
   directly after a Kubernetes-level cascade.
 
 ## Observability
+
+- **The config-reloader of a vmagent pod reads its own Secret.** An RBAC that forbids every Secret read crash-loops its init container
+  (`secrets "vmagent-vmagent" is forbidden`). The namespaced Role `vmagent-config` allows that one name, read-only, and the RBAC test checks it
+  is the only Secret read.
+- **The Loki chart's default pod anti-affinity is `required`.** Helm merges maps, so adding a preferred rule does not remove it: three replicas on
+  two workers leave the third Pending. The values clear the required list.
 
 - **`up == 0` only catches NODE-discovered targets.** A rule on a metric nobody
   produces never fires and never says so — that is what `task check-alerts` is for.
