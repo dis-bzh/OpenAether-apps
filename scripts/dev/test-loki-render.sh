@@ -17,8 +17,10 @@ kubectl kustomize "$ROOT/apps/base/observability-local" > "$WORK/local.yaml"
 extract() { python3 -I - "$1" "$2" "$3" <<'PY'
 import sys, yaml
 src, values_out, version_out = sys.argv[1:4]
+repos = {d["metadata"]["name"]: d["spec"]["url"] for d in yaml.safe_load_all(open(src)) if d and d.get("kind") == "HelmRepository"}
 for d in yaml.safe_load_all(open(src)):
     if d and d.get("kind") == "HelmRelease" and d["metadata"]["name"] == "loki":
+        open(version_out + ".repo", "w").write(repos[d["spec"]["chart"]["spec"]["sourceRef"]["name"]])
         v = d["spec"]["values"]
         s3 = v.setdefault("loki", {}).setdefault("storage", {}).setdefault("s3", {})
         # What valuesFrom injects; a literal in spec.values would win over it (checked below).
@@ -45,9 +47,9 @@ PY
 }
 extract "$WORK/base.yaml"  "$WORK/base-values.yaml"  "$WORK/version"
 extract "$WORK/local.yaml" "$WORK/local-values.yaml" "$WORK/version"
-VERSION="$(cat "$WORK/version")"
+VERSION="$(cat "$WORK/version")"; REPO="$(cat "$WORK/version.repo")"   # the chart repository the HelmRelease names
 
-helm pull loki --repo https://grafana.github.io/helm-charts --version "$VERSION" --untar --untardir "$WORK/chart" >/dev/null
+helm pull loki --repo "$REPO" --version "$VERSION" --untar --untardir "$WORK/chart" >/dev/null
 for env in base local; do
   helm template loki "$WORK/chart/loki" --namespace services-observability -f "$WORK/$env-values.yaml" > "$WORK/$env-rendered.yaml"
 done

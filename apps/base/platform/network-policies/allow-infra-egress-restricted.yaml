@@ -43,6 +43,7 @@ spec:
         - matchName: istio-release.storage.googleapis.com
         - matchName: victoriametrics.github.io
         - matchName: grafana.github.io
+        - matchName: grafana-community.github.io
         - matchName: prometheus-community.github.io
         - matchName: kubernetes-sigs.github.io
       toPorts:

@@ -110,16 +110,14 @@ components:
 - id: loki
   brick: observability
   component: loki
-  pin: 6.25.0
+  pin: 18.16.2
   file: apps/base/observability/loki.yaml
   pattern: chart:\s*loki\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Loki 3.3 (chart appVersion)
-  eol: '2025-04-17'
+  cycle: Loki 3.7 (chart appVersion)
+  eol: not-yet
   eol_source: https://endoflife.date/api/grafana-loki.json
-  waiver:
-    until: '2026-12-31'
-    reason: the chart pin 6.25.0 ships Loki 3.3.2; the log store was reworked in this branch and is not
-      yet validated on a cluster, so it is not moved again before that
+  note: chart from the grafana-community repository (the OSS chart moved there on 2026-03-16); the log store is
+    not yet validated on a cluster
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: alloy
