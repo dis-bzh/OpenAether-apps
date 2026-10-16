@@ -125,20 +125,20 @@ components:
 - id: alloy
   brick: observability
   component: alloy
-  pin: 0.11.0
+  pin: 1.13.1
   file: apps/base/observability/alloy.yaml
   pattern: chart:\s*alloy\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Alloy 1.6 (chart appVersion)
+  cycle: Alloy 1.20 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: alloy-audit
   brick: observability
   component: alloy-audit (second Alloy release, API audit log)
-  pin: 0.11.0
+  pin: 1.13.1
   file: apps/base/observability/alloy-audit.yaml
   pattern: chart:\s*alloy\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Alloy 1.6 (chart appVersion)
+  cycle: Alloy 1.20 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'

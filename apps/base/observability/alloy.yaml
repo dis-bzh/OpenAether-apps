@@ -23,7 +23,7 @@ spec:
   chart:
     spec:
       chart: alloy
-      version: "0.11.0"
+      version: "1.13.1"
       sourceRef:
         kind: HelmRepository
         name: grafana
@@ -188,7 +188,8 @@ spec:
           loki.write "default" {
             endpoint {
               url = "http://loki.services-observability.svc.cluster.local:3100/loki/api/v1/push"
-              // Alloy v1.6 has no WAL for loki.write: a batch is held in memory and dropped when its retries run out.
+              // The optional `wal` block of loki.write is not enabled: a batch is held in memory and dropped when its
+              // retries run out.
               // The default gives up after 10 tries (about 5 min of Loki down, e.g. a node drain or an upgrade);
               // 30 tries capped at 1 min between them rides out about 30 min. The memory limit bounds the queue.
               min_backoff_period  = "500ms"

@@ -7,7 +7,7 @@
 #   Usage: scripts/dev/test-alloy-scrub.sh
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-IMAGE="docker.io/grafana/alloy:v1.6.1"   # appVersion of the alloy chart 0.11.0 pinned in alloy.yaml
+IMAGE="docker.io/grafana/alloy:v1.20.1"   # appVersion of the alloy chart 1.13.1 pinned in alloy.yaml
 command -v docker >/dev/null && command -v python3 >/dev/null || { echo "docker and python3 are required" >&2; exit 2; }
 W="$(mktemp -d)"; NAME="alloyscrub$$"; PASS=0; FAIL=0
 trap 'docker rm -f "$NAME" >/dev/null 2>&1; rm -rf "$W"' EXIT

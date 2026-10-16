@@ -24,7 +24,7 @@ spec:
   chart:
     spec:
       chart: alloy
-      version: "0.11.0"
+      version: "1.13.1"
       sourceRef:
         kind: HelmRepository
         name: grafana
@@ -145,7 +145,8 @@ spec:
           loki.write "default" {
             endpoint {
               url = "http://loki.services-observability.svc.cluster.local:3100/loki/api/v1/push"
-              // Same retry budget as alloy.yaml (no WAL in Alloy v1.6: a batch is dropped when its retries run out).
+              // Same retry budget as alloy.yaml (the optional loki.write `wal` block is not enabled: a batch is
+              // dropped when its retries run out).
               min_backoff_period  = "500ms"
               max_backoff_period  = "1m"
               max_backoff_retries = 30
