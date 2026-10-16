@@ -572,3 +572,45 @@ results:
   kind: Pod
   namespace: app
   result: fail
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - prometheus-node-exporter-abc
+  kind: Pod
+  namespace: services-observability-node
+  result: skip
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - prometheus-node-exporter-abc
+  kind: Pod
+  namespace: services-observability-node
+  result: skip
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - intruder
+  kind: Pod
+  namespace: services-observability-node
+  result: fail
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - intruder
+  kind: Pod
+  namespace: services-observability-node
+  result: fail
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - waypoint-abc
+  kind: Pod
+  namespace: foundation-service-mesh
+  result: fail
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - waypoint-abc
+  kind: Pod
+  namespace: foundation-service-mesh
+  result: pass

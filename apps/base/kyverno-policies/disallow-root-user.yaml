@@ -42,6 +42,8 @@ spec:
               # Pass 2 (hardening): tighten through the Helm securityContexts where
               # the chart allows it (Grafana can run non-root) rather than excluding.
               - services-observability
+              # node-exporter alone (hostPath/hostNetwork): split out of services-observability, same exemption.
+              - services-observability-node
       validate:
         # EITHER form, not both. Kubernetes' own "restricted" Pod Security
         # Standard is satisfied when runAsNonRoot is set on the pod OR on every

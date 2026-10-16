@@ -1,7 +1,7 @@
 # OpenAether 0.5.0 — Restrict Privileged Containers
 # Forbids privileged, hostNetwork, hostPID and hostIPC pods.
-# Exclusions: namespaces where legitimate workloads need it
-# (longhorn, istio-cni, capi, local-path, node-exporter).
+# Exclusions: the single-purpose system namespaces (longhorn, capi, local-path), and by pod name node-exporter, ztunnel
+# and the Istio CNI agent.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -34,8 +34,20 @@ spec:
               - capi-system
               - orc-system
               - capi-operator-system
-              - services-observability
+        # Named, not their namespace, so that a new host-network pod next to them is still flagged (#47):
+        # node-exporter in its own namespace, ztunnel and the Istio CNI agent.
+        - resources:
+            namespaces:
+              - services-observability-node
+            names:
+              - "*node-exporter*"
+        - resources:
+            namespaces:
+              - istio-system
               - foundation-service-mesh
+            names:
+              - "ztunnel-*"
+              - "istio-cni-node-*"
       validate:
         message: "Privileged containers are not allowed."
         pattern:
@@ -72,7 +84,7 @@ spec:
         # ztunnel and the Istio CNI agent (the CNI socket and binaries).
         - resources:
             namespaces:
-              - services-observability
+              - services-observability-node
             names:
               - "*node-exporter*"
         - resources:

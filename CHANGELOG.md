@@ -21,6 +21,18 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Security
 
+- **node-exporter moves to its own privileged namespace, `services-observability-node`** (ANSSI FT082 R4, R6, NSA12 POD-05;
+  apps half of K8S/F08, OSN/F16, SCC/F09). It is the only observability workload that needs hostPath, hostNetwork and hostPID,
+  and Pod Security has no per-pod level, so the whole `services-observability` namespace was privileged for it. The HelmRelease,
+  the `node-exporter` VMServiceScrape and the Kyverno exemptions (`restrict-privileged` by pod name, `disallow-root-user` by
+  namespace as before) follow; `services-observability` itself is NOT lowered here (next entry). The CiliumNetworkPolicies and Istio
+  policies need no change: node-exporter is hostNetwork, out of the mesh, and reached through vmagent's host egress on :9100.
+  `restrict-privileged` also stops sparing `foundation-service-mesh` wholesale (ztunnel and the Istio CNI agent by name).
+  **Rung: static (`scripts/dev/test-node-exporter-namespace.py` in CI, render, Kyverno CLI fixtures); not run on a cluster.**
+  **Upgrade note**: Flux uninstalls the old release and installs the new one, so node_* series stop for one or two scrape
+  intervals and the `node` DaemonSet briefly has both pods wanting :9100; series gain `namespace="services-observability-node"`
+  (no shipped rule or dashboard selects on it). It does NOT touch the Talos or Cilium host policies.
+
 - **Kyverno: sensitive capabilities, init containers and read-only rootfs are reported, all in Audit** (ANSSI FT082 R1, R8, R15
   in part, NSA12 POD-01, BP028 R64; apps half of K8S/F04). New `restrict-capabilities` (names `capabilities.add` values such as
   SYS_ADMIN, NET_ADMIN, NET_RAW, SYS_PTRACE, SYS_MODULE on containers, initContainers and, through `Pod/ephemeralcontainers`,

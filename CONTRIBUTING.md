@@ -30,6 +30,7 @@ this repo doesn't provision infrastructure itself.
     ./scripts/dev/check-gitleaks-rules.sh          # the environment-data rules (.gitleaks-envdata.toml) catch what they claim
     python3 scripts/dev/test-container-security-context.py   # operators get the securityContext field they read (#47)
     scripts/dev/test-kyverno-policies.sh                     # the Audit policies on fixture pods (needs the Kyverno CLI 1.12, $KYVERNO)
+    python3 scripts/dev/test-node-exporter-namespace.py       # node-exporter, its scrape and its privileged namespace agree
 
 All of these run in CI too — a PR can't merge until they're green (see the required
 checks on `main`). CI also runs actionlint on the workflows, kubeconform and
