@@ -353,7 +353,7 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 ### Changed
 
 Upgrade campaign, phase 1 (independent low-risk bumps, one commit each; static / rendered offline, **not run on a cluster**).
-Not in this phase: Istio, cert-manager, CNPG operator, Kyverno, ESO, Loki, Grafana, Zitadel, VM operator, Flux, child Cilium, Longhorn.
+Phase 2 follows below.
 
 - **local-path-provisioner v0.0.31 -> v0.0.37** (re-vendored; the dump joins `apps/vendored-dumps.sha256`). Local changes kept: provisioner
   securityContext, no `--debug`, the `local-path-retain` StorageClass, the `busybox:1.37.0` helper pin. v0.0.36 validates the helper-pod template
@@ -371,6 +371,33 @@ Not in this phase: Istio, cert-manager, CNPG operator, Kyverno, ESO, Loki, Grafa
 - **Gateway API CRDs v1.1.0 -> v1.2.1** (standard). Upgrade note: the CRDs are not rolled back by Helm or Flux pruning; GRPCRoute/ReferenceGrant `v1alpha2`
   disappear (check `storedVersions` first, see the lab checklist); `Gateway.spec.infrastructure` is now accepted. **Deliberately not 1.5.x**: Istio 1.24
   has no maximum-version filter and istiod does not become Ready with the 1.5 CRDs (istio/istio#59443); 1.5.x waits for the Istio hops.
+
+Upgrade campaign, phase 2 (the operators, data services and charts that were past support, one commit each; rendered, schema-checked and, where a
+container image exists, run offline; **nothing run on a cluster**). Not in this phase: Istio (still 1.24.2, waived), MinIO (dev profile only, no
+maintained upstream, waiver kept), OpenBao (stays 2.7.1), talos-cloud-controller-manager on the children (0.5.8 moves the CCM to the Talos 1.14 line, the children run Talos 1.13).
+**A fresh install lands on the new versions; a running cluster must hop one minor at a time where the project says so** (docs/patching.md).
+
+- **Longhorn 1.9.2 -> 1.12.1.** A cluster on 1.9 hops 1.10.2 -> 1.11.3 -> 1.12.1 (Longhorn refuses a skipped minor and any downgrade); the preconditions are in
+  `docs/patching.md`. The HelmRelease no longer remediates (install and upgrade `retries: 0`): a failed upgrade is not rolled back by Flux, a person fixes forward.
+  The chart's own NetworkPolicies are switched off (`networkPolicies.restrictInternalTraffic: false`) so the brick's CiliumNetworkPolicy stays the only authority.
+  `defaultSettings.orphanAutoDeletion` is not a chart key and never was in effect: orphan auto-deletion is NOT on.
+- **cert-manager v1.15.3 -> v1.21.2.** `installCRDs` replaced by `crds.enabled` + `crds.keep` (same CRDs). The controller metrics port is renamed
+  `http-metrics`: the VMServiceScrape follows. All Certificates already named their `rotationPolicy`. Step one minor at a time on a running cluster.
+- **Kyverno 1.12.1 -> 1.19.1** (re-vendored). The two cleanup CronJobs no longer exist upstream (their patch and test are gone); PolicyException stays off and
+  `--exceptionNamespace=kyverno` is set; images come from `reg.kyverno.io` (allow-list updated); the CLI test fixtures and CI pin CLI 1.19.1.
+  **1.19 is the last line serving `kyverno.io/v1` ClusterPolicy: the policies must move to `policies.kyverno.io` before 1.20.**
+- **CloudNativePG operator 1.23.1 -> 1.30.1** (re-vendored) and the grafana-db image 16.3 -> 16.15. Every operator upgrade rolls each Cluster with a switchover.
+  **`barmanObjectStore` (used by both Clusters) is removed in CNPG 1.31: stay on 1.30.x until the Barman Cloud plugin replaces it.**
+- **External Secrets Operator 1.2.0 -> 2.13.0** (re-vendored from the chart, local patches re-applied). Released the day it was vendored; upstream supports only the latest minor.
+- **Flux on the children 2.8.8 -> 2.9.6; cluster-api-operator 0.27.0 -> 0.29.0; OpenStack Resource Controller 2.4.0 -> 2.6.0** (what the pinned CAPO v0.15.0 requires);
+  **victoria-metrics-operator 0.65.1 -> 0.68.1** (one rolling restart of the VMAgent, VMAlert, VMSingle and VMAlertmanager pods; the VM component versions are the operator's
+  defaults and move with it, they are not pinned here).
+- **Alloy 0.11.0 -> 1.13.1** (Alloy 1.6.1 -> 1.20.1; the config-reloader image changes, allow-list updated), **Zitadel chart 10.0.2 -> 10.4.0** (v4.19.2, not 4.18.0),
+  **Loki 6.25.0 -> 18.16.2 (3.7.8)** and **Grafana 8.6.4 -> 14.0.1 (13.2.4)**, both now from the `grafana-community` chart repository (new HelmRepository, new Flux egress FQDN).
+  Grafana: the duplicate `tmp` mount is removed and default plugin preinstall is disabled. Zitadel and Grafana database migrations are forward-only: take a CNPG Backup first.
+- **Cilium on the children 1.19.2 -> 1.19.9** (one minor behind the parent foundation, on purpose).
+- Offline checks that now run the real software: Kyverno CLI 1.19.1 (90 fixtures), Alloy 1.20.1 (`validate`, scrub and audit tests), Zitadel v4.19.2 + PostgreSQL (32 checks),
+  Loki 3.7.8 `-verify-config`, Grafana 13.2.4 with the shipped ini and dashboards, CRD-schema validation of the Cluster, ExternalSecret, provider and VM objects.
 
 ### Added
 

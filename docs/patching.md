@@ -85,6 +85,20 @@ Done outside the order above because they touch nothing the order depends on, on
 component pass; the per-bump observations and rollbacks are in the maintainers' lab checklist (section UPGRADE-PHASE1). `helm rollback` does not
 roll CRDs back, and the Gateway API CRDs are not a Helm release at all.
 
+## Phase 2: the pins that were past support
+
+Same rules, one commit per component, offline only. Moved: Longhorn 1.12.1, cert-manager v1.21.2, Kyverno 1.19.1 and CNPG operator 1.30.1 (both
+re-vendored), grafana-db PostgreSQL 16.15, External Secrets 2.13.0 (re-vendored from the chart), Flux for the children 2.9.6, cluster-api-operator
+0.29.0, ORC v2.6.0, victoria-metrics-operator 0.68.1, Alloy 1.13.1, Zitadel chart 10.4.0 (v4.19.2), Loki 18.16.2 and Grafana 14.0.1 (both from the
+`grafana-community` chart repository, the old one no longer carries them), and the children's Cilium 1.19.9. **These pins describe a fresh install.**
+A cluster that already runs the old versions follows each project's own hop rule (one minor at a time for Longhorn, cert-manager and CNPG; a CNPG
+Backup before Zitadel or Grafana; the order above for the rest): the observations, rollbacks and the data-safety gates are the lab checklist's, not
+this page's. Not moved, with the reason: Istio (waived, needs the Gateway API CRDs and a chart repository decision), MinIO (dev profile, no maintained
+upstream), OpenBao (stays 2.7.1), talos-cloud-controller-manager on the children (0.5.8 follows Talos 1.14, the children run 1.13).
+
+Two follow-ups these bumps create and that nothing in the repository enforces yet: CNPG 1.30.x is the last line with the in-tree `barmanObjectStore`
+(both Clusters use it; 1.31 removes it), and Kyverno 1.19.x is the last with `kyverno.io/v1` policies (1.20 removes them).
+
 ## Longhorn in-place hops (a running cluster pinned at 1.9.x)
 
 A **fresh install** takes the pin (1.12.1) directly. A cluster already running 1.9.x cannot: Longhorn only upgrades one
@@ -114,11 +128,10 @@ single authority); the conversion-webhook `Service` is gone with the v1beta1 API
 (the repository uses the V1 engine only). `defaultSettings.orphanAutoDeletion` is not a key of the chart (it reads
 `orphanResourceAutoDeletion`) and was already ignored at 1.9.2, so orphan auto-deletion is not enabled; left as is.
 
-## Where it stands (2026-10-14)
+## Where it stands (2026-10-16)
 
-The 30-day rule is **not met** for components already past upstream support: Istio 1.24 (EOL 2025-06-24),
-cert-manager 1.15 (2025-02-03), Kyverno 1.12 (2025-07-31), the CloudNativePG operator 1.23 (not in the project's
-supported table), Grafana 11.3 and Loki 3.3 (via their chart pins). They are listed in the calendar with a waiver
-to 2026-12-31 and the reason each is still where it is. Longhorn 1.9 reaches its end of support on 2026-11-27.
-Whether those releases have unpatched published advisories was **not checked**; the dependency graph and the
-OSV feed the Renovate blocks above read are where to look.
+After phase 2 the pins in [`eol-calendar.yaml`](eol-calendar.yaml) are on supported lines except Istio 1.24 (EOL 2025-06-24, waived to 2026-12-31),
+MinIO (dev profile only) and the rows whose upstream publishes no schedule. The 30-day rule is therefore **not met for Istio**, and the new pins have
+**never run on a cluster**: the checks behind them are renders, schema checks and real-software runs on a workstation (see the CHANGELOG). Whether the
+releases still pinned (Istio 1.24) have unpatched advisories was **not checked**; the dependency graph and the OSV feed the Renovate blocks above read
+are where to look.

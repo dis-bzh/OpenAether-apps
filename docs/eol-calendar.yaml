@@ -204,8 +204,14 @@ components:
   file: apps/base/storage/minio/minio.yaml
   pattern: chart:\s*minio\s*\n\s*version:\s*"?([^"\s]+)
   cycle: MinIO RELEASE.2024-04-18 (chart appVersion)
-  eol: unknown
-  note: local/dev profile only
+  eol: unsupported
+  eol_source: https://github.com/minio/minio
+  note: local/dev profile only; upstream archived the community edition (last release RELEASE.2025-10-15), no bump
+    is possible
+  waiver:
+    until: '2026-12-31'
+    reason: owner decision 2026-10-16, MinIO is the dev/local S3 only and is never part of a production profile;
+      no maintained upstream to move to, so the pin stays and the waiver is renewed or the brick is replaced
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: kyverno
