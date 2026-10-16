@@ -27,7 +27,7 @@ or a vendored dump has no row.
 | victoria-metrics-operator (`observability`) | 0.65.1 | VictoriaMetrics operator v0.72.0 (chart appVersion) | unknown |  | 2026-12-14 |
 | kube-state-metrics (`observability`) | 8.6.0 | kube-state-metrics 2.20.0 (chart appVersion) | unknown |  | 2026-12-14 |
 | prometheus-node-exporter (`observability`) | 4.60.0 | node_exporter 1.12.1 (chart appVersion) | unknown |  | 2026-12-14 |
-| metrics-server (`platform`) | 3.12.2 | metrics-server 0.7.2 (chart appVersion) | unknown |  | 2026-12-14 |
+| metrics-server (`platform`) | 3.14.0 | metrics-server 0.9.0 (chart appVersion) | unknown |  | 2026-12-14 |
 | cluster-api-operator (`cluster-api-operator`) | 0.27.0 | cluster-api-operator 0.27.0 | unknown |  | 2026-12-14 |
 | minio (`storage`) | 5.2.0 | MinIO RELEASE.2024-04-18 (chart appVersion) | unknown |  | 2026-12-14 |
 | Kyverno (vendored dump) (`kyverno`) | 1.12.1 | Kyverno 1.12 | 2025-07-31 | 2026-12-31 | 2026-12-14 |

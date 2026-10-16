@@ -188,10 +188,10 @@ components:
 - id: metrics-server
   brick: platform
   component: metrics-server
-  pin: 3.12.2
+  pin: 3.14.0
   file: apps/base/platform/metrics-server/metrics-server.yaml
   pattern: chart:\s*metrics-server\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: metrics-server 0.7.2 (chart appVersion)
+  cycle: metrics-server 0.9.0 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
