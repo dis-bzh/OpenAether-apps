@@ -60,18 +60,15 @@ kind: Namespace
 metadata:
   name: services-observability
   labels:
-    # enforce: privileged — REQUIRED by prometheus-node-exporter (DaemonSet), which
-    # mounts hostPath /proc /sys /host + hostNetwork/hostPID/hostPort 9100 to
-    # expose system metrics. Those needs violate baseline WITH NO possible
-    # workaround (the hostPath is intrinsic to its function). Since PSA has no
-    # per-pod granularity, the whole namespace must go privileged.
-    # Consistent with designating "observability = trusted infrastructure":
+    # enforce: baseline. node-exporter, the one workload here that needs hostPath/hostNetwork/hostPID, has its own
+    # privileged namespace (services-observability-node, below). Baseline still forbids host namespaces, hostPath and
+    # privileged containers for everything left here (Grafana, Loki, vm-*, Alloy, kube-state-metrics).
+    # To go back: set enforce to privileged (and nothing else breaks). The rest of the stack stays:
     #   - outside the ambient mesh (see the block above)
-    #   - excluded from Kyverno disallow-root-user (node-exporter/loki specific uids)
+    #   - excluded from Kyverno disallow-root-user (a broad exclusion, see that policy)
     #   - real security = L3/L4 CiliumNetworkPolicy (observability/networkpolicy.yaml)
-    # warn/audit stay restricted → drift of the other pods (grafana/loki/vm-*)
-    # remains visible in the apiserver logs without blocking node-exporter.
-    pod-security.kubernetes.io/enforce: privileged
+    # warn/audit stay restricted → drift of the pods (grafana/loki/vm-*) stays visible in the apiserver logs.
+    pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
     openaether.io/managed: "true"

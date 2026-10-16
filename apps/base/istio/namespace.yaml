@@ -3,7 +3,11 @@ kind: Namespace
 metadata:
   name: foundation-service-mesh
   labels:
-    pod-security.kubernetes.io/enforce: privileged
+    # baseline: only HelmRelease objects and the waypoint Gateway live here; ztunnel and istiod run in istio-system
+    # (privileged) and the CNI agent in kube-system. To go back, set enforce to privileged.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprintB"
     openaether.io/component: "istio"
@@ -14,7 +18,11 @@ kind: Namespace
 metadata:
   name: services-gateway
   labels:
-    pod-security.kubernetes.io/enforce: privileged
+    # baseline: only the Envoy proxy istiod generates for the Gateway runs here, and it needs no host access.
+    # To go back, set enforce to privileged. warn/audit restricted keep the drift visible.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprintB"
     openaether.io/component: "gateway"

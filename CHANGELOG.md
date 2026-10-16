@@ -21,6 +21,16 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Security
 
+- **Four namespaces drop from the privileged to the baseline Pod Security level** (ANSSI FT082 R4, R6, NSA12 POD-05; apps half of
+  K8S/F08, OSN/F16, SCC/F09): `services-observability` (node-exporter has left it), `services-gateway` (the Envoy proxy istiod
+  generates), `foundation-service-mesh` (HelmReleases and the waypoint Gateway; ztunnel and istiod run in `istio-system`) and
+  `foundation-storage` (MinIO). `warn` and `audit` stay at, or are set to, restricted. **This is the one change of the series that
+  can stop a pod at admission, and it is a separate commit so it can be dropped alone**: it was written from the manifests, the
+  required server-side dry run (`LAB-CHECKLIST` B20) was NOT run, and baseline is only checked on pods created or rescheduled
+  after it. To go back, set `enforce` to `privileged` on the namespace. It does NOT lower `istio-system`, `longhorn-system`,
+  `kube-system` or the new node-exporter namespace, nor raise `foundation-networking` (Cilium hostPort), `zitadel`, `kyverno`,
+  `cnpg-system`, `orc-system` or `flux-system` (their warn logs have to be read first).
+
 - **node-exporter moves to its own privileged namespace, `services-observability-node`** (ANSSI FT082 R4, R6, NSA12 POD-05;
   apps half of K8S/F08, OSN/F16, SCC/F09). It is the only observability workload that needs hostPath, hostNetwork and hostPID,
   and Pod Security has no per-pod level, so the whole `services-observability` namespace was privileged for it. The HelmRelease,
