@@ -154,11 +154,13 @@ spec:
             User:
               Username: zitadel
               SSL:
-                Mode: disable
+                # `require` = encrypted, server not authenticated: CNPG serves TLS (self-signed CA) and
+                # needs no CA mounted. verify-full is a later step. Rollback: `disable`.
+                Mode: require
             Admin:
               Username: zitadel
               SSL:
-                Mode: disable
+                Mode: require
 
         # ── Authentication policy (ANSSI PA-079, PG-078, docs/zitadel-hardening.md) ─────────────────────────────
         # TWO scopes, and the difference is the whole risk of this block:

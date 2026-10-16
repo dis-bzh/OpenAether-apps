@@ -21,6 +21,21 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Security
 
+- **In-cluster transport and metadata egress** (ANSSI HYG-M21, PG078-R11, NT-35, NSA12 NET-07, NET-09, HYG-M22; apps half of
+  F14, F12, DP-11, F20, F05):
+  - Zitadel (User and Admin) and Grafana connect to CNPG with `sslmode=require`: the credentials stop crossing the pod network
+    in clear. It encrypts but does **not authenticate the server**; `verify-full` needs the CNPG CA copied into the consuming
+    namespaces with a rotation-safe mechanism and is **not done**. Rollback: `disable`.
+  - `meshConfig.tlsDefaults.minProtocolVersion: TLSV1_2` in istiod: writes down Envoy's existing floor, no behaviour change
+    expected. TLS 1.3 and cipher lists are **not** set (client versions not measured).
+  - New CCNP `deny-cloud-metadata-egress`: every pod is denied 169.254.169.254 and 169.254.42.42 (deny-only, no default-deny
+    side effect, Talos hostDNS untouched).
+  - The cert-manager egress rule no longer names the Let's Encrypt hosts: no issuer in the repo is ACME. Anyone with an ACME
+    ClusterIssuer must add its directory FQDN back.
+  - **Not done / already done**: Loki `insecure` was fixed in 0.2.0; the kubelet and metrics-server CA path is the opt-in component of
+    B23; Zitadel's own TLS (gateway to Zitadel stays h2c behind WireGuard and the CNPs), the gateway key algorithm, node-level egress
+    (infra) are not touched.
+  - **Rung: static** (`scripts/dev/test-in-cluster-transport.py` in CI), mocked/static, not run on a cluster.
 - **Container hardening and resource bounds** (ANSSI FT082 R10, R11, R12, NSA12 POD-06, BP028 R64, PA012 R10, R14; apps half of
   K8S/F09, K8S/F10, LOG-13, LOG-14):
   - Alloy and its config-reloader, Grafana and the CAPI operator run with a **read-only root filesystem**; what each writes

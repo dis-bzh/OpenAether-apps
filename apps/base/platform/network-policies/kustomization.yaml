@@ -12,3 +12,4 @@ resources:
   - coredns-ingress-restricted.yaml
   - coredns-egress-hostdns.yaml
   - default-deny-all.yaml
+  - deny-cloud-metadata.yaml
