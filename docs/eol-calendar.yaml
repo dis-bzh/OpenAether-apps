@@ -71,16 +71,13 @@ components:
 - id: cert-manager
   brick: cert-manager
   component: cert-manager
-  pin: v1.15.3
+  pin: v1.21.2
   file: apps/base/cert-manager/helmrelease.yaml
   pattern: chart:\s*cert-manager\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: cert-manager 1.15
-  eol: '2025-02-03'
+  cycle: cert-manager 1.21
+  eol: not-yet
   eol_source: https://endoflife.date/api/cert-manager.json
-  waiver:
-    until: '2026-12-31'
-    reason: cert-manager issues every certificate from the OpenBao PKI; each minor is stepped on a cluster
-      after the rotationPolicy is set explicitly; no hop is scheduled
+  note: a fresh install lands on 1.21.2; a running 1.15 cluster steps one minor at a time (docs/patching.md)
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: longhorn

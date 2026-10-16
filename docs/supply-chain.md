@@ -46,7 +46,7 @@ external-secrets). Checked against the versions **pinned here**:
 | `ghcr.io/external-secrets/external-secrets:v1.2.0` | yes, subject `https://github.com/external-secrets/external-secrets/.github/workflows/release.yml@refs/heads/main` |
 | `ghcr.io/kyverno/kyverno:v1.12.1` | **no signature at all** |
 | `ghcr.io/cloudnative-pg/cloudnative-pg:1.23.1` | **no signature at all** |
-| `quay.io/jetstack/cert-manager-controller:v1.15.3` | a `.sig` tag exists but no keyless signature matches (key-signed or another scheme) |
+| `quay.io/jetstack/cert-manager-controller:v1.15.3` (the former pin; not re-checked at v1.21.2) | a `.sig` tag exists but no keyless signature matches (key-signed or another scheme) |
 | `docker.io/openbao/openbao:2.7.1` | a signature verifies, identity not recorded here |
 | `docker.io/restic/restic:0.19.1`, `grafana/grafana:11.3.1`, `ghcr.io/zitadel/zitadel:v4.14.0`, `istio/pilot:1.24.2` | no keyless signature |
 

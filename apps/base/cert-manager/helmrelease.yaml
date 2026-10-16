@@ -18,7 +18,7 @@ spec:
   chart:
     spec:
       chart: cert-manager
-      version: "v1.15.3"
+      version: "v1.21.2"
       sourceRef:
         kind: HelmRepository
         name: cert-manager
@@ -38,7 +38,10 @@ spec:
     global:
       leaderElection:
         namespace: cert-manager
-    installCRDs: true
+    # `installCRDs` is deprecated since 1.15: same rendered CRDs through crds.enabled, and keep them on uninstall.
+    crds:
+      enabled: true
+      keep: true
     # Kyverno reads the container level (#47): the chart's default lacks runAsNonRoot and seccompProfile there.
     containerSecurityContext: &csc
       runAsNonRoot: true

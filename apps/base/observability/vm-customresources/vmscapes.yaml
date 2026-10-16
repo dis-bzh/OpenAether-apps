@@ -257,9 +257,9 @@ spec:
     matchNames:
       - cert-manager
   endpoints:
-    # The chart still names this port `tcp-prometheus-servicemonitor` (v1.15.3),
-    # not the http-metrics you would expect. Verified with `helm template`.
-    - port: tcp-prometheus-servicemonitor
+    # Chart 1.21 names the controller's metrics port `http-metrics` (1.15 named it
+    # `tcp-prometheus-servicemonitor`). Verified with `helm template`.
+    - port: http-metrics
       path: /metrics
       # certmanager_certificate_* carries the CERTIFICATE's namespace, not the
       # controller's — same reason as kube-state-metrics.
