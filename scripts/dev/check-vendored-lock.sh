@@ -12,7 +12,7 @@ DUMPS=(
   apps/base/cnpg/cnpg-1.23.1.yaml
   apps/base/cluster-api-clusters/flux-gotk/gotk-components.yaml
   apps/base/external-secrets/install.yaml
-  apps/base/kyverno/kyverno-1.12.1.yaml
+  apps/base/kyverno/kyverno-1.19.1.yaml
   apps/base/orc/install.yaml
   apps/base/platform/gateway-api/standard-install.yaml
   apps/base/platform/local-path-provisioner/local-path-storage.yaml

@@ -51,7 +51,7 @@
   // the native `kubernetes` manager, which would otherwise bump individual
   // `image:` lines inside them out of step with the rest of the file.
   ignorePaths: [
-    "apps/base/kyverno/kyverno-1.12.1.yaml",
+    "apps/base/kyverno/kyverno-1.19.1.yaml",
     "apps/base/cnpg/cnpg-1.23.1.yaml",
     "apps/base/external-secrets/install.yaml",
     "apps/base/orc/install.yaml",

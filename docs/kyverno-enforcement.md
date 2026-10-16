@@ -6,7 +6,7 @@
 
 ## The switch
 
-Five policies can be enforced where, and only where, a namespace carries a label (Kyverno 1.12.1 `spec.validationFailureActionOverrides`;
+Five policies can be enforced where, and only where, a namespace carries a label (Kyverno `spec.validationFailureActionOverrides`, deprecated since 1.13 but still served by the vendored 1.19; kyverno.io/v1 policies go in 1.20;
 `validate.failureActionOverrides` is 1.13+ and the vendored version rejects it). No namespace in this repository has one, so the
 default is what ran before: Audit everywhere.
 

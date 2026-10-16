@@ -30,7 +30,7 @@ or a vendored dump has no row.
 | metrics-server (`platform`) | 3.14.0 | metrics-server 0.9.0 (chart appVersion) | unknown |  | 2026-12-14 |
 | cluster-api-operator (`cluster-api-operator`) | 0.27.0 | cluster-api-operator 0.27.0 | unknown |  | 2026-12-14 |
 | minio (`storage`) | 5.2.0 | MinIO RELEASE.2024-04-18 (chart appVersion) | unknown |  | 2026-12-14 |
-| Kyverno (vendored dump) (`kyverno`) | 1.12.1 | Kyverno 1.12 | 2025-07-31 | 2026-12-31 | 2026-12-14 |
+| Kyverno (vendored dump) (`kyverno`) | 1.19.1 | Kyverno 1.19 | not-yet |  | 2026-12-14 |
 | CloudNativePG operator (vendored dump) (`cnpg`) | 1.23.1 | CNPG 1.23 | unsupported | 2026-12-31 | 2026-12-14 |
 | PostgreSQL (zitadel cluster) (`cnpg`) | 18.6 | PostgreSQL 18 | 2030-11-14 |  | 2026-12-14 |
 | PostgreSQL (grafana cluster) (`cnpg`) | 16.3 | PostgreSQL 16 | 2028-11-09 |  | 2026-12-14 |

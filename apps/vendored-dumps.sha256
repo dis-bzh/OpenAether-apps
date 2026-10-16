@@ -1,7 +1,7 @@
 c7c2a9f0aa64b400dee869c1a029a765a695c8545fd6f2d072e8d13182501637  apps/base/cnpg/cnpg-1.23.1.yaml
 11bf3ffc04ea354672168df07e1f9a86137d0f3565495c44626894c0a13f0582  apps/base/cluster-api-clusters/flux-gotk/gotk-components.yaml
 17ccf927232cfb1deabd57aac37eac98c102603328e318b6ec2fff64aee4b16d  apps/base/external-secrets/install.yaml
-888e26a13fa34b72d6fc321e4b29af4857539f46f89b606f624fddb518db4ebf  apps/base/kyverno/kyverno-1.12.1.yaml
+d3322cb346d3d42dd0f41e230b0d1d7bc5619960e1c36fdac4d9151d724b88e6  apps/base/kyverno/kyverno-1.19.1.yaml
 f27d81872499ff9df5aa0278843d56b9b4d96e63a1c5823ebfca8af43587196b  apps/base/orc/install.yaml
 97598bf6ab3b33b9b5c5432bdd24de091e4e9c3aa0575ebb0710a2a19cd64d64  apps/base/platform/gateway-api/standard-install.yaml
 38bcfbb7e0a56a37aaab2780fc20fd7398bb90f532e46fe0ba621c7ba89d9054  apps/base/platform/local-path-provisioner/local-path-storage.yaml

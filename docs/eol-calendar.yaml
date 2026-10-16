@@ -216,18 +216,14 @@ components:
 - id: kyverno
   brick: kyverno
   component: Kyverno (vendored dump)
-  pin: 1.12.1
-  file: apps/base/kyverno/kyverno-1.12.1.yaml
-  pattern: image:\s*"?ghcr\.io/kyverno/kyverno:v([0-9.]+)"?
-  cycle: Kyverno 1.12
-  eol: '2025-07-31'
+  pin: 1.19.1
+  file: apps/base/kyverno/kyverno-1.19.1.yaml
+  pattern: image:\s*"?reg\.kyverno\.io/kyverno/kyverno:v([0-9.]+)"?
+  cycle: Kyverno 1.19
+  eol: not-yet
   eol_source: https://endoflife.date/api/kyverno.json
-  note: re-vendored by hand; the 'vendored from' comment in kustomization.yaml is a Renovate tracking
-    comment, not the vendored version
-  waiver:
-    until: '2026-12-31'
-    reason: the vendored dump is re-vendored by hand and every policy re-checked against the new release
-      on a cluster; no hop is scheduled
+  note: re-vendored by hand; 1.19 is the last line that serves kyverno.io/v1 ClusterPolicy (removed in 1.20), so the
+    policies must move to policies.kyverno.io before the next minor
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: cnpg-operator

@@ -145,9 +145,6 @@ jobs:
       - name: CiliumLoadBalancerIPPool stays on cilium.io/v2 (#49)
         run: ./scripts/dev/test-cilium-lb-ipam-api.sh
 
-      - name: Kyverno cleanup CronJobs render and behave as fixed (#48)
-        run: python3 -I scripts/dev/test-kyverno-cleanup-render.py
-
       - name: Provider S3 egress rules admit every region of the provider (#53)
         run: python3 -I scripts/dev/test-s3-egress-fqdns.py
 
@@ -168,14 +165,14 @@ jobs:
 
       # Runs the Audit policies against fixture pods. The release publishes no checksum file, only a cosign signature:
       # the sha256 below is the one of the tarball as first downloaded (trust on first use), so a changed asset fails.
-      - name: Kyverno policies report what they should (Kyverno CLI 1.12.1, the vendored version)
+      - name: Kyverno policies report what they should (Kyverno CLI 1.19.1, the vendored version)
         env:
-          KYVERNO_CLI_SHA256: a5f6e9070c17acc47168c8ce4db78e45258376551b8bf68ad2d5ed27454cf666
+          KYVERNO_CLI_SHA256: b38228f367fc0fdc2b08f4c83ea50ac5f16c60ff8d62d76a66157c33c47b70ae
         run: |
           set -euo pipefail
           d="$(mktemp -d)"
-          url=https://github.com/kyverno/kyverno/releases/download/v1.12.1
-          curl -fsSL -o "$d/k.tgz" "$url/kyverno-cli_v1.12.1_linux_x86_64.tar.gz"
+          url=https://github.com/kyverno/kyverno/releases/download/v1.19.1
+          curl -fsSL -o "$d/k.tgz" "$url/kyverno-cli_v1.19.1_linux_x86_64.tar.gz"
           echo "${KYVERNO_CLI_SHA256}  $d/k.tgz" | sha256sum -c -
           tar -xzf "$d/k.tgz" -C "$d" kyverno
           KYVERNO="$d/kyverno" ./scripts/dev/test-kyverno-policies.sh

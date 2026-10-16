@@ -50,7 +50,7 @@ for name in FLIPPABLE:
             check(f"{rule['name']}: the ephemeral-container subresource is matched explicitly", True)
         else:
             check(f"{rule['name']}: matches Pod at CREATE only", kinds == ["Pod"] and ops == [["CREATE"]], (kinds, ops))
-        check(f"{rule['name']}: no Kyverno-1.13 `validate.failureActionOverrides` (the vendored 1.12.1 rejects it)",
+        check(f"{rule['name']}: no Kyverno-1.13 `validate.failureActionOverrides` (still the spec-level spelling, deprecated but served by the vendored 1.19)",
               "failureActionOverrides" not in rule["validate"])
 
 check("require-ro-rootfs stays Audit with no override (informational, no flip prepared)",
