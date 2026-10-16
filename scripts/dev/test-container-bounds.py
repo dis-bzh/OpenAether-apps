@@ -44,7 +44,13 @@ def check_values():
     g = release_values("apps/base/observability/grafana.yaml")["spec"]["values"]
     if not ro_root(g.get("containerSecurityContext")):
         out.append("grafana: containerSecurityContext.readOnlyRootFilesystem must be true")
-    if "/tmp" not in {m["mountPath"] for m in g.get("extraEmptyDirMounts", [])}:
+    # The chart mounts /tmp itself from chart 13; a second mount there renders a duplicate volume name. Older charts need it.
+    grafana_chart = release_values("apps/base/observability/grafana.yaml")["spec"]["chart"]["spec"]["version"]
+    has_tmp = "/tmp" in {m["mountPath"] for m in g.get("extraEmptyDirMounts", [])}
+    if int(grafana_chart.split(".")[0]) >= 13:
+        if has_tmp:
+            out.append("grafana: the chart (13+) mounts /tmp itself, extraEmptyDirMounts must not add a second one")
+    elif not has_tmp:
         out.append("grafana: /tmp must be an emptyDir when the root filesystem is read-only")
     c = release_values("apps/base/cluster-api-operator/operator.yaml")["spec"]["values"]
     if not ro_root(c.get("containerSecurityContext", {}).get("manager")):

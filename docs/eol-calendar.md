@@ -19,7 +19,7 @@ or a vendored dump has no row.
 | Istio ztunnel (`istio`) | 1.24.2 | Istio 1.24 | 2025-06-24 | 2026-12-31 | 2026-12-14 |
 | cert-manager (`cert-manager`) | v1.21.2 | cert-manager 1.21 | not-yet |  | 2026-12-14 |
 | longhorn (`storage`) | 1.12.1 | Longhorn 1.12 | 2027-08-14 |  | 2026-12-14 |
-| grafana (`observability`) | 8.6.4 | Grafana 11.3 (chart appVersion) | 2025-07-22 | 2026-12-31 | 2026-12-14 |
+| grafana (`observability`) | 14.0.1 | Grafana 13.2 (chart appVersion) | 2027-05-18 |  | 2026-12-14 |
 | loki (`observability`) | 18.16.2 | Loki 3.7 (chart appVersion) | not-yet |  | 2026-12-14 |
 | alloy (`observability`) | 1.13.1 | Alloy 1.20 (chart appVersion) | unknown |  | 2026-12-14 |
 | alloy-audit (second Alloy release, API audit log) (`observability`) | 1.13.1 | Alloy 1.20 (chart appVersion) | unknown |  | 2026-12-14 |

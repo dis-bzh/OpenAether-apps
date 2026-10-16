@@ -2,7 +2,8 @@
 
 > Addresses ANSSI PA-079 (R10, R12, R21, R23, R29), PG-078 and PA-012 R27 in part. Rung: the Zitadel settings were run
 > through a real Zitadel (the chart's appVersion, v4.19.2) against PostgreSQL by `scripts/dev/test-zitadel-config.sh`, and
-> Grafana's through a real Grafana 11.3.1; nothing was run on a cluster, with OpenBao, External Secrets or Istio.
+> Grafana's through a real Grafana 11.3.1 (the chart now ships 13.2.4, which was started with the shipped settings and dashboards;
+> the login behaviours below were not re-run on it); nothing was run on a cluster, with OpenBao, External Secrets or Istio.
 
 ## The one thing to know first
 

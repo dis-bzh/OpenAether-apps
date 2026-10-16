@@ -95,16 +95,13 @@ components:
 - id: grafana
   brick: observability
   component: grafana
-  pin: 8.6.4
+  pin: 14.0.1
   file: apps/base/observability/grafana.yaml
   pattern: chart:\s*grafana\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Grafana 11.3 (chart appVersion)
-  eol: '2025-07-22'
+  cycle: Grafana 13.2 (chart appVersion)
+  eol: '2027-05-18'
   eol_source: https://endoflife.date/api/grafana.json
-  waiver:
-    until: '2026-12-31'
-    reason: the chart pin 8.6.4 ships Grafana 11.3.1; bumping needs the Zitadel login and the datasources
-      checked on a cluster
+  note: chart from the grafana-community repository (the old repository stops at Grafana 12.3.1)
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: loki

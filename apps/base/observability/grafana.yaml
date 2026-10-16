@@ -25,10 +25,10 @@ spec:
   chart:
     spec:
       chart: grafana
-      version: "8.6.4"
+      version: "14.0.1"
       sourceRef:
         kind: HelmRepository
-        name: grafana
+        name: grafana-community
         namespace: services-observability
       interval: 1h
   install:
@@ -49,10 +49,8 @@ spec:
           - ALL
       seccompProfile:
         type: RuntimeDefault
-    # Grafana writes /var/lib/grafana (the chart's own emptyDir) and /tmp.
-    extraEmptyDirMounts:
-      - name: tmp
-        mountPath: /tmp
+    # Grafana writes /var/lib/grafana, /tmp and its search index: since chart 13 the chart mounts an emptyDir for
+    # each of them (a second `tmp` mount here renders a duplicate volume name, which the API server rejects).
     affinity:
       podAntiAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
@@ -83,6 +81,10 @@ spec:
       analytics:
         reporting_enabled: false
         check_for_updates: false
+      # Grafana 12+ downloads default app plugins from grafana.com at startup (seen in a real 13.2.4 run: they
+      # landed in data/plugins). No egress rule allows grafana.com and nothing here uses them: off.
+      plugins:
+        preinstall_disabled: true
       users:
         # Default role for a user arriving through SSO with no recognised role.
         # Read-only: widen it in Zitadel afterwards, not here.
