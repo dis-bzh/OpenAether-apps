@@ -31,8 +31,10 @@ graf = next(d for d in load("apps/base/observability/grafana.yaml") if d.get("ki
 check("grafana ssl_mode is require", graf["spec"]["values"]["grafana.ini"]["database"]["ssl_mode"] == "require")
 
 istio = next(d for d in load("apps/base/istio/istiod.yaml") if d.get("kind") == "HelmRelease" and d["metadata"]["name"] == "istiod")
-check("istiod pins tlsDefaults.minProtocolVersion TLSV1_2",
-      istio["spec"]["values"]["meshConfig"].get("tlsDefaults", {}).get("minProtocolVersion") == "TLSV1_2")
+# tlsDefaults.minProtocolVersion is inert (the field covers non-ISTIO_MUTUAL traffic and only ecdhCurves/cipherSuites);
+# a documented control that does nothing is worse than none, so the key must not come back without a test that proves it.
+check("istiod does not carry the inert tlsDefaults.minProtocolVersion",
+      "minProtocolVersion" not in istio["spec"]["values"]["meshConfig"].get("tlsDefaults", {}))
 
 np = REPO / "apps/base/platform/network-policies"
 kust = yaml.safe_load((np / "kustomization.yaml").read_text())

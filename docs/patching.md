@@ -62,8 +62,9 @@ validated on a staging cluster before the next (never in one Renovate batch). Th
    `13b-cert-manager-issuers`.
 2. **Gateway API CRDs** (vendored v1.1.0), to the release the target Istio expects.
 3. **Istio** (`base`, `istiod`, `istio-cni`, `ztunnel`), minor by minor, reading each upgrade note; the control plane
-   first, then the node-level `istio-cni` and `ztunnel`. `meshConfig.tlsDefaults.minProtocolVersion` is already
-   `TLSV1_2` and must still apply to the Gateway API gateway afterwards.
+   first, then the node-level `istio-cni` and `ztunnel`. No mesh TLS floor is set in
+   `meshConfig` (`tlsDefaults` does not apply to ISTIO_MUTUAL); after the hop, re-check with `openssl s_client` that the
+   Gateway listener still refuses TLS 1.1.
 4. **Kyverno** (re-vendor the dump, then re-run `scripts/dev/test-kyverno-policies.sh` with the matching CLI),
    **CNPG operator** (re-vendor), then the **PostgreSQL images** (`scripts/dev/check-pg-dump-version.sh` keeps the dump
    image at or above every `Cluster`), then **Longhorn**.

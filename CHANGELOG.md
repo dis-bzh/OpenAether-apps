@@ -53,8 +53,10 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   - Zitadel (User and Admin) and Grafana connect to CNPG with `sslmode=require`: the credentials stop crossing the pod network
     in clear. It encrypts but does **not authenticate the server**; `verify-full` needs the CNPG CA copied into the consuming
     namespaces with a rotation-safe mechanism and is **not done**. Rollback: `disable`.
-  - `meshConfig.tlsDefaults.minProtocolVersion: TLSV1_2` in istiod: writes down Envoy's existing floor, no behaviour change
-    expected. TLS 1.3 and cipher lists are **not** set (client versions not measured).
+  - No TLS version floor is set in istiod's `meshConfig`: `tlsDefaults.minProtocolVersion` (added then removed in this release
+    cycle) is ignored by Istio, which reads only `ecdhCurves` and `cipherSuites` there and leaves ISTIO_MUTUAL to `meshMTLS`.
+    Envoy's own TLS 1.2 floor applies, unchanged. A TLS 1.3 floor and cipher lists are **not** set (client versions not
+    measured); the Gateway floor would be a per-listener `tls.options`, not done.
   - New CCNP `deny-cloud-metadata-egress`: every pod is denied 169.254.169.254 and 169.254.42.42 (deny-only, no default-deny
     side effect, Talos hostDNS untouched).
   - The cert-manager egress rule no longer names the Let's Encrypt hosts: no issuer in the repo is ACME. Anyone with an ACME
