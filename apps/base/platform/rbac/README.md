@@ -16,4 +16,9 @@ What this does **not** do: a client certificate cannot be revoked, and a group b
 control is the short lifetime. Removing a binding cuts every certificate of that group at once. Group names must never start
 with `system:`.
 
+Known conflict (review of B26): `OpenAether-infra` `scripts/ops/cluster-security-tests.sh` (check 3.7, no custom cluster-admin
+binding) and `scripts/ops/rbac-review.sh` allow only `cluster-admin` and `cluster-reconciler`, so they fail on the `oa-admins`
+binding until infra allows it by name. The brick stays in the baseline (inert without a credential); the infra change is tracked
+on the infra side.
+
 Rollback: delete the `platform-rbac` Kustomization (pruned with its two bindings); no other component references them.

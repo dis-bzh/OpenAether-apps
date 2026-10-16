@@ -411,6 +411,9 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   `docs/patching.md` already warned). `scripts/dev/test-certificates.py` (CI) fails if a Certificate omits the policy or an
   HTTPRoute hostname is missing from the Gateway Certificate's `dnsNames` (the role refuses wildcards). It does not stop a
   route added from a cluster's own overlay outside this repository. `docs/key-inventory.md` renewal windows corrected.
+- **metrics-server args guard** (review of B23, static): `scripts/dev/test-kubelet-verified-tls.py` now checks that the
+  `kubelet-verified-tls` component leaves the other metrics-server args in place (the Flux patch replaces the list), so an arg
+  added to the base later cannot vanish silently when the component is on. Does not remove the list-replace itself.
 - **Alloy's control-plane toleration was ignored** (found while adding the audit collector; LOG-01). `tolerations` sat at the
   top of the `alloy` HelmRelease values, where the chart does not read it (`controller.tolerations` is the key), so the
   pod-log collector never ran on a tainted control plane. It now does. The same file's top-level `resources` is also not a

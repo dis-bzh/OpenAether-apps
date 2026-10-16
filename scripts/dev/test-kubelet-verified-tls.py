@@ -81,6 +81,12 @@ with tempfile.TemporaryDirectory() as tmp:
         on = label == "component"
         check(f"{label}: metrics-server {'verifies' if on else 'keeps --kubelet-insecure-tls'}",
               ("--kubelet-insecure-tls" not in args) == on and (f"--kubelet-certificate-authority={CA}" in args) == on, args)
+        if on:
+            # The patch replaces the whole args list: an arg added to metrics-server.yaml later must not vanish silently.
+            base_args = pick(built(tmp, plain["platform-metrics-server"]), "HelmRelease", "metrics-server")["spec"]["values"]["args"]
+            check("component: metrics-server args are the default ones, minus --kubelet-insecure-tls, plus the CA flag",
+                  sorted(args) == sorted([x for x in base_args if x != "--kubelet-insecure-tls"] + [f"--kubelet-certificate-authority={CA}"]),
+                  args)
         check(f"{label}: kubelet and cAdvisor scrapes {'verify against the cluster CA' if on else 'stay insecure'}",
               all((t.get("insecureSkipVerify") is None and t.get("caFile") == CA) if on
                   else (t.get("insecureSkipVerify") is True and "caFile" not in t) for t in scr.values()), scr)
