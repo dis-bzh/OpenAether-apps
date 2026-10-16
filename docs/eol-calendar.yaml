@@ -168,10 +168,10 @@ components:
 - id: kube-state-metrics
   brick: observability
   component: kube-state-metrics
-  pin: 5.25.1
+  pin: 8.6.0
   file: apps/base/observability/kube-state-metrics.yaml
   pattern: chart:\s*kube-state-metrics\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: kube-state-metrics 2.13.0 (chart appVersion)
+  cycle: kube-state-metrics 2.20.0 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
