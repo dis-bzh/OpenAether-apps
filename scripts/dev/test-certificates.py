@@ -8,7 +8,10 @@
 3. Every DestinationRule `credentialName` is readable by the gateway: istiod refuses to serve a Secret over SDS to a Gateway-API
    gateway unless its ServiceAccount may `list secrets` in the gateway namespace (a Role, not limited by resourceNames: the
    SubjectAccessReview carries no name), and the Secret exists there as a Certificate output (the Vault UI answered 503, lab 11).
+4. The offline-signing runbook signs the intermediate for MORE than the gateway leaf's duration: OpenBao refuses a leaf beyond
+   the CA's notAfter, and cert-manager then backs off for hours (a lab that signed 7 days had no gateway TLS for an hour).
 """
+import re
 import sys
 from pathlib import Path
 
@@ -80,5 +83,13 @@ for path, d in creds:
     check("the Role and RoleBinding are in the services-gateway kustomization",
           "gateway-sds-rbac.yaml" in (REPO / "apps/base/services-gateway/kustomization.yaml").read_text())
     check(f"ServiceAccount {sa} may list secrets in {GW_NS} (Role without resourceNames + RoleBinding)", bound)
+
+runbook = (REPO / "apps/base/foundation/vault/pki-root-offline-runbook.md").read_text()
+signing = re.search(r"-extensions v3_intermediate_ca -days (\d+)", runbook)
+dur = re.fullmatch(r"(\d+)h", str(gw["spec"].get("duration", ""))) if gw else None
+check("the runbook signs the intermediate with a -days and the gateway leaf has a duration in hours", bool(signing and dur))
+if signing and dur:
+    check(f"intermediate {signing.group(1)} days outlives the gateway leaf ({dur.group(1)} h)", int(signing.group(1)) * 24 > int(dur.group(1)))
+check("the runbook says to re-trigger the gateway Certificate after the import", "cmctl renew openaether-tls" in runbook)
 
 sys.exit(1 if failures else 0)

@@ -11,7 +11,9 @@ metadata:
     openaether.io/component: gateway
 spec:
   secretName: openaether-tls
-  duration: 2160h   # 90 days
+  # 90 days. The signing intermediate must be valid for MORE than this when it signs: OpenBao refuses a leaf beyond the
+  # CA's notAfter and cert-manager then backs off for hours (pki-root-offline-runbook.md, section 3).
+  duration: 2160h
   renewBefore: 720h  # one third of the life: 30 days
   issuerRef:
     kind: ClusterIssuer

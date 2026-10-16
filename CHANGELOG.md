@@ -411,6 +411,13 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **The PKI runbook says the intermediate must outlive the gateway leaf, and to re-trigger the Certificate after the import** (lab 11:
+  an intermediate signed for 7 days against a 90-day leaf, OpenBao refused "TTL would result in notAfter ... beyond the expiration of
+  the CA", cert-manager backed off and the Gateway had no TLS Secret for 55 minutes; docs and a static check, not run on a cluster).
+  `pki-root-offline-runbook.md` (sections 3, 4, 5), the vault README and a comment on `certificate-openaether-tls.yaml` state the
+  rule and the `cmctl renew openaether-tls -n services-gateway` step (with a status patch for a machine without `cmctl`).
+  `scripts/dev/test-certificates.py` fails if the `-days` of the signing command is not longer than the leaf duration. The role keeps
+  its refusal (no `leaf_not_after_behavior` change).
 - **Longhorn managers could not reach each other's webhooks: 9501/9502 added to the in-namespace rules; two alert notes** (lab 11,
   66 denied flows longhorn-system to longhorn-system; static + server dry-run, not re-run on a cluster). The policy description
   claimed the ports, the in-namespace ingress and egress rules listed only 9500 and 8500-8503. `scripts/dev/test-longhorn-netpol.py`

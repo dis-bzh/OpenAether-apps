@@ -81,6 +81,12 @@ openssl verify -CAfile root-ca.crt intermediate-signed.crt
 ```
 
 730 days matches the 17520 h that `configure.sh` asks for; the intermediate can not outlive the root (10 years).
+**The intermediate must outlive the leaf it signs.** The gateway Certificate asks for 2160 h (90 days) and renews 30 days before the end:
+OpenBao refuses a leaf whose `notAfter` is beyond the CA's ("TTL would result in notAfter of ... beyond the expiration of the CA
+certificate"), and cert-manager then waits in an exponential backoff (an hour, then more) before it asks again. A short `-days`
+(a lab that signs 7 days) leaves the gateway with no TLS Secret for hours. So `-days` must exceed the leaf `duration` of
+`apps/base/services-gateway/certificate-openaether-tls.yaml` (`scripts/dev/test-certificates.py` checks the number in the command
+above), and the renewal in section 5 must happen more than that duration before the expiry, not at it.
 The CSR is an ECDSA P-384 one by default (`OA_PKI_KEY_TYPE=ec`); the same `openssl ca` line signs it, an RSA root signs it too.
 The signing of an EC CSR was dry-run with a throwaway EC root in `scripts/dev/test-openbao-bootstrap.sh`; do the same with your own
 root and a scratch OpenBao before the first real signature.
@@ -97,8 +103,18 @@ bao_admin write pki/intermediate/set-signed certificate=@/tmp/int.crt
 
 The `openbao` ClusterIssuer (`pki/sign/openaether`) becomes Ready: `kubectl get clusterissuer openbao`.
 
+**Then re-trigger the certificates that asked too early.** Everything that requested a leaf before this import (the gateway
+`openaether-tls` first) failed with "no default issuer currently configured" and sits in cert-manager's issuance backoff, which
+grows to hours: the Gateway has no TLS Secret (port 443 closes the handshake, port 80 works) until it retries. Do not wait:
+`cmctl renew openaether-tls -n services-gateway` (or `kubectl cert-manager renew ...`), then
+`kubectl -n services-gateway get certificate openaether-tls` until Ready. Without `cmctl`, mark the Certificate as issuing by hand:
+`kubectl -n services-gateway patch certificate openaether-tls --subresource=status --type=merge -p '{"status":{"conditions":[{"type":"Issuing","status":"True","reason":"ManuallyTriggered","message":"after the intermediate import","lastTransitionTime":"<now, RFC 3339>"}]}}'`
+(this replaces the status conditions list: read it first with `-o jsonpath='{.status.conditions}'` and keep the Ready entry).
+
 ## 5. Renewal (every 1 to 2 years; put it in a calendar)
 
+- Start it while the current intermediate still has MORE than the gateway leaf's duration (90 days) left, and make the new one the default
+  before that margin is gone: after it, the gateway renewal is refused (section 3).
 - Generate a new intermediate CSR (`bao_admin write -field=csr pki/intermediate/generate/internal common_name="OpenAether Workload Intermediate CA" key_type=ec key_bits=384`),
   sign it with the same root, import it. Certificates already issued keep working until they expire.
   **A newly imported intermediate is not the default issuer**: the role keeps signing with the old one until
