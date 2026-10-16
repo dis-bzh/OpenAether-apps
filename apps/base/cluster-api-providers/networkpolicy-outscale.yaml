@@ -41,17 +41,7 @@ spec:
             dns:
               - matchPattern: "*"
     - toFQDNs:
-        - matchName: api.scaleway.com
-        # OVH/OpenStack: Keystone is only the entry point — the catalogue
-        # then returns compute./network./image./lb.<region>.cloud.ovh.net.
-        # ⚠️ Cilium's `*` matches ONLY ONE label: one pattern per depth is
-        # needed. Seen for real: network.compute.eu-west-par.cloud.ovh.net
-        # (3 levels) was dropped by "*.cloud.ovh.net" alone.
-        - matchName: auth.cloud.ovh.net
-        - matchPattern: "*.cloud.ovh.net"
-        - matchPattern: "*.*.cloud.ovh.net"
-        - matchPattern: "*.*.*.cloud.ovh.net"
-        # Outscale (CAPOSC): API + regional endpoints.
+        # Outscale only (CAPOSC): API + regional endpoints. Scaleway and OVH live in capi-system's policy, not here.
         - matchPattern: "*.outscale.com"
         - matchPattern: "*.*.outscale.com"
       toPorts:

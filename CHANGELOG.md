@@ -21,6 +21,19 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Security
 
+- **Critic follow-ups: apps areas the audit had not read** (no ANSSI requirement id was assigned to them by the audit; they sit near DP-02, DP-03/F06, LOG-13 and SSDLC-CICD-AIP-01; mocked/static, not run on a cluster):
+  - CAPI provider egress: `capi-system` no longer allows the Outscale endpoints and `capi-outscale-system` no longer allows Scaleway and OVH
+    (each namespace runs the providers of its own cloud). Rollback: restore the removed `toFQDNs` lines.
+  - `cert-manager-vault-token` Role: `serviceaccounts/token` `create` is limited to the `cert-manager` ServiceAccount (`resourceNames`), not every
+    ServiceAccount of the namespace.
+  - `openbao-snapshot` CronJob: the Job revokes its own token right after the snapshot (it read a copy of every secret); a failed revoke only warns.
+  - Alloy (logs): `discovery.kubernetes` is limited to the pods of the node (`NODE_NAME` from the downward API). The DaemonSet had every instance
+    tail every pod through the API server. The config parses with Alloy 1.6.1 (`alloy fmt`); that logs still arrive from every node is a lab check.
+  - `apps/vendored-dumps.sha256` + `scripts/dev/check-vendored-lock.sh` (CI): the six vendored upstream dumps are hash-locked, so a change to one
+    moves the lock in the same commit.
+  - Does NOT: prove a dump equals its upstream release, narrow the ClusterRoles that the vendored External Secrets dump grants, split the
+    `openbao-snapshot` pod so the restic container has no ServiceAccount token, or restrict who may use the `openbao-ca` ClusterIssuer.
+
 - **Flux Git source verification, opt-in** (ANSSI SSDLC-CICD-AIP-03, SSDLC-CONT-REC06; apps half of F04, F10; mocked/static, not run on a cluster):
   - New component `apps/flux/components/git-verify`: adds `spec.verify {mode: HEAD, secretRef: git-signers}` to the `GitRepository`, only when a cluster's overlay lists it. Default unchanged (`scripts/dev/test-git-verify.py`, in CI).
   - `scripts/dev/check-commit-signatures.sh` in the `commits` job: a WARNING for unsigned commits of a PR (the history has none signed), `--strict` to fail; own test with a throwaway key. `CODEOWNERS` names the Flux, RBAC and workflow paths. `docs/signed-commits.md`: GPG as the standard, signer table (to fill), enable order, break-glass.

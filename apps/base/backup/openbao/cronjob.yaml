@@ -85,6 +85,9 @@ spec:
                   export BAO_TOKEN VAULT_TOKEN="$BAO_TOKEN"
                   bao operator raft snapshot save /backup/openbao-raft.snap
                   ls -l /backup/openbao-raft.snap
+                  # The token reads a copy of every secret: drop it now instead of letting it live out its 30 min TTL. A
+                  # failed revoke is not a failed backup (the TTL still ends it).
+                  bao token revoke -self >/dev/null 2>&1 || echo "WARN: token revoke failed, it expires with its TTL"
               securityContext:
                 capabilities: { drop: ["ALL"] }
                 allowPrivilegeEscalation: false
