@@ -411,6 +411,13 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
+- **CNPG instance pods left Completed by an undrained node reboot: documented and alerted, not fixed** (lab 11: both databases
+  down 30+ minutes after `talosctl reboot` of two workers; mocked/static, `vmalert-tool` unit test). The kubelet's graceful
+  shutdown ends the pod in phase `Succeeded` and the vendored CNPG 1.23.1 never recreates it; cloudnative-pg #2056 (released in
+  1.23.3, 1.22.5, 1.24.0) makes the operator delete such pods. No Cluster setting avoids it. New alert `CnpgInstancePodSucceeded`
+  (critical, 5 min, Cluster-owned pods only, so finished Job pods do not count) and a trap in `docs/traps.md` with the drain rule
+  and the recovery (delete the pod, never the PVC). The real fix is the operator upgrade (a patch bump to 1.23.x or the
+  1.30 move), which restarts the instance managers of every database and needs a cluster exercise.
 - **The Cluster API operator installs providers again under its read-only root filesystem** (lab 11: no provider was ever
   installed, `INSTALLEDVERSION` empty after 85 minutes; static + `helm template` of chart 0.27.0, not re-run on a cluster). The
   clusterctl config reader inside the operator creates `$HOME/.config/cluster-api` before every reconcile ("could not create any
