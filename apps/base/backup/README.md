@@ -115,7 +115,7 @@ metadata:
   namespace: foundation-databases
 spec:
   instances: 1
-  imageName: ghcr.io/cloudnative-pg/postgresql:18.4   # same major as the origin
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6   # same major as the origin
   storage: { size: 5Gi, storageClass: local-path-retain }
   bootstrap:
     recovery:

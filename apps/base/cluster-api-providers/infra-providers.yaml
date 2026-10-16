@@ -7,7 +7,7 @@ metadata:
   name: scaleway
   namespace: capi-system
 spec:
-  version: v0.2.2
+  version: v0.2.3
   deployment:
     containers:
       - name: manager
@@ -27,7 +27,7 @@ metadata:
   name: openstack
   namespace: capi-system
 spec:
-  version: v0.14.6
+  version: v0.15.0
   deployment:
     containers:
       - name: manager
@@ -61,7 +61,7 @@ metadata:
   name: outscale
   namespace: capi-outscale-system
 spec:
-  version: v1.5.0
+  version: v1.5.3
   deployment:
     containers:
       - name: manager

@@ -243,7 +243,7 @@ components:
 - id: postgres-main
   brick: cnpg
   component: PostgreSQL (zitadel cluster)
-  pin: '18.4'
+  pin: '18.6'
   file: apps/base/cnpg/cluster.yaml
   pattern: imageName:\s*ghcr\.io/cloudnative-pg/postgresql:([0-9.]+)
   cycle: PostgreSQL 18
