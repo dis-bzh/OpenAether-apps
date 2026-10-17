@@ -31,7 +31,8 @@ patches:
         path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
         value: true
 
-# CNPG 1.30 CRD descriptions quote the operator's own placeholder syntax (`${podselector:NAME}`, `${`image_root`}`, `$${...}`).
+# CNPG 1.30 CRD descriptions quote the operator's own placeholder syntax (`${podselector:NAME}`, `${`image_root`}`,
+# `$${...}`).
 # Flux's post-build envsubst fails on them ("unable to parse variable name") and the whole brick never applies (lab 12).
 # Only the CRDs opt out: cluster.yaml and the other files still need ${BACKUP_S3_*} from cluster-identity.
   - target:

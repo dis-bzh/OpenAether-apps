@@ -3,7 +3,8 @@
 # subresource match with background scanning on. UPDATE is listed because an ephemeral container arrives as an UPDATE of
 # pods/ephemeralcontainers. The namespace label of restrict-privileged flips both
 # (kyverno.openaether.io/enforce-restrict-privileged).
-# Two rules instead of validationFailureActionOverrides: Kyverno 1.19.1 does not apply a namespaceSelector override to the
+# Two rules instead of validationFailureActionOverrides: Kyverno 1.19.1 does not apply a namespaceSelector override to
+# the
 # ephemeralcontainers subresource (the request was admitted with a warning in a labelled namespace; lab 12). A
 # namespaceSelector in `match` and the rule-level failureAction do work there.
 apiVersion: kyverno.io/v1

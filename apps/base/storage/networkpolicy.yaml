@@ -28,10 +28,12 @@ spec:
               protocol: TCP
             - port: "9502"
               protocol: TCP
-            # Longhorn 1.12: the share-manager reaches the manager's recovery backend on 9503 (lab 12: denied, RWX never mounted).
+            # Longhorn 1.12: the share-manager reaches the manager's recovery backend on 9503 (lab 12: denied, RWX
+            # never mounted).
             - port: "9503"
               protocol: TCP
-            # The managers query the share-manager pod's gRPC (serving state, remount) on 9600: without it an RWX volume never
+            # The managers query the share-manager pod's gRPC (serving state, remount) on 9600: without it an RWX
+            # volume never
             # comes back after its share-manager restarts (lab 12: "Failed to verify serving state", Policy denied).
             - port: "9600"
               protocol: TCP

@@ -5,8 +5,10 @@
 # For the same reason the match lists UPDATE: with no `operations` Kyverno registers CREATE only on the webhook and
 # `kubectl debug` (an UPDATE of pods/ephemeralcontainers) was admitted unseen (lab 11, both providers).
 # The same namespace label flips both (kyverno.openaether.io/enforce-restrict-capabilities).
-# Two rules instead of validationFailureActionOverrides: Kyverno 1.19.1 does not apply a namespaceSelector override to the
-# ephemeralcontainers subresource (admitted with a warning in a labelled namespace; lab 12). A namespaceSelector in `match`
+# Two rules instead of validationFailureActionOverrides: Kyverno 1.19.1 does not apply a namespaceSelector override to
+# the
+# ephemeralcontainers subresource (admitted with a warning in a labelled namespace; lab 12). A namespaceSelector in
+# `match`
 # and the rule-level failureAction do work there.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
