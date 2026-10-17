@@ -95,5 +95,27 @@ for comp, (LEVEL_FROM, LEVEL_TO, EXPECTED) in CASES.items():
               and all({k: v for k, v in after[n]["metadata"]["labels"].items() if k != ENFORCE}
                       == {k: v for k, v in before[n]["metadata"]["labels"].items() if k != ENFORCE} for n in want))
 
+
+# The restricted level also has to admit the pods the operator renders for the CAPI providers: lab 15A, on a real cluster,
+# found cabpt and the Outscale provider refused at re-creation (no seccomp / runAsNonRoot / capabilities.drop). The component
+# carries manifestPatches on those provider CRs; check they are rendered, and that the plain DAG has none.
+with tempfile.TemporaryDirectory() as tmp:
+    comp = REPO / "apps/flux/components/psa-restricted"
+    with_c = {d["metadata"]["name"]: d for d in render(tmp, [BASE], [comp]) if d["kind"] == "Kustomization"}
+    spec = with_c["cluster-api-providers"]["spec"]
+    path = REPO / spec["path"]
+    plain_p = [d for d in render(tmp, [path]) if d["kind"].endswith("Provider")]
+    after_p = {(d["kind"], d["metadata"]["name"]): d for d in render(tmp, [path], patches=spec["patches"]) if d["kind"].endswith("Provider")}
+    check("without the component no provider carries manifestPatches", not any("manifestPatches" in d["spec"] for d in plain_p))
+    for key, dep in {("BootstrapProvider", "talos"): "cabpt-controller-manager", ("ControlPlaneProvider", "talos"): "cacppt-controller-manager",
+                     ("InfrastructureProvider", "outscale"): "cluster-api-provider-outscale-controller-manager"}.items():
+        mp = [yaml.safe_load(m) for m in after_p[key]["spec"].get("manifestPatches", [])]
+        sc = mp[0]["spec"]["template"]["spec"]["securityContext"] if mp else {}
+        check(f"{key[0]}/{key[1]}: a manifest patch makes {dep} restricted-compliant (runAsNonRoot + RuntimeDefault)",
+              len(mp) == 1 and mp[0]["metadata"]["name"] == dep and sc.get("runAsNonRoot") is True
+              and sc.get("seccompProfile", {}).get("type") == "RuntimeDefault", mp)
+    check("the others (scaleway, openstack, core) are left alone",
+          all("manifestPatches" not in d["spec"] for k, d in after_p.items() if k not in {("BootstrapProvider", "talos"), ("ControlPlaneProvider", "talos"), ("InfrastructureProvider", "outscale")}))
+
 print(f"{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

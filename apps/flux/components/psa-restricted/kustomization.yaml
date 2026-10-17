@@ -132,3 +132,85 @@ patches:
                 name: capi-outscale-system
                 labels:
                   pod-security.kubernetes.io/enforce: restricted
+          # The providers' own Deployments come from the operator, not from this repository: the operator renders them from
+          # the upstream release, and two of them do not satisfy `restricted` (seen on a real cluster, lab 15A: the pod of
+          # cabpt could not be recreated, "runAsNonRoot != true, seccompProfile"; the Outscale provider's "capabilities.drop").
+          # The CR field manifestPatches (strategic merge patches on the rendered manifests) fixes them without a fork.
+          - target:
+              kind: BootstrapProvider
+              name: talos
+            patch: |-
+              apiVersion: operator.cluster.x-k8s.io/v1alpha2
+              kind: BootstrapProvider
+              metadata:
+                name: talos
+                namespace: capi-system
+              spec:
+                manifestPatches:
+                  - |
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: cabpt-controller-manager
+                      namespace: capi-system
+                    spec:
+                      template:
+                        spec:
+                          securityContext:
+                            runAsNonRoot: true
+                            seccompProfile:
+                              type: RuntimeDefault
+          - target:
+              kind: ControlPlaneProvider
+              name: talos
+            patch: |-
+              apiVersion: operator.cluster.x-k8s.io/v1alpha2
+              kind: ControlPlaneProvider
+              metadata:
+                name: talos
+                namespace: capi-system
+              spec:
+                manifestPatches:
+                  - |
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: cacppt-controller-manager
+                      namespace: capi-system
+                    spec:
+                      template:
+                        spec:
+                          securityContext:
+                            runAsNonRoot: true
+                            seccompProfile:
+                              type: RuntimeDefault
+          - target:
+              kind: InfrastructureProvider
+              name: outscale
+            patch: |-
+              apiVersion: operator.cluster.x-k8s.io/v1alpha2
+              kind: InfrastructureProvider
+              metadata:
+                name: outscale
+                namespace: capi-outscale-system
+              spec:
+                manifestPatches:
+                  - |
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: cluster-api-provider-outscale-controller-manager
+                      namespace: capi-outscale-system
+                    spec:
+                      template:
+                        spec:
+                          securityContext:
+                            runAsNonRoot: true
+                            seccompProfile:
+                              type: RuntimeDefault
+                          containers:
+                            - name: manager
+                              securityContext:
+                                allowPrivilegeEscalation: false
+                                capabilities:
+                                  drop: ["ALL"]
