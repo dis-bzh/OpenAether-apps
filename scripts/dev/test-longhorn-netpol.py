@@ -33,4 +33,9 @@ for direction, rules, key in (("ingress", pol["spec"]["ingress"], "fromEndpoints
     ok = NEED <= got
     print(("ok   " if ok else "FAIL ") + f"in-namespace {direction} carries {sorted(NEED)}" + ("" if ok else f" (missing {sorted(NEED - got)})"))
     fails += not ok
+# RWX: the NFS client is the node's kernel: the share-manager must accept 2049 from the host and remote-node entities (lab 13).
+nfs = any({"host", "remote-node"} <= set(r.get("fromEntities", [])) and
+          any(p["port"] == "2049" for tp in r.get("toPorts", []) for p in tp["ports"]) for r in pol["spec"]["ingress"])
+print(("ok   " if nfs else "FAIL ") + "ingress accepts NFS 2049 from host + remote-node")
+fails += not nfs
 sys.exit(1 if fails else 0)

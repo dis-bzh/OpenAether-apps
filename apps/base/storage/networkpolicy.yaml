@@ -81,6 +81,17 @@ spec:
         - ports:
             - port: "80"
               protocol: TCP
+    # RWX: the NFS client is the kernel of the node that mounts the volume, so the source of the flow to the
+    # share-manager pod is the node (host entity, remote-node when the client runs on another node). Without this
+    # a client on a different node than the share-manager never mounted (lab 13: Policy denied on :2049, MountDevice
+    # DeadlineExceeded); the same-node case only worked because the local host is always allowed.
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "2049"
+              protocol: TCP
   egress:
     # Intra-namespace: allow all (Longhorn pods don't always have ns label)
     - toEndpoints:
