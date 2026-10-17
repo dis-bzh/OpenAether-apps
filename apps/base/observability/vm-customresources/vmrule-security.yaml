@@ -86,11 +86,15 @@ spec:
       rules:
         # 4) A Flux object stuck in a non-Ready state: the cluster no longer converges to git. Unlike
         #    FluxReconciliationStalled (a flat counter) this catches "reconciling but failing". 20 min lets a slow
-        #    install (Longhorn, Istio) finish. Ready is "" for an object Flux has not yet looked at.
+        #    install (Longhorn, Istio) finish. Ready is "" for an object Flux has not yet looked at;
+        #    a HelmRepository of type oci never gets a Ready condition at all (source-controller does not
+        #    reconcile it), so it is excluded or the alert would fire for it forever (seen live: talos-ccm).
         - alert: FluxObjectNotReady
           expr: |
             max by (customresource_kind, exported_namespace, name) (
               gotk_resource_info{ready!="True", suspended!="true"}
+              unless on (customresource_kind, exported_namespace, name)
+              gotk_resource_info{customresource_kind="HelmRepository", ready=""}
             ) == 1
           for: 20m
           labels:

@@ -208,3 +208,23 @@ tests:
                 kubectl delete pod -n foundation-databases zitadel-db-1
                 (the PVC stays; the operator recreates the pod). Never delete the PVC. docs/traps.md, Databases.
               runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/traps.md"
+  # An OCI HelmRepository never gets a Ready condition (ready=""): it must not alert, a failing HelmRelease must.
+  - name: Flux object without a Ready condition (OCI HelmRepository) does not alert
+    interval: 1m
+    input_series:
+      - series: 'gotk_resource_info{customresource_kind="HelmRepository", exported_namespace="capi-clusters", name="talos-ccm", ready="", suspended=""}'
+        values: '1+0x60'
+      - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability", name="grafana", ready="False", suspended=""}'
+        values: '1+0x60'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: FluxObjectNotReady
+        exp_alerts:
+          - exp_labels:
+              {customresource_kind: HelmRelease, exported_namespace: services-observability, name: grafana,
+               severity: warning, component: flux}
+            exp_annotations:
+              summary: "Flux HelmRelease grafana is not Ready"
+              description: >-
+                flux get all -A, then kubectl describe HelmRelease
+                -n services-observability grafana. Objects that depend on it wait too.
