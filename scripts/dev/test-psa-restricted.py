@@ -25,7 +25,7 @@ CASES = {
         "namespaces": {"foundation-networking", "foundation-policy-engine"},
         "identity": {"services-identity"},
         "cluster-api-operator": {"capi-system", "capi-operator-system"},
-        "cluster-api-providers": {"capi-outscale-system"},
+        "cluster-api-providers": set(),  # capi-outscale-system stays baseline (see the component)
     }),
     "psa-baseline": ("privileged", "baseline", {
         "namespaces": {"services-observability"},
@@ -97,7 +97,7 @@ for comp, (LEVEL_FROM, LEVEL_TO, EXPECTED) in CASES.items():
 
 
 # The restricted level also has to admit the pods the operator renders for the CAPI providers: lab 15A, on a real cluster,
-# found cabpt and the Outscale provider refused at re-creation (no seccomp / runAsNonRoot / capabilities.drop). The component
+# found cabpt refused at re-creation (no seccomp / runAsNonRoot); the Outscale provider is left at baseline. The component
 # carries manifestPatches on those provider CRs; check they are rendered, and that the plain DAG has none.
 with tempfile.TemporaryDirectory() as tmp:
     comp = REPO / "apps/flux/components/psa-restricted"
@@ -107,15 +107,14 @@ with tempfile.TemporaryDirectory() as tmp:
     plain_p = [d for d in render(tmp, [path]) if d["kind"].endswith("Provider")]
     after_p = {(d["kind"], d["metadata"]["name"]): d for d in render(tmp, [path], patches=spec["patches"]) if d["kind"].endswith("Provider")}
     check("without the component no provider carries manifestPatches", not any("manifestPatches" in d["spec"] for d in plain_p))
-    for key, dep in {("BootstrapProvider", "talos"): "cabpt-controller-manager", ("ControlPlaneProvider", "talos"): "cacppt-controller-manager",
-                     ("InfrastructureProvider", "outscale"): "cluster-api-provider-outscale-controller-manager"}.items():
+    for key, dep in {("BootstrapProvider", "talos"): "cabpt-controller-manager", ("ControlPlaneProvider", "talos"): "cacppt-controller-manager"}.items():
         mp = [yaml.safe_load(m) for m in after_p[key]["spec"].get("manifestPatches", [])]
         sc = mp[0]["spec"]["template"]["spec"]["securityContext"] if mp else {}
         check(f"{key[0]}/{key[1]}: a manifest patch makes {dep} restricted-compliant (runAsNonRoot + RuntimeDefault)",
               len(mp) == 1 and mp[0]["metadata"]["name"] == dep and sc.get("runAsNonRoot") is True
               and sc.get("seccompProfile", {}).get("type") == "RuntimeDefault", mp)
     check("the others (scaleway, openstack, core) are left alone",
-          all("manifestPatches" not in d["spec"] for k, d in after_p.items() if k not in {("BootstrapProvider", "talos"), ("ControlPlaneProvider", "talos"), ("InfrastructureProvider", "outscale")}))
+          all("manifestPatches" not in d["spec"] for k, d in after_p.items() if k not in {("BootstrapProvider", "talos"), ("ControlPlaneProvider", "talos")}))
 
 print(f"{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

@@ -1,6 +1,6 @@
 # OPT-IN, off by default. Raises the Pod Security Admission ENFORCE level from baseline to restricted on the namespaces
 # that still enforce baseline: foundation-networking, foundation-policy-engine, services-identity, capi-system,
-# capi-operator-system, capi-outscale-system (ANSSI FT082 R4/R8, NSA12 POD-05; mocked/static, never run on a cluster).
+# capi-operator-system (ANSSI FT082 R4/R8, NSA12 POD-05; mocked/static, never run on a cluster).
 # kyverno stays at baseline on purpose (docs/kyverno-enforcement.md, section PSA). services-observability, services-
 # gateway,
 # foundation-service-mesh and foundation-storage are privileged by default; the component psa-baseline lowers them.
@@ -122,21 +122,12 @@ patches:
         namespace: flux-system
       spec:
         patches:
-          - target:
-              kind: Namespace
-              name: capi-outscale-system
-            patch: |-
-              apiVersion: v1
-              kind: Namespace
-              metadata:
-                name: capi-outscale-system
-                labels:
-                  pod-security.kubernetes.io/enforce: restricted
           # The providers' own Deployments come from the operator, not from this repository: the operator renders
-          # them from the upstream release, and three of them do not satisfy `restricted` (seen on a real cluster,
-          # lab 15A: a cabpt pod could not be recreated, "runAsNonRoot != true, seccompProfile"; the Outscale
-          # provider lacks "capabilities.drop"). The CR field manifestPatches (strategic merge patches on the
-          # rendered manifests) fixes them without a fork.
+          # them from the upstream release, and the two Talos ones do not satisfy `restricted` (seen on a real
+          # cluster, lab 15A: a cabpt pod could not be recreated, "runAsNonRoot != true, seccompProfile"). The CR
+          # field manifestPatches fixes them without a fork. capi-outscale-system is NOT raised: its container lacks
+          # capabilities.drop, and a manifest patch that sets it must list the whole container (the operator
+          # replaces the containers list and refuses it without an image), which would pin the image twice.
           - target:
               kind: BootstrapProvider
               name: talos
@@ -185,33 +176,3 @@ patches:
                             runAsNonRoot: true
                             seccompProfile:
                               type: RuntimeDefault
-          - target:
-              kind: InfrastructureProvider
-              name: outscale
-            patch: |-
-              apiVersion: operator.cluster.x-k8s.io/v1alpha2
-              kind: InfrastructureProvider
-              metadata:
-                name: outscale
-                namespace: capi-outscale-system
-              spec:
-                manifestPatches:
-                  - |
-                    apiVersion: apps/v1
-                    kind: Deployment
-                    metadata:
-                      name: cluster-api-provider-outscale-controller-manager
-                      namespace: capi-outscale-system
-                    spec:
-                      template:
-                        spec:
-                          securityContext:
-                            runAsNonRoot: true
-                            seccompProfile:
-                              type: RuntimeDefault
-                          containers:
-                            - name: manager
-                              securityContext:
-                                allowPrivilegeEscalation: false
-                                capabilities:
-                                  drop: ["ALL"]

@@ -91,8 +91,10 @@ policy per release. Note `KyvernoPolicyViolation` ignores `require-security-cont
 ## Pod Security Admission
 
 The namespaces that still enforce baseline can move to restricted with the opt-in component `apps/flux/components/psa-restricted`
-(foundation-networking, foundation-policy-engine, services-identity, capi-system, capi-operator-system, capi-outscale-system), after
-their `warn`/`audit` = restricted lines are clean, with the same reboot gate. PSA covers init containers, ephemeral containers,
+(foundation-networking, foundation-policy-engine, services-identity, capi-system, capi-operator-system), after
+their `warn`/`audit` = restricted lines are clean, with the same reboot gate. `capi-outscale-system` stays at baseline: the
+Outscale provider's container lacks `capabilities.drop` and the operator cannot patch one field of a container (checked on a real
+OVH cluster, lab 15A, where a deleted cabpt pod could not be recreated before the component patched the Talos providers). PSA covers init containers, ephemeral containers,
 hostPorts and capabilities without a webhook. `kyverno` stays at baseline for the reasons written on its Namespace manifest.
 
 Four namespaces enforce `privileged` as released although nothing privileged runs in them: services-observability,
