@@ -6,8 +6,7 @@
 
 ## The switch
 
-Five policies can be enforced where, and only where, a namespace carries a label (Kyverno `spec.validationFailureActionOverrides`, deprecated since 1.13 but still served by the vendored 1.19; kyverno.io/v1 policies go in 1.20;
-`validate.failureActionOverrides` is 1.13+ and the vendored version rejects it). No namespace in this repository has one, so the
+Five policies can be enforced where, and only where, a namespace carries a label (Kyverno `validate.failureActionOverrides` on each rule, with `failureAction: Audit` beside it; the older spec-level `validationFailureActionOverrides` is NOT honoured by the vendored Kyverno 1.19.1: a hostNetwork pod was admitted with a warning in a labelled namespace, lab 15A on OVH, and denied once the rule-level spelling was applied). No namespace in this repository has one, so the
 default is what ran before: Audit everywhere.
 
 | Policy | Label (value `"true"`) | What it denies |
@@ -34,8 +33,8 @@ the policy never fires, as lab 11 found). Check with `kubectl get validatingwebh
 the `pods/ephemeralcontainers` rule must list UPDATE.
 
 The two ephemeral-container policies flip with two rules (an Audit rule that excludes the labelled namespaces, an Enforce rule whose `match` carries the label) and no
-`validationFailureActionOverrides`: Kyverno 1.19.1 admitted a privileged `kubectl debug` with a warning in a labelled namespace when the override was used (lab 12), while a
-`namespaceSelector` in `match` plus the rule-level `failureAction` denies it.
+override at all: Kyverno 1.19.1 admitted a privileged `kubectl debug` with a warning in a labelled namespace when an override was used (lab 12), while a
+`namespaceSelector` in `match` plus the rule-level `failureAction` denies it (the subresource does not honour `failureActionOverrides` either).
 
 ## What Audit reported on a fresh cluster (lab 11, Scaleway, after an install and two worker reboots)
 

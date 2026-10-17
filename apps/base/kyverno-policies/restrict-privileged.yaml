@@ -16,13 +16,9 @@ metadata:
 spec:
   validationFailureAction: Audit
   # Enforce only in a namespace carrying the label below (docs/kyverno-enforcement.md); none does, so every namespace
-  # stays in Audit. Kyverno 1.12 spells it here, per policy (`validate.failureActionOverrides` is 1.13+).
+  # stays in Audit. Spelled per rule (`validate.failureActionOverrides`, Kyverno 1.13+): 1.19.1 ignores the spec-level
+  # `validationFailureActionOverrides` at all (a hostNetwork pod was admitted in a labelled namespace; lab 15A, OVH).
   # Rollback: remove the label.
-  validationFailureActionOverrides:
-    - action: Enforce
-      namespaceSelector:
-        matchLabels:
-          kyverno.openaether.io/enforce-restrict-privileged: "true"
   background: true
   rules:
     - name: deny-privileged
@@ -60,6 +56,12 @@ spec:
               - "ztunnel-*"
               - "istio-cni-node-*"
       validate:
+        failureAction: Audit
+        failureActionOverrides:
+          - action: Enforce
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-restrict-privileged: "true"
         message: "Privileged containers are not allowed."
         pattern:
           spec:
@@ -115,6 +117,12 @@ spec:
               - "ztunnel-*"
               - "istio-cni-node-*"
       validate:
+        failureAction: Audit
+        failureActionOverrides:
+          - action: Enforce
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-restrict-privileged: "true"
         message: "HostPath volumes are not allowed."
         pattern:
           spec:

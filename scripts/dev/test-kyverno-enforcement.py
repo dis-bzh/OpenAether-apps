@@ -2,8 +2,8 @@
 """Test of the Kyverno enforcement switch (apps/base/kyverno-policies, docs/kyverno-enforcement.md).
 
 Five policies can be flipped to Enforce one namespace at a time, by labelling the namespace
-`kyverno.openaether.io/enforce-<policy>: "true"` (spec.validationFailureActionOverrides, the Kyverno 1.12 spelling). Checks:
-every one of them stays Audit globally, carries exactly that one override, matches pods at CREATE only (so an update of a running
+`kyverno.openaether.io/enforce-<policy>: "true"` (`validate.failureActionOverrides` on every rule, rule-level `failureAction: Audit`; the spec-level spelling is no longer honoured by Kyverno 1.19.1, lab 15A). Checks:
+every one of them stays Audit globally, carries exactly that one override on each rule, matches pods at CREATE only (so an update of a running
 pod is never denied; the two ephemeral-container policies are an UPDATE by nature and are the exception: they must list CREATE and UPDATE,
 because with no `operations` Kyverno registers CREATE only on the webhook and `kubectl debug` is never seen, lab 11), no namespace in the repo
 carries such a label (the default is today's Audit everywhere), the two policies that already enforce are untouched, and the
@@ -60,8 +60,13 @@ for name in FLIPPABLE:
         check("ephemeral policy: one Audit rule that excludes the labelled namespaces",
               len(aud) == 1 and any(blk["resources"].get("namespaceSelector") == sel for blk in aud[0]["exclude"]["any"]), aud)
     else:
-        check("one override: Enforce where the namespace carries its label", spec.get("validationFailureActionOverrides") == want,
+        # Kyverno 1.19.1 does not apply the spec-level validationFailureActionOverrides namespaceSelector at all: a hostNetwork pod
+        # was admitted with a warning in a labelled namespace (lab 15A, OVH). The rule-level spelling (1.13+) denies it.
+        check("no spec-level override (Kyverno 1.19.1 ignores it)", "validationFailureActionOverrides" not in spec,
               spec.get("validationFailureActionOverrides"))
+        check("every rule: failureAction Audit + one override, Enforce where the namespace carries its label",
+              all(r["validate"].get("failureAction") == "Audit" and r["validate"].get("failureActionOverrides") == want for r in spec["rules"]),
+              [(r["name"], r["validate"].get("failureAction"), r["validate"].get("failureActionOverrides")) for r in spec["rules"]])
     if any(k == "Pod/ephemeralcontainers" for rule in spec["rules"] for blk in rule["match"]["any"] for k in blk["resources"]["kinds"]):
         check("a policy that matches a subresource has background scanning off (Kyverno 1.12.1 refuses it otherwise)", spec.get("background") is False, spec.get("background"))
     for rule in spec["rules"]:
@@ -72,8 +77,9 @@ for name in FLIPPABLE:
                   ops == [["CREATE", "UPDATE"]], ops)
         else:
             check(f"{rule['name']}: matches Pod at CREATE only", kinds == ["Pod"] and ops == [["CREATE"]], (kinds, ops))
-        check(f"{rule['name']}: no Kyverno-1.13 `validate.failureActionOverrides` (still the spec-level spelling, deprecated but served by the vendored 1.19)",
-              "failureActionOverrides" not in rule["validate"])
+        if name in LABEL_OF:
+            check(f"{rule['name']}: no `validate.failureActionOverrides` (the ephemeral policies use two rules, see above)",
+                  "failureActionOverrides" not in rule["validate"])
 
 check("require-ro-rootfs stays Audit with no override (informational, no flip prepared)",
       all(pol[n]["spec"]["validationFailureAction"] == "Audit" and "validationFailureActionOverrides" not in pol[n]["spec"]

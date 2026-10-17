@@ -16,13 +16,9 @@ metadata:
 spec:
   validationFailureAction: Audit
   # Enforce only in a namespace carrying the label below (docs/kyverno-enforcement.md); none does, so every namespace
-  # stays in Audit. Kyverno 1.12 spells it here, per policy (`validate.failureActionOverrides` is 1.13+).
+  # stays in Audit. Spelled per rule (`validate.failureActionOverrides`, Kyverno 1.13+): 1.19.1 ignores the spec-level
+  # `validationFailureActionOverrides` at all (a hostNetwork pod was admitted in a labelled namespace; lab 15A, OVH).
   # Rollback: remove the label.
-  validationFailureActionOverrides:
-    - action: Enforce
-      namespaceSelector:
-        matchLabels:
-          kyverno.openaether.io/enforce-require-security-context: "true"
   background: true
   rules:
     - name: check-container-security-context
@@ -55,6 +51,12 @@ spec:
             names:
               - "ztunnel-*"
       validate:
+        failureAction: Audit
+        failureActionOverrides:
+          - action: Enforce
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-require-security-context: "true"
         message: >-
           Containers (initContainers included) must set allowPrivilegeEscalation=false and
           capabilities.drop=["ALL"]: both exist at the container level only.
@@ -87,6 +89,12 @@ spec:
               - CREATE
       exclude: *exclude
       validate:
+        failureAction: Audit
+        failureActionOverrides:
+          - action: Enforce
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-require-security-context: "true"
         message: >-
           runAsNonRoot=true must be set on the pod securityContext, or on every container (initContainers included).
         anyPattern:
@@ -111,6 +119,12 @@ spec:
               - CREATE
       exclude: *exclude
       validate:
+        failureAction: Audit
+        failureActionOverrides:
+          - action: Enforce
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-require-security-context: "true"
         message: >-
           seccompProfile.type=RuntimeDefault must be set on the pod securityContext, or on every container
           (initContainers included).

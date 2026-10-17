@@ -15,13 +15,9 @@ metadata:
 spec:
   validationFailureAction: Audit
   # Enforce only in a namespace carrying the label below (docs/kyverno-enforcement.md); none does, so every namespace
-  # stays in Audit. Kyverno spells it here, per policy (`validate.failureActionOverrides` is 1.13+).
+  # stays in Audit. Spelled per rule (`validate.failureActionOverrides`, Kyverno 1.13+): 1.19.1 ignores the spec-level
+  # `validationFailureActionOverrides` at all (a hostNetwork pod was admitted in a labelled namespace; lab 15A, OVH).
   # Rollback: remove the label.
-  validationFailureActionOverrides:
-    - action: Enforce
-      namespaceSelector:
-        matchLabels:
-          kyverno.openaether.io/enforce-restrict-image-registries: "true"
   background: true
   rules:
     - name: validate-registries
@@ -45,6 +41,12 @@ spec:
               - orc-system
               - capi-operator-system
       validate:
+        failureAction: Audit
+        failureActionOverrides:
+          - action: Enforce
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-restrict-image-registries: "true"
         message: >-
           Image registry not allowed. Allowed: the organisations this platform runs, on ghcr.io (cloudnative-pg,
           external-secrets, fluxcd, kyverno, zitadel), reg.kyverno.io (kyverno), quay.io (cilium, jetstack, kiwigrid,
