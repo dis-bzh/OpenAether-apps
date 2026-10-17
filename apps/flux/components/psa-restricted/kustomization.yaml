@@ -132,10 +132,11 @@ patches:
                 name: capi-outscale-system
                 labels:
                   pod-security.kubernetes.io/enforce: restricted
-          # The providers' own Deployments come from the operator, not from this repository: the operator renders them from
-          # the upstream release, and two of them do not satisfy `restricted` (seen on a real cluster, lab 15A: the pod of
-          # cabpt could not be recreated, "runAsNonRoot != true, seccompProfile"; the Outscale provider's "capabilities.drop").
-          # The CR field manifestPatches (strategic merge patches on the rendered manifests) fixes them without a fork.
+          # The providers' own Deployments come from the operator, not from this repository: the operator renders
+          # them from the upstream release, and three of them do not satisfy `restricted` (seen on a real cluster,
+          # lab 15A: a cabpt pod could not be recreated, "runAsNonRoot != true, seccompProfile"; the Outscale
+          # provider lacks "capabilities.drop"). The CR field manifestPatches (strategic merge patches on the
+          # rendered manifests) fixes them without a fork.
           - target:
               kind: BootstrapProvider
               name: talos
