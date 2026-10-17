@@ -15,6 +15,21 @@ belong to. What follows has no skill of its own yet.
   instance pods need it for `barmanObjectStore`; a replica JOIN calling
   `restore_command` blocks for ever instead of erroring.
 
+## Storage
+
+- **Never reboot (or `talosctl reboot`/`shutdown`) a node undrained when it hosts a Longhorn RWX share-manager and a pod that mounts that volume** (apps #124).
+  Lab 12 (Scaleway, Longhorn 1.12.1, Talos 1.14): the graceful reboot stayed in `unmountPodMounts` ("nfs: server ... not responding") for more
+  than 12 minutes, twice, and only a provider hard reset ended it: the NFS server (share-manager pod) goes down with the node, and the
+  client's unmount waits on it. A client on ANOTHER node than its share-manager rebooted in 1.5 minutes. Before any reboot, upgrade or removal:
+  `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`, then check that nothing RWX is left on it
+  (`kubectl -n longhorn-system get pods -o wide | grep share-manager` shows another node; `task cluster-roll`, `cluster-upgrade` and
+  `cluster-shrink` do both and refuse to reboot otherwise). Mitigation shipped: the `longhorn-x2-rwx*` classes mount with
+  `softerr,timeo=100,retrans=3`, which errors after about 60 s instead of Longhorn's default `timeo=600,retrans=5` (15 minutes of retries).
+  What is NOT proven on a cluster yet: that it removes the hang with no drain (see the issue). A class change reaches only volumes created
+  AFTER it: check an existing one with `talosctl -n <worker> read /proc/mounts | grep nfs4` (options `timeo=100,retrans=3`);
+  an older RWX volume keeps the old options until its PVC is recreated from a restore or a copy. If a node is already stuck, a hard reset
+  through the provider API is the only exit lab 12 found: expect the volumes to rebuild, and do not do it to two Longhorn nodes within minutes.
+
 ## Databases and secrets
 
 - **The `openbao` ClusterSecretStore serves only the namespaces it lists.** An

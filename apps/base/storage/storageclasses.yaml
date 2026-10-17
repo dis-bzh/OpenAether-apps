@@ -127,11 +127,23 @@ parameters:
 # 2 Longhorn replicas + ReadWriteMany (NFS-like through the Longhorn Share Manager).
 # For: the rare multi-pod shared storage cases (static assets, uploads).
 # WARNING: NFS overhead on the network. Do not use for high-frequency IO.
+# nfsOptions (apps #124): Longhorn's own default is timeo=600,retrans=5. timeo is in
+# tenths of a second and the TCP retry timeout grows by timeo each time, so a client
+# whose share-manager vanished waited 60+120+180+240+300 s = 15 min before softerr
+# returned an error: the "> 12 min in unmountPodMounts" of a graceful reboot of a node
+# that hosted both (lab 12). timeo=100,retrans=3 gives up after 10+20+30 = 60 s, long
+# enough for a share-manager restart or fast failover, short enough for a node shutdown.
+# Apps then see ETIMEDOUT instead of a hang (softerr): RWX users must tolerate it.
+# StorageClass parameters are immutable: the force annotation lets Flux delete and
+# recreate the class (bound PVs are untouched). Volumes created BEFORE the change keep
+# the options they were created with; see docs/traps.md.
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: longhorn-x2-rwx
+  annotations:
+    kustomize.toolkit.fluxcd.io/force: enabled
   labels:
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprintC"
@@ -144,7 +156,7 @@ parameters:
   numberOfReplicas: "2"
   staleReplicaTimeout: "30"
   fromBackup: ""
-  nfsOptions: "vers=4.1,noresvport,softerr,timeo=600,retrans=5"
+  nfsOptions: "vers=4.1,noresvport,softerr,timeo=100,retrans=3"
 
 # ── longhorn-x2-rwx-encrypted ──────────────────────────────────────
 # 2 Longhorn replicas + ReadWriteMany + LUKS encryption.
@@ -154,6 +166,8 @@ apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: longhorn-x2-rwx-encrypted
+  annotations:
+    kustomize.toolkit.fluxcd.io/force: enabled
   labels:
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprintC"
@@ -166,7 +180,7 @@ parameters:
   numberOfReplicas: "2"
   staleReplicaTimeout: "30"
   fromBackup: ""
-  nfsOptions: "vers=4.1,noresvport,softerr,timeo=600,retrans=5"
+  nfsOptions: "vers=4.1,noresvport,softerr,timeo=100,retrans=3"
   encrypted: "true"
   csi.storage.k8s.io/provisioner-secret-name: longhorn-encryption
   csi.storage.k8s.io/provisioner-secret-namespace: longhorn-system
