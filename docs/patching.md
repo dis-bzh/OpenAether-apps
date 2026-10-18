@@ -137,7 +137,29 @@ single authority); the conversion-webhook `Service` is gone with the v1beta1 API
 (the repository uses the V1 engine only). `defaultSettings.orphanAutoDeletion` is not a key of the chart (it reads
 `orphanResourceAutoDeletion`) and was already ignored at 1.9.2, so orphan auto-deletion is not enabled; left as is.
 
+## Loki chart hop (a running cluster pinned at the 6.x chart)
+
+A fresh install takes chart 18 directly. A cluster on 6.25 moves to 18 in place (the StatefulSet selector, `serviceName` and volume claim
+template are identical in both charts, so no recreate is needed). Lab 15c measured the 6.25 -> 6.55 hop timing out: the rolling update left
+`loki-1` not Ready (the memberlist join dialled a stale pod IP) and Helm's automatic rollback re-rolled the same way and left 1 of 2 Ready.
+The `HelmRelease` therefore has `upgrade.timeout: 15m` and **no automatic upgrade rollback** (`retries: 0`, `remediateLastFailure: false`);
+a failed hop leaves the release `Failed`/Stalled on the new chart and a person (or the runbook of an AI) does this, in order:
+
+1. `kubectl -n services-observability get pods -l app.kubernetes.io/name=loki` and `logs loki-<n>` of the pod that is not Ready.
+   Logs are not lost meanwhile: Alloy retries its pushes and the chunks are in the object store, the PVCs only hold the index cache and WAL.
+2. If the pods only wait on the memberlist ring: delete all Loki pods at once, so none keeps a stale peer
+   (`kubectl -n services-observability delete pod -l app.kubernetes.io/name=loki`). The StatefulSet recreates them in parallel
+   (`podManagementPolicy: Parallel`) and the ring forms from the headless Service.
+3. Reset the release: `flux reconcile helmrelease loki -n services-observability --reset --force`.
+4. If a pod is stuck on a PVC (rare: a node lost during the hop), delete that PVC and pod; local-path recreates an empty volume, the data is
+   in the object store.
+
+Not shown without a cluster: that step 2 always clears the stale address. The test `scripts/dev/test-loki-render.sh` only pins the values
+(timeout, no rollback, advertise address).
+
 ## Where it stands (2026-10-16)
+
+
 
 After phase 2 the pins in [`eol-calendar.yaml`](eol-calendar.yaml) are on supported lines except Istio 1.24 (EOL 2025-06-24, waived to 2026-12-31),
 MinIO (dev profile only) and the rows whose upstream publishes no schedule. The 30-day rule is therefore **not met for Istio**, and the new pins have

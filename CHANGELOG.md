@@ -461,6 +461,13 @@ maintained upstream, waiver kept), OpenBao (stays 2.7.1), talos-cloud-controller
 
 ### Fixed
 
+- **Loki chart hops are not rolled back by Helm, and get a 15 minute budget (apps #121, lab 15c).** The in-place hop 6.25 -> 6.55 timed out at
+  the default 5 minutes (loki-1 never Ready: the memberlist join dialled the address of a pod that no longer existed) and the automatic Helm
+  rollback re-rolled the StatefulSet to the old chart, which stalled the same way and left it at 1 of 2 Ready. `upgrade.timeout: 15m`,
+  `upgrade.remediation.retries: 0` and `remediateLastFailure: false` now; a fresh install keeps its three retries. Chart 18 starts Loki with
+  `-memberlist.advertise-addr=$(POD_IP)` (checked in the render). The exact recovery is in `docs/patching.md`, "Loki chart hop". Test:
+  `scripts/dev/test-loki-render.sh` (fails with the old values). Static; the stale-address behaviour itself needs a cluster.
+
 - **Certificates: rotation policy written down on every one, and a guard that routes are covered** (review of B18/B19; static,
   not run on a cluster). `openbao-ca` and `openbao-ca-bundle` now say `privateKey.rotationPolicy: Never` (the value cert-manager
   applies today, so no behaviour change on 1.15; without it the 1.18 hop would re-key the 10-year listener CA, as

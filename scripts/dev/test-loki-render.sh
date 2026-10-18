@@ -117,6 +117,21 @@ for env, replicas, rf, retention, insecure, pdb in (("base", 3, 2, 8760, False, 
         check("base: s3 endpoint is https in the render", s3["endpoint"].startswith("https://"))
 
 docs = [d for d in yaml.safe_load_all(open(work + "/base.yaml")) if d]
+# Chart hop safety (lab 15c): an upgrade must not be rolled back by Helm and needs a budget over the 5 minute default.
+hr = next((d for d in docs if d.get("kind") == "HelmRelease" and d["metadata"]["name"] == "loki"), {})
+up = hr.get("spec", {}).get("upgrade", {})
+def minutes(v):
+    return int(v[:-1]) * {"m": 1, "h": 60}[v[-1]] if v else 5
+check("helmrelease: upgrade.timeout is at least 15m (a rolling update of the replicas takes longer than the 5m default)",
+      minutes(up.get("timeout")) >= 15)
+check("helmrelease: upgrade.remediation.retries 0 and remediateLastFailure false (no automatic Helm rollback of a chart hop)",
+      up.get("remediation", {}).get("retries") == 0 and up.get("remediation", {}).get("remediateLastFailure") is False)
+check("helmrelease: install keeps its retries (a failed first install has nothing to lose)",
+      hr.get("spec", {}).get("install", {}).get("remediation", {}).get("retries", 0) >= 1)
+bsts = [d for d in load("base")[0].get("StatefulSet", []) if d["metadata"]["name"] == "loki"]
+check("base: the pod advertises its own IP to memberlist (a stale address is what stalled the lab hop)",
+      bool(bsts) and any("-memberlist.advertise-addr=$(POD_IP)" in (c.get("args") or []) for c in bsts[0]["spec"]["template"]["spec"]["containers"]))
+
 # The ExternalSecret: the region key is emitted, with the host regex and the us-east-1 fallback (the stand-in region above
 # would hide the removal of this template).
 es = next((d for d in docs if d.get("kind") == "ExternalSecret" and d["metadata"]["name"] == "loki-s3-credentials"), None)
