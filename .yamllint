@@ -9,6 +9,7 @@ ignore: |
   **/orc/install.yaml
   **/platform/gateway-api/standard-install.yaml
   **/platform/local-path-provisioner/local-path-storage.yaml
+  **/storage/external-snapshotter-crds.yaml
   **/flux-gotk/gotk-components.yaml
   # Embedded generated content (Grafana dashboard JSON, embedded bash
   # scripts) — genuinely long by nature, not sloppy formatting. A line-length
