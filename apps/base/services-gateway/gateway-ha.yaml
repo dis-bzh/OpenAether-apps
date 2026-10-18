@@ -1,0 +1,34 @@
+# The Gateway's Deployment (openaether-gateway-istio, created by Istio from the Gateway) is the only way in for every
+# customer request. Istio creates it with ONE replica and no disruption budget: draining the node that hosts it cut all
+# traffic for 74 s (lab 15c, measured by a 1 Hz probe through the load balancer). Istio leaves `replicas` to an HPA when
+# there is one, so two replicas are kept by the HPA's floor, and the PDB lets a drain evict one at a time.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: openaether-gateway-istio
+  namespace: services-gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: openaether-gateway-istio
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: openaether-gateway-istio
+  namespace: services-gateway
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: openaether-gateway

@@ -154,6 +154,9 @@ jobs:
       - name: CNPG clusters roll the primary by switchover, not by an in-place restart (lab 15c)
         run: python3 -I scripts/dev/test-cnpg-primary-update.py
 
+      - name: The Gateway keeps two replicas and a disruption budget (lab 15c)
+        run: python3 -I scripts/dev/test-gateway-ha.py
+
       - name: Container securityContext is set where the operators read it (#47)
         run: python3 -I scripts/dev/test-container-security-context.py
 

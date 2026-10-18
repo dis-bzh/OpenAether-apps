@@ -18,6 +18,7 @@ resources:
   - openbao-destinationrule.yaml  # Istio CRD: lives here, not in foundation-vault, which is applied before Istio (#38)
   - certificate-openaether-tls.yaml
   - httproute-redirect.yaml
+  - gateway-ha.yaml  # two replicas and a PDB: one drained node must not cut the ingress
 
 labels:
   - includeSelectors: false
