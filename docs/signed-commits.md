@@ -47,8 +47,8 @@ in the web UI with a squash or merge commit. Know which strategy the repository 
    one side only is added or removed at the first reconcile.
 3. Mode is `HEAD`. `Tag` and `TagAndHEAD` wait until the release flow signs tags.
 4. Watch: `kubectl -n flux-system get gitrepository openaether -o yaml` (condition `SourceVerified`). A rejected commit
-   makes the object NotReady and Flux keeps the last good artifact; the existing alert `FluxObjectNotReady`
-   (20 minutes) covers it.
+   makes the object NotReady and Flux keeps the last good artifact; `FluxSourceNotVerified`
+   (critical, 5 minutes, from the `SourceVerified` condition) names it, and `FluxObjectNotReady` (20 minutes) follows.
 
 Roll out on a dev cluster for several release cycles before production.
 

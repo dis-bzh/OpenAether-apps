@@ -15,7 +15,7 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 | A rule blind because its metrics vanished (Kyverno's only when Kyverno is deployed) | `AlloyMetricsAbsent`, `LokiMetricsAbsent`, `KyvernoMetricsAbsent`, `FluxStateMetricsAbsent`, `CnpgMetricsAbsent` | several |
 | A new object breaks a Kyverno policy (Audit or Enforce) | `KyvernoPolicyViolation` | `vmrule-security.yaml` |
 | The Kyverno webhook is down | `KyvernoAdmissionDown`, `KyvernoControllerNotReady` | `vmrule-security.yaml` |
-| Flux object not Ready, or suspended for a day | `FluxObjectNotReady`, `FluxObjectSuspended` | `vmrule-security.yaml` |
+| Flux object not Ready, or suspended for a day; a commit whose signature Flux rejected | `FluxObjectNotReady`, `FluxObjectSuspended`, `FluxSourceNotVerified` | `vmrule-security.yaml` |
 | Network policy denials in a loop (no Hubble) | `CiliumPolicyDeniedBurst` | `vmrule-platform.yaml` |
 | `/var` (EPHEMERAL, local-path volumes) filling | `NodeFilesystemFillingUp`, `NodeFilesystemFullIn24h` | `vmrule-cluster.yaml` |
 | A CNPG instance pod left Completed after a node reboot without a drain (CNPG 1.23.1 never restarts it) | `CnpgInstancePodSucceeded` | `vmrule-platform.yaml` |
