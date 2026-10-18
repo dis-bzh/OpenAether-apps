@@ -82,7 +82,10 @@ table says so** (`docs/patching.md`; the in-place hops were rehearsed on Scalewa
 - **In-place hops not rehearsed:** Loki chart 6.25 -> 18 (the lab hop stopped at 6.55 and timed out), Grafana 8.6 -> 14, Alloy, Gateway API CRDs, Flux on the children,
   Cilium and Talos patches, Istio (#121). A fresh install of these versions was run on three clouds.
 - **Scaleway first install with the app load balancer allow-list needs two applies** (infra #361).
-- **OVH S3 has no bucket policies through the S3 API** (infra #379); **Outscale gp2 roots saturate under the full stack** (infra #376) and OOS refused dedicated EIM keys (infra #377).
+- **OVH S3 has no bucket policies through the S3 API** (infra #379); **Outscale did not pass the stability criteria with the full stack in lab 16** (3 CP + 3 W of 3 vCPU / 6 GB: an IO and memory
+  cascade after one backup and restore and one drained reboot, not cured by a live `io1 3000`; the 20 vCPU quota allows no larger shape, infra #376) and OOS refused dedicated EIM keys (infra #377).
+- **Losing a worker.** The shipped 2-worker examples could not be rolled (172% of CPU requested, infra #378; the infra examples now ship 3, not re-run); only the CPU gate is checked. Replicas with a required
+  spread stay short while a worker is out. `CnpgWalArchiveFailing` can stay pending about 25 minutes after a drained reboot (#138), and Flux has no notification Alert or Provider (#139): both 0.4.0.
 - **MinIO (dev profile) is archived upstream;** the waiver runs to 2026-12-31 (#104). Istio 1.24 is waived to the same date.
 - **Kubernetes 1.37 is outside the range cert-manager 1.21, CNPG 1.30, Flux 2.9 and others test upstream** (#105, #120); the labs ran on it.
 - **Loki retention deletion of expired chunks was never exercised** (#127); Alloy keeps log batches in memory only (#80, #119); **Zitadel -> Grafana login with MFA** was not run (#126).
@@ -96,6 +99,12 @@ each torn down and checked clean. At the end of a fresh install on the defaults:
 (the rest skipped, not failed), strict plan "No changes". Lab 15c ran 40 upgrade hops and drills from apps 0.2.0 on Scaleway: 20896 HTTP samples through the load balancer,
 135 failed, one 73 s episode (a drain evicting the single Gateway pod); CNPG primary kill 24 s of write gap, planned switchover 12 s; Loki outage of 240 s lost no line.
 Offline: Kyverno CLI 1.19.1 (90 + 8 fixtures), Alloy 1.20.1, Zitadel 4.19.2 with PostgreSQL, Loki `-verify-config`, Grafana 13.2.4, CRD schema validation, vmalert dry runs.
+
+**Lab 16 (2026-10-18, final validation on the head of this branch with a signed throwaway Flux branch, each cloud torn down and checked clean):** Scaleway and OVH, a fresh install from the shipped
+examples: 38 Kustomizations and 16 HelmReleases Ready 23.5 min (Scaleway) and 29 min (OVH) after the start, idle alerts Watchdog only (61 rules healthy), Longhorn RWO, LUKS2 and RWX backups restored with matching
+checksums, CNPG backup and restore into a new cluster (150 tables = origin), the five Kyverno Enforce policies and the ephemeral-container denials, OpenBao TLS 1.3 only with re-key, ESO 15/15, Zitadel setup, Loki
+write and read-back, a drained worker reboot and a control-plane reboot. Outscale (3 CP + 3 W of 3 vCPU / 6 GB): everything passed for the first hour, then the cascade above; its control-plane reboot, alert drill and
+final acceptance were not run. A provoked alert reached Alertmanager (the webhook-receiver leg was skipped on purpose). Found and filed: #137 (fixed here), #138, #139.
 
 **NOT run:** the etcd snapshot restore; OpenBao raft snapshot restore; Istio hops; Alloy, Grafana and Gateway API CRD in-place hops; Flux (children) and Cilium/Talos patch hops;
 Zitadel -> Grafana interactive login; the alert drills (no alert was provoked); Loki retention expiry; the Flux Git verification (no signing key); an unattended run to completion.
