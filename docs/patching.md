@@ -121,6 +121,15 @@ Preconditions, to check before every hop (none was run from this repository; the
 6. After the manager hop, upgrade the engine image of every volume (live when attached and healthy, offline when
    detached) and wait for the old instance-manager pods to go; whether the next hop refuses volumes left on an old
    engine image is not documented upstream, so treat it as a precondition.
+7. Before the **1.9 -> 1.10 hop only**, take the conversion webhook off the five CRDs that still carry one
+   (`backingimages`, `backuptargets`, `engineimages`, `nodes`, `volumes` under `longhorn.io`):
+   `kubectl patch crd <name> --type=json -p '[{"op":"replace","path":"/spec/conversion","value":{"strategy":"None"}}]'`.
+   Measured in lab 15c (Flux HelmRelease, `crds: CreateReplace`): without it helm-controller's server-side apply of those
+   CRDs fails (`spec.conversion.strategy: Required value`), the chart's other objects are applied anyway, the new
+   `longhorn-manager` crash-loops on every node (`unknown field spec.backupBlockSize`, the CRD is still the old one) and
+   the release is Stalled. Attached volumes kept serving, but nothing could attach, detach or back up for about 14 minutes.
+   The fix-forward after the fact is the same patch, then delete the manager pods and
+   `flux reconcile helmrelease longhorn -n longhorn-system --reset --force`.
 
 Behaviour changes met between 1.9 and 1.12 that touch this repository: the chart renders `NetworkPolicy` objects
 by default (`networkPolicies.restrictInternalTraffic`; set to `false` here so the brick's `CiliumNetworkPolicy` stays the
