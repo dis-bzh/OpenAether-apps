@@ -175,6 +175,16 @@ a failed hop leaves the release `Failed`/Stalled on the new chart and a person (
 Not shown without a cluster: that step 2 always clears the stale address. The test `scripts/dev/test-loki-render.sh` only pins the values
 (timeout, no rollback, advertise address).
 
+## Kubernetes 1.37 against the add-ons' support matrices (decision, apps #105, #120)
+
+The management cluster runs Kubernetes 1.37.1 (the infra default). Upstream matrices list up to 1.36 for cert-manager 1.21 (1.33-1.36), Flux 2.9
+(1.34-1.36) and Cilium 1.20 (e2e 1.33-1.36); CloudNativePG 1.30 lists 1.34-1.36 and tests 1.37; Istio 1.31 is the one line that covers it. **Decision
+(owner, 2026-10-16): keep 1.37.1** and let real-cloud labs prove the pairing; the labs 15a to 15c ran this repository's pins on 1.37.1 on three
+providers without a Kubernetes-version failure being attributed to an add-on. That is evidence for these pins on that version, not an upstream
+statement of support: a problem on 1.37 is reported upstream as outside the tested range, and the fallback is the children's 1.35/1.36. At every
+hop, re-read the target's matrix for 1.37 before merging and note the result in the PR. No automated check exists: the matrices are prose on each
+project's site, not data (a check that parsed them would be guessing); `docs/eol-calendar.yaml` tracks component end of support, not Kubernetes compatibility.
+
 ## Where it stands (2026-10-16)
 
 

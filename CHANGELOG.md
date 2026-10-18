@@ -461,6 +461,9 @@ maintained upstream, waiver kept), OpenBao (stays 2.7.1), talos-cloud-controller
 
 ### Fixed
 
+- **The Kubernetes 1.37 decision is recorded (apps #105, #120).** `docs/patching.md` states the owner decision (keep 1.37.1, labs prove it), what the labs do and
+  do not show, and the per-hop re-read of each add-on's matrix. No automated matrix check: the matrices are prose, not data.
+
 - **VictoriaMetrics and Alertmanager images are pinned, and the operator probe values are real chart keys (apps #117).** VMCluster (`v1.136.0-cluster`),
   VMAgent and VMAlert (`v1.136.0`) and VMAlertmanager (`v0.31.0`) now set `image.tag` to what operator 0.68.1 chose by default, so nothing moves today
   and an operator bump no longer moves the storage engine with it. The operator's `probePath`, `livenessProbe` and `readinessProbe` were ignored by
