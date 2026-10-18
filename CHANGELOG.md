@@ -461,6 +461,10 @@ maintained upstream, waiver kept), OpenBao (stays 2.7.1), talos-cloud-controller
 
 ### Fixed
 
+- **Zitadel: the recovery of a setup Job that died half way is written down (apps #133).** `docs/traps.md` gives the measured procedure (delete the Job, remove
+  the one `started` event and its unique-constraint row on a first install, reset the HelmRelease) and says to restore from backup instead on a database
+  that holds data. An automatic clean-up is not done (it edits the event store from a hook; needs a cluster, 0.4.0).
+
 - **Longhorn first-install remediation is decided and documented (apps #134).** `install.remediation.retries` stays 0: Helm's remediation is an
   uninstall, and Longhorn's pre-delete Job refuses it while `deleting-confirmation-flag` is false (read in longhorn-manager v1.12.1) and could remove
   data when it is true, so a retry would strand the release instead. The one-command reset after a transient first-install error is in
