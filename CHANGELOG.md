@@ -461,6 +461,12 @@ maintained upstream, waiver kept), OpenBao (stays 2.7.1), talos-cloud-controller
 
 ### Fixed
 
+- **Longhorn: the dead `defaultSettings` keys are gone and orphan auto-deletion stays off on purpose (apps #115).** `orphanAutoDeletion` and
+  `defaultSettings.backupTarget` are not keys of the chart (1.12.1 reads `orphanResourceAutoDeletion` and `defaultBackupStore.backupTarget`);
+  they were silently dropped, and the comment claimed orphan deletion was on. It is not, and is left off: an orphan is replica data
+  with no replica object, which a restored etcd or a rebuilt node also looks like. New test `scripts/dev/test-longhorn-values.py` (CI) fails on a
+  `defaultSettings` key the pinned chart does not read. No cluster effect: the keys were already ignored.
+
 - **The two Gateway pods are spread over the nodes (lab 15c W2 follow-up).** The HPA floor of 2 and the PDB (dc6e12f) let a drain evict one
   pod, but both replicas had landed on the same node, so a node loss still cut the ingress. Istio 1.24 offers no scheduling setting for the
   Deployment it generates (`infrastructure.parametersRef` is in the CRDs, istiod 1.24 does not read it), so a Kyverno mutation

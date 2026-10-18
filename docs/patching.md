@@ -135,7 +135,9 @@ Behaviour changes met between 1.9 and 1.12 that touch this repository: the chart
 by default (`networkPolicies.restrictInternalTraffic`; set to `false` here so the brick's `CiliumNetworkPolicy` stays the
 single authority); the conversion-webhook `Service` is gone with the v1beta1 API; V2 backing images are removed
 (the repository uses the V1 engine only). `defaultSettings.orphanAutoDeletion` is not a key of the chart (it reads
-`orphanResourceAutoDeletion`) and was already ignored at 1.9.2, so orphan auto-deletion is not enabled; left as is.
+`orphanResourceAutoDeletion`) and was already ignored at 1.9.2, so orphan auto-deletion was never enabled. It stays off on purpose and the dead key
+(and the equally dead `defaultSettings.backupTarget`) are removed: an orphan is replica data with no replica object, which is also what a restored etcd
+or a rebuilt node looks like for a while. `scripts/dev/test-longhorn-values.py` fails on any `defaultSettings` key the pinned chart does not read.
 
 ## Loki chart hop (a running cluster pinned at the 6.x chart)
 

@@ -71,15 +71,16 @@ spec:
       defaultReplicaCount: 2
       # Minimum free space before refusing new volumes.
       storageMinimalAvailablePercentage: 15
-      # Automatically delete orphaned volumes (with no PVC).
-      orphanAutoDeletion: true
-      # backupTarget: deliberately left empty HERE. `defaultSettings` is only
-      # read on the FIRST deployment; the truth then lives in the CRs laid down
-      # by the `storage-backup-target` brick
-      # (apps/base/storage/backup-target), which gets the URL from the
-      # `cluster-identity` ConfigMap and the credentials from OpenBao. A value
-      # here would only serve the initial install and would diverge afterwards.
-      backupTarget: ""
+      # Orphan auto-deletion is deliberately NOT enabled (apps #115). The old key here (`orphanAutoDeletion`) is not a
+      # key of the chart (it reads `orphanResourceAutoDeletion`) and was ignored since 1.9, so nothing was ever enabled
+      # and the comment promised a behaviour that did not exist. An "orphan" is replica data on a node with no
+      # matching replica object, which is exactly what a restore of etcd or a rebuilt node looks like for a while:
+      # deleting it automatically could remove the only copy. Reclaim space by reading `kubectl get orphans.longhorn.io`
+      # first. A test fails on a key the pinned chart does not read.
+      # No backup target here either: it is the chart's `defaultBackupStore.backupTarget` (defaultSettings.backupTarget
+      # is not read), and it is deliberately left empty. The truth lives in the CRs laid down by the
+      # `storage-backup-target` brick (apps/base/storage/backup-target), which gets the URL from the
+      # `cluster-identity` ConfigMap and the credentials from OpenBao.
       # kubelet path Talos
       kubernetesClusterAutoscalerEnabled: false
     longhornManager:
