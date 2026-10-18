@@ -15,7 +15,94 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ---
 
-## [Unreleased]
+## [0.3.0] — unreleased (the date is set at the tag)
+
+0.3.0 is the pair of OpenAether-infra 0.3.0: a **version upgrade campaign** (every component that was past support, plus the independent low-risk bumps) and a
+**security hardening wave**, the latter opt-in or in Audit unless stated. The project follows ANSSI recommendations as far as possible.
+**Nothing here is a claim of compliance with any ANSSI document**: each entry names the requirements it addresses and the rung it reached.
+
+**A fresh install lands on the new versions (run on Scaleway, OVH and Outscale, labs 12 to 15). A running cluster must hop one minor at a time where the
+table says so** (`docs/patching.md`; the in-place hops were rehearsed on Scaleway only, in lab 15c, and not all of them).
+
+### Version upgrades
+
+| Component | 0.2.0 | 0.3.0 | Running cluster |
+|---|---|---|---|
+| Longhorn | 1.9.2 | 1.12.1 | hop 1.10.2 -> 1.11.3 -> 1.12.1; **pre-step on the five CRDs with a conversion webhook before 1.10** (lab 15c: the 1.10 hop failed without it, 14 min without attach); no downgrade exists; the HelmRelease no longer remediates |
+| cert-manager | 1.15.3 | 1.21.2 | one minor at a time, six Flux hops, 221-255 s each, no probe failure |
+| Kyverno | 1.12.1 | 1.19.1 | 1.13 -> 1.15 -> 1.17 -> 1.19 ran in 57-123 s each; **1.19 is the last line serving `kyverno.io/v1`; migrate before 1.20** (#113) |
+| CloudNativePG operator | 1.23.1 | 1.30.1 | every hop rolls the Clusters; with the new `primaryUpdateMethod: switchover` the write gap is about 10 s instead of 195 s; take the 0.3.0 `cnpg` Kustomization no later than the 1.27 hop (CRD substitute opt-out) |
+| PostgreSQL (Grafana DB image) | 16.3 | 16.15 | a minor roll of that Cluster |
+| External Secrets Operator | 1.2.0 | 2.13.0 | 1.3.2 then 2.13.0 ran without failure |
+| Loki chart (Loki) | 6.25.0 (3.3.2) | 18.16.2 (3.7.8), chart now from `grafana-community` | procedure below; the 6.25 -> 6.55 hop timed out in lab 15c |
+| Grafana chart (Grafana) | 8.6.4 | 14.0.1 (13.2.4), from `grafana-community` | **not rehearsed in place**; take a CNPG backup first |
+| Alloy chart (Alloy) | 0.11.0 (1.6.1) | 1.13.1 (1.20.1) | **not rehearsed in place** |
+| Zitadel chart (Zitadel) | 10.0.2 | 10.4.0 (4.19.2) | 4.14 -> 4.15 -> 4.17 -> 4.19.2 ran in 219-250 s each; migrations are forward-only: CNPG backup first |
+| victoria-metrics-operator | 0.65.1 | 0.68.1 | one rolling restart of the VM pods |
+| Flux on the children | 2.8.8 | 2.9.6 | not rehearsed |
+| cluster-api-operator / ORC | 0.27.0 / 2.4.0 | 0.29.0 / 2.6.0 | the ORC version the pinned CAPO needs |
+| Cilium on the children | 1.19.2 | 1.19.9 | a patch; one minor behind the management cluster on purpose |
+| Gateway API CRDs | 1.1.0 | 1.2.1 | **not 1.5.x** (Istio 1.24 does not become Ready with them); CRDs are not rolled back; check `storedVersions` first |
+| restic | 0.18.0 | 0.19.1 | exit code 3 now fails the Job; `prune` repacks more |
+| local-path-provisioner | 0.0.31 | 0.0.37 | restarts once; PVs untouched |
+| node-exporter chart / kube-state-metrics chart / metrics-server chart | 4.39.0 / 5.25.1 / 3.12.2 | 4.60.0 / 8.6.0 / 3.14.0 | each restarts once |
+| Kubernetes / Talos (infra) | 1.37.1 / 1.14.2 | unchanged | |
+| Istio, OpenBao, MinIO | 1.24.2, 2.7.1, RELEASE.2024-04-18 | unchanged | Istio and MinIO waived to 2026-12-31 (`docs/eol-calendar.md`) |
+
+### Upgrade notes by component (from 0.2.0)
+
+- **Longhorn.** Follow `docs/patching.md` ("Longhorn in-place hops") in order: the CRD conversion pre-step, then 1.10.2, 1.11.3, 1.12.1, engines upgrade automatically afterwards.
+  The chart NetworkPolicies are off and the brick's CiliumNetworkPolicy opens the new ports (9503/9600, 10000-30000, NFS 2049). The RWX StorageClasses
+  now carry `softerr,timeo=100,retrans=3` (a graceful reboot of a node with a share-manager and a client no longer hangs for more than 12 minutes, apps #124);
+  a volume created earlier keeps its old mount options until it is recreated.
+- **Loki chart 6.x -> 18.** A fresh install takes 18 directly. In place: the StatefulSet selector and volume claim template are unchanged. The HelmRelease has a 15 minute
+  timeout and **no automatic upgrade rollback**: on a stalled hop follow "Loki chart hop" in `docs/patching.md` (inspect the pod that is not Ready, delete all Loki pods at
+  once if only the memberlist ring waits, `flux reconcile helmrelease loki --reset --force`). Logs are not lost: Alloy retries and the chunks are in the object store.
+- **Kyverno.** The five Pod policies get a per-namespace Enforce through the **rule-level `failureAction` / `failureActionOverrides` spelling**; the old spec-level
+  `validationFailureActionOverrides` is ignored on 1.19.1 and denies nothing (lab 15a, apps 669494b). Enforce stays off by default.
+- **CloudNativePG.** Both Clusters use `primaryUpdateMethod: switchover`. `barmanObjectStore` stays until the Barman Cloud plugin replaces it (removed in CNPG 1.31, #114).
+- **Disk.** The infra default root volume is 50 GB; a 20 GB node exhausts EPHEMERAL after the larger images of 0.3.0 (DiskPressure, evictions). Grow the disks before the hops (infra CHANGELOG).
+- **OpenBao** metrics move to a second listener on 8202 (headless Service only); the listeners accept TLS 1.3 only.
+- **Grafana and Zitadel** database migrations are forward-only. Take a CNPG Backup first.
+
+### BREAKING and behaviour changes
+
+- `Longhorn` HelmRelease: `retries: 0`, no remediation (a person fixes forward). `Loki` likewise.
+- Kyverno is on 1.19.1: the cleanup CronJobs no longer exist; `PolicyException` stays off; images come from `reg.kyverno.io`.
+- node-exporter runs in its own privileged namespace `services-observability-node`; four namespaces can drop to the baseline Pod Security level (opt-in).
+- Zitadel no longer installs with its public admin password: a generated 32-character password is used.
+- The kubelet and apiserver scrapes verify TLS (the kubelet side is an opt-in component that needs infra's `kubelet_serving_cert_rotation`).
+- Kyverno reports sensitive capabilities, init containers and read-only rootfs in Audit (new violations to review, none blocking).
+- The Gateway API CRDs v1alpha2 `GRPCRoute`/`ReferenceGrant` versions disappear.
+
+### Known limitations
+
+- **Unsigned history:** no commit on the history verifies yet, so the Flux Git verification component cannot be turned on (#86; infra #332, #333). The maintainer creates a dedicated signing key later.
+- **CNPG `barmanObjectStore` is removed in CNPG 1.31** (#114) and **Kyverno `kyverno.io/v1` ClusterPolicy is removed in Kyverno 1.20** (#113): stay on 1.30.x and 1.19.x until migrated.
+- **In-place hops not rehearsed:** Loki chart 6.25 -> 18 (the lab hop stopped at 6.55 and timed out), Grafana 8.6 -> 14, Alloy, Gateway API CRDs, Flux on the children,
+  Cilium and Talos patches, Istio (#121). A fresh install of these versions was run on three clouds.
+- **Scaleway first install with the app load balancer allow-list needs two applies** (infra #361).
+- **OVH S3 has no bucket policies through the S3 API** (infra #379); **Outscale gp2 roots saturate under the full stack** (infra #376) and OOS refused dedicated EIM keys (infra #377).
+- **MinIO (dev profile) is archived upstream;** the waiver runs to 2026-12-31 (#104). Istio 1.24 is waived to the same date.
+- **Kubernetes 1.37 is outside the range cert-manager 1.21, CNPG 1.30, Flux 2.9 and others test upstream** (#105, #120); the labs ran on it.
+- **Loki retention deletion of expired chunks was never exercised** (#127); Alloy keeps log batches in memory only (#80, #119); **Zitadel -> Grafana login with MFA** was not run (#126).
+- OpenBao replicas and volumes can land on one worker (#129); the Zitadel setup Job killed half way leaves a migration lock (#133); the Longhorn install has no retries (#134).
+- The alert thresholds are estimates; most rules have run against synthetic series only.
+
+### Validated on
+
+The same labs as the infra CHANGELOG (11 to 15c, 2026-10-16 to 2026-10-18; Scaleway full DAG in 12, 13, 14 and 15c, OVH complete in 15a, Outscale full in 15b),
+each torn down and checked clean. At the end of a fresh install on the defaults: 38 Kustomizations and 16 HelmReleases Ready, `cluster-verify` 16/16, `cluster-security` 33/36 to 34/36
+(the rest skipped, not failed), strict plan "No changes". Lab 15c ran 40 upgrade hops and drills from apps 0.2.0 on Scaleway: 20896 HTTP samples through the load balancer,
+135 failed, one 73 s episode (a drain evicting the single Gateway pod); CNPG primary kill 24 s of write gap, planned switchover 12 s; Loki outage of 240 s lost no line.
+Offline: Kyverno CLI 1.19.1 (90 + 8 fixtures), Alloy 1.20.1, Zitadel 4.19.2 with PostgreSQL, Loki `-verify-config`, Grafana 13.2.4, CRD schema validation, vmalert dry runs.
+
+**NOT run:** the etcd snapshot restore; OpenBao raft snapshot restore; Istio hops; Alloy, Grafana and Gateway API CRD in-place hops; Flux (children) and Cilium/Talos patch hops;
+Zitadel -> Grafana interactive login; the alert drills (no alert was provoked); Loki retention expiry; the Flux Git verification (no signing key); an unattended run to completion.
+
+---
+
+### Detail of the 0.3.0 entries
 
 ANSSI hardening work, not released yet. **Nothing here is a claim of compliance with any ANSSI document**: each entry names the requirements it addresses and the rung it reached; the ones that only a cluster can show are listed in the lab checklist of the maintainers.
 

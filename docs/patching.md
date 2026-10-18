@@ -185,12 +185,13 @@ statement of support: a problem on 1.37 is reported upstream as outside the test
 hop, re-read the target's matrix for 1.37 before merging and note the result in the PR. No automated check exists: the matrices are prose on each
 project's site, not data (a check that parsed them would be guessing); `docs/eol-calendar.yaml` tracks component end of support, not Kubernetes compatibility.
 
-## Where it stands (2026-10-16)
+## Where it stands (2026-10-18, 0.3.0)
 
 
 
 After phase 2 the pins in [`eol-calendar.yaml`](eol-calendar.yaml) are on supported lines except Istio 1.24 (EOL 2025-06-24, waived to 2026-12-31),
-MinIO (dev profile only) and the rows whose upstream publishes no schedule. The 30-day rule is therefore **not met for Istio**, and the new pins have
-**never run on a cluster**: the checks behind them are renders, schema checks and real-software runs on a workstation (see the CHANGELOG). Whether the
-releases still pinned (Istio 1.24) have unpatched advisories was **not checked**; the dependency graph and the OSV feed the Renovate blocks above read
-are where to look.
+MinIO (dev profile only) and the rows whose upstream publishes no schedule. The 30-day rule is therefore **not met for Istio**. The new pins **ran on real
+clouds as a fresh install** (labs 12 to 15, Scaleway, OVH, Outscale) and, on Scaleway only, as in-place hops from 0.2.0 for cert-manager, Longhorn, CNPG,
+Zitadel, Kyverno, External Secrets, the VM operator and the first Loki steps (lab 15c). **Not rehearsed in place:** Loki 6.55 -> 18, Grafana, Alloy, the
+Gateway API CRDs, Flux on the children, Cilium and Talos patches, Istio (#121). Whether the releases still pinned (Istio 1.24) have unpatched advisories was
+**not checked**; the dependency graph and the OSV feed the Renovate blocks above read are where to look.
