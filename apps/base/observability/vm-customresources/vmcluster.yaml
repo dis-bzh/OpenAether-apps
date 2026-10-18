@@ -29,7 +29,8 @@ spec:
   retentionPeriod: "30d"
   replicationFactor: 2
   vminsert:
-    # Pinned (apps #117): unset, the operator's own default moves with every operator bump (0.68.1 defaults to this one).
+    # Pinned (apps #117): unset, the operator's own default moves with every operator bump (0.68.1 defaults to this
+    # one).
     image:
       tag: v1.136.0-cluster
     replicaCount: 2
@@ -66,7 +67,8 @@ spec:
     podDisruptionBudget:
       minAvailable: 1
   vmstorage:
-    # Pinned (apps #117): unset, the operator's own default moves with every operator bump (0.68.1 defaults to this one).
+    # Pinned (apps #117): unset, the operator's own default moves with every operator bump (0.68.1 defaults to this
+    # one).
     image:
       tag: v1.136.0-cluster
     replicaCount: 2
@@ -112,7 +114,8 @@ spec:
     podDisruptionBudget:
       minAvailable: 1
   vmselect:
-    # Pinned (apps #117): unset, the operator's own default moves with every operator bump (0.68.1 defaults to this one).
+    # Pinned (apps #117): unset, the operator's own default moves with every operator bump (0.68.1 defaults to this
+    # one).
     image:
       tag: v1.136.0-cluster
     replicaCount: 2

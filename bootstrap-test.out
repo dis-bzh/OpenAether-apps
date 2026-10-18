@@ -1,0 +1,239 @@
+=== the real configuration template + entrypoint: OpenBao starts, static seal, audit device, TLS ===
+gpg: checking the trustdb
+gpg: marginals needed: 3  completes needed: 1  trust model: pgp
+gpg: depth: 0  valid:   1  signed:   0  trust: 0-, 0q, 0n, 0m, 0f, 1u
+gpg: checking the trustdb
+gpg: marginals needed: 3  completes needed: 1  trust model: pgp
+gpg: depth: 0  valid:   2  signed:   0  trust: 0-, 0q, 0n, 0m, 0f, 2u
+gpg: checking the trustdb
+gpg: marginals needed: 3  completes needed: 1  trust model: pgp
+gpg: depth: 0  valid:   3  signed:   0  trust: 0-, 0q, 0n, 0m, 0f, 3u
+  [32m✓[0m OpenBao started with the rendered configuration
+  [32m✓[0m seal type is static
+=== init.sh refuses to guess: a ConfigMap it can not read is not 'development' ===
+  [32m✓[0m init.sh stops when reading the ConfigMap is forbidden
+  [32m✓[0m …and OpenBao was not initialised
+=== production mode refuses, BEFORE sys/init, what would leave a half-initialised cluster ===
+  [32m✓[0m OpenBao for the refusals started
+  [32m✓[0m a non-numeric threshold is refused
+  [32m✓[0m …and OpenBao was not initialised (the guard used to error, not fail, and let sys/init run with an empty body)
+  [32m✓[0m a key that is not base64 is refused
+  [32m✓[0m …and OpenBao was not initialised
+  [32m✓[0m a leftover recovery-shares Secret stops the run
+  [32m✓[0m …before OpenBao was initialised
+=== a root token left by a killed run is revoked at the next start ===
+  [32m✓[0m init.sh notices the leftover
+  [32m✓[0m …removes the file
+  [32m✓[0m …and the token no longer works
+=== a failure inside the root window: the root token is revoked on the way out, not left in the pod ===
+  [32m✓[0m OpenBao for the failing run started
+  [32m✓[0m init.sh fails when the hand-over is not proven
+  [32m✓[0m …and says why
+  [32m✓[0m no root token file is left in the pod's memory volume
+  [32m✓[0m the audit trail shows the root token revoked itself on the failure path
+  [32m✓[0m …and the log says so
+=== init.sh, development mode: seal key, one recovery share, the root token revoked, nothing printed ===
+  [32m✓[0m init.sh exits 0
+  [32m✓[0m Secret openbao-seal-key holds 32 bytes
+  [32m✓[0m the development recovery share is stored
+  [32m✓[0m …and labelled as development
+  [32m✓[0m no production shares Secret in development mode
+  [32m✓[0m the root token was revoked
+  [32m✓[0m the audit device from the configuration is enabled
+  [32m✓[0m the audit trail shows the root token revoking itself
+  [32m✓[0m the recovery share is not in the output
+  [32m✓[0m no token-shaped string in the output
+  [32m✓[0m the seal key is not in the output
+  [32m✓[0m no response body, root token or share file is left behind
+  [32m✓[0m the 'initialised' marker ConfigMap was written
+  [32m✓[0m the break-glass role exists right after init.sh, before configure.sh ever ran
+  [32m✓[0m the Kubernetes auth config pins no CA (a restore onto a rebuilt cluster keeps logging in)
+--- a second run changes nothing
+  [32m✓[0m second init.sh exits 0
+  [32m✓[0m no Secret changed
+  [32m✓[0m it says so
+--- a deleted seal key on an initialised cluster is never replaced by a fresh one
+  [32m✓[0m init.sh stops when the seal key is missing on an initialised cluster
+  [32m✓[0m …and says why
+  [32m✓[0m …without creating a new key
+=== configure.sh under the bootstrap identity: engines, policies, roles, application secrets ===
+  [32m✓[0m configure.sh exits 0
+  [32m✓[0m policy openaether-bootstrap
+  [32m✓[0m policy openaether-breakglass
+  [32m✓[0m policy external-secrets-read
+  [32m✓[0m policy cert-manager-pki
+  [32m✓[0m policy backup-snapshot
+  [32m✓[0m policy secret-seeder
+  [32m✓[0m policy openaether-admin
+  [32m✓[0m policy openaether-reader
+  [32m✓[0m role backup-snapshot
+  [32m✓[0m role cert-manager-issuer
+  [32m✓[0m role external-secrets-operator
+  [32m✓[0m role openaether-admin
+  [32m✓[0m role openaether-reader
+  [32m✓[0m role openbao-bootstrap
+  [32m✓[0m role openbao-breakglass
+  [32m✓[0m role secret-seeder
+  [32m✓[0m secret/grafana/admin exists
+  [32m✓[0m secret/grafana/db exists
+  [32m✓[0m secret/minio/root exists
+  [32m✓[0m secret/longhorn/encryption exists
+  [32m✓[0m secret/zitadel/db exists
+  [32m✓[0m secret/zitadel/masterkey exists
+  [32m✓[0m secret/zitadel/admin exists
+  [32m✓[0m secret/backup/restic exists
+  [32m✓[0m the intermediate CSR is stored in secret/pki/intermediate-csr (outlives the Job's log)
+  [32m✓[0m no application secret value in the output
+  [32m✓[0m the Zitadel master key is exactly 32 characters
+  [32m✓[0m the Zitadel first-admin password has 15+ characters and all four classes
+  [32m✓[0m ...and is not upstream's default
+--- a second run changes no secret
+  [32m✓[0m second configure.sh exits 0
+  [32m✓[0m backup/restic is unchanged
+  [32m✓[0m it reports the secrets as already present
+  [32m✓[0m two runs, one pending PKI key (no key per sync)
+  [32m✓[0m the second run says the CSR is pending
+  [32m✓[0m the stored CSR is unchanged by the second run (still version 1)
+--- PKI: key types, role, revocation information, tidy (a throwaway EC root signs the intermediate, as the runbook does)
+  [32m✓[0m the intermediate CSR is an ECDSA P-384 key
+  [32m✓[0m the intermediate signed by the offline root is imported
+  [32m✓[0m role openaether: key_type=ec
+  [32m✓[0m role openaether: key_bits=256
+  [32m✓[0m role openaether: client_flag=false
+  [32m✓[0m role openaether: server_flag=true
+  [32m✓[0m role openaether: allow_wildcard_certificates=false
+  [32m✓[0m role openaether: allow_bare_domains=false
+  [32m✓[0m role openaether: allow_ip_sans=false
+  [32m✓[0m role openaether: key usage is DigitalSignature only
+  [32m✓[0m the role issues an ECDSA leaf
+  [32m✓[0m …with serverAuth and no clientAuth
+  [32m✓[0m …and Digital Signature as its only key usage
+  [32m✓[0m …carrying the CRL distribution point
+  [32m✓[0m …and the OCSP and CA Issuers URLs of the in-cluster service
+  [32m✓[0m the chain verifies up to the throwaway root
+  [32m✓[0m an RSA key is refused (role requires keys of type ec)
+  [32m✓[0m a wildcard name is refused (subject alternate name *.openaether.local not allowed by this role)
+  [32m✓[0m the bare domain is refused (subject alternate name openaether.local not allowed by this role)
+  [32m✓[0m a name outside the domain is refused (subject alternate name evil.example.com not allowed by this role)
+  [32m✓[0m an IP address SAN is refused (IP Subject Alternative Names are not allowed in this role, but was provided via CSR)
+  [32m✓[0m a bare-domain common name is refused (common name openaether.local not allowed by this role)
+  [32m✓[0m config/urls points at the in-cluster service
+  [32m✓[0m the CRL is rebuilt automatically (delta CRLs on, 72h)
+  [32m✓[0m auto-tidy is enabled for the cert store and revoked certificates
+  [32m✓[0m a revoked leaf is on the CRL, served without a token
+  [32m✓[0m …and the CRL is signed by the intermediate
+--- PKI: a second run changes nothing; the default issuer only follows imports on request; the RSA-3072 variant
+  [32m✓[0m configure.sh on a mount with a signed intermediate exits 0
+  [32m✓[0m …and finds it present
+  [32m✓[0m the default issuer does not follow imports by default
+  [32m✓[0m configure.sh with OA_PKI_DEFAULT_FOLLOWS_LATEST=true exits 0
+  [32m✓[0m …and the default issuer follows the latest import
+  [32m✓[0m configure.sh with OA_PKI_KEY_TYPE=rsa exits 0
+  [32m✓[0m the RSA variant signs an RSA-3072 key
+  [32m✓[0m an RSA-2048 key under the RSA variant is refused (role requires a minimum of a 3072-bit key, but CSR's key is 2048 bits)
+  [32m✓[0m …with PSS signatures
+  [32m✓[0m an unknown OA_PKI_KEY_TYPE stops configure.sh with a message
+  [32m✓[0m back to the default: the role is EC again
+--- the seeding identity can create and test, never overwrite or read a value
+    (bootstrap identity creating a token: 1 error occurred:
+	* permission denied)
+  [32m✓[0m the bootstrap identity can not mint tokens
+=== production mode: PGP-encrypted recovery shares that decrypt, and the documented break-glass ===
+  [32m✓[0m second OpenBao started
+  [32m✓[0m init.sh (production) exits 0
+  [32m✓[0m three recovery shares stored
+  [32m✓[0m no development Secret in production mode
+  [32m✓[0m share 1 decrypts with operator 1's private key
+  [32m✓[0m the log says production mode
+  [32m✓[0m configure.sh (production) exits 0
+=== the policies, as an enforcement: what each identity can and can not do (a fresh instance, root still held) ===
+--- secret-seeder: create once, never overwrite, never read a value
+  [32m✓[0m seeder creates backup/s3-primary (200)
+  [32m✓[0m seeder can not overwrite it (403)
+  [32m✓[0m seeder can not read the value (403)
+  [32m✓[0m seeder can test that it exists (200)
+  [32m✓[0m seeder can not write elsewhere (403)
+--- openaether-admin: secrets yes, structure no
+  [32m✓[0m admin reads a secret (200)
+  [32m✓[0m admin writes a secret (200)
+  [32m✓[0m admin reads the stored CSR (200)
+  [32m✓[0m admin can not overwrite the stored CSR (403)
+  [32m✓[0m admin can not delete the stored CSR (403)
+  [32m✓[0m admin can not destroy its versions (403)
+  [32m✓[0m admin can not wipe its metadata (403)
+  [32m✓[0m admin can not soft-delete a version (the delete endpoint) (403)
+  [32m✓[0m admin can not undelete a version (403)
+  [32m✓[0m admin can not delete the stored CSR with a trailing slash (403)
+  [32m✓[0m admin can not wipe its metadata with a trailing slash (403)
+  [32m✓[0m the stored CSR is still version 1 and readable after every attempt
+  [32m✓[0m admin reads a policy (200)
+  [32m✓[0m admin can not write a policy (403)
+  [32m✓[0m admin can not mount an engine (403)
+  [32m✓[0m admin can not write a PKI role (allow_any_name would issue for anything) (403)
+  [32m✓[0m admin can not touch the PKI root (403)
+  [32m✓[0m admin may import a signed intermediate (not denied: 400)
+  [32m✓[0m admin can list the PKI roles (404)
+  [32m✓[0m admin can not mint a token (403)
+  [32m✓[0m admin can not write an auth role (403)
+  [32m✓[0m admin can not seal (403)
+  [32m✓[0m admin can not read raw storage (403)
+  [32m✓[0m admin can not start a root generation (403)
+--- the others
+  [32m✓[0m reader reads a secret (200)
+  [32m✓[0m reader can not write (403)
+  [32m✓[0m ESO reads a secret (200)
+  [32m✓[0m ESO can not write (403)
+  [32m✓[0m break-glass can not read a secret (403)
+  [32m✓[0m bootstrap can not seal (403)
+  [32m✓[0m bootstrap can not mint a token (403)
+  [32m✓[0m bootstrap can not read raw storage (403)
+  [32m✓[0m bootstrap can not disable the audit (403)
+  [32m✓[0m cert-manager may sign (not denied: 400)
+  [32m✓[0m cert-manager can not read a secret (403)
+  [32m✓[0m snapshot may take the snapshot (not denied: 200)
+  [32m✓[0m snapshot can not read a secret (403)
+=== production mode (continued): break-glass ===
+  [32m✓[0m break-glass produced a root token from 2 decrypted shares
+  [32m✓[0m …and that root token works
+=== disaster recovery: a raft snapshot restored into a NEW cluster needs the escrowed seal key ===
+  [32m✓[0m snapshot taken from the source cluster
+  [32m✓[0m forced restore into a fresh cluster with the SAME seal key (204)
+  [32m✓[0m the restored cluster is unsealed and active
+  [32m✓[0m the secret is back, read with a token that only existed in the source cluster
+  [32m✓[0m the recovery configuration is the SOURCE's (2 shares required, not the target's 1)
+  [32m✓[0m with ANOTHER seal key the data does not come back (restore answered 204): the key is the data
+=== seal key rotation: new key + previous key, then the previous key dropped ===
+  [32m✓[0m OpenBao with key 1
+  [32m✓[0m restart with key 2 + previous-key 1: unsealed
+  [32m✓[0m the data is intact after the rotation
+  [32m✓[0m restart with key 2 only: unsealed (the previous key is no longer needed)
+=== TLS 1.3 only, the metrics listener, and the certificate reload (the real template, entrypoint and cert-reload.sh) ===
+  [32m✓[0m OpenBao started with the TLS directory of the test
+  [32m✓[0m TLS 1.3 is accepted and the certificate verifies
+  [32m✓[0m the API listener refuses TLS 1.2
+  [32m✓[0m the metrics listener refuses TLS 1.2
+  [32m✓[0m key exchange X25519 is accepted
+  [32m✓[0m key exchange secp384r1 is accepted
+  [32m✓[0m key exchange secp256r1 is accepted
+  [32m✓[0m a curve outside tls_key_exchange_preferences (secp521r1) is refused
+  [32m✓[0m a TLS 1.2 client (curl --tls-max 1.2) gets no answer
+  [32m✓[0m the API listener does not serve the metrics without a token
+  [32m✓[0m the metrics listener serves them without a token, SEALED and uninitialised
+  [32m✓[0m a sealed pod reports vault_core_unsealed 0 (the alert reads this)
+  [32m✓[0m initialised and unsealed
+  rules read: vault_autopilot_failure_tolerance, vault_core_active, vault_core_unsealed, vault_raft_storage_stats_applied_index, vault_raft_storage_stats_commit_index | missing: none
+  [32m✓[0m every vault_* metric the OpenBao alerts read is served by this OpenBao
+  [32m✓[0m an unsealed pod reports vault_core_unsealed 1 under its cluster name
+  [32m✓[0m the metrics listener's cluster port is on the loopback only
+  [32m✓[0m the API listener serves the renewed certificate without a restart (serial=4D8A17C9044E1B332E6F1CCDE3BBAA525294A9CB -> serial=1092)
+  [32m✓[0m so does the metrics listener
+  [32m✓[0m the sidecar logged the signal
+  [32m✓[0m the server survived the SIGHUP
+  [32m✓[0m the audit device still writes to stdout after the reload
+  [32m✓[0m audit lines start with {"time","type" (the Alloy log_type selector keys on it)
+  [32m✓[0m the server log is JSON too (log_format = json)
+=== OA_TLS_MIN_VERSION: tls12 is the documented way back; anything else is refused ===
+  [32m✓[0m OpenBao started with OA_TLS_MIN_VERSION=tls12
+  [32m✓[0m …and then accepts TLS 1.2
+  [32m✓[0m an unknown value stops the entrypoint with a message
+203 passed, 0 failed

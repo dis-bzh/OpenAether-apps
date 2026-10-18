@@ -1,0 +1,27 @@
+--- the base brick (what runs today, plus the session and log settings)
+ok   sessions: 2h idle, 12h in all
+ok   the local login form is NOT hidden
+ok   the role mapping is permissive: strict false and a Viewer fallback
+ok   every HTTP request is logged, as JSON
+ok   SSO still creates the user at first login
+ok   the server root_url and the database survive the section move
+--- the SSO-only overlay (off by default)
+ok   it hides the local login form
+ok   it keeps the session lifetimes
+ok   the role mapping is strict
+ok   grafana-admin gives Admin
+ok   grafana-viewer gives Viewer
+ok   both: Admin wins
+ok   any other role gives nothing (strict then denies)
+ok   no roles claim at all gives nothing
+ok   nothing else differs between the base and the overlay
+--- the chart rendered with each (grafana.ini as Grafana will read it)
+ok   base: [auth] carries the lifetimes
+ok   base: [log.console] format = json and router_logging = true
+ok   base: disable_login_form is absent
+ok   base: role_attribute_strict = false
+ok   only: [auth] carries the lifetimes
+ok   only: [log.console] format = json and router_logging = true
+ok   only: disable_login_form is set
+ok   only: role_attribute_strict = true
+0 failed

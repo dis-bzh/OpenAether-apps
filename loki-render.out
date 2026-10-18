@@ -1,0 +1,60 @@
+ok   base: no hard pod anti-affinity (replicas may share a node when there are fewer nodes than replicas)
+ok   base: one StatefulSet loki with 3 replica(s)
+ok   base: no ClusterRole nor ClusterRoleBinding (no cluster-wide read of ConfigMaps/Secrets)
+ok   base: no rules sidecar container (loki-sc-rules)
+ok   base: sidecar.securityContext kept (non-root, no escalation, drop ALL, RuntimeDefault) next to rules.enabled false
+ok   base: no loki-canary DaemonSet
+ok   base: PodDisruptionBudget present with minAvailable 1
+ok   base: compactor enforces retention (retention_enabled, delete_request_store s3, working_directory)
+ok   base: retention_period 8760h == 8760h
+ok   base: replication_factor 2
+ok   base: s3 insecure False
+ok   base: s3 path style kept
+ok   base: s3 region is the injected one, not a literal
+ok   base: compactor never runs with a retention under 168h
+ok   base: a replica can be down and a write still reaches RF (replicas > RF)
+ok   base: the shipped retention is the one-year baseline
+ok   base: s3 endpoint is https in the render
+ok   local: no hard pod anti-affinity (replicas may share a node when there are fewer nodes than replicas)
+ok   local: one StatefulSet loki with 1 replica(s)
+ok   local: no ClusterRole nor ClusterRoleBinding (no cluster-wide read of ConfigMaps/Secrets)
+ok   local: no rules sidecar container (loki-sc-rules)
+ok   local: sidecar.securityContext kept (non-root, no escalation, drop ALL, RuntimeDefault) next to rules.enabled false
+ok   local: no loki-canary DaemonSet
+ok   local: PodDisruptionBudget absent
+ok   local: compactor enforces retention (retention_enabled, delete_request_store s3, working_directory)
+ok   local: retention_period 168h == 168h
+ok   local: replication_factor 1
+ok   local: s3 insecure True
+ok   local: s3 path style kept
+ok   local: s3 region is the injected one, not a literal
+ok   local: compactor never runs with a retention under 168h
+ok   helmrelease: upgrade.timeout is at least 15m (a rolling update of the replicas takes longer than the 5m default)
+ok   helmrelease: upgrade.remediation.retries 0 and remediateLastFailure false (no automatic Helm rollback of a chart hop)
+ok   helmrelease: install keeps its retries (a failed first install has nothing to lose)
+ok   base: the pod advertises its own IP to memberlist (a stale address is what stalled the lab hop)
+ok   externalsecret: loki-s3-credentials exists
+ok   externalsecret: the Secret carries accessKey, secretKey, endpoint, bucket and region
+ok   externalsecret: extract (an absent optional region must not fail it)
+ok   externalsecret: region falls back to us-east-1 and prefers a seeded value
+ok   externalsecret: the host match is a readable printf of $hosts and $oos
+ok   externalsecret: https://s3.fr-par.scw.cloud gives fr-par
+ok   externalsecret: https://s3.eu-west-par.io.cloud.ovh.net gives eu-west-par
+ok   externalsecret: https://oos.eu-west-2.outscale.com gives eu-west-2
+ok   externalsecret: http://minio.foundation-storage:9000 gives us-east-1
+ok   externalsecret: https://s3.fr-par.scw.cloud.evil.example gives us-east-1
+ok   externalsecret: https://evil.example/s3.fr-par.scw.cloud gives us-east-1
+ok   externalsecret: the S3 host s3.fr-par.scw.cloud yields a non-default region
+ok   externalsecret: the S3 host s3.nl-ams.scw.cloud yields a non-default region
+ok   externalsecret: the S3 host s3.eu-west-par.io.cloud.ovh.net yields a non-default region
+ok   externalsecret: the S3 host s3.gra.io.cloud.ovh.net yields a non-default region
+ok   externalsecret: the S3 host oos.eu-west-2.outscale.com yields a non-default region
+ok   netpol: CiliumNetworkPolicy loki exists
+ok   netpol: DNS egress carries rules.dns (Cilium learns the S3 addresses from the lookup)
+ok   netpol: Loki egress to Loki peers on 3100, 9095, 7946/tcp and 7946/udp
+ok   netpol: Loki ingress from Loki peers on 3100, 9095, 7946/tcp and 7946/udp
+ok   netpol: ingress from Alloy and Grafana on 3100
+ok   netpol: S3 egress is FQDN-scoped on 443/tcp, not toEntities world
+ok   netpol: FQDN list covers every region of the Scaleway, OVH and Outscale S3 hosts
+ok   netpol: local MinIO egress on 9000/tcp
+0 failed

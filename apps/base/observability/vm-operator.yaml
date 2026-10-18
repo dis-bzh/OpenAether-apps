@@ -69,8 +69,10 @@ spec:
       limits:
         cpu: 500m
         memory: 512Mi
-    # More probe tolerance to give the first reconcile time to finish (VMCluster 6 StatefulSets). The keys the chart reads
-    # are probe.readiness / probe.liveness (the former top-level probePath, livenessProbe and readinessProbe were ignored:
+    # More probe tolerance to give the first reconcile time to finish (VMCluster 6 StatefulSets). The keys the chart
+    # reads
+    # are probe.readiness / probe.liveness (the former top-level probePath, livenessProbe and readinessProbe were
+    # ignored:
     # apps #117); the maps merge, so the chart's own httpGet / tcpSocket stays.
     probe:
       readiness:

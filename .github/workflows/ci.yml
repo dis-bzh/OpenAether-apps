@@ -148,16 +148,16 @@ jobs:
       - name: Provider S3 egress rules admit every region of the provider (#53)
         run: python3 -I scripts/dev/test-s3-egress-fqdns.py
 
-      - name: CNPG clusters send checksums only when required (barman-cloud on Outscale OOS, #132)
+      - name: "CNPG clusters send checksums only when required (barman-cloud on Outscale OOS, #132)"
         run: python3 -I scripts/dev/test-cnpg-s3-checksum-env.py
 
       - name: CNPG clusters roll the primary by switchover, not by an in-place restart (lab 15c)
         run: python3 -I scripts/dev/test-cnpg-primary-update.py
 
-      - name: Longhorn values are keys the pinned chart reads, and its remediation stays off (#115, #134)
+      - name: "Longhorn values are keys the pinned chart reads, and its remediation stays off (#115, #134)"
         run: python3 -I scripts/dev/test-longhorn-values.py
 
-      - name: VictoriaMetrics images are pinned and the operator values are chart keys (#117)
+      - name: "VictoriaMetrics images are pinned and the operator values are chart keys (#117)"
         run: python3 -I scripts/dev/test-vm-pins.py
 
       - name: The Gateway keeps two replicas and a disruption budget (lab 15c)

@@ -1,0 +1,249 @@
+ok   backup-alerts: a rule of openaether-backups is an alert, not a recording rule
+ok   BackupJobFailed: unique alert name
+ok   BackupJobFailed: severity label in none/info/warning/critical
+ok   BackupJobFailed: summary annotation
+ok   backup-alerts: a rule of openaether-backups is an alert, not a recording rule
+ok   BackupCronJobStale: unique alert name
+ok   BackupCronJobStale: severity label in none/info/warning/critical
+ok   BackupCronJobStale: summary annotation
+ok   backup-alerts: a rule of openaether-backups is an alert, not a recording rule
+ok   BackupCronJobSuspended: unique alert name
+ok   BackupCronJobSuspended: severity label in none/info/warning/critical
+ok   BackupCronJobSuspended: summary annotation
+ok   backup-alerts: a rule of openaether-backups-verification is an alert, not a recording rule
+ok   RestoreTestStale: unique alert name
+ok   RestoreTestStale: severity label in none/info/warning/critical
+ok   RestoreTestStale: summary annotation
+ok   backup-alerts: a rule of openaether-backups-verification is an alert, not a recording rule
+ok   BackupCronJobMissing: unique alert name
+ok   BackupCronJobMissing: severity label in none/info/warning/critical
+ok   BackupCronJobMissing: summary annotation
+ok   backup-alerts: a rule of openaether-backups-verification is an alert, not a recording rule
+ok   CnpgWalArchiveFailing: unique alert name
+ok   CnpgWalArchiveFailing: severity label in none/info/warning/critical
+ok   CnpgWalArchiveFailing: summary annotation
+ok   backup-alerts: a rule of openaether-backups-verification is an alert, not a recording rule
+ok   CnpgBackupFailed: unique alert name
+ok   CnpgBackupFailed: severity label in none/info/warning/critical
+ok   CnpgBackupFailed: summary annotation
+ok   backup-alerts: a rule of openaether-backups-verification is an alert, not a recording rule
+ok   CnpgBackupStale: unique alert name
+ok   CnpgBackupStale: severity label in none/info/warning/critical
+ok   CnpgBackupStale: summary annotation
+ok   backup-alerts: a rule of openaether-backups-verification is an alert, not a recording rule
+ok   CnpgMetricsAbsent: unique alert name
+ok   CnpgMetricsAbsent: severity label in none/info/warning/critical
+ok   CnpgMetricsAbsent: summary annotation
+ok   backup-alerts: a rule of openaether-backups-verification is an alert, not a recording rule
+ok   OpenBaoEscrowNotAttested: unique alert name
+ok   OpenBaoEscrowNotAttested: severity label in none/info/warning/critical
+ok   OpenBaoEscrowNotAttested: summary annotation
+ok   bootstrap-alerts: a rule of openaether-bootstrap is an alert, not a recording rule
+ok   OpenBaoBootstrapJobFailed: unique alert name
+ok   OpenBaoBootstrapJobFailed: severity label in none/info/warning/critical
+ok   OpenBaoBootstrapJobFailed: summary annotation
+ok   cluster-health-alerts: a rule of openaether-nodes is an alert, not a recording rule
+ok   NodeUnreachable: unique alert name
+ok   NodeUnreachable: severity label in none/info/warning/critical
+ok   NodeUnreachable: summary annotation
+ok   cluster-health-alerts: a rule of openaether-nodes is an alert, not a recording rule
+ok   NodeNotReady: unique alert name
+ok   NodeNotReady: severity label in none/info/warning/critical
+ok   NodeNotReady: summary annotation
+ok   cluster-health-alerts: a rule of openaether-nodes is an alert, not a recording rule
+ok   NodeUnderPressure: unique alert name
+ok   NodeUnderPressure: severity label in none/info/warning/critical
+ok   NodeUnderPressure: summary annotation
+ok   cluster-health-alerts: a rule of openaether-node-resources is an alert, not a recording rule
+ok   NodeFilesystemFillingUp: unique alert name
+ok   NodeFilesystemFillingUp: severity label in none/info/warning/critical
+ok   NodeFilesystemFillingUp: summary annotation
+ok   cluster-health-alerts: a rule of openaether-node-resources is an alert, not a recording rule
+ok   NodeFilesystemFullIn24h: unique alert name
+ok   NodeFilesystemFullIn24h: severity label in none/info/warning/critical
+ok   NodeFilesystemFullIn24h: summary annotation
+ok   cluster-health-alerts: a rule of openaether-node-resources is an alert, not a recording rule
+ok   NodeClockSkew: unique alert name
+ok   NodeClockSkew: severity label in none/info/warning/critical
+ok   NodeClockSkew: summary annotation
+ok   cluster-health-alerts: a rule of openaether-node-resources is an alert, not a recording rule
+ok   NodeClockNotSynchronised: unique alert name
+ok   NodeClockNotSynchronised: severity label in none/info/warning/critical
+ok   NodeClockNotSynchronised: summary annotation
+ok   cluster-health-alerts: a rule of openaether-workloads is an alert, not a recording rule
+ok   PodCrashLooping: unique alert name
+ok   PodCrashLooping: severity label in none/info/warning/critical
+ok   PodCrashLooping: summary annotation
+ok   cluster-health-alerts: a rule of openaether-workloads is an alert, not a recording rule
+ok   PersistentVolumeFillingUp: unique alert name
+ok   PersistentVolumeFillingUp: severity label in none/info/warning/critical
+ok   PersistentVolumeFillingUp: summary annotation
+ok   cluster-health-alerts: a rule of openaether-etcd is an alert, not a recording rule
+ok   EtcdNoLeader: unique alert name
+ok   EtcdNoLeader: severity label in none/info/warning/critical
+ok   EtcdNoLeader: summary annotation
+ok   cluster-health-alerts: a rule of openaether-etcd is an alert, not a recording rule
+ok   EtcdQuorumLost: unique alert name
+ok   EtcdQuorumLost: severity label in none/info/warning/critical
+ok   EtcdQuorumLost: summary annotation
+ok   cluster-health-alerts: a rule of openaether-etcd is an alert, not a recording rule
+ok   EtcdMemberDown: unique alert name
+ok   EtcdMemberDown: severity label in none/info/warning/critical
+ok   EtcdMemberDown: summary annotation
+ok   cluster-health-alerts: a rule of openaether-etcd is an alert, not a recording rule
+ok   EtcdLeaderFlapping: unique alert name
+ok   EtcdLeaderFlapping: severity label in none/info/warning/critical
+ok   EtcdLeaderFlapping: summary annotation
+ok   cluster-health-alerts: a rule of openaether-watchdog is an alert, not a recording rule
+ok   Watchdog: unique alert name
+ok   Watchdog: severity label in none/info/warning/critical
+ok   Watchdog: summary annotation
+ok   cluster-health-alerts: a rule of openaether-monitoring-itself is an alert, not a recording rule
+ok   KubeStateMetricsAbsent: unique alert name
+ok   KubeStateMetricsAbsent: severity label in none/info/warning/critical
+ok   KubeStateMetricsAbsent: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   AlloyNotRunningEverywhere: unique alert name
+ok   AlloyNotRunningEverywhere: severity label in none/info/warning/critical
+ok   AlloyNotRunningEverywhere: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   AlloyAbsent: unique alert name
+ok   AlloyAbsent: severity label in none/info/warning/critical
+ok   AlloyAbsent: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   AlloyDroppingLogs: unique alert name
+ok   AlloyDroppingLogs: severity label in none/info/warning/critical
+ok   AlloyDroppingLogs: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   AlloyNotShipping: unique alert name
+ok   AlloyNotShipping: severity label in none/info/warning/critical
+ok   AlloyNotShipping: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   AlloyMetricsAbsent: unique alert name
+ok   AlloyMetricsAbsent: severity label in none/info/warning/critical
+ok   AlloyMetricsAbsent: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   LokiPushErrors: unique alert name
+ok   LokiPushErrors: severity label in none/info/warning/critical
+ok   LokiPushErrors: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   LokiReplicaNotReady: unique alert name
+ok   LokiReplicaNotReady: severity label in none/info/warning/critical
+ok   LokiReplicaNotReady: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   LokiDiscardingLogs: unique alert name
+ok   LokiDiscardingLogs: severity label in none/info/warning/critical
+ok   LokiDiscardingLogs: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   LokiMetricsAbsent: unique alert name
+ok   LokiMetricsAbsent: severity label in none/info/warning/critical
+ok   LokiMetricsAbsent: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   LokiIngestionBurst: unique alert name
+ok   LokiIngestionBurst: severity label in none/info/warning/critical
+ok   LokiIngestionBurst: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   GrafanaServerErrors: unique alert name
+ok   GrafanaServerErrors: severity label in none/info/warning/critical
+ok   GrafanaServerErrors: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   K8sAuditCollectorNotRunning: unique alert name
+ok   K8sAuditCollectorNotRunning: severity label in none/info/warning/critical
+ok   K8sAuditCollectorNotRunning: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   K8sAuditLogSilent: unique alert name
+ok   K8sAuditLogSilent: severity label in none/info/warning/critical
+ok   K8sAuditLogSilent: summary annotation
+ok   logging-alerts: a rule of openaether-logging is an alert, not a recording rule
+ok   K8sAuditLogNeverRead: unique alert name
+ok   K8sAuditLogNeverRead: severity label in none/info/warning/critical
+ok   K8sAuditLogNeverRead: summary annotation
+ok   platform-alerts: a rule of openaether-flux is an alert, not a recording rule
+ok   FluxReconciliationStalled: unique alert name
+ok   FluxReconciliationStalled: severity label in none/info/warning/critical
+ok   FluxReconciliationStalled: summary annotation
+ok   platform-alerts: a rule of openaether-cilium is an alert, not a recording rule
+ok   CiliumPolicyImportFailed: unique alert name
+ok   CiliumPolicyImportFailed: severity label in none/info/warning/critical
+ok   CiliumPolicyImportFailed: summary annotation
+ok   platform-alerts: a rule of openaether-cilium is an alert, not a recording rule
+ok   CiliumEndpointRegenerationFailing: unique alert name
+ok   CiliumEndpointRegenerationFailing: severity label in none/info/warning/critical
+ok   CiliumEndpointRegenerationFailing: summary annotation
+ok   platform-alerts: a rule of openaether-cilium is an alert, not a recording rule
+ok   CiliumAgentMissing: unique alert name
+ok   CiliumAgentMissing: severity label in none/info/warning/critical
+ok   CiliumAgentMissing: summary annotation
+ok   platform-alerts: a rule of openaether-network-policy is an alert, not a recording rule
+ok   CiliumPolicyDeniedBurst: unique alert name
+ok   CiliumPolicyDeniedBurst: severity label in none/info/warning/critical
+ok   CiliumPolicyDeniedBurst: summary annotation
+ok   platform-alerts: a rule of openaether-certificates is an alert, not a recording rule
+ok   CertificateExpiringSoon: unique alert name
+ok   CertificateExpiringSoon: severity label in none/info/warning/critical
+ok   CertificateExpiringSoon: summary annotation
+ok   platform-alerts: a rule of openaether-certificates is an alert, not a recording rule
+ok   CertificateNotReady: unique alert name
+ok   CertificateNotReady: severity label in none/info/warning/critical
+ok   CertificateNotReady: summary annotation
+ok   platform-alerts: a rule of openaether-databases is an alert, not a recording rule
+ok   CnpgInstancePodSucceeded: unique alert name
+ok   CnpgInstancePodSucceeded: severity label in none/info/warning/critical
+ok   CnpgInstancePodSucceeded: summary annotation
+ok   security-alerts: a rule of openaether-policy-engine is an alert, not a recording rule
+ok   KyvernoPolicyViolation: unique alert name
+ok   KyvernoPolicyViolation: severity label in none/info/warning/critical
+ok   KyvernoPolicyViolation: summary annotation
+ok   security-alerts: a rule of openaether-policy-engine is an alert, not a recording rule
+ok   KyvernoAdmissionDown: unique alert name
+ok   KyvernoAdmissionDown: severity label in none/info/warning/critical
+ok   KyvernoAdmissionDown: summary annotation
+ok   security-alerts: a rule of openaether-policy-engine is an alert, not a recording rule
+ok   KyvernoControllerNotReady: unique alert name
+ok   KyvernoControllerNotReady: severity label in none/info/warning/critical
+ok   KyvernoControllerNotReady: summary annotation
+ok   security-alerts: a rule of openaether-policy-engine is an alert, not a recording rule
+ok   KyvernoMetricsAbsent: unique alert name
+ok   KyvernoMetricsAbsent: severity label in none/info/warning/critical
+ok   KyvernoMetricsAbsent: summary annotation
+ok   security-alerts: a rule of openaether-gitops is an alert, not a recording rule
+ok   FluxObjectNotReady: unique alert name
+ok   FluxObjectNotReady: severity label in none/info/warning/critical
+ok   FluxObjectNotReady: summary annotation
+ok   security-alerts: a rule of openaether-gitops is an alert, not a recording rule
+ok   FluxSourceNotVerified: unique alert name
+ok   FluxSourceNotVerified: severity label in none/info/warning/critical
+ok   FluxSourceNotVerified: summary annotation
+ok   security-alerts: a rule of openaether-gitops is an alert, not a recording rule
+ok   FluxObjectSuspended: unique alert name
+ok   FluxObjectSuspended: severity label in none/info/warning/critical
+ok   FluxObjectSuspended: summary annotation
+ok   security-alerts: a rule of openaether-gitops is an alert, not a recording rule
+ok   FluxStateMetricsAbsent: unique alert name
+ok   FluxStateMetricsAbsent: severity label in none/info/warning/critical
+ok   FluxStateMetricsAbsent: summary annotation
+ok   openbao-alerts: a rule of openaether-openbao is an alert, not a recording rule
+ok   OpenBaoWorkloadSealed: unique alert name
+ok   OpenBaoWorkloadSealed: severity label in none/info/warning/critical
+ok   OpenBaoWorkloadSealed: summary annotation
+ok   openbao-alerts: a rule of openaether-openbao is an alert, not a recording rule
+ok   OpenBaoNoActiveNode: unique alert name
+ok   OpenBaoNoActiveNode: severity label in none/info/warning/critical
+ok   OpenBaoNoActiveNode: summary annotation
+ok   openbao-alerts: a rule of openaether-openbao is an alert, not a recording rule
+ok   OpenBaoRaftNoFailureTolerance: unique alert name
+ok   OpenBaoRaftNoFailureTolerance: severity label in none/info/warning/critical
+ok   OpenBaoRaftNoFailureTolerance: summary annotation
+ok   openbao-alerts: a rule of openaether-openbao is an alert, not a recording rule
+ok   OpenBaoRaftApplyLag: unique alert name
+ok   OpenBaoRaftApplyLag: severity label in none/info/warning/critical
+ok   OpenBaoRaftApplyLag: summary annotation
+ok   openbao-alerts: a rule of openaether-openbao is an alert, not a recording rule
+ok   OpenBaoMetricsDown: unique alert name
+ok   OpenBaoMetricsDown: severity label in none/info/warning/critical
+ok   OpenBaoMetricsDown: summary annotation
+ok   at least 40 alert rules are loaded
+0 failed
+ok   vmalert -dryRun accepts all 61 rules
+ok   vmalert-tool unittest: 14 cases pass
+0 failed

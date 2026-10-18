@@ -1,0 +1,5 @@
+selftest: missing ttl detected
+selftest: short deadline detected
+selftest: alert without openbao-init detected
+selftest: ttl above 2 hours detected
+selftest: ttl below the alert's for detected

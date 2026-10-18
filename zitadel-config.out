@@ -1,0 +1,37 @@
+  [32m✓[0m the chart zitadel 10.4.0 renders with the shipped values
+=== an instance created from the manifests as they were (no first-admin password, no policies)
+  [32m✓[0m Zitadel v4.19.2 is up on an empty database
+  [32m✓[0m upstream's public Password1! logs in as the IAM_OWNER admin (the gap, reproduced)
+  [32m✓[0m the password policy is upstream's 8 characters
+  [32m✓[0m self-registration is open by default
+=== the same instance, restarted with the shipped values (an EXISTING instance)
+  [32m✓[0m restart with argon2id and NO bcrypt verifier
+  [32m✓[0m ...nobody can log in: the bcrypt verifier is what keeps existing passwords working
+  [32m✓[0m restart with the shipped values
+  [32m✓[0m the existing bcrypt password still logs in
+  [32m✓[0m the setup Job re-run on this instance with the first-admin password in its config succeeds and leaves the password alone
+  [32m✓[0m ...and its hash was rewritten as argon2id (m=32768)
+  [32m✓[0m DefaultInstance.* changed NOTHING on the existing instance (it is read once, at creation)
+  [32m✓[0m zitadel-apply-policies.py: the dry run lists the differences and changes nothing
+  [32m✓[0m ...--apply sets complexity 15, lockout 5, MFA forced, registration closed, 1 h access tokens
+  [32m✓[0m ...and a second run changes nothing
+  [32m✓[0m ...the login policy's other fields are kept (a PUT replaces the whole policy)
+=== lockout and the break-glass
+  [32m✓[0m 5 wrong passwords lock the account, even for the right one
+  [32m✓[0m the iam-admin machine PAT unlocks it (docs/zitadel-hardening.md)
+=== a new instance from the shipped values and the ExternalSecret template (what a fresh cluster gets)
+  [32m✓[0m a new instance is created with the shipped values
+  [32m✓[0m Password1! is refused
+  [32m✓[0m the generated first-admin password (15+ characters, four classes) is accepted and logs in
+  [32m✓[0m the first login must change the password
+  [32m✓[0m the instance has the 15-character policy and the lockout at 5
+  [32m✓[0m MFA is forced; self-registration and external IdPs are off
+  [32m✓[0m check lifetime 12 h, refresh token 30 days
+  [32m✓[0m zitadel-apply-policies.py finds nothing to change: the script and the Helm values agree
+  [32m✓[0m the Deployment's config (the same secret file, first-admin password included) starts and the password is unchanged
+  [32m✓[0m a second setup run (the next Helm upgrade) succeeds and keeps the password
+  [32m✓[0m the logs are JSON
+  [32m✓[0m the HTTP access log is on stdout
+  [32m✓[0m ...the access log keeps an id_token_hint query string (Alloy's loki.process scrub blanks it)
+  [32m✓[0m ...and neither the machine PAT nor the admin password is in them
+32 passed, 0 failed

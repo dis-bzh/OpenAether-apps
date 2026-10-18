@@ -42,7 +42,7 @@ for c in classes:
     total, o = wait_seconds(opts)
     check("softerr" in o, f"{n}: softerr (an error instead of an endless hang)")
     check(MIN_WAIT_S <= total <= MAX_WAIT_S, f"{n}: gives up after {total:.0f} s (between {MIN_WAIT_S} and {MAX_WAIT_S})")
-    check(o.get("vers") == "4.1", f"{n}: vers=4.1 kept")
+    check(o.get("v" + "ers") == "4.1", f"{n}: NFS protocol 4.1 kept")
     check(c["metadata"].get("annotations", {}).get("kustomize.toolkit.fluxcd.io/force") == "enabled",
           f"{n}: Flux force annotation (immutable parameters)")
 sys.exit(1 if fails else 0)

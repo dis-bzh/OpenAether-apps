@@ -1,0 +1,10 @@
+  ok   Alloy ran the shipped block and emitted the three Zitadel lines
+  ok   the id_token_hint value is gone from the Zitadel lines
+  ok   the parameter name and the rest of the URL stay, only the value is REDACTED
+  ok   client_secret in a query string is blanked too
+  ok   a line without a token is unchanged
+  ok   another namespace is not touched (the selector is services-identity)
+  ok   of two OpenBao lines, only the audit one carries log_type=audit
+  ok   an audit-shaped line of another container or namespace is not labelled
+  ok   the Zitadel lines get no log_type
+9 passed, 0 failed

@@ -212,8 +212,10 @@ tests:
   - name: Flux object without a Ready condition (OCI HelmRepository) does not alert
     interval: 1m
     input_series:
+      # yamllint disable-line rule:line-length
       - series: 'gotk_resource_info{customresource_kind="HelmRepository", exported_namespace="capi-clusters", name="talos-ccm", ready="", suspended=""}'
         values: '1+0x60'
+      # yamllint disable-line rule:line-length
       - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability", name="grafana", ready="False", suspended=""}'
         values: '1+0x60'
     alert_rule_test:
@@ -232,11 +234,14 @@ tests:
   - name: Flux source with a rejected signature alerts, a verified one does not
     interval: 1m
     input_series:
-      - series: 'gotk_resource_info{customresource_kind="GitRepository", exported_namespace="flux-system", name="openaether", ready="False", suspended="", source_verified="False"}'
+      # yamllint disable-line rule:line-length
+      - series: 'gotk_resource_info{customresource_kind="GitRepository", exported_namespace="flux-system", name="openaether", source_verified="False"}'
         values: '1+0x30'
-      - series: 'gotk_resource_info{customresource_kind="GitRepository", exported_namespace="flux-system", name="other", ready="True", suspended="", source_verified="True"}'
+      # yamllint disable-line rule:line-length
+      - series: 'gotk_resource_info{customresource_kind="GitRepository", exported_namespace="flux-system", name="other", source_verified="True"}'
         values: '1+0x30'
-      - series: 'gotk_resource_info{customresource_kind="GitRepository", exported_namespace="flux-system", name="unverified-off", ready="True", suspended="", source_verified=""}'
+      # yamllint disable-line rule:line-length
+      - series: 'gotk_resource_info{customresource_kind="GitRepository", exported_namespace="flux-system", name="unverified-off", source_verified=""}'
         values: '1+0x30'
     alert_rule_test:
       - eval_time: 3m
@@ -250,6 +255,6 @@ tests:
             exp_annotations:
               summary: "Flux rejected the commit of GitRepository openaether: unsigned or unknown signer"
               description: >-
-                kubectl describe gitrepository -n flux-system openaether (condition SourceVerified), then
-                git log --show-signature on the branch. Sign the push with a registered key or remove the unexpected commit;
-                docs/signed-commits.md.
+                kubectl describe gitrepository -n flux-system openaether
+                (condition SourceVerified), then git log --show-signature on the branch. Sign the push with a
+                registered key or remove the unexpected commit; docs/signed-commits.md.

@@ -1,0 +1,12 @@
+  ok   default set plans
+  ok   GitRepository pinned to a commit
+  ok   no GIT_REF placeholder applied
+  ok   OpenBao without cert-manager: refused ('foundation-vault' dependsOn 'cert-manager', which is not in the set ()
+  ok   unknown brick: refused (unknown Kustomization 'no-such-brick' (not in apps/flux/base))
+  ok   substituteFrom on a selected brick: refused
+  ok   leak scan: OpenBao service/batch tokens, a Vault token and two PEM private keys are caught
+  ok   leak scan: the clean log is kept, the leaking ones are deleted
+workflow: ok
+  ok   no 'drives the whole order' claim
+  ok   shellcheck
+0 failed

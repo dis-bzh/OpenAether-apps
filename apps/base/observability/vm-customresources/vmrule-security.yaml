@@ -107,13 +107,17 @@ spec:
               -n {{ $labels.exported_namespace }} {{ $labels.name }}. Objects that depend on it wait too.
 
         # 4b) Flux rejected the HEAD commit because its signature does not verify (git-verify component, infra #337).
-        #     FluxObjectNotReady says the source is not Ready after 20 minutes and nothing more; this one says why, at once:
-        #     either a legitimate push was not signed (or by a key not in the signer table), or something pushed that should
+        #     FluxObjectNotReady says the source is not Ready after 20 minutes and nothing more; this one says why,
+        # at once:
+        #     either a legitimate push was not signed (or by a key not in the signer table), or something pushed
+        # that should
         #     not have. The cluster keeps running the last verified revision. Silent (no series with the label) while
         #     spec.verify is off.
         - alert: FluxSourceNotVerified
           expr: |
-            max by (exported_namespace, name) (gotk_resource_info{customresource_kind="GitRepository", source_verified="False"}) == 1
+            max by (exported_namespace, name) (
+              gotk_resource_info{customresource_kind="GitRepository", source_verified="False"}
+            ) == 1
           for: 5m
           labels:
             severity: critical
@@ -121,9 +125,9 @@ spec:
           annotations:
             summary: "Flux rejected the commit of GitRepository {{ $labels.name }}: unsigned or unknown signer"
             description: >-
-              kubectl describe gitrepository -n {{ $labels.exported_namespace }} {{ $labels.name }} (condition SourceVerified), then
-              git log --show-signature on the branch. Sign the push with a registered key or remove the unexpected commit;
-              docs/signed-commits.md.
+              kubectl describe gitrepository -n {{ $labels.exported_namespace }} {{ $labels.name }}
+              (condition SourceVerified), then git log --show-signature on the branch. Sign the push with a
+              registered key or remove the unexpected commit; docs/signed-commits.md.
 
         # 5) Suspended and forgotten: git no longer applies to it. Often deliberate during an operation.
         - alert: FluxObjectSuspended
