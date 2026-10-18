@@ -6,6 +6,7 @@
 (b) install and upgrade remediation stay off, and `deletingConfirmationFlag` is not set: Longhorn's pre-delete uninstall Job
     refuses to run while the flag is false, so Helm's install remediation (an uninstall) would strand the release instead of
     retrying it; and with the flag true it could delete data. A failure is read and reset by a person (docs/patching.md).
+(c) The three snapshot.storage.k8s.io CRDs are shipped (the sidecar needs them; no snapshot-controller, apps #137).
 Needs `helm` and network for the chart (the same as test-loki-render.sh). Rung: mocked/static.
 Usage: python3 -I scripts/dev/test-longhorn-values.py   (needs PyYAML)
 """
@@ -45,4 +46,13 @@ for phase in ("install", "upgrade"):
     check(rem.get("retries") == 0, f"{phase}.remediation.retries is 0 (an uninstall remediation is refused by the chart's pre-delete Job)")
 check(spec["upgrade"]["remediation"].get("remediateLastFailure") is False, "upgrade.remediateLastFailure is false")
 check("deletingConfirmationFlag" not in spec["values"].get("defaultSettings", {}), "deletingConfirmationFlag is not set (the uninstall Job needs a person to set it)")
+
+# (c) The chart cannot switch the csi-snapshotter sidecar off (apps #137): it lists the snapshot.storage.k8s.io resources and
+#     logged an error every ~16 s while they were absent. The storage brick must therefore ship the three CRDs.
+kust = yaml.safe_load((REPO / "apps/base/storage/kustomization.yaml").read_text())
+check("external-snapshotter-crds.yaml" in kust["resources"], "the storage brick lists the external-snapshotter CRDs (apps #137)")
+crds = REPO / "apps/base/storage/external-snapshotter-crds.yaml"
+names = {d["metadata"]["name"] for d in yaml.safe_load_all(crds.read_text()) if d} if crds.exists() else set()
+for plural in ("volumesnapshotclasses", "volumesnapshotcontents", "volumesnapshots"):
+    check(f"{plural}.snapshot.storage.k8s.io" in names, f"CRD {plural}.snapshot.storage.k8s.io is shipped")
 sys.exit(1 if fails else 0)

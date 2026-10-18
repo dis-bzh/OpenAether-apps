@@ -16,6 +16,7 @@ DUMPS=(
   apps/base/orc/install.yaml
   apps/base/platform/gateway-api/standard-install.yaml
   apps/base/platform/local-path-provisioner/local-path-storage.yaml
+  apps/base/storage/external-snapshotter-crds.yaml
 )
 if [[ "${1:-}" == "--update" ]]; then
   sha256sum "${DUMPS[@]}" > "$LOCK"

@@ -57,6 +57,7 @@
     "apps/base/orc/install.yaml",
     "apps/base/platform/gateway-api/standard-install.yaml",
     "apps/base/platform/local-path-provisioner/local-path-storage.yaml",
+    "apps/base/storage/external-snapshotter-crds.yaml",
     "apps/base/cluster-api-clusters/flux-gotk/gotk-components.yaml",
   ],
 
@@ -153,6 +154,16 @@
       ],
       datasourceTemplate: "github-releases",
       depNameTemplate: "rancher/local-path-provisioner",
+    },
+    {
+      customType: "regex",
+      description: "CSI external-snapshotter CRDs (apps #137): vendored dump, the version is in the kustomization comment.",
+      fileMatch: ["^apps/base/storage/kustomization\\.yaml$"],
+      matchStrings: [
+        "external-snapshotter-crds\\.yaml\\s+#\\s*vendored from external-snapshotter (?<currentValue>v[0-9.]+)",
+      ],
+      datasourceTemplate: "github-releases",
+      depNameTemplate: "kubernetes-csi/external-snapshotter",
     },
     {
       customType: "regex",

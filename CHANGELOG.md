@@ -548,6 +548,11 @@ maintained upstream, waiver kept), OpenBao (stays 2.7.1), talos-cloud-controller
 
 ### Fixed
 
+- **Longhorn's csi-snapshotter no longer errors every 16 seconds (#137).** The `snapshot.storage.k8s.io` CRDs were not installed, so the sidecar failed to list `VolumeSnapshotContent` and
+  `VolumeSnapshotClass` for ever (about 290 error lines per 40 minutes on an idle cluster, three clouds, lab 16) and its pods restarted during the first hour. The chart cannot disable the sidecar
+  (only its replica count and image are values), so the `storage` brick now vendors the three external-snapshotter v8.6.0 CRDs (sha256 lock, Renovate and end-of-life calendar entries).
+  The snapshot controller is NOT shipped: CSI VolumeSnapshots stay unsupported, volume backups use Longhorn's own objects. `test-longhorn-values.py` fails without the CRDs.
+
 - **The Loki PodDisruptionBudget is rendered by Helm 3, which Flux uses (found by CI on the 0.3.0 pull request).** `podDisruptionBudget` was set at the top level of the Loki values, the key chart 18
   deprecates; Helm 3 merges the empty `singleBinary.podDisruptionBudget` over it and renders no PDB, Helm 4 renders it. The value now sits under `singleBinary`. `test-loki-render.sh`
   catches it with Helm 3 (it passed on the Helm 4 of the maintainer's host). A cluster that took the 0.3.0 candidates from the labs had no Loki PDB; whether the old chart honoured the top-level key was not checked.

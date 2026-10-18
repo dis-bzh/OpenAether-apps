@@ -285,6 +285,17 @@ components:
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
+- id: external-snapshotter-crds
+  brick: storage
+  component: CSI external-snapshotter CRDs (vendored dump, CRDs only)
+  pin: 8.6.0
+  file: apps/base/storage/external-snapshotter-crds.yaml
+  pattern: vendored from v([0-9.]+)
+  cycle: external-snapshotter v8.6
+  eol: unknown
+  note: no snapshot-controller is shipped; CSI VolumeSnapshots are not a supported feature (apps #137)
+  owner: '@vde-dis'
+  next_review: '2026-12-14'
 - id: gateway-api
   brick: platform/gateway-api
   component: Gateway API CRDs (vendored dump)

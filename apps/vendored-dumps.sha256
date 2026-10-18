@@ -5,3 +5,4 @@ d3322cb346d3d42dd0f41e230b0d1d7bc5619960e1c36fdac4d9151d724b88e6  apps/base/kyve
 affe57ece8c81001d4dacd35fe3bd5bf35662ed6b5c4b1da59f334c685bba109  apps/base/orc/install.yaml
 97598bf6ab3b33b9b5c5432bdd24de091e4e9c3aa0575ebb0710a2a19cd64d64  apps/base/platform/gateway-api/standard-install.yaml
 38bcfbb7e0a56a37aaab2780fc20fd7398bb90f532e46fe0ba621c7ba89d9054  apps/base/platform/local-path-provisioner/local-path-storage.yaml
+065892d0f234a63f534b5f5609c4dcd4e06485eeed94e79c59369748c34a2d29  apps/base/storage/external-snapshotter-crds.yaml
