@@ -461,6 +461,11 @@ maintained upstream, waiver kept), OpenBao (stays 2.7.1), talos-cloud-controller
 
 ### Fixed
 
+- **Longhorn first-install remediation is decided and documented (apps #134).** `install.remediation.retries` stays 0: Helm's remediation is an
+  uninstall, and Longhorn's pre-delete Job refuses it while `deleting-confirmation-flag` is false (read in longhorn-manager v1.12.1) and could remove
+  data when it is true, so a retry would strand the release instead. The one-command reset after a transient first-install error is in
+  `docs/patching.md` ("A first install that stalls"); `test-longhorn-values.py` pins the choice. An automatic retry is left to 0.4.0.
+
 - **Longhorn: the dead `defaultSettings` keys are gone and orphan auto-deletion stays off on purpose (apps #115).** `orphanAutoDeletion` and
   `defaultSettings.backupTarget` are not keys of the chart (1.12.1 reads `orphanResourceAutoDeletion` and `defaultBackupStore.backupTarget`);
   they were silently dropped, and the comment claimed orphan deletion was on. It is not, and is left off: an orphan is replica data

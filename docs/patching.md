@@ -131,6 +131,22 @@ Preconditions, to check before every hop (none was run from this repository; the
    The fix-forward after the fact is the same patch, then delete the manager pods and
    `flux reconcile helmrelease longhorn -n longhorn-system --reset --force`.
 
+### A first install that stalls
+
+The same no-remediation rule applies to a **fresh install**. In two Outscale labs the first install failed once on a transient
+`etcdserver: request timed out` (server-side apply of `longhorn-frontend`, control planes busy) and the release went `Stalled` /
+`RetriesExceeded`, which also holds back `storage`, `observability` and the backups behind it. Helm's install remediation is an uninstall; Longhorn's
+pre-delete Job refuses it while `deleting-confirmation-flag` is `false` (the default, and what this repository keeps), and with the flag `true` an
+uninstall could remove data, so the retries are 0 on purpose. Nothing is lost on a first install: read the failure, then reset the release,
+which the next attempt applies over the failed one:
+
+```
+kubectl -n longhorn-system get helmrelease longhorn -o jsonpath='{.status.conditions[*].message}'
+flux reconcile helmrelease longhorn -n longhorn-system --reset --force
+```
+
+An automatic bounded retry (a controller that resets a first-install release once) is a resilience item for 0.4.0, not done here.
+
 Behaviour changes met between 1.9 and 1.12 that touch this repository: the chart renders `NetworkPolicy` objects
 by default (`networkPolicies.restrictInternalTraffic`; set to `false` here so the brick's `CiliumNetworkPolicy` stays the
 single authority); the conversion-webhook `Service` is gone with the v1beta1 API; V2 backing images are removed
