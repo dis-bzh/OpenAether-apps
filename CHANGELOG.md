@@ -548,6 +548,10 @@ maintained upstream, waiver kept), OpenBao (stays 2.7.1), talos-cloud-controller
 
 ### Fixed
 
+- **The Loki PodDisruptionBudget is rendered by Helm 3, which Flux uses (found by CI on the 0.3.0 pull request).** `podDisruptionBudget` was set at the top level of the Loki values, the key chart 18
+  deprecates; Helm 3 merges the empty `singleBinary.podDisruptionBudget` over it and renders no PDB, Helm 4 renders it. The value now sits under `singleBinary`. `test-loki-render.sh`
+  catches it with Helm 3 (it passed on the Helm 4 of the maintainer's host). A cluster that took the 0.3.0 candidates from the labs had no Loki PDB; whether the old chart honoured the top-level key was not checked.
+
 - **A rejected commit signature raises its own alert (infra #337).** kube-state-metrics now exposes the GitRepository condition `SourceVerified` as the label
   `source_verified` of `gotk_resource_info`, and `FluxSourceNotVerified` (critical, 5 minutes) says "Flux rejected the commit: unsigned or unknown signer" instead of
   leaving it to the generic `FluxObjectNotReady` after 20 minutes. Silent while `git-verify` is off. Synthetic-series unit test in `vmrules-unittest.yaml` (run by
