@@ -1,9 +1,0 @@
-  ok   Alloy ran the shipped config and emitted the three appended lines
-  ok   a line written before the start is not read (tail_from_end)
-  ok   every line carries log_type=k8s-audit
-  ok   every line carries the node name from NODE_NAME
-  ok   the audit event stays whole in the line (user, verb, resource are LogQL fields, not labels)
-  ok   a line that is not JSON is still shipped
-  ok   no high-cardinality label (verb, user, resource)
-  ok   no timestamp or JSON stage error in Alloy's log (the line is not valid JSON in one case, and must not raise one)
-8 passed, 0 failed

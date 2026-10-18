@@ -22,3 +22,6 @@ __pycache__/
 *.pyc
 # output of scripts/dev/local-docker-lane.sh run locally (cluster dumps, pod logs)
 local-docker-out/
+
+# CI step output captured with tee (never commit)
+/*.out
