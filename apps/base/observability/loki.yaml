@@ -124,8 +124,8 @@ spec:
   values:
     deploymentMode: SingleBinary
     singleBinary:
-      # Under singleBinary: the top-level podDisruptionBudget is deprecated and Helm 3 (Flux's helm-controller) merges the
-      # empty singleBinary one over it, which renders no PDB at all (Helm 4 does not).
+      # Under singleBinary: the top-level podDisruptionBudget is deprecated and Helm 3 (Flux's helm-controller)
+      # merges the empty singleBinary one over it, which renders no PDB at all (Helm 4 does not).
       # Never evict the last replica. minAvailable 2 would keep the write quorum, but the pods are
       # pinned to their node by local-path, so a drain of a node holding two of them would wait
       # forever for the first to come back. An unready pod never blocks an eviction.
