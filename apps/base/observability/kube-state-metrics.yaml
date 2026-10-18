@@ -155,6 +155,9 @@ spec:
                     exported_namespace: [metadata, namespace]
                     ready: [status, conditions, "[type=Ready]", status]
                     suspended: [spec, suspend]
+                    # False when spec.verify rejected the HEAD commit (unsigned or signed by an unknown key); empty while
+                    # git-verify is off (no such condition). Read by FluxSourceNotVerified (infra #337).
+                    source_verified: [status, conditions, "[type=SourceVerified]", status]
             - groupVersionKind: {group: source.toolkit.fluxcd.io, version: v1, kind: HelmRepository}
               metricNamePrefix: gotk
               metrics:

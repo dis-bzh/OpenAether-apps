@@ -461,6 +461,11 @@ maintained upstream, waiver kept), OpenBao (stays 2.7.1), talos-cloud-controller
 
 ### Fixed
 
+- **A rejected commit signature raises its own alert (infra #337).** kube-state-metrics now exposes the GitRepository condition `SourceVerified` as the label
+  `source_verified` of `gotk_resource_info`, and `FluxSourceNotVerified` (critical, 5 minutes) says "Flux rejected the commit: unsigned or unknown signer" instead of
+  leaving it to the generic `FluxObjectNotReady` after 20 minutes. Silent while `git-verify` is off. Synthetic-series unit test in `vmrules-unittest.yaml` (run by
+  `test-vmrules.sh`); that the condition really reaches the metric needs a cluster with git-verify on.
+
 - **The Kubernetes 1.37 decision is recorded (apps #105, #120).** `docs/patching.md` states the owner decision (keep 1.37.1, labs prove it), what the labs do and
   do not show, and the per-hop re-read of each add-on's matrix. No automated matrix check: the matrices are prose, not data.
 

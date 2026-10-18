@@ -228,3 +228,28 @@ tests:
               description: >-
                 flux get all -A, then kubectl describe HelmRelease
                 -n services-observability grafana. Objects that depend on it wait too.
+  # A rejected signature is named at once (infra #337); a verified or unverified-because-off source does not alert.
+  - name: Flux source with a rejected signature alerts, a verified one does not
+    interval: 1m
+    input_series:
+      - series: 'gotk_resource_info{customresource_kind="GitRepository", exported_namespace="flux-system", name="openaether", ready="False", suspended="", source_verified="False"}'
+        values: '1+0x30'
+      - series: 'gotk_resource_info{customresource_kind="GitRepository", exported_namespace="flux-system", name="other", ready="True", suspended="", source_verified="True"}'
+        values: '1+0x30'
+      - series: 'gotk_resource_info{customresource_kind="GitRepository", exported_namespace="flux-system", name="unverified-off", ready="True", suspended="", source_verified=""}'
+        values: '1+0x30'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FluxSourceNotVerified
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FluxSourceNotVerified
+        exp_alerts:
+          - exp_labels:
+              {exported_namespace: flux-system, name: openaether, severity: critical, component: flux}
+            exp_annotations:
+              summary: "Flux rejected the commit of GitRepository openaether: unsigned or unknown signer"
+              description: >-
+                kubectl describe gitrepository -n flux-system openaether (condition SourceVerified), then
+                git log --show-signature on the branch. Sign the push with a registered key or remove the unexpected commit;
+                docs/signed-commits.md.
