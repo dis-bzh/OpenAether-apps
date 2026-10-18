@@ -26,6 +26,8 @@ spec:
   instances: 2
   imageName: ghcr.io/cloudnative-pg/postgresql:16.15
   primaryUpdateStrategy: unsupervised
+  # See cluster.yaml: replicas first, then a switchover, instead of restarting the only writer in place.
+  primaryUpdateMethod: switchover
   storage:
     # local-path-retain: node-local storage, immediate mount (no CSI
     # attach/detach), Retain (data kept if the PVC is deleted).
