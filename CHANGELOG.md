@@ -461,6 +461,14 @@ maintained upstream, waiver kept), OpenBao (stays 2.7.1), talos-cloud-controller
 
 ### Fixed
 
+- **The two Gateway pods are spread over the nodes (lab 15c W2 follow-up).** The HPA floor of 2 and the PDB (dc6e12f) let a drain evict one
+  pod, but both replicas had landed on the same node, so a node loss still cut the ingress. Istio 1.24 offers no scheduling setting for the
+  Deployment it generates (`infrastructure.parametersRef` is in the CRDs, istiod 1.24 does not read it), so a Kyverno mutation
+  (`kyverno-policies/spread-gateway-pods.yaml`, pods of `openaether-gateway` at CREATE) adds a `topologySpreadConstraint` and a preferred
+  anti-affinity on the hostname. Soft on purpose: a one-worker cluster still runs both. Running pods keep their node until recreated
+  (`kubectl -n services-gateway rollout restart deployment openaether-gateway-istio`). Test: Kyverno CLI mutation test in
+  `scripts/dev/test-kyverno-policies.sh`; whether the scheduler then separates the pods needs a cluster.
+
 - **Loki chart hops are not rolled back by Helm, and get a 15 minute budget (apps #121, lab 15c).** The in-place hop 6.25 -> 6.55 timed out at
   the default 5 minutes (loki-1 never Ready: the memberlist join dialled the address of a pod that no longer existed) and the automatic Helm
   rollback re-rolled the StatefulSet to the old chart, which stalled the same way and left it at 1 of 2 Ready. `upgrade.timeout: 15m`,

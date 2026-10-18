@@ -1,0 +1,22 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: spread-gateway-pods
+policies:
+- ../../../../apps/base/kyverno-policies/spread-gateway-pods.yaml
+resources:
+- pods.yaml
+results:
+- policy: spread-gateway-pods
+  rule: spread-over-nodes
+  resources:
+  - gw-abc
+  kind: Pod
+  patchedResources: patched-gw.yaml
+  result: pass
+- policy: spread-gateway-pods
+  rule: spread-over-nodes
+  resources:
+  - other-abc
+  kind: Pod
+  result: skip

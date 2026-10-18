@@ -12,6 +12,11 @@ out="$("$kyverno" test scripts/dev/testdata/kyverno-policies 2>&1)" || { echo "$
 if grep -q 'Want ' <<<"$out"; then grep 'Want ' <<<"$out"; exit 1; fi
 grep 'Test Summary' <<<"$out"
 
+# The Gateway spread is a mutation: the CLI compares the patched pod with the expected file.
+out="$("$kyverno" test scripts/dev/testdata/kyverno-gateway-spread 2>&1)" || { echo "$out" | tail -25; exit 1; }
+if grep -q 'Want ' <<<"$out"; then grep 'Want ' <<<"$out"; exit 1; fi
+grep 'Test Summary' <<<"$out"
+
 # The CLI cannot evaluate a `Pod/ephemeralcontainers` match (every row comes back "Excluded"), so the two ephemeral policies are
 # run on a copy whose match is rewritten to Pod: this tests the deny conditions; that the real match registers CREATE and UPDATE
 # on the subresource is checked statically by test-kyverno-enforcement.py.

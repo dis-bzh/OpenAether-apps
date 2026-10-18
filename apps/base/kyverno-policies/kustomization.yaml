@@ -15,3 +15,4 @@ resources:
   - restrict-privileged-ephemeral.yaml
   - require-ro-rootfs.yaml
   - require-limits.yaml
+  - spread-gateway-pods.yaml  # a mutation, not a validation: the Istio Gateway pods spread over the nodes

@@ -1,0 +1,55 @@
+# Spread the Istio Gateway pods over the nodes. Istio 1.24 builds the Gateway's Deployment itself and offers no way to set
+# scheduling on it (the Gateway API `infrastructure.parametersRef` is in the CRDs but istiod 1.24 does not read it), and the
+# kube-scheduler's default scoring put both replicas on one node in lab 15c: one node loss or drain then cut the ingress
+# although the HPA keeps two replicas and the PDB lets one be evicted. This MUTATES the pod at creation. Soft on purpose
+# (ScheduleAnyway + preferred anti-affinity): a cluster with one worker must still run both pods. Pods already running keep
+# their placement until they are recreated (`kubectl -n services-gateway rollout restart deployment openaether-gateway-istio`).
+# Not a validation: it has no failure action and is not part of the Enforce switch.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: spread-gateway-pods
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/title: Spread Gateway Pods Over Nodes
+    policies.kyverno.io/category: Other
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Adds a topologySpreadConstraint and a preferred pod anti-affinity on kubernetes.io/hostname to the pods of the
+      openaether-gateway Gateway, unless the pod already sets them.
+spec:
+  background: false
+  rules:
+    - name: spread-over-nodes
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              operations:
+                - CREATE
+              namespaces:
+                - services-gateway
+              selector:
+                matchLabels:
+                  gateway.networking.k8s.io/gateway-name: openaether-gateway
+      mutate:
+        patchStrategicMerge:
+          spec:
+            +(topologySpreadConstraints):
+              - maxSkew: 1
+                topologyKey: kubernetes.io/hostname
+                whenUnsatisfiable: ScheduleAnyway
+                labelSelector:
+                  matchLabels:
+                    gateway.networking.k8s.io/gateway-name: openaether-gateway
+            +(affinity):
+              podAntiAffinity:
+                preferredDuringSchedulingIgnoredDuringExecution:
+                  - weight: 100
+                    podAffinityTerm:
+                      topologyKey: kubernetes.io/hostname
+                      labelSelector:
+                        matchLabels:
+                          gateway.networking.k8s.io/gateway-name: openaether-gateway

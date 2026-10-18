@@ -87,7 +87,11 @@ check("require-ro-rootfs stays Audit with no override (informational, no flip pr
 check("the two policies that already enforce are untouched",
       all(pol[n]["spec"]["validationFailureAction"] == "Enforce" and "validationFailureActionOverrides" not in pol[n]["spec"]
           for n in ALREADY_ENFORCE))
-check("no other policy exists unlisted", set(pol) == set(FLIPPABLE) | ALREADY_ENFORCE | ALWAYS_AUDIT, sorted(pol))
+# spread-gateway-pods is a mutation (no validate rule, so nothing to flip): it must stay one.
+MUTATIONS = {"spread-gateway-pods"}
+check("the mutation policies have no validate rule",
+      all("validate" not in r and "mutate" in r for n in MUTATIONS for r in pol[n]["spec"]["rules"]))
+check("no other policy exists unlisted", set(pol) - MUTATIONS == set(FLIPPABLE) | ALREADY_ENFORCE | ALWAYS_AUDIT, sorted(pol))
 
 # Default off: nothing shipped labels a namespace for Enforce (policies and docs excluded: they spell the label).
 hits = [str(p.relative_to(REPO)) for p in (REPO / "apps").rglob("*.yaml")
