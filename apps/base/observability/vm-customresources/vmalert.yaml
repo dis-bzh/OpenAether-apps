@@ -18,6 +18,9 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: vmalert
 spec:
+  # Pinned (apps #117): the operator's default moves with every operator bump (0.68.1 defaults to this one).
+  image:
+    tag: v1.136.0
   replicaCount: 2
   securityContext:
     runAsUser: 65534
@@ -74,6 +77,9 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: vmalertmanager
 spec:
+  # Pinned (apps #117): the operator's default moves with every operator bump (0.68.1 defaults to v0.31.0).
+  image:
+    tag: v0.31.0
   replicaCount: 1
   # Kyverno reads the container level (#47). The operator copies this flat block onto every container
   # (pod and container fields share it: spec.securityContext, not containerSecurityContext).

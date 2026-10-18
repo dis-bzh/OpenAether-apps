@@ -461,6 +461,12 @@ maintained upstream, waiver kept), OpenBao (stays 2.7.1), talos-cloud-controller
 
 ### Fixed
 
+- **VictoriaMetrics and Alertmanager images are pinned, and the operator probe values are real chart keys (apps #117).** VMCluster (`v1.136.0-cluster`),
+  VMAgent and VMAlert (`v1.136.0`) and VMAlertmanager (`v0.31.0`) now set `image.tag` to what operator 0.68.1 chose by default, so nothing moves today
+  and an operator bump no longer moves the storage engine with it. The operator's `probePath`, `livenessProbe` and `readinessProbe` were ignored by
+  the chart; they are now `probe.readiness` / `probe.liveness` `failureThreshold: 10`. New test `scripts/dev/test-vm-pins.py` (CI). VictoriaTraces is not
+  deployed here. Bumping the pins is now a deliberate edit with the operator hop.
+
 - **Zitadel: the recovery of a setup Job that died half way is written down (apps #133).** `docs/traps.md` gives the measured procedure (delete the Job, remove
   the one `started` event and its unique-constraint row on a first install, reset the HelmRelease) and says to restore from backup instead on a database
   that holds data. An automatic clean-up is not done (it edits the event store from a hook; needs a cluster, 0.4.0).
