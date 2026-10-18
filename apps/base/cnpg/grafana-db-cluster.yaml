@@ -47,6 +47,15 @@ spec:
     limits:
       cpu: 500m
       memory: 512Mi
+  # barman-cloud (boto3) against an S3 store that rejects the trailing checksum newer boto3 sends by default
+  # ("PutObject: trailing checksum is not supported", measured on Outscale OOS: continuous archiving False and
+  # every Backup stuck "running"). Send checksums only where the API requires them; harmless on stores that accept both.
+  env:
+    - name: AWS_REQUEST_CHECKSUM_CALCULATION
+      value: when_required
+    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
+      value: when_required
+
   affinity:
     # CNPG AffinityConfiguration (not the standard K8s type)
     podAntiAffinityType: preferred
