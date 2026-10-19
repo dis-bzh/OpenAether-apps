@@ -44,6 +44,16 @@ for key in spec["values"].get("defaultSettings", {}):
 for phase in ("install", "upgrade"):
     rem = spec.get(phase, {}).get("remediation", {})
     check(rem.get("retries") == 0, f"{phase}.remediation.retries is 0 (an uninstall remediation is refused by the chart's pre-delete Job)")
+# apps #134: a first install that fails once is retried WITHOUT remediation. The strategy must exist in the helm-controller CRD
+# the cluster runs (vendored gotk-components.yaml) and be valid there: name in the enum, retryInterval matching its pattern.
+strat = spec["install"].get("strategy", {})
+check(strat.get("name") == "RetryOnFailure", "install.strategy.name is RetryOnFailure (a transient first-install error is retried, apps #134)")
+check("strategy" not in spec["upgrade"], "the upgrade path keeps the default strategy (a failed engine upgrade is not retried)")
+gotk = (REPO / "apps/base/cluster-api-clusters/flux-gotk/gotk-components.yaml").read_text()
+crd = next(d for d in yaml.safe_load_all(gotk) if d and d.get("kind") == "CustomResourceDefinition" and d["spec"]["names"]["kind"] == "HelmRelease")
+sch = next(v for v in crd["spec"]["versions"] if v["name"] == "v2")["schema"]["openAPIV3Schema"]["properties"]["spec"]["properties"]["install"]["properties"]["strategy"]
+check(strat.get("name") in sch["properties"]["name"]["enum"], "the strategy name is in the pinned HelmRelease CRD enum")
+check(re.fullmatch(sch["properties"]["retryInterval"]["pattern"], strat.get("retryInterval", "")) is not None, "retryInterval matches the CRD pattern")
 check(spec["upgrade"]["remediation"].get("remediateLastFailure") is False, "upgrade.remediateLastFailure is false")
 check("deletingConfirmationFlag" not in spec["values"].get("defaultSettings", {}), "deletingConfirmationFlag is not set (the uninstall Job needs a person to set it)")
 
