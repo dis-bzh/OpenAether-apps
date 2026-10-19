@@ -6,7 +6,7 @@ Manifests Kubernetes **communs / plateforme** de OpenAether, réconciliés par
 
 🇬🇧 [English version](README.md)
 
-**Versions.** apps 0.3.0 (publiée le 2026-10-19 ; notes de version sous `[0.3.0]` du CHANGELOG.md) s'associe à OpenAether-infra 0.3.0 : une installation neuve arrive sur les composants mis à jour, et un cluster 0.2.0 monte d'une version mineure à la fois comme le dit `docs/patching.md`. apps 0.2.0 vise les nouveaux clusters : un cluster initialisé par 0.1.0 ne peut pas y être migré sur place, et un cluster
+**Versions.** La version courante est apps 0.3.1, un correctif de 0.3.0 (hotfix, aucun nouveau périmètre ; notes sous `[0.3.1]` du CHANGELOG.md), associée à OpenAether-infra 0.3.1. Ce qui suit est l'historique : apps 0.3.0 (publiée le 2026-10-19 ; notes de version sous `[0.3.0]` du CHANGELOG.md) s'associe à OpenAether-infra 0.3.0 : une installation neuve arrive sur les composants mis à jour, et un cluster 0.2.0 monte d'une version mineure à la fois comme le dit `docs/patching.md`. apps 0.2.0 vise les nouveaux clusters : un cluster initialisé par 0.1.0 ne peut pas y être migré sur place, et un cluster
 0.1.1 doit faire recréer ses volumes VictoriaMetrics, ce qui en perd l'historique de métriques (CHANGELOG, Upgrade notes ; #71). Elle s'associe à OpenAether-infra 0.2.1, pas à 0.2.0. La table d'association, ce qui a été validé où et ce qui n'est pas corrigé sont dans [CHANGELOG.md](CHANGELOG.md).
 
 ## Principe : socle figé + pioche modulaire
