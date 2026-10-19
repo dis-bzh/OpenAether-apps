@@ -15,6 +15,31 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ---
 
+## [0.3.2] — unreleased
+
+0.3.2 is a **patch release** of 0.3.1: no new scope, bug fixes, documentation corrections and safety nets, worked offline. It pairs apps 0.3.2 with OpenAether-infra 0.3.2 (whose `git_ref`
+default and tfvars examples will pin `refs/tags/0.3.2` of this repository). Rung reached for every line below: **mocked** (static checks, a real Zitadel and PostgreSQL in containers for #133);
+nothing was observed on a cluster yet, so the two hotfix items name what a short lab must show. It fixes neither #42 nor #375 (infra) and does not make the Zitadel recovery automatic:
+a person still runs it. Not a compliance claim.
+
+### Fixed
+
+- **Longhorn: a first install that fails once is retried** (#134): the HelmRelease sets `install.strategy: RetryOnFailure` (`retryInterval: 2m`, helm-controller 1.6, checked against the vendored CRD)
+  instead of staying `Stalled` after one transient error. The strategy retries without Helm's uninstall, so it does not meet the pre-delete Job that refuses it; `install.remediation.retries` and the whole
+  upgrade path are unchanged. `test-longhorn-values.py` asserts the strategy, its CRD enum and pattern, and that the upgrade keeps the default. **Not observed:** a cluster has to show an install
+  that fails once and succeeds by itself (see the lab criteria in the release notes).
+- **Zitadel: a setup that died half way has a tested recovery** (#133): `scripts/ops/zitadel-clear-stuck-migration.sh` lists the steps started and never finished (dry run by default), and with `--apply` deletes
+  exactly the `started` event and the `migration_started` row of each, in one transaction. It refuses a step younger than `--min-age` (600 s), a running setup pod and a database that holds more than the bootstrap
+  admin. `scripts/dev/test-zitadel-migration-lock.sh` (new CI step) runs it against a real Zitadel v4.19.2 and PostgreSQL: it reproduces the wait ("migration already started"), shows the refusals, and shows
+  the same setup finishing after the recovery. **Not fixed:** nothing clears the migration by itself (a hook editing the event store needs a cluster to prove; 0.4.0); the kubectl path to the CNPG primary is not run by any test.
+- **The version comments of two vendored dumps are checked** (#106): `check-vendored-lock.sh` fails when `vendored from vX` in the local-path-provisioner or gateway-api kustomization differs from the dump
+  (Renovate bumps only the comment). Two mutation cases in `test-check-vendored-lock.sh`.
+
+### Documentation
+
+- `docs/patching.md` (first install that stalls) and `docs/traps.md` (Zitadel migration) describe the two changes above; the cluster-wide default-deny policy now says in its header that a new namespace's pods
+  accept nothing, even from their own namespace (#112, the per-namespace template stays an issue); one French comment in `22-backup.yaml` is English.
+
 ## [0.3.1] — 2026-10-19
 
 0.3.1 is a **patch release** of 0.3.0: no new scope, the hotfix for the problems that block the goals of 0.4.0 (resilience and monitoring). It pairs
