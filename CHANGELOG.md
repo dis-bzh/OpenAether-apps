@@ -30,6 +30,10 @@ issues list as open (see each entry).
   planes left out), so a replica waits for a second worker instead of joining the first two on it. A cluster whose pods already share a worker is not moved by
   this (the volumes are pinned): `foundation/vault/README.md` has the one-replica-at-a-time procedure and the check. Not covered: a node that has not
   registered at all when the pods are placed; a one-control-plane-only cluster (the control planes are excluded, the pods stay Pending).
+- **`CnpgWalArchiveFailing` tells "failing now" from "failed once"** (#138): it now needs a failure counted in the last 10 minutes with no WAL archived in the same 10
+  minutes, for 15 minutes, so the two failed attempts around a drained reboot or a switchover never fire and are no longer pending for 25 minutes. A vmalert unit test replays
+  continuous failure, two isolated failures with archiving resuming, and two isolated failures on an idle database. The metric `cnpg_pg_stat_archiver_archived_count` is
+  taken from the CNPG default queries, not yet read on a cluster.
 
 ---
 

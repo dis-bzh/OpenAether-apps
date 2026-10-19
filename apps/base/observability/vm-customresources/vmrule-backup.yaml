@@ -118,9 +118,15 @@ spec:
 
         # 6) WAL archiving to the object store fails: PITR stops advancing, and the unarchived WAL piles up on the
         #    database volume until the instance stops.
+        #    "Failing NOW", not "failed once in the last half hour" (#138): a failure counted in the last 10 minutes while no WAL
+        #    was archived in the same 10 minutes. A drained reboot or a switchover (a few failed attempts, then archiving
+        #    resumes) is therefore never firing: the window is shorter than `for`, and archiving resuming cancels it at once.
+        #    A real outage keeps the counter growing (PostgreSQL retries every minute or so) with nothing archived, and fires after 15 minutes.
         - alert: CnpgWalArchiveFailing
           expr: |
-            sum by (cnpg_io_cluster) (increase(cnpg_pg_stat_archiver_failed_count[30m])) > 0
+            (sum by (cnpg_io_cluster) (increase(cnpg_pg_stat_archiver_failed_count[10m])) > 0)
+              unless
+            (sum by (cnpg_io_cluster) (increase(cnpg_pg_stat_archiver_archived_count[10m])) > 0)
           for: 15m
           labels:
             severity: critical
