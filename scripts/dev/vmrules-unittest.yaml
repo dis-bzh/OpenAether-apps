@@ -230,6 +230,26 @@ tests:
               description: >-
                 flux get all -A, then kubectl describe HelmRelease
                 -n services-observability grafana. Objects that depend on it wait too.
+  # alloy-audit is suspended by design (opt-in audit collector): no alert after 24 h; any other suspended object alerts.
+  - name: Flux object suspended for a day alerts, the by-design suspended alloy-audit does not
+    interval: 1m
+    input_series:
+      # yamllint disable-line rule:line-length
+      - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability", name="alloy-audit", ready="True", suspended="true"}'
+        values: '1+0x1600'
+      # yamllint disable-line rule:line-length
+      - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability", name="grafana", ready="True", suspended="true"}'
+        values: '1+0x1600'
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: FluxObjectSuspended
+        exp_alerts:
+          - exp_labels:
+              {customresource_kind: HelmRelease, exported_namespace: services-observability, name: grafana,
+               severity: warning, component: flux}
+            exp_annotations:
+              summary: "Flux HelmRelease grafana has been suspended for 24 h"
+              description: "flux resume ... when the operation is over."
   # A rejected signature is named at once (infra #337); a verified or unverified-because-off source does not alert.
   - name: Flux source with a rejected signature alerts, a verified one does not
     interval: 1m

@@ -15,7 +15,7 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 | A rule blind because its metrics vanished (Kyverno's only when Kyverno is deployed) | `AlloyMetricsAbsent`, `LokiMetricsAbsent`, `KyvernoMetricsAbsent`, `FluxStateMetricsAbsent`, `CnpgMetricsAbsent` | several |
 | A new object breaks a Kyverno policy (Audit or Enforce) | `KyvernoPolicyViolation` | `vmrule-security.yaml` |
 | The Kyverno webhook is down | `KyvernoAdmissionDown`, `KyvernoControllerNotReady` | `vmrule-security.yaml` |
-| Flux object not Ready, or suspended for a day; a commit whose signature Flux rejected | `FluxObjectNotReady`, `FluxObjectSuspended`, `FluxSourceNotVerified` | `vmrule-security.yaml` |
+| Flux object not Ready, or suspended for a day (the HelmRelease `alloy-audit`, suspended by design, is excluded); a commit whose signature Flux rejected | `FluxObjectNotReady`, `FluxObjectSuspended`, `FluxSourceNotVerified` | `vmrule-security.yaml` |
 | Flux itself reports an `error` event (reconciliation failure, rejected signature), whatever the metrics say | Alert `flux-errors` and Provider `alertmanager` (`flux-system`), routed by Alertmanager like the rules | `apps/base/flux/notification-alertmanager.yaml` |
 | Network policy denials in a loop (no Hubble) | `CiliumPolicyDeniedBurst` | `vmrule-platform.yaml` |
 | `/var` (EPHEMERAL, local-path volumes) filling | `NodeFilesystemFillingUp`, `NodeFilesystemFullIn24h` | `vmrule-cluster.yaml` |
