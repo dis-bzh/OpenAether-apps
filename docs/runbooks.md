@@ -459,3 +459,47 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: VMAgent targets for `longhorn-manager`; the longhorn CiliumNetworkPolicy (port 9500 from vmagent).
 - Do: Restore the scrape. UNVERIFIED path until a lab.
+
+## Backup signals
+
+### BackupNotSucceededRecently
+
+- Check: `kubectl -n <ns> get jobs --sort-by=.status.startTime` and the logs of the latest; BackupJobFailed usually fired first.
+- Do: Fix the cause named in the log and trigger one run by hand: the RPO of 24 h is already exceeded.
+
+### RestoreTestNotSucceeding
+
+- Check: Latest restore-test Job logs.
+- Do: Fix and run the test by hand; treat the backups as unverified meanwhile.
+
+### BackupVerificationStale
+
+- Check: The verifier's CronJob and logs (from M2).
+- Do: Fix the verifier or the backup it reports on.
+
+### BackupVerificationFailed
+
+- Check: The verifier's logs (from M2): which object or checksum failed.
+- Do: Treat the backup as corrupt: run a fresh backup and verify it.
+
+## Databases (CNPG)
+
+### CnpgReplicationLagHigh
+
+- Check: `kubectl cnpg status <cluster> -n foundation-databases` (replication section); replica node I/O (NodeIoPressure).
+- Do: Find the slow replica node or disk; a replica that cannot catch up is re-cloned by deleting its pod and PVC.
+
+### CnpgReplicaNotStreaming
+
+- Check: `kubectl cnpg status <cluster> -n foundation-databases`; the replica log.
+- Do: Fix the network or primary; re-clone the replica if it cannot reconnect.
+
+### CnpgInstanceDown
+
+- Check: `kubectl -n foundation-databases logs <pod> -c postgres`.
+- Do: Restart the pod if it is a replica; for a primary prefer a switchover to a healthy replica first.
+
+### CnpgWalFilesPiling
+
+- Check: `kubectl cnpg status`; archive log; replication slots.
+- Do: Fix the archive (see CnpgWalArchiveFailing) or the lagging slot; grow the volume if time is short.
