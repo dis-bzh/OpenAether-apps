@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The provider-S3 egress rules must admit every region of a provider, not one hard-coded host (apps #53).
 
-Six files of CiliumNetworkPolicies (observability, backup/openbao, backup/databases, cnpg, storage) let a workload reach the provider's object storage on :443 through `toFQDNs`.
+Six files of CiliumNetworkPolicies (observability, backup/openbao, backup/databases, backup/etcd, cnpg, storage) let a workload reach the provider's object storage on :443 through `toFQDNs`.
 They used to name ONE host per provider (`s3.eu-west-par.io.cloud.ovh.net`), so a real OVH config with
 `s3.gra.io.cloud.ovh.net` had Loki, the CNPG backups and the OpenBao snapshot job dropped by Cilium
 ("Policy denied", measured on a real OVH cluster). This test reads those rules and checks them against
@@ -18,6 +18,7 @@ FILES = [
     "apps/base/observability/networkpolicy.yaml",
     "apps/base/backup/openbao/networkpolicy.yaml",
     "apps/base/backup/databases/networkpolicy.yaml",   # the dump, the store replication and the verifier: one block each
+    "apps/base/backup/etcd/networkpolicy.yaml",
     "apps/base/cnpg/networkpolicy-db-restricted.yaml",
     "apps/base/storage/networkpolicy.yaml",
 ]

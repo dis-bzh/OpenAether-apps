@@ -29,6 +29,7 @@ companions:
   - backup-databases-identity        # same, on the CNPG side
   - backup-openbao                   # backup by default once OpenBao + ESO are picked
   - backup-databases                 # backup by default once CNPG + ESO are picked
+  - backup-etcd                      # scheduled etcd snapshot once the databases backup is picked
   - capi-clusters                    # client cluster instantiation (if CAPI picked)
   - orc                              # CAPO (OpenStack) dependency — openstack.k-orc.cloud CRDs
 
