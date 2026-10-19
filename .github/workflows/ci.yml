@@ -263,7 +263,8 @@ jobs:
   backup-checks:
     name: Backup brick checks
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The verifier test runs 14 full passes of its three stages on real restic and Barman data (about 10 minutes).
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:

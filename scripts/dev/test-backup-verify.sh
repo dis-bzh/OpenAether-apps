@@ -131,7 +131,7 @@ chk "repaired: openbao is 1 again" "[ \"\$(okv openbao)\" = 1 ]"
 head -c 14000 "$ROOT/scripts/dev/testdata/etcd-snapshot-v3.6.db" >"$W/seed/etcd/etcd.snap"
 seed primary etcd; run_all
 chk "a truncated etcd snapshot (restic check passes): etcd fails on primary" "[ \"\$(okv etcd)\" = 0 ] && [ \"\$(storeok etcd primary)\" = 0 ] && [ \"\$(storeok etcd replica)\" = 1 ]"
-cp "$ROOT/scripts/dev/testdata/etcd-snapshot-v3.6.db" "$W/seed/etcd/etcd.snap"; printf '\xff' | dd of="$W/seed/etcd/etcd.snap" bs=1 seek=48 conv=notrunc 2>/dev/null
+cp "$ROOT/scripts/dev/testdata/etcd-snapshot-v3.6.db" "$W/seed/etcd/etcd.snap"; printf '\x07' | dd of="$W/seed/etcd/etcd.snap" bs=1 seek=56 conv=notrunc 2>/dev/null
 seed primary etcd; run_all
 chk "an etcd snapshot with a damaged meta page: etcd fails" "[ \"\$(okv etcd)\" = 0 ]"
 cp "$ROOT/scripts/dev/testdata/etcd-snapshot-v3.6.db" "$W/seed/etcd/etcd.snap"; seed primary etcd; run_all

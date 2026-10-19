@@ -171,7 +171,7 @@ for spec in "openbao/cronjob.yaml openbao" "databases/cronjob.yaml cnpg"; do
   rm -f "$W/calls-$N"; expect "$N push: all exit codes 0 passes" 0 push
   [ "$(grep -c '^backup' "$W/calls-$N")" = 2 ] && ok "$N push: both repositories got a snapshot" || bad "$N push: backup calls: $(cat "$W/calls-$N")"
   rm -f "$W/calls-$N"; expect "$N push: backup exit 3 (missing source) fails" fail push STUB_RC_BACKUP=3
-  [ "$(grep -c '^backup' "$W/calls-$N")" = 1 ] && ok "$N push: stops at the first incomplete snapshot" || bad "$N push: calls: $(cat "$W/calls-$N")"
+  [ "$(grep -c '^backup' "$W/calls-$N")" = 2 ] && ok "$N push: an incomplete snapshot fails the Job but the other repository is still tried" || bad "$N push: calls: $(cat "$W/calls-$N")"
   push STUB_RC_BACKUP=130 >/dev/null 2>&1; [ $? = 130 ] && ok "$N push: SIGINT code 130 is passed on" || bad "$N push: 130 not passed on"
   rm -f "$W/calls-$N"; expect "$N push: forget exit 3 fails the Job" fail push STUB_RC_FORGET=3
   [ "$(grep -c '^backup' "$W/calls-$N")" = 2 ] && ok "$N push: ... but only after the replica got its snapshot" || bad "$N push: calls: $(cat "$W/calls-$N")"
