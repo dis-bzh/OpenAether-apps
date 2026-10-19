@@ -51,6 +51,15 @@ spec:
               protocol: TCP
             - port: "8503"
               protocol: TCP
+    # VMAgent scrapes the managers' /metrics (observability: vmscapes.yaml, longhorn-manager).
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "9500"
+              protocol: TCP
     # kube-apiserver → webhooks (admission 9502, conversion 9501, backend 9500)
     - fromEntities:
         - kube-apiserver

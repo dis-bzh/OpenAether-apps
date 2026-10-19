@@ -1,0 +1,95 @@
+# yamllint disable rule:line-length
+# Longhorn health (0.4.0 M1). Metrics: the longhorn-manager /metrics endpoint (vmscapes.yaml, longhorn-manager).
+# Rung: static + synthetic series. UNVERIFIED on a cluster: every longhorn_* name below, the port name `manager`, and the
+# state encodings (robustness 0 unknown, 1 healthy, 2 degraded, 3 faulted; backup state 4 = Error). A lab must read them.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: storage-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+spec:
+  groups:
+    - name: openaether-storage
+      interval: 1m
+      rules:
+        - alert: LonghornVolumeDegraded
+          expr: |
+            max by (volume) (longhorn_volume_robustness) == 2
+          for: 30m
+          labels:
+            severity: warning
+            component: storage
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#longhornvolumedegraded"
+            summary: "Longhorn volume {{ $labels.volume }} is degraded (fewer healthy replicas than wanted)"
+            description: >-
+              A replica is missing or rebuilding for over 30 minutes: one more loss can fault the volume.
+
+        - alert: LonghornVolumeFaulted
+          expr: |
+            max by (volume) (longhorn_volume_robustness) == 3
+          for: 5m
+          labels:
+            severity: critical
+            component: storage
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#longhornvolumefaulted"
+            summary: "Longhorn volume {{ $labels.volume }} is faulted: no healthy replica"
+            description: >-
+              The volume cannot be attached. Data is at risk.
+
+        - alert: LonghornNodeNotReady
+          expr: |
+            min by (node) (longhorn_node_status{condition="ready"}) == 0
+          for: 10m
+          labels:
+            severity: critical
+            component: storage
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#longhornnodenotready"
+            summary: "Longhorn node {{ $labels.node }} is not ready"
+            description: >-
+              No replica scheduling or rebuild there; volumes degrade.
+
+        - alert: LonghornDiskFilling
+          expr: |
+            max by (node, disk) (longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes) > 0.85
+          for: 30m
+          labels:
+            severity: warning
+            component: storage
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#longhorndiskfilling"
+            summary: "Longhorn disk {{ $labels.disk }} on {{ $labels.node }} is over 85 % used"
+            description: >-
+              Replicas cannot be rebuilt or created when disks are full.
+
+        - alert: LonghornBackupFailed
+          expr: |
+            max by (volume) (longhorn_backup_state) == 4
+          for: 5m
+          labels:
+            severity: warning
+            component: storage
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#longhornbackupfailed"
+            summary: "A Longhorn backup of {{ $labels.volume }} is in error"
+            description: >-
+              Backups to the object store are opt-in; this one failed.
+
+        - alert: LonghornMetricsAbsent
+          expr: |
+            absent(longhorn_node_status)
+            and on() (count(kube_storageclass_info{provisioner="driver.longhorn.io"}) > 0)
+          for: 30m
+          labels:
+            severity: warning
+            component: storage
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#longhornmetricsabsent"
+            summary: "No Longhorn metrics: its health alerts are blind"
+            description: >-
+              Longhorn is installed but its managers are not scraped (port name, network policy).

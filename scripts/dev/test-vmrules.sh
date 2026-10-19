@@ -77,10 +77,17 @@ echo "ok   vmalert -dryRun accepts all $(grep -c 'alert:' "$WORK/rules.yaml") ru
 python3 -I - "$WORK" "$ROOT/scripts/dev/vmrules-unittest.yaml" <<'PY'
 import sys, yaml
 work, tests = sys.argv[1:3]
-wanted = {r["alertname"] for t in yaml.safe_load(open(tests))["tests"] for r in t["alert_rule_test"]}
+cases = [r for t in yaml.safe_load(open(tests))["tests"] for r in t["alert_rule_test"]]
+wanted = {r["alertname"] for r in cases}
+# An alert whose cases never state exp_annotations is tested on firing and labels only (annotations are checked
+# statically above: summary and runbook_url); the harness compares annotations exactly, so they are dropped there.
+checked = {r["alertname"] for r in cases if any("exp_annotations" in e for e in r.get("exp_alerts") or [])}
 groups = []
 for g in yaml.safe_load(open(f"{work}/rules.yaml"))["groups"]:
     g["rules"] = [r for r in g["rules"] if r.get("alert") in wanted]
+    for r in g["rules"]:
+        if r["alert"] not in checked:
+            r.pop("annotations", None)
     if g["rules"]:
         groups.append(g)
 if {r["alert"] for g in groups for r in g["rules"]} != wanted:

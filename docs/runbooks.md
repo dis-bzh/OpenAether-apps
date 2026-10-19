@@ -338,3 +338,124 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: as AlertDeliveryFailing, and whether the chat channel or webhook still exists (a deleted webhook answers 4xx).
 - Do: fix the receiver. The heartbeat is stopped meanwhile on purpose; it resumes when this resolves.
+
+## Gateway (RED)
+
+### GatewayErrorBudgetBurnFast
+
+- Check: Grafana, requests by `response_code` and `destination_service_name`; `kubectl -n services-gateway get pods`; the backend named by the 5xx.
+- Do: Fix or roll back the failing backend; if the gateway itself fails (503 with no backend), see its pods and the HTTPRoutes.
+
+### GatewayErrorBudgetBurnSlow
+
+- Check: As GatewayErrorBudgetBurnFast, over a longer window.
+- Do: Find the intermittently failing backend or route; watch the ratio fall.
+
+### GatewayLatencyP99High
+
+- Check: Grafana, latency by `destination_service_name`; node pressure (NodeIoPressure, NodeCpuThrottled) and the backend's own saturation.
+- Do: Find the slow backend or the saturated node; the threshold is a starting value to tune.
+
+### GatewayReplicasLow
+
+- Check: `kubectl -n services-gateway get pods -o wide` (are both on one node? the spread policy), HPA events.
+- Do: Free capacity so the second replica schedules; check the spread Kyverno policy.
+
+### GatewayMetricsAbsent
+
+- Check: VMAgent targets page for `istio-gateway`; the `openaether-gateway` CiliumNetworkPolicy (port 15090) and vmagent egress.
+- Do: Restore the scrape. UNVERIFIED path: the first lab confirms the port and metric names.
+
+## Resources (USE)
+
+### ContainerOOMKilled
+
+- Check: `kubectl -n <ns> describe pod <pod>` (Last State), Grafana memory vs limit.
+- Do: Raise the limit (and the request) in git, or fix the leak; the chart values carry measured figures.
+
+### ContainerCpuThrottled
+
+- Check: Grafana CPU usage vs limit for the container.
+- Do: Raise the CPU limit or remove it where the chart allows; informational by design.
+
+### NodeIoPressure
+
+- Check: `kubectl debug node` is not needed: Grafana node disk panels, NodeDiskBusy and NodeDiskLatencyHigh on the same node; which pods write (Longhorn rebuild, Loki, etcd).
+- Do: Move or throttle the writer, use a faster disk class (sizing in the infra docs); never run an I/O drill on a node that carries etcd.
+
+### NodeMemoryPressureStall
+
+- Check: `kubectl top pods -A --sort-by=memory`; ContainerOOMKilled on the node.
+- Do: Reduce requests on the node or add memory.
+
+### NodeDiskBusy
+
+- Check: As NodeIoPressure.
+- Do: As NodeIoPressure.
+
+### NodeDiskLatencyHigh
+
+- Check: As NodeIoPressure; etcd fsync latency on control planes.
+- Do: As NodeIoPressure.
+
+### NodeMemoryLow
+
+- Check: `kubectl top node`, the biggest pods on it.
+- Do: Reduce memory use or enlarge the node.
+
+### NodeNetworkErrors
+
+- Check: Provider status, `talosctl dmesg` on the node, MTU settings.
+- Do: Replace or reboot the node if it persists.
+
+### PodPendingTooLong
+
+- Check: `kubectl -n <ns> describe pod <pod>` (Events): Insufficient cpu/memory, volume node affinity, image pull.
+- Do: Free or add capacity (see ClusterCpuRequestsHigh), fix the affinity or the image.
+
+### PdbBlocksDisruption
+
+- Check: `kubectl -n <ns> get pdb,pods -o wide`: are replicas missing or unready?
+- Do: Bring the missing replica back; do not delete the PDB.
+
+### ClusterCpuRequestsHigh
+
+- Check: `kubectl describe nodes | grep -A8 'Allocated resources'`.
+- Do: Add nodes or lower requests; the sizing notes are in the infra docs.
+
+### ClusterMemoryRequestsHigh
+
+- Check: As ClusterCpuRequestsHigh.
+- Do: As ClusterCpuRequestsHigh.
+
+## Storage (Longhorn)
+
+### LonghornVolumeDegraded
+
+- Check: `kubectl -n longhorn-system get volumes.longhorn.io,replicas.longhorn.io`; the Longhorn UI is not exposed by default.
+- Do: Wait for a running rebuild; if none, check the node and disk of the missing replica (LonghornNodeNotReady).
+
+### LonghornVolumeFaulted
+
+- Check: `kubectl -n longhorn-system get volumes.longhorn.io <volume> -o yaml`; restore from backup if replicas are lost.
+- Do: Salvage a replica (Longhorn docs) or restore the volume from its backup.
+
+### LonghornNodeNotReady
+
+- Check: `kubectl -n longhorn-system get nodes.longhorn.io`; the manager pod on that node.
+- Do: Fix the node (NodeNotReady) or the manager pod.
+
+### LonghornDiskFilling
+
+- Check: `kubectl -n longhorn-system get nodes.longhorn.io -o yaml` (disk status).
+- Do: Add disk space or remove unused volumes; do not resize while degraded.
+
+### LonghornBackupFailed
+
+- Check: `kubectl -n longhorn-system get backups.longhorn.io`; the backup target secret and bucket.
+- Do: Fix the target (credentials, bucket); the next scheduled backup retries.
+
+### LonghornMetricsAbsent
+
+- Check: VMAgent targets for `longhorn-manager`; the longhorn CiliumNetworkPolicy (port 9500 from vmagent).
+- Do: Restore the scrape. UNVERIFIED path until a lab.

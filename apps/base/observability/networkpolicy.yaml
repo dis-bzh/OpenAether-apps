@@ -110,6 +110,10 @@ spec:
               protocol: TCP
             - port: "9402"   # cert-manager controller
               protocol: TCP
+            - port: "9500"   # Longhorn managers
+              protocol: TCP
+            - port: "15090"  # gateway Envoy (istio_* request metrics)
+              protocol: TCP
             - port: "9187"   # postgres-exporter
               protocol: TCP
             - port: "3000"   # Grafana

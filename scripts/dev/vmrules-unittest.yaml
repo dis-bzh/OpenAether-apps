@@ -425,3 +425,111 @@ tests:
               description: >-
                 The heartbeat stops with it, so an external dead-man's-switch (if configured) pages you.
               runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alertmanagerabsent"
+
+  # --- RED / USE / storage (0.4.0 M1). Synthetic series only: metric names and labels are UNVERIFIED on a cluster. ---
+  - name: gateway 5xx at 5 percent burns the budget fast
+    interval: 1m
+    input_series:
+      - series: 'istio_requests_total{namespace="services-gateway", response_code="200"}'
+        values: '0+95x400'
+      - series: 'istio_requests_total{namespace="services-gateway", response_code="503"}'
+        values: '0+5x400'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: GatewayErrorBudgetBurnFast
+        exp_alerts:
+          - exp_labels: {severity: critical, component: gateway}
+  - name: gateway 5xx at 0.05 percent is inside the budget
+    interval: 1m
+    input_series:
+      - series: 'istio_requests_total{namespace="services-gateway", response_code="200"}'
+        values: '0+1999x400'
+      - series: 'istio_requests_total{namespace="services-gateway", response_code="503"}'
+        values: '0+1x400'
+    alert_rule_test:
+      - {eval_time: 90m, alertname: GatewayErrorBudgetBurnFast, exp_alerts: []}
+      - {eval_time: 7h, alertname: GatewayErrorBudgetBurnSlow, exp_alerts: []}
+  - name: all errors but almost no traffic does not page
+    interval: 1m
+    input_series:
+      - series: 'istio_requests_total{namespace="services-gateway", response_code="503"}'
+        values: '0+1x400'
+    alert_rule_test:
+      - {eval_time: 90m, alertname: GatewayErrorBudgetBurnFast, exp_alerts: []}
+  - name: gateway p99 above two seconds
+    interval: 1m
+    input_series:
+      - series: 'istio_request_duration_milliseconds_bucket{namespace="services-gateway", le="100"}'
+        values: '0+0x60'
+      - series: 'istio_request_duration_milliseconds_bucket{namespace="services-gateway", le="5000"}'
+        values: '0+600x60'
+      - series: 'istio_request_duration_milliseconds_bucket{namespace="services-gateway", le="+Inf"}'
+        values: '0+600x60'
+      - series: 'istio_requests_total{namespace="services-gateway", response_code="200"}'
+        values: '0+600x60'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: GatewayLatencyP99High, exp_alerts: []}
+      - eval_time: 30m
+        alertname: GatewayLatencyP99High
+        exp_alerts:
+          - exp_labels: {severity: warning, component: gateway}
+  - name: an OOM kill needs a recent restart, not only a remembered reason
+    interval: 1m
+    input_series:
+      - series: >-
+          kube_pod_container_status_last_terminated_reason{namespace="a", pod="p", container="c", reason="OOMKilled"}
+        values: '1x60'
+      - series: 'kube_pod_container_status_restarts_total{namespace="a", pod="p", container="c"}'
+        values: '3x30 4x30'
+      - series: >-
+          kube_pod_container_status_last_terminated_reason{namespace="a", pod="old", container="c", reason="OOMKilled"}
+        values: '1x60'
+      - series: 'kube_pod_container_status_restarts_total{namespace="a", pod="old", container="c"}'
+        values: '7x60'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: ContainerOOMKilled
+        exp_alerts:
+          - exp_labels: {namespace: a, pod: p, container: c, severity: warning, component: workload}
+  - name: node IO pressure sustained
+    interval: 1m
+    input_series:
+      - series: 'node_pressure_io_stalled_seconds_total{instance="n1"}'
+        values: '0+30x60'
+      - series: 'node_pressure_io_stalled_seconds_total{instance="n2"}'
+        values: '0+3x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: NodeIoPressure
+        exp_alerts:
+          - exp_labels: {instance: n1, severity: warning, component: node}
+  - name: Longhorn degraded for 30 minutes
+    interval: 1m
+    input_series:
+      - series: 'longhorn_volume_robustness{volume="v1", node="n1"}'
+        values: '1x10 2x80'
+      - series: 'longhorn_volume_robustness{volume="v2", node="n1"}'
+        values: '1x90'
+    alert_rule_test:
+      - {eval_time: 25m, alertname: LonghornVolumeDegraded, exp_alerts: []}
+      - eval_time: 60m
+        alertname: LonghornVolumeDegraded
+        exp_alerts:
+          - exp_labels: {volume: v1, severity: warning, component: storage}
+  - name: Longhorn blind rule only where Longhorn is installed
+    interval: 1m
+    input_series:
+      - series: 'kube_storageclass_info{storageclass="longhorn", provisioner="driver.longhorn.io"}'
+        values: '1x90'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: LonghornMetricsAbsent
+        exp_alerts:
+          - exp_labels: {severity: warning, component: storage}
+  - name: no Longhorn, no blind alert
+    interval: 1m
+    input_series:
+      - series: 'kube_storageclass_info{storageclass="local-path", provisioner="rancher.io/local-path"}'
+        values: '1x90'
+    alert_rule_test:
+      - {eval_time: 45m, alertname: LonghornMetricsAbsent, exp_alerts: []}
