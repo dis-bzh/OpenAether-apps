@@ -295,6 +295,22 @@ jobs:
           grep -qE '^[0-9]+ passed, 0 failed$' replicate.out
           ! grep -q 'SKIPPED' replicate.out
 
+      - name: "Restic Jobs keep both destinations independent; the etcd Job refuses a non-snapshot (real restic)"
+        run: |
+          set -euo pipefail
+          for t in test-backup-independent-stores test-etcd-snapshot; do
+            CI=true ./scripts/dev/$t.sh | tee "$t.out"
+            grep -qE '^[0-9]+ passed, 0 failed$' "$t.out"
+            if grep -q 'SKIPPED' "$t.out"; then exit 1; fi
+          done
+
+      - name: "The backup verifier sees each damage (real restic, a real Barman archive, an etcd snapshot)"
+        run: |
+          set -euo pipefail
+          CI=true ./scripts/dev/test-backup-verify.sh | tee verify.out
+          grep -qE '^[0-9]+ passed, 0 failed$' verify.out
+          ! grep -q 'SKIPPED' verify.out
+
   loki-render:
     name: Loki chart render
     runs-on: ubuntu-latest

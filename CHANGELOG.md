@@ -22,6 +22,21 @@ Bug fixes, documentation corrections and safety nets after 0.3.1, for the next r
 in 9 min 07 s, `cluster-verify` 15 passed, 0 failed, 38 Kustomizations and 16 HelmReleases Ready except `alloy-audit` (suspended by design). It fixes neither #42 nor #375 (infra), **does not
 fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
 
+### Added (0.4.0, milestone M2: backups complete, replicated, verified)
+
+- **CNPG moves to the Barman Cloud plugin** (#114): both Clusters leave the in-tree `barmanObjectStore` that CNPG 1.31 removes. Plugin v0.15.1 vendored next to the operator (lock, EOL calendar, Renovate), one `ObjectStore` per Cluster
+  with the SSE-S3 request (`AES256`), the Outscale checksum fix (#132) now in the sidecar environment, `ScheduledBackup` with `method: plugin`, `cert-manager` in the `dependsOn` of `cnpg`, a network policy for the plugin. **Encryption, exactly:**
+  the plugin has no client-side encryption (its CRD offers `AES256` and `aws:kms`, both server-side); the archive is protected by TLS in transit, the store's encryption at rest if it honours the header (measured with the same header on artifacts on Scaleway and OVH, not through barman, not on Outscale) and the key pair. The client-side encrypted copy stays the daily restic dump. The plugin form of a recovery has not been run on a cluster.
+- **Replica copy of the CNPG archive**: `cnpg-store-replicate` (every 15 min) copies `cnpg/<cluster>/` to the replica store with the replica key pair only, prunes only what left the primary 45 days ago and never against an empty primary or more than half of the replica; `*-replica` ObjectStores and a `cnpg-backup-s3-replica` ExternalSecret serve a recovery from the replica store; `cluster-identity` gains optional `BACKUP_REPLICA_S3_*`.
+- **Scheduled etcd snapshot** (`backup-etcd`, `etcd-snapshot` 04:10 UTC): Talos API access with the role `os:etcd:backup` only (infra `etcd_snapshot_api_access`), memory-backed volume, gate on the bolt magic, restic to both stores with the retention of the other datasets. Replaces "nothing runs it for you".
+- **Backup verifier** (`backup-verify`, 05:10 UTC, `backup-verify-exporter`, `VMServiceScrape`): exports `oa_backup_verify_ok` and `oa_backup_verify_last_success_timestamp_seconds` (the series the monitoring alerts wait for) plus per-store series: restic data subset, restore of the openbao and etcd snapshots with content checks, Barman base backup read to its end and WAL continuity on both stores, replica lag, Longhorn backup state. Alerts: `BackupCopyJobFailed`, `CnpgStoreReplicationStale`, `EtcdSnapshotStale`, `BackupVerifierStale`, `BackupStoreVerificationFailed`.
+- `check-backup-key-rights.sh` tries the `AES256` server-side-encryption request that the ObjectStores and the copy send.
+- Tests: `test-cnpg-barman-plugin.py` (render, CRD shape, Kyverno CLI), `test-cnpg-store-replicate.sh`, `test-backup-verify.sh` (real restic, a real Barman archive from a throwaway PostgreSQL, a real etcd snapshot, damage injected), `test-etcd-snapshot.sh`, `test-backup-independent-stores.sh`; `scripts/dev/testdata/fake_s3_server.py` is the store they share.
+
+### Fixed (backups)
+
+- **A failing destination no longer keeps the other from receiving its copy**: in `openbao-snapshot` and `cnpg-dump` the first failing store ended the Job before the replica was written; failures are now recorded and fail the Job last.
+
 ### Fixed
 
 - **Longhorn: a first install that fails once is retried, PARTIAL** (#134, stays open): the HelmRelease sets `install.strategy: RetryOnFailure` (`retryInterval: 2m`, `install.remediation.retries: 0`),

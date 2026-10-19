@@ -3,7 +3,7 @@
 Two Flux sub-bricks (`backup-openbao`, `backup-databases`) on a common **restic** engine: authenticated **client-side**
 encryption (AES-256-CTR + Poly1305-AES, key derived by scrypt from `RESTIC_PASSWORD`, so the buckets never see plaintext),
 deduplication, retention (14 days / 8 weeks / 12 months) and a `restic check` on every run. Each backup is pushed to **2 independent
-S3 repositories** (different providers in production); a failing destination fails the Job.
+S3 repositories** (different providers in production); a failing destination fails the Job, and does not keep the other from receiving its copy.
 
 ## Backup policy
 
@@ -53,7 +53,7 @@ anymore is not erased: only deleting the objects is.
    ```
 
    Until they exist, the `backup-restic-env` ExternalSecrets stay NotReady and the CronJobs do not start (by design,
-   `wait: false`). A new S3 FQDN means adding it to the `toFQDNs` of the five policies that carry the provider-S3 rule
+   `wait: false`). A new S3 FQDN means adding it to the `toFQDNs` of every policy that carries the provider-S3 rule
    (`observability`, `backup/openbao`, `backup/databases`, `cnpg` restricted, `storage`); `scripts/dev/test-s3-egress-fqdns.py`
    checks that they agree.
 3. **The buckets must exist beforehand**: restic does not create them (and retries a NoSuchBucket silently). Cloud:
@@ -186,6 +186,41 @@ are server-side). The ObjectStores request `AES256` for WAL and data, so the sto
 transport is TLS. NOT encrypted by us: the WAL and base backup bytes before the store sees them, so whoever can read the bucket
 (a store operator, a stolen key) reads the database content. The provider-independent, client-side encrypted copy is the daily restic
 `pg_dump` (RPO 24 h).
+
+## Scheduled etcd snapshot
+
+`backup-etcd` (its own Kustomization: the `talos.dev` ServiceAccount kind exists only where the control planes enable the Talos
+API access from Kubernetes, infra variable `etcd_snapshot_api_access`, on by default). The CronJob `etcd-snapshot` (04:10 UTC)
+takes a snapshot with `talosctl etcd snapshot` through a talosconfig that Talos generates for the grant `etcd-snapshot-talos`
+(role `os:etcd:backup` only, namespace `foundation-databases` only), keeps it in a memory-backed volume (the snapshot is every
+Secret of the cluster in clear), refuses a file that is not a bolt database, and pushes it to both restic repositories
+`<cluster>/etcd` (client-side encryption, 14 d / 8 w / 12 m, `restic check`). Why not a bastion timer: it would need the tofu state,
+its passphrase, the S3 keys and a Talos admin credential on an internet-facing host with closed egress. The risk taken instead: a
+pod of the namespace that mounts the grant Secret can take a snapshot (RBAC keeps that to the Job's ServiceAccount; the namespace
+holds the CNPG instances and the backup Jobs only). Failure signal: `BackupCopyJobFailed`, `EtcdSnapshotStale` (36 h), and the
+verifier below. Restore: `docs` of the infra repository (disaster recovery, step 10). Not exercised on a cluster: UNVERIFIED.
+
+## Verification (what proves a backup readable)
+
+`backup-verify` (CronJob, 05:10 UTC; the three stages are listed at the top of `databases/verify-cronjob.yaml`) publishes the
+series below through a ConfigMap served by `backup-verify-exporter` and scraped by vmagent (`VMServiceScrape backup-verify`):
+
+| Series | Meaning |
+|---|---|
+| `oa_backup_verify_ok{dataset}` | 1 when the last check passed on every store, 0 when one failed (the alert contract) |
+| `oa_backup_verify_last_success_timestamp_seconds{dataset}` | the last run where every store passed; kept through failures |
+| `oa_backup_verify_store_ok{dataset,store}`, `oa_backup_verify_newest_backup_age_seconds{dataset,store}`, `oa_backup_verify_last_run_timestamp_seconds` | per store, and the run itself |
+
+Datasets: `openbao`, `cnpg-dump`, `etcd` (restic: `restic check --read-data-subset=n/10`, so every pack is read within ten days,
+and a restore of the latest snapshot: the raft snapshot's archive and `SHA256SUMS`, the etcd snapshot's bolt meta pages, length
+and sha256 trailer); `cnpg` (the Barman archive: the latest base backup is `DONE` and read to its end, so the gzip CRC and the tar
+structure are verified, every WAL segment from its `begin_wal` to the newest exists, a sample reads to its end, and on the replica
+store no object older than two hours is missing compared with the primary); `longhorn` (the newest backup of each volume is
+`Completed`, with a size and no error: the blocks are NOT read). A repository that does not exist, a cluster with no base backup
+yet and an archive younger than 30 hours are skipped (no series), not failed. What it does NOT prove: that a restore into a running
+database or etcd works (the restore tests, M3), and that a byte flipped inside an etcd snapshot's data pages (no hash trailer) is
+seen (`etcdutl snapshot status` would; restic's own authentication covers the stored copy). It uses the key pairs of the backup
+Jobs (restic needs to write its lock files); a read-only pair is a follow-up.
 
 ## Known limits / upgrades
 
