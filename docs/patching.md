@@ -97,7 +97,7 @@ this page's. Not moved, with the reason: Istio (waived, needs the Gateway API CR
 upstream), OpenBao (stays 2.7.1), talos-cloud-controller-manager on the children (0.5.8 follows Talos 1.14, the children run 1.13).
 
 Two follow-ups these bumps create and that nothing in the repository enforces yet: CNPG 1.30.x is the last line with the in-tree `barmanObjectStore`
-(both Clusters use it; 1.31 removes it), and Kyverno 1.19.x is the last with `kyverno.io/v1` policies (1.20 removes them).
+(1.31 removes it; the Clusters have moved to the Barman Cloud plugin since 0.4.0, apps #114), and Kyverno 1.19.x is the last with `kyverno.io/v1` policies (1.20 removes them).
 
 ## Longhorn in-place hops (a running cluster pinned at 1.9.x)
 

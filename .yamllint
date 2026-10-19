@@ -5,6 +5,7 @@ extends: default
 ignore: |
   **/kyverno/kyverno-*.yaml
   **/cnpg/cnpg-*.yaml
+  **/cnpg/barman-cloud-plugin-*.yaml
   **/external-secrets/install.yaml
   **/orc/install.yaml
   **/platform/gateway-api/standard-install.yaml

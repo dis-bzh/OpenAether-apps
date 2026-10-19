@@ -14,7 +14,7 @@ been timed on a cluster (the drill below is how it becomes a number).
 |---|---|---|---|---|---|---|---|
 | OpenBao (raft: KV, PKI intermediate, policies) | `openbao-snapshot` CronJob, daily 02:17 UTC, restic | 24 h / 4 h (target) | 14 d / 8 w / 12 m | the 2 restic repositories | restic password (OpenBao itself + offline escrow) AND the OpenBao seal key (offline escrow) | monthly `openbao-snapshot-restore-test` (checksums and unpack); a full restore is manual | retention `--prune`; decommission below |
 | CNPG databases (zitadel, grafana): logical dump | `cnpg-dump` CronJob, daily 02:47 UTC, `pg_dump -Fc`, restic | 24 h / 4 h (target) | 14 d / 8 w / 12 m | the 2 restic repositories | restic password | monthly `cnpg-dump-restore-test` (`pg_restore --list` on every dump) | as above |
-| CNPG databases: continuous archive (PITR) | CNPG `barmanObjectStore`, WAL archive plus a `ScheduledBackup` at 03:10 / 03:25 UTC | minutes / 4 h (target) | 30 d | the cluster's own provider only (CNPG offers one destination) | S3 credentials (no client-side encryption) | none automated | bucket lifecycle at the provider |
+| CNPG databases: continuous archive (PITR) | CNPG Barman Cloud plugin (`ObjectStore` objects in `cnpg/objectstores.yaml`), WAL archive plus a `ScheduledBackup` at 03:10 / 03:25 UTC | minutes / 4 h (target) | 30 d | the primary store (see the replica copy in `cnpg-store-replicate`) | S3 credentials; server-side encryption requested, **no client-side encryption** | none automated | bucket lifecycle at the provider |
 | Longhorn volumes | opt-in RecurringJob group (`storage/backup-target`) | per job / not set | per job | the `backupTarget` of the environment | LUKS passphrase | none | at the provider |
 | Kubernetes resources | none: GitOps (Flux re-applies the repository) | n/a | Git history | Git | n/a | the DAG on a fresh cluster | n/a |
 | tfstate, kubeconfig/talosconfig, etcd snapshots | OpenAether-infra (`task` targets, encrypted with the state passphrase) | see the infra backup policy | see infra | 2 buckets | state passphrase | infra | infra |
@@ -136,9 +136,9 @@ restored dump (the archive must be readable by a client at least as recent as th
 snapshot and checks its `SHA256SUMS`. Neither loads the data into a live database or OpenBao: a real restore is still a manual
 exercise (this section, and the OpenBao runbook in `foundation/vault/README.md`).
 
-CNPG point-in-time recovery (barman archive, RPO of minutes). Restore into a NEW Cluster next to the original, in
-`foundation-databases` (the only namespace the S3 credentials Secret `cnpg-backup-s3` and the egress policy exist in), and never
-reuse the original's name or its `backup:` block (CNPG refuses to archive into a non-empty path):
+CNPG point-in-time recovery (Barman Cloud plugin, RPO of minutes). Restore into a NEW Cluster next to the original, in
+`foundation-databases` (the namespace of the ObjectStore objects, the S3 credentials Secret `cnpg-backup-s3` and the egress
+policy), and never reuse the original's name or its `plugins:` block (the barman check refuses to archive into a non-empty path):
 
 ```yaml
 apiVersion: postgresql.cnpg.io/v1
@@ -158,28 +158,30 @@ spec:
         targetTime: "2026-01-01 12:00:00+00"   # UTC, inside the archive range
   externalClusters:
     - name: zitadel-db-origin
-      barmanObjectStore:
-        # The archive lives under <destinationPath>/<serverName>; serverName belongs INSIDE barmanObjectStore (at the
-        # externalCluster level the API server refuses the manifest: unknown field).
-        serverName: zitadel-db
-        destinationPath: s3://<bucket>/cnpg/zitadel-db   # as in cnpg/cluster.yaml
-        endpointURL: <endpoint>
-        s3Credentials:
-          accessKeyId: { name: cnpg-backup-s3, key: ACCESS_KEY_ID }
-          secretAccessKey: { name: cnpg-backup-s3, key: ACCESS_SECRET_KEY }
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: zitadel-db-primary   # the ObjectStore of cnpg/objectstores.yaml
+          serverName: zitadel-db                  # the archive lives under <destinationPath>/<serverName>
 ```
 
 Check with `kubectl cnpg status zitadel-db-restore` and a `SELECT` on the data, then delete the scratch Cluster (its PVC is
-`Retain`: delete it too). Run on a real cluster in lab 12 (CNPG 1.30.1, Scaleway): a Backup of zitadel-db, then this restore into a new
-Cluster, healthy in about 1 minute with the same 150 tables as the origin. The PITR chain lives on the cluster's own provider only (one destination in CNPG 1.23); the second provider
-holds the daily `pg_dump` (RPO 24 h). The barman objects carry no client-side encryption (CNPG 1.23 offers server-side AES256/KMS
-only, unset here): they rely on the bucket's own protection.
+`Retain`: delete it too). Measured with the in-tree object store in lab 12 (CNPG 1.30.1, Scaleway): a Backup of zitadel-db, then this
+restore into a new Cluster, healthy in about 1 minute with the same 150 tables as the origin. **The plugin form of this restore has not
+been run on a cluster** (UNVERIFIED until the M2 lab). To restore from the replica store instead, name the `<cluster>-replica` ObjectStore.
+
+**Encryption of the PITR data, exactly.** The plugin has no client-side encryption (its CRD offers `encryption: AES256 | aws:kms`, which
+are server-side). The ObjectStores request `AES256` for WAL and data, so the store encrypts at rest if it honours the header
+(measured with the same header on artifacts: Scaleway and OVH; not measured through barman-cloud, and not measured on Outscale);
+transport is TLS. NOT encrypted by us: the WAL and base backup bytes before the store sees them, so whoever can read the bucket
+(a store operator, a stolen key) reads the database content. The provider-independent, client-side encrypted copy is the daily restic
+`pg_dump` (RPO 24 h).
 
 ## Known limits / upgrades
 
-- **CNPG PITR**: the restic dumps are daily (RPO 24 h). PITR through `barmanObjectStore` is an **active** block of
-  `cnpg/cluster.yaml` (`${BACKUP_S3_*}` values of the `cluster-identity` ConfigMap, `cnpg/scheduledbackups.yaml`): it lives next
-  to this engine and does not replace it.
+- **CNPG PITR**: the restic dumps are daily (RPO 24 h). PITR goes through the Barman Cloud plugin: `plugins:` in each Cluster,
+  the ObjectStores in `cnpg/objectstores.yaml` (`${BACKUP_S3_*}` values of the `cluster-identity` ConfigMap) and
+  `cnpg/scheduledbackups.yaml` (`method: plugin`). It lives next to this engine and does not replace it.
 - **Longhorn**: LUKS volumes (Longhorn backups of encrypted volumes stay encrypted); the backup target is not a Setting but the
   `BackupTarget` CR laid down by the `storage-backup-target` brick from `BACKUP_TARGET_URL`. With no URL published, Longhorn keeps
   no volume backups (see `storage/longhorn.yaml`).

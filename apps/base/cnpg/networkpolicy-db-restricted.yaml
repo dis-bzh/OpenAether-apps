@@ -123,7 +123,7 @@ spec:
               protocol: TCP
     - toEntities:
         - kube-apiserver
-    # Cloud S3 (HTTPS) — barmanObjectStore continuous archiving (WAL push from
+    # Cloud S3 (HTTPS) — Barman Cloud plugin continuous archiving (WAL push from
     # the primary, WAL/history restore for a joining replica). Missing this
     # silently degrades: a single-instance cluster never notices (no
     # restore_command calls), and archive-push failures don't block Ready —

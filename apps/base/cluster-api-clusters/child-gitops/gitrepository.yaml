@@ -13,7 +13,7 @@
 #                      prefix of its restic repositories
 #   ${CHILD_BACKUP_S3_BUCKET} / ${CHILD_BACKUP_S3_ENDPOINT} — REQUIRED if the
 #                      child picks the cnpg brick. Found live (2026-07-30,
-#                      edge-2): CNPG's Cluster.spec.backup.barmanObjectStore.
+#                      edge-2): CNPG's Barman Cloud plugin ObjectStore (cnpg/objectstores.yaml).
 #                      endpointURL is written as `"${BACKUP_S3_ENDPOINT:=}"` —
 #                      the WHOLE field is just the substitution, and when the
 #                      variable resolves to an EMPTY string (undefined, no

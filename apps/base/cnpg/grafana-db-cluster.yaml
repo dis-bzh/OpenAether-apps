@@ -49,14 +49,6 @@ spec:
     limits:
       cpu: 500m
       memory: 512Mi
-  # barman-cloud (boto3) against an S3 store that rejects the trailing checksum newer boto3 sends by default
-  # ("PutObject: trailing checksum is not supported", measured on Outscale OOS: continuous archiving False and
-  # every Backup stuck "running"). Send checksums only where the API requires them; harmless on stores that accept both.
-  env:
-    - name: AWS_REQUEST_CHECKSUM_CALCULATION
-      value: when_required
-    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
-      value: when_required
 
   affinity:
     # CNPG AffinityConfiguration (not the standard K8s type)
@@ -66,36 +58,12 @@ spec:
     enablePodMonitor: false
 
   # ── PITR (Point-In-Time Recovery) ───────────────────────────────────────────
-  # Before: the only net was the backup brick's daily `pg_dump`, i.e. a 24 h
-  # RPO. barmanObjectStore archives WAL continuously → an RPO of a few minutes,
-  # and restoration to a precise point in time.
-  #
-  # `${BACKUP_S3_*}` comes from the `cluster-identity` ConfigMap — laid down by
-  # the management's own bootstrap, or (gitception children) by
-  # child-gitops/gitrepository.yaml's ${CHILD_BACKUP_S3_*} substitution.
-  # ⚠️ NOT optional in practice: found live 2026-07-30 that an unset
-  # BACKUP_S3_ENDPOINT doesn't degrade to "" here (unlike destinationPath,
-  # where the empty substitution lands inside a larger string) — endpointURL's
-  # entire value IS the substitution, so it renders as YAML `null` and CNPG's
-  # CRD rejects the whole Cluster at dry-run. Any profile picking cnpg needs
-  # real values from its cluster-identity source.
-  #
-  # The path includes the database name: both clusters share the bucket without
-  # stepping on each other, like the restic repositories.
-  backup:
-    retentionPolicy: "30d"
-    barmanObjectStore:
-      destinationPath: "s3://${BACKUP_S3_BUCKET:=}/cnpg/grafana-db"
-      endpointURL: "${BACKUP_S3_ENDPOINT:=}"
-      s3Credentials:
-        accessKeyId:
-          name: cnpg-backup-s3
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: cnpg-backup-s3
-          key: ACCESS_SECRET_KEY
-      wal:
-        # WAL are bulky and S3 storage is billed by volume.
-        compression: gzip
-      data:
-        compression: gzip
+  # The Barman Cloud plugin archives WAL continuously (an RPO of minutes) and takes the base backups
+  # (scheduledbackups.yaml). Where and how is the ObjectStore `grafana-db-primary` (objectstores.yaml); the second copy
+  # on the replica store is shipped by the backup brick (backup/databases, cnpg-store-replicate).
+  # The WAL archive name is the Cluster name (serverName), as it was with the in-tree object store.
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: grafana-db-primary

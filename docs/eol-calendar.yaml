@@ -237,8 +237,21 @@ components:
   eol: not-yet
   eol_source: https://github.com/cloudnative-pg/cloudnative-pg/blob/main/docs/src/supported_releases.md
   note: the project's table lists 1.29 and 1.30 as supported; a minor is supported until 3 months after
-    the next one. barmanObjectStore (both Clusters) is removed in 1.31, so the 1.30 pin cannot go to 1.31 before
-    the move to the Barman Cloud plugin
+    the next one. Both Clusters now archive through the Barman Cloud plugin (the in-tree barmanObjectStore goes
+    in 1.31), so 1.31 is no longer blocked by it; the hop is still one minor at a time
+  owner: '@vde-dis'
+  next_review: '2026-12-14'
+- id: barman-cloud-plugin
+  brick: cnpg
+  component: CNPG Barman Cloud plugin (vendored dump)
+  pin: 0.15.1
+  file: apps/base/cnpg/barman-cloud-plugin-0.15.1.yaml
+  pattern: image:\s*ghcr\.io/cloudnative-pg/plugin-barman-cloud:v([0-9.]+)
+  cycle: plugin-barman-cloud 0.x
+  eol: not-yet
+  eol_source: https://github.com/cloudnative-pg/plugin-barman-cloud/releases
+  note: pre-1.0, no published support policy; re-vendored by hand, one release at a time, and its CRD (ObjectStore)
+    is what scripts/dev/test-cnpg-barman-plugin.py validates the ObjectStores against
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: postgres-main

@@ -1,0 +1,66 @@
+# Barman Cloud plugin ObjectStores: where each Cluster archives its WAL and base backups (apps #114).
+# Layout in the bucket is unchanged from the former in-tree `barmanObjectStore`:
+# s3://<bucket>/cnpg/<cluster>/<cluster>/{base,wals}, so an archive written before the move keeps being read.
+#
+# Encryption: the plugin has NO client-side encryption. `encryption: AES256` asks the store for server-side
+# encryption (SSE-S3 header) on every WAL and data object; TLS covers transport. Client-side encrypted copies of the
+# data are the restic dumps (backup/databases). docs/backup-cnpg.md says what is and is not covered.
+#
+# `${BACKUP_S3_*}` come from the `cluster-identity` ConfigMap, laid down by the bootstrap or (gitception children) by
+# child-gitops/gitrepository.yaml. Keep the quotes: an unquoted endpoint that is unset renders as YAML `null` and the
+# CRD rejects the object. A profile that picks cnpg needs real values there.
+#
+# The sidecar is the process that runs boto3: the Outscale checksum fix (apps #132, trailing checksum refused by OOS)
+# belongs to ITS environment, not the Cluster's.
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: zitadel-db-primary
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg
+spec:
+  retentionPolicy: "30d"
+  configuration:
+    destinationPath: "s3://${BACKUP_S3_BUCKET:=}/cnpg/zitadel-db"
+    endpointURL: "${BACKUP_S3_ENDPOINT:=}"
+    s3Credentials:
+      accessKeyId: { name: cnpg-backup-s3, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: cnpg-backup-s3, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip, encryption: AES256 }
+    data: { compression: gzip, encryption: AES256 }
+  instanceSidecarConfiguration:
+    env:
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: when_required }
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: when_required }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: grafana-db-primary
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg
+spec:
+  retentionPolicy: "30d"
+  configuration:
+    destinationPath: "s3://${BACKUP_S3_BUCKET:=}/cnpg/grafana-db"
+    endpointURL: "${BACKUP_S3_ENDPOINT:=}"
+    s3Credentials:
+      accessKeyId: { name: cnpg-backup-s3, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: cnpg-backup-s3, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip, encryption: AES256 }
+    data: { compression: gzip, encryption: AES256 }
+  instanceSidecarConfiguration:
+    env:
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: when_required }
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: when_required }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }

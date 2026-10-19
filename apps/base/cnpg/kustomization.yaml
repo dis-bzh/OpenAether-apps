@@ -6,12 +6,13 @@ kind: Kustomization
 # (it defines its own `cnpg-system` namespace for the operator).
 # Solution: let the install create the operator in cnpg-system, and
 # override cluster.yaml only.
-# CNPG 1.30.x is the last line that serves the in-tree `barmanObjectStore` (both Clusters archive WAL and take their
-# base backups through it): 1.31 removes it. Do not take 1.31 before the Barman Cloud plugin replaces it.
+# Both Clusters archive WAL and take their base backups through the Barman Cloud plugin (ObjectStore objects), not the
+# in-tree `barmanObjectStore` that CNPG 1.31 removes (apps #114). The plugin needs cert-manager (its mTLS certificates).
 # `monitoring.enablePodMonitor` is deprecated since 1.2x and will go too.
 resources:
   - namespace.yaml
   - cnpg-1.30.1.yaml  # vendored from v1.30.1 — avoids a remote fetch (DNS/IPv6)
+  - barman-cloud-plugin-0.15.1.yaml  # vendored from v0.15.1, installs into cnpg-system next to the operator
   - networkpolicy.yaml
   - networkpolicy-db-restricted.yaml
   - cluster.yaml
@@ -19,6 +20,7 @@ resources:
   - grafana-db-cluster.yaml
   - grafana-db-externalsecret.yaml
   - backup-externalsecret.yaml
+  - objectstores.yaml
   - scheduledbackups.yaml
 
 # The vendored operator sets runAsNonRoot on the pod only; Kyverno require-security-context reads the container (#47).
@@ -30,6 +32,23 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
         value: true
+
+# The plugin ships no resources, debug logging and no per-container runAsNonRoot (Kyverno reads the container).
+  - target:
+      kind: Deployment
+      name: barman-cloud
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
+        value: true
+      - op: replace
+        path: /spec/template/spec/containers/0/args/6
+        value: --log-level=info
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: 25m, memory: 64Mi }
+          limits: { cpu: 250m, memory: 128Mi }
 
 # CNPG 1.30 CRD descriptions quote the operator's own placeholder syntax (`${podselector:NAME}`, `${`image_root`}`,
 # `$${...}`).

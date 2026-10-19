@@ -53,6 +53,7 @@
   ignorePaths: [
     "apps/base/kyverno/kyverno-1.19.1.yaml",
     "apps/base/cnpg/cnpg-1.30.1.yaml",
+    "apps/base/cnpg/barman-cloud-plugin-0.15.1.yaml",
     "apps/base/external-secrets/install.yaml",
     "apps/base/orc/install.yaml",
     "apps/base/platform/gateway-api/standard-install.yaml",
@@ -142,6 +143,16 @@
       ],
       datasourceTemplate: "github-releases",
       depNameTemplate: "cloudnative-pg/cloudnative-pg",
+    },
+    {
+      customType: "regex",
+      description: "CNPG Barman Cloud plugin: vendored dump, same short-form 'vendored from vX' comment.",
+      fileMatch: ["^apps/base/cnpg/kustomization\\.yaml$"],
+      matchStrings: [
+        "barman-cloud-plugin-[0-9.]+\\.yaml\\s+#\\s*vendored from (?<currentValue>v[0-9.]+)",
+      ],
+      datasourceTemplate: "github-releases",
+      depNameTemplate: "cloudnative-pg/plugin-barman-cloud",
     },
     {
       customType: "regex",
