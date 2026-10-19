@@ -15,6 +15,43 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ---
 
+## [Unreleased]
+
+Bug fixes, documentation corrections and safety nets after 0.3.1, for the next release (a 0.3.2 patch was prepared and abandoned: there is no 0.3.2 tag). No new scope. Rungs: **mocked**
+(static checks, a real Zitadel and PostgreSQL in containers for #133) for every line, plus one short lab (lab 18, Scaleway, infra 7e367d9 / apps 75e464f, on branches): nominal `cluster-up`
+in 9 min 07 s, `cluster-verify` 15 passed, 0 failed, 38 Kustomizations and 16 HelmReleases Ready except `alloy-audit` (suspended by design). It fixes neither #42 nor #375 (infra), **does not
+fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
+
+### Fixed
+
+- **Longhorn: a first install that fails once is retried, PARTIAL** (#134, stays open): the HelmRelease sets `install.strategy: RetryOnFailure` (`retryInterval: 2m`, `install.remediation.retries: 0`),
+  accepted by helm-controller 1.6.5, with no Longhorn uninstall Job ever created. `test-longhorn-values.py` asserts the strategy, its CRD enum and pattern, and that the upgrade keeps the default.
+  Lab 18: a first-install failure undone inside the first retry period recovered by itself in about 2 minutes (the retry runs as an *upgrade* over the failed release). **But** if the cause
+  lasts longer than one period, the retry fails as an upgrade (`upgrade.remediation.retries: 0`), the HelmRelease goes `Stalled=True` (`RetriesExceeded`) and stays so until a manual reconcile
+  with the `requestedAt` and `forceAt` annotations. A deliberate upgrade failure is not retried (expected). So the change heals a transient shorter than 2 minutes only; see apps #143.
+- **Zitadel: a setup killed half way has a tested recovery** (#133): `scripts/ops/zitadel-clear-stuck-migration.sh` lists the steps started and never finished (dry run by default), and with `--apply`
+  deletes exactly the `started` event and the `migration_started` row of each, in one transaction. It refuses a step younger than `--min-age` (600 s), a running setup pod and a database that holds
+  more than the bootstrap admin. `scripts/dev/test-zitadel-migration-lock.sh` (new CI step) runs it against a real Zitadel v4.19.2 and PostgreSQL.
+  Lab 18, for the stuck state of step `05_last_failed`: dry run exit 1, `--apply` cleared it, `flux reconcile helmrelease zitadel --reset --force` brought the release Ready, then the script said
+  "nothing to clear"; the kubectl path to the CNPG primary worked; the refusals for a running setup pod and for the minimum age were observed; the human-user refusal was observed only on a
+  synthetic database. **Limits:** a plain pod delete never creates the stuck state (Zitadel handles SIGTERM), the state was reproduced with a hard kill. A kill inside `03_default_instance`
+  (not atomic) leaves instance data behind and the setup then fails for good with `Errors.Instance.Domain.AlreadyExists`: **not handled**, apps #144. Trap: wait for the Job to be `Failed`
+  before deleting it while Helm waits on its hook, or the hook times out and the rollback fails. Nothing clears the migration by itself (0.4.0).
+- **The version comments of two vendored dumps are checked** (#106): `check-vendored-lock.sh` fails when `vendored from vX` in the local-path-provisioner or gateway-api kustomization differs from the dump
+  (Renovate bumps only the comment). Two mutation cases in `test-check-vendored-lock.sh`. Rung: mocked.
+- **`FluxObjectSuspended` excludes the HelmRelease `alloy-audit`**, suspended by design. Lab 18: Alertmanager showed the Watchdog alert only; the vmalert pending state was **not** read (a network policy
+  blocks queries to vmselect from outside), so the absence of a pending alert is not proven.
+
+### Documentation
+
+- `docs/patching.md` (first install that stalls) and `docs/traps.md` (Zitadel migration) describe the changes above; the cluster-wide default-deny policy now says in its header that a new namespace's pods
+  accept nothing, even from their own namespace (#112, the per-namespace template stays an issue); one French comment in `22-backup.yaml` is English. Rung: mocked.
+
+### Known limitations
+
+- Open and unchanged: #134 (partial, see above), #143 (stall beyond one retry period), #144 (kill inside `03_default_instance`), infra #42 and #375. The other limitations of 0.3.1 are unchanged.
+- An ownership conflict does not make a Flux install fail (Flux takes ownership), so it is not a way to test #134.
+
 ## [0.3.1] — 2026-10-19
 
 0.3.1 is a **patch release** of 0.3.0: no new scope, the hotfix for the problems that block the goals of 0.4.0 (resilience and monitoring). It pairs

@@ -592,6 +592,12 @@ jobs:
           ./scripts/dev/test-zitadel-config.sh | tee zitadel-config.out
           grep -qE '^[0-9]+ passed, 0 failed$' zitadel-config.out
 
+      - name: Zitadel stuck migration recovery against a real Zitadel
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-zitadel-migration-lock.sh | tee zitadel-lock.out
+          grep -qE '^[0-9]+ passed, 0 failed$' zitadel-lock.out
+
       - name: Alloy scrubs tokens from Zitadel's access log (real Alloy)
         run: |
           set -euo pipefail

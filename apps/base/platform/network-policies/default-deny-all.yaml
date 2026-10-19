@@ -4,6 +4,10 @@
 # with `endpointSelector: {}` INTERSECT, so one would override allow-dns and
 # allow-kube-api (intersection = nothing) and break DNS across the cluster.
 #
+# A pod of a NEW namespace is therefore reachable by nobody, its own namespace included (lab 11, apps #112): give each
+# workload a CNP whose ingress allows `fromEndpoints: [{}]` (the same namespace) plus what else it serves. A ready-made
+# per-namespace template is not shipped yet.
+#
 # Egress is handled additively instead: the allow-dns / allow-kube-api /
 # allow-infra-egress-restricted CCNPs, plus a CNP per component. A namespace
 # without its own egress CNP has free egress — acceptable in dev, to harden

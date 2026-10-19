@@ -41,14 +41,17 @@ belong to. What follows has no skill of its own yet.
   step (lab: the database connection failed while the node was starved of IO). Zitadel then holds a `system.migration.started` event for that
   step and a `migration_started` row in `eventstore.unique_constraints` with no matching `done`; every later attempt logs `migration already
   started, will check again in 5 seconds` for ever, the Helm hook times out, the HelmRelease burns its 3 install retries and ends Stalled.
-  **Only on a first install (an empty Zitadel database; on one that holds users, restore from the CNPG backup instead of editing the event
-  store).** Recovery measured in the lab: (1) delete the Job (`kubectl -n services-identity delete job zitadel-setup`; if an attempt is still
-  running it writes the `started` event again, so wait for the Job to be failed); (2) on the CNPG primary of `zitadel-db`, in the `zitadel` database
-  (`kubectl cnpg psql zitadel-db -n foundation-databases -- -d zitadel`), SELECT the `system.migration.started` event whose payload names the stuck
-  step in `eventstore.events2` and the matching `migration_started` row of `eventstore.unique_constraints`, check no `system.migration.done`
-  exists for that step, then DELETE exactly those two rows; (3) reset the release:
-  `flux reconcile helmrelease zitadel -n services-identity --reset --force`. A pre-install step that clears a stale `started` migration by itself is
-  not written: it would edit the event store from a hook, which needs a cluster to prove (0.4.0, resilience).
+  **Only on a first install (the database holds the bootstrap organisation and its one admin human, nothing more; on one that holds users,
+  restore from the CNPG backup instead of editing the event store).** Recovery: (1) delete the Job (`kubectl -n services-identity delete job
+  zitadel-setup`; if an attempt is still running it writes the `started` event again, so wait for the Job to be failed); (2) run
+  `scripts/ops/zitadel-clear-stuck-migration.sh` (a dry run that lists each step started and never finished), then again with `--apply`: it deletes
+  exactly the `system.migration.started` event of the step in `eventstore.events2` and its `migration_started` row in
+  `eventstore.unique_constraints`, in one transaction, and refuses a step younger than 10 minutes (`--min-age`), a running setup pod, and a
+  database that holds more than the bootstrap admin; (3) reset the release: `flux reconcile helmrelease zitadel -n services-identity --reset --force`.
+  The script is tested against a real Zitadel and PostgreSQL (`scripts/dev/test-zitadel-migration-lock.sh`); its kubectl path (CNPG primary of
+  `zitadel-db`) has not run on a cluster. The same two rows can be deleted by hand with `kubectl cnpg psql zitadel-db -n foundation-databases -- -d zitadel`.
+  A pre-install step that clears a stale `started` migration by itself is not written: it would edit the event store from a hook, which needs a
+  cluster to prove (0.4.0, resilience).
 - **A node reboot WITHOUT a drain leaves the CNPG instance pods Completed, and CNPG 1.23.1 never restarts them.** The kubelet's
   graceful shutdown stops postgres (exit 0), the pod ends in phase `Succeeded` and the operator waits for it for ever: both
   databases down, Zitadel and the Gateway answer 503 (lab 11, measured 30+ minutes; Kubernetes only fixed this for StatefulSets).
