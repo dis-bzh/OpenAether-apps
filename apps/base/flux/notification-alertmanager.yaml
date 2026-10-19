@@ -1,0 +1,73 @@
+# Flux failures reach the cluster's Alertmanager (#139). Before this, Flux errors (a Kustomization that fails, a HelmRelease that
+# does not install, a commit whose signature is rejected) were seen only through the VMRules, so a cluster whose receiver
+# was not wired showed nothing from Flux itself.
+#
+# The Provider is of type `alertmanager` and points at the in-cluster VMAlertmanager (the same notifier as vmalert): Alertmanager
+# is the one place that knows the receivers (Slack, the dead-man's switch). No URL or credential is needed here, so there is
+# nothing to seed. If the receiver is not configured, Alertmanager is the component that says so.
+# Only `error` events are sent. A HelmRelease is listed per namespace because the notification controller matches an event
+# source on one namespace; scripts/dev/test-flux-notifications.py fails when a HelmRelease namespace of apps/base is missing.
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
+metadata:
+  name: alertmanager
+  namespace: flux-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: flux-notifications
+spec:
+  type: alertmanager
+  address: http://vmalertmanager-alertmanager.services-observability:9093/api/v2/alerts
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: flux-errors
+  namespace: flux-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: flux-notifications
+spec:
+  providerRef:
+    name: alertmanager
+  eventSeverity: error
+  eventSources:
+    - kind: GitRepository
+      name: "*"
+      namespace: flux-system
+    - kind: Kustomization
+      name: "*"
+      namespace: flux-system
+    - kind: HelmRelease
+      name: "*"
+      namespace: capi-operator-system
+    - kind: HelmRelease
+      name: "*"
+      namespace: cert-manager
+    - kind: HelmRelease
+      name: "*"
+      namespace: foundation-service-mesh
+    - kind: HelmRelease
+      name: "*"
+      namespace: foundation-storage
+    - kind: HelmRelease
+      name: "*"
+      namespace: kube-system
+    - kind: HelmRelease
+      name: "*"
+      namespace: longhorn-system
+    - kind: HelmRelease
+      name: "*"
+      namespace: services-identity
+    - kind: HelmRelease
+      name: "*"
+      namespace: services-observability
+    - kind: HelmRelease
+      name: "*"
+      namespace: services-observability-audit
+    - kind: HelmRelease
+      name: "*"
+      namespace: services-observability-node
+    - kind: HelmRelease
+      name: "*"
+      namespace: capi-clusters

@@ -34,6 +34,10 @@ issues list as open (see each entry).
   minutes, for 15 minutes, so the two failed attempts around a drained reboot or a switchover never fire and are no longer pending for 25 minutes. A vmalert unit test replays
   continuous failure, two isolated failures with archiving resuming, and two isolated failures on an idle database. The metric `cnpg_pg_stat_archiver_archived_count` is
   taken from the CNPG default queries, not yet read on a cluster.
+- **Flux errors reach Alertmanager** (#139): a `Provider` of type `alertmanager` (the in-cluster VMAlertmanager, no URL to seed) and an `Alert` for `error` events of every
+  GitRepository, every Kustomization and the HelmReleases of each namespace that has one, with the `flux-system` egress and the Alertmanager ingress on :9093 opened and the
+  Slack text reading Flux's `message`. A test refuses a HelmRelease namespace the Alert does not list. Not covered: a HelmRelease created in a new namespace must be added to
+  the Alert (the test says so); the notification controller was not run against a real Alertmanager (the label set it sends is taken from the Flux documentation).
 
 ---
 

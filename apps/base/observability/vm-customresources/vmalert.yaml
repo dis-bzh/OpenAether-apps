@@ -151,7 +151,7 @@ spec:
             send_resolved: true
             title: "[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}"
             text: >-
-              {{ range .Alerts }}{{ .Annotations.summary }}
+              {{ range .Alerts }}{{ or .Annotations.summary .Annotations.message }}
               {{ with .Annotations.description }}{{ . }}{{ end }}
               {{ end }}
   resources:

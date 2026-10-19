@@ -115,3 +115,13 @@ spec:
               protocol: TCP
     - toEntities:
         - kube-apiserver
+    # 12. The in-cluster Alertmanager, for the Flux notification Provider (#139). Ingress is allowed on its side
+    #     (services-observability/networkpolicy.yaml, CNP vmalertmanager).
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmalertmanager
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
