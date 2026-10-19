@@ -6,8 +6,8 @@
 
 🇫🇷 [Version française](README.fr.md)
 
-**Versions.** apps 0.3.0 (not released yet; release notes under `[0.3.0]` in CHANGELOG.md) pairs with OpenAether-infra 0.3.0: a fresh install lands on the upgraded components, and a 0.2.0 cluster hops one minor at a time as `docs/patching.md` says. apps 0.2.0 is for new clusters: a cluster initialised by 0.1.0 cannot be moved to it in place, and a 0.1.1 cluster
-needs its VictoriaMetrics volumes recreated, which loses their metric history (CHANGELOG, Upgrade notes; #71). It pairs with OpenAether-infra 0.2.1 (not yet cut), not with
+**Versions.** apps 0.3.0 (released 2026-10-19; release notes under `[0.3.0]` in CHANGELOG.md) pairs with OpenAether-infra 0.3.0: a fresh install lands on the upgraded components, and a 0.2.0 cluster hops one minor at a time as `docs/patching.md` says. apps 0.2.0 is for new clusters: a cluster initialised by 0.1.0 cannot be moved to it in place, and a 0.1.1 cluster
+needs its VictoriaMetrics volumes recreated, which loses their metric history (CHANGELOG, Upgrade notes; #71). It pairs with OpenAether-infra 0.2.1, not with
 0.2.0. The pairing table, what was validated where and what is not fixed are in [CHANGELOG.md](CHANGELOG.md).
 
 ## Principle: fixed foundation + modular pick

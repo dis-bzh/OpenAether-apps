@@ -15,7 +15,7 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ---
 
-## [0.3.0] — unreleased (the date is set at the tag)
+## [0.3.0] — 2026-10-19
 
 0.3.0 is the pair of OpenAether-infra 0.3.0: a **version upgrade campaign** (every component that was past support, plus the independent low-risk bumps) and a
 **security hardening wave**, the latter opt-in or in Audit unless stated. The project follows ANSSI recommendations as far as possible.
@@ -113,7 +113,7 @@ Zitadel -> Grafana interactive login; the alert drills (no alert was provoked); 
 
 ### Detail of the 0.3.0 entries
 
-ANSSI hardening work, not released yet. **Nothing here is a claim of compliance with any ANSSI document**: each entry names the requirements it addresses and the rung it reached; the ones that only a cluster can show are listed in the lab checklist of the maintainers.
+ANSSI hardening work, released with 0.3.0. **Nothing here is a claim of compliance with any ANSSI document**: each entry names the requirements it addresses and the rung it reached; the ones that only a cluster can show are listed in the lab checklist of the maintainers.
 
 ### Security
 
