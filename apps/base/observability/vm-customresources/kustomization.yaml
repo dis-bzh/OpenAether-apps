@@ -30,6 +30,7 @@ resources:
   - vmrule-platform.yaml
   - vmrule-logging.yaml
   - vmrule-security.yaml
+  - vmrule-retention.yaml
 
 labels:
   - includeSelectors: false

@@ -1,0 +1,30 @@
+# yamllint disable rule:line-length
+# Loki retention sweep (apps #127). The compactor deletes expired chunks (loki.yaml: retention_enabled, 8760h); this alert
+# only says the sweep keeps RUNNING. That chunks really disappear from the bucket is NOT proven by it: the lab reads the
+# object count after a short retention (docs/monitoring-0.4.md). UNVERIFIED: the metric name below.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: retention-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: logging
+spec:
+  groups:
+    - name: openaether-retention
+      interval: 5m
+      rules:
+        - alert: LokiRetentionNotSwept
+          expr: |
+            time() - max(loki_compactor_apply_retention_last_successful_run_timestamp_seconds) > 2 * 3600
+          for: 30m
+          labels:
+            severity: warning
+            component: logging
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#lokiretentionnotswept"
+            summary: "The Loki compactor has not applied retention for over 2 hours"
+            description: >-
+              Expired logs are no longer deleted: the bucket grows and the stated retention (a year) stops being
+              true in the other direction too, data is kept longer than documented.

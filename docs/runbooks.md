@@ -503,3 +503,10 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `kubectl cnpg status`; archive log; replication slots.
 - Do: Fix the archive (see CnpgWalArchiveFailing) or the lagging slot; grow the volume if time is short.
+
+## Logging retention
+
+### LokiRetentionNotSwept
+
+- Check: `kubectl -n services-observability logs sts/loki | grep -i 'compactor\|retention'`; the compactor ring (only one replica runs it).
+- Do: Fix the compactor error named in the log (bucket rights: DeleteObject on objects only, working directory space).

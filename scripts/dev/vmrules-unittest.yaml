@@ -601,3 +601,16 @@ tests:
         alertname: CnpgReplicaNotStreaming
         exp_alerts:
           - exp_labels: {cnpg_io_cluster: db, pod: db-2, severity: warning, component: database}
+  - name: Loki compactor stopped applying retention
+    interval: 10m
+    input_series:
+      - series: 'loki_compactor_apply_retention_last_successful_run_timestamp_seconds{pod="loki-0"}'
+        values: '946684800+600x6 _x300'   # advances for an hour, then the series stops moving (stale)
+      - series: 'loki_compactor_apply_retention_last_successful_run_timestamp_seconds{pod="loki-1"}'
+        values: '946684800+0x300'
+    alert_rule_test:
+      - {eval_time: 1h, alertname: LokiRetentionNotSwept, exp_alerts: []}
+      - eval_time: 4h
+        alertname: LokiRetentionNotSwept
+        exp_alerts:
+          - exp_labels: {severity: warning, component: logging}
