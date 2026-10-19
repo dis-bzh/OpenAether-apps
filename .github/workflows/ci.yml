@@ -181,6 +181,12 @@ jobs:
           python3 -I scripts/dev/test-alert-delivery.py --selftest | tee delivery.out
           ! grep -q "selftest FAIL" delivery.out
 
+      - name: Every alert metric is catalogued, scraped and honest about its status (0.4.0 M1)
+        run: |
+          python3 -I scripts/dev/test-alert-metrics.py
+          python3 -I scripts/dev/test-alert-metrics.py --selftest | tee metrics.out
+          ! grep -q "selftest FAIL" metrics.out
+
       - name: New scrapes pass the network policies (0.4.0 M1)
         run: |
           python3 -I scripts/dev/test-scrape-paths.py

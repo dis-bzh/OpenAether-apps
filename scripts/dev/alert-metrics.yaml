@@ -1,0 +1,282 @@
+# Where each metric read by an alert comes from, and how sure we are it exists. Checked by test-alert-metrics.py.
+#   status existing   : read by a rule that predates 0.4.0 M1 (`task check-alerts` of the labs found series for all of
+#                       them but kube_job_failed and kubelet_volume_stats_*, quiet by design: docs/detection.md).
+#   status UNVERIFIED : added by M1, never read on a cluster; the next lab runs `task check-alerts` and flips it.
+#   source            : the scrape that must exist (SCRAPES in the test), or `verifier-m2` for a series nobody exports
+#                       yet (its alerts are dormant by design), or `scrape` for `up`.
+ALERTS:
+  source: vmalert
+  status: UNVERIFIED
+alertmanager_build_info:
+  source: alertmanager
+  status: UNVERIFIED
+alertmanager_config_last_reload_successful:
+  source: alertmanager
+  status: UNVERIFIED
+alertmanager_notifications_failed_total:
+  source: alertmanager
+  status: UNVERIFIED
+alertmanager_notifications_total:
+  source: alertmanager
+  status: UNVERIFIED
+certmanager_certificate_expiration_timestamp_seconds:
+  source: cert-manager
+  status: existing
+certmanager_certificate_ready_status:
+  source: cert-manager
+  status: existing
+cilium_drop_count_total:
+  source: cilium
+  status: existing
+cilium_endpoint_regenerations_total:
+  source: cilium
+  status: existing
+cilium_policy_change_total:
+  source: cilium
+  status: existing
+cnpg_collector_last_available_backup_timestamp:
+  source: cnpg
+  status: existing
+cnpg_collector_last_failed_backup_timestamp:
+  source: cnpg
+  status: existing
+cnpg_collector_pg_wal:
+  source: cnpg
+  status: UNVERIFIED
+cnpg_collector_up:
+  source: cnpg
+  status: existing
+cnpg_pg_replication_in_recovery:
+  source: cnpg
+  status: UNVERIFIED
+cnpg_pg_replication_is_wal_receiver_up:
+  source: cnpg
+  status: UNVERIFIED
+cnpg_pg_replication_lag:
+  source: cnpg
+  status: UNVERIFIED
+cnpg_pg_stat_archiver_archived_count:
+  source: cnpg
+  status: existing
+cnpg_pg_stat_archiver_failed_count:
+  source: cnpg
+  status: existing
+container_cpu_cfs_periods_total:
+  source: cadvisor
+  status: UNVERIFIED
+container_cpu_cfs_throttled_periods_total:
+  source: cadvisor
+  status: UNVERIFIED
+envoy_server_live:
+  source: istio-gateway
+  status: UNVERIFIED
+etcd_server_has_leader:
+  source: etcd
+  status: existing
+etcd_server_leader_changes_seen_total:
+  source: etcd
+  status: existing
+gotk_reconcile_duration_seconds_count:
+  source: flux
+  status: existing
+gotk_resource_info:
+  source: kube-state-metrics
+  status: existing
+grafana_http_request_duration_seconds_count:
+  source: grafana
+  status: existing
+istio_request_duration_milliseconds_bucket:
+  source: istio-gateway
+  status: UNVERIFIED
+istio_requests_total:
+  source: istio-gateway
+  status: UNVERIFIED
+kube_cronjob_created:
+  source: kube-state-metrics
+  status: existing
+kube_cronjob_info:
+  source: kube-state-metrics
+  status: existing
+kube_cronjob_spec_suspend:
+  source: kube-state-metrics
+  status: existing
+kube_cronjob_status_last_schedule_time:
+  source: kube-state-metrics
+  status: existing
+kube_cronjob_status_last_successful_time:
+  source: kube-state-metrics
+  status: existing
+kube_daemonset_status_desired_number_scheduled:
+  source: kube-state-metrics
+  status: existing
+kube_daemonset_status_number_ready:
+  source: kube-state-metrics
+  status: existing
+kube_deployment_spec_replicas:
+  source: kube-state-metrics
+  status: existing
+kube_deployment_status_replicas_available:
+  source: kube-state-metrics
+  status: existing
+kube_job_failed:
+  source: kube-state-metrics
+  status: existing
+kube_job_status_failed:
+  source: kube-state-metrics
+  status: existing
+kube_node_status_allocatable:
+  source: kube-state-metrics
+  status: UNVERIFIED
+kube_node_status_condition:
+  source: kube-state-metrics
+  status: existing
+kube_pod_container_resource_requests:
+  source: kube-state-metrics
+  status: UNVERIFIED
+kube_pod_container_status_last_terminated_reason:
+  source: kube-state-metrics
+  status: UNVERIFIED
+kube_pod_container_status_restarts_total:
+  source: kube-state-metrics
+  status: existing
+kube_pod_owner:
+  source: kube-state-metrics
+  status: existing
+kube_pod_status_phase:
+  source: kube-state-metrics
+  status: existing
+kube_poddisruptionbudget_status_pod_disruptions_allowed:
+  source: kube-state-metrics
+  status: UNVERIFIED
+kube_statefulset_replicas:
+  source: kube-state-metrics
+  status: existing
+kube_statefulset_status_replicas_ready:
+  source: kube-state-metrics
+  status: existing
+kube_storageclass_info:
+  source: kube-state-metrics
+  status: UNVERIFIED
+kubelet_volume_stats_available_bytes:
+  source: kubelet
+  status: existing
+kubelet_volume_stats_capacity_bytes:
+  source: kubelet
+  status: existing
+kyverno_policy_results_total:
+  source: kyverno
+  status: existing
+loki_compactor_apply_retention_last_successful_run_timestamp_seconds:
+  source: loki
+  status: UNVERIFIED
+loki_discarded_samples_total:
+  source: loki
+  status: existing
+loki_distributor_bytes_received_total:
+  source: loki
+  status: existing
+loki_request_duration_seconds_count:
+  source: loki
+  status: existing
+loki_source_file_read_lines_total:
+  source: alloy
+  status: existing
+loki_write_dropped_entries_total:
+  source: alloy
+  status: existing
+loki_write_sent_entries_total:
+  source: alloy
+  status: existing
+longhorn_backup_state:
+  source: longhorn
+  status: UNVERIFIED
+longhorn_disk_capacity_bytes:
+  source: longhorn
+  status: UNVERIFIED
+longhorn_disk_usage_bytes:
+  source: longhorn
+  status: UNVERIFIED
+longhorn_node_status:
+  source: longhorn
+  status: UNVERIFIED
+longhorn_volume_robustness:
+  source: longhorn
+  status: UNVERIFIED
+node_disk_io_time_seconds_total:
+  source: node-exporter
+  status: UNVERIFIED
+node_disk_read_time_seconds_total:
+  source: node-exporter
+  status: UNVERIFIED
+node_disk_reads_completed_total:
+  source: node-exporter
+  status: UNVERIFIED
+node_disk_write_time_seconds_total:
+  source: node-exporter
+  status: UNVERIFIED
+node_disk_writes_completed_total:
+  source: node-exporter
+  status: UNVERIFIED
+node_filesystem_avail_bytes:
+  source: node-exporter
+  status: existing
+node_filesystem_size_bytes:
+  source: node-exporter
+  status: existing
+node_memory_MemAvailable_bytes:
+  source: node-exporter
+  status: UNVERIFIED
+node_memory_MemTotal_bytes:
+  source: node-exporter
+  status: UNVERIFIED
+node_network_receive_errs_total:
+  source: node-exporter
+  status: UNVERIFIED
+node_network_transmit_errs_total:
+  source: node-exporter
+  status: UNVERIFIED
+node_pressure_io_stalled_seconds_total:
+  source: node-exporter
+  status: UNVERIFIED
+node_pressure_memory_stalled_seconds_total:
+  source: node-exporter
+  status: UNVERIFIED
+node_timex_offset_seconds:
+  source: node-exporter
+  status: existing
+node_timex_sync_status:
+  source: node-exporter
+  status: existing
+oa_backup_verify_last_success_timestamp_seconds:
+  source: verifier-m2
+  status: UNVERIFIED
+oa_backup_verify_ok:
+  source: verifier-m2
+  status: UNVERIFIED
+up:
+  source: scrape
+  status: existing
+vault_autopilot_failure_tolerance:
+  source: openbao
+  status: existing
+vault_core_active:
+  source: openbao
+  status: existing
+vault_core_unsealed:
+  source: openbao
+  status: existing
+vault_raft_storage_stats_applied_index:
+  source: openbao
+  status: existing
+vault_raft_storage_stats_commit_index:
+  source: openbao
+  status: existing
+vmalert_alerts_send_errors_total:
+  source: vmalert
+  status: UNVERIFIED
+vmalert_execution_errors_total:
+  source: vmalert
+  status: UNVERIFIED
+vmalert_remotewrite_errors_total:
+  source: vmalert
+  status: UNVERIFIED
