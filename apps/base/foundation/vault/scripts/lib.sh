@@ -69,7 +69,7 @@ retry3() {
 wait_api() { # up to 15 minutes; any HTTP answer counts, sealed and uninitialised included
   local i c
   for i in $(seq 1 180); do
-    c="$(curl -s "${CURL_CA[@]}" -o /dev/null -w '%{http_code}' \
+    c="$(curl -s --max-time 5 "${CURL_CA[@]}" -o /dev/null -w '%{http_code}' \
       "${BAO_ADDR}/v1/sys/health?uninitcode=200&sealedcode=200&standbyok=true" || true)"
     if [ -n "$c" ] && [ "$c" != "000" ]; then log "  API answers (health=$c)"; return 0; fi
     [ $((i % 6)) = 0 ] && log "  waiting for the API... ${i}/180"

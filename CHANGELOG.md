@@ -15,6 +15,52 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ---
 
+## [0.3.1] — 2026-10-19
+
+0.3.1 is a **patch release** of 0.3.0: no new scope, the hotfix for the problems that block the goals of 0.4.0 (resilience and monitoring). It pairs
+apps 0.3.1 with OpenAether-infra 0.3.1 (whose `git_ref` default and tfvars examples pin `refs/tags/0.3.1` of this repository). Every fix below reached the rung
+**mocked** (static checks, unit tests, Kyverno CLI) and was then **observed on a real cloud in lab 17 (2026-10-19)**: Scaleway (3 control planes, 3 workers, fresh install on the
+branch) and OVH (reduced profile), both torn down. Not a compliance claim. It does not fix what the issues list as open.
+
+### Fixed
+
+- **OpenBao bootstrap Jobs retry instead of ending Failed on a slow start** (#34): the terminal `activeDeadlineSeconds` is gone from `openbao-init` and
+  `openbao-vault-bootstrap` (its clock counted the wait for the StatefulSet); both retry in place eight times, the waits stay bounded by the scripts,
+  and `check-bootstrap-jobs.sh` refuses a deadline that does not cover every attempt. A Job that exhausts its retries still comes back about 70 minutes later.
+  **Lab 17: PASS** on Scaleway and OVH: both Jobs Complete 1/1 (41 s and 46 s on Scaleway; 69 s and 80 s on OVH), no Failed pod, one recovery Secret, no OpenBao restart.
+- **The three OpenBao replicas spread over the workers** (#129): the hostname constraint is `DoNotSchedule` (`maxSkew: 1`, not-Ready workers counted, control
+  planes left out), so a replica waits for a second worker instead of joining the first two on it. **Lab 17: verified for placement** on Scaleway and OVH (one replica per worker,
+  three volumes pinned to three different nodes, PodDisruptionBudget `minAvailable: 2`); a drain of a worker holding a replica was **not blocked** (55 s). A real node-replacing
+  roll was **not run**. A cluster whose pods already share a worker is not moved by this (the volumes are pinned): `foundation/vault/README.md` has the one-replica-at-a-time
+  procedure. Not covered: a node that has not registered at all when the pods are placed; a one-control-plane-only cluster (the control planes are excluded, the pods stay Pending);
+  a second concurrent drain waits by design.
+- **`CnpgWalArchiveFailing` tells "failing now" from "failed once"** (#138): it needs a failure counted in the last 10 minutes with no WAL archived in the same 10
+  minutes, for 15 minutes, so the isolated failures around a drained reboot or a switchover never fire. A vmalert unit test replays continuous failure, two isolated failures
+  with archiving resuming, and two isolated failures on an idle database. **Lab 17: verified.** The metric `cnpg_pg_stat_archiver_archived_count` is present; across two drained reboots (one with
+  the primary of `zitadel-db`, with a real one-failure transient after the failover) the alert was never pending; with the archive credentials of one cluster broken it went pending after the last good archive aged
+  out and fired 29 minutes after the break (24 minutes after the first failed archive), reaching Alertmanager as `critical`.
+- **Flux errors reach Alertmanager** (#139): a `Provider` of type `alertmanager` (the in-cluster VMAlertmanager, no URL to seed) and an `Alert` for `error` events, with the `flux-system`
+  egress and the Alertmanager ingress on :9093 opened and the Slack text reading Flux's `message`. **Lab 17: verified** on Scaleway: a broken Kustomization reached Alertmanager within 60 s with the real labels
+  (`alertname=FluxKustomizationArtifactfailed` i.e. `Flux<Kind><Reason>`, `kind`, `name`, `namespace`, `reason`, `reportingcontroller`, `revision`, `severity=error`) and a non-empty `message`;
+  `severity=error` is routed by the root route to the default `slack` receiver (the sub-routes are only for `critical` and Watchdog). Flux sends no resolve, so each alert expires after about 6 minutes.
+  **Covered** event sources: every GitRepository and every Kustomization of `flux-system` only (a Kustomization in another namespace is not covered), and the HelmReleases of the listed namespaces
+  (`capi-operator-system`, `cert-manager`, `foundation-service-mesh`, `foundation-storage`, `kube-system`, `longhorn-system`, `services-identity`, `services-observability`,
+  `services-observability-audit`, `services-observability-node`, `capi-clusters`). Not covered: a HelmRelease created in a new namespace must be added to the Alert (a test says so).
+  The rejected-signature case was **not exercised** (git verification was off).
+- **`FluxObjectSuspended` no longer fires for the HelmRelease `alloy-audit`, suspended by design** (found in lab 17): the audit collector is opt-in, so every default
+  install keeps `alloy-audit` suspended and the alert (`for: 24h`) would have fired after a day. The rule now excludes that one HelmRelease; any other suspended object still alerts. A vmalert unit test
+  (the by-design object does not alert, another suspended HelmRelease does) fails without the change. Suspending `alloy-audit` after enabling the collector is not reported by this alert.
+
+### Known limitations
+
+- `cluster-verify` counts 15 checks on a default install (lab 16 of 0.3.0 counted 16): lab 17 reported 15 passed, 0 failed; the missing check was not investigated.
+- The rejected-signature case of #139 was not exercised.
+- #129: a real node-replacing roll was not run; a plain drain is not blocked, a second concurrent drain waits by design.
+- `FluxReconciliationStalled` (`critical`) was seen firing 6 to 7 minutes after hard-reboot drills on OVH with every object Ready again; its window and `for` are unchanged in 0.3.1 (not clearly safe to loosen without evidence from a cluster), to be looked at in 0.4.0.
+- Unchanged and still open: #134, #133, #124 and infra #42.
+
+---
+
 ## [0.3.0] — 2026-10-19
 
 0.3.0 is the pair of OpenAether-infra 0.3.0: a **version upgrade campaign** (every component that was past support, plus the independent low-risk bumps) and a

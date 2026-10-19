@@ -214,8 +214,8 @@ cluster that holds nothing yet, as above.
 ## Alerts and network
 
 `OpenBaoBootstrapJobFailed` (critical, `observability/vm-customresources/vmrule-bootstrap.yaml`): `openbao-init` or
-`openbao-vault-bootstrap` ended Failed for 15 minutes; the configure Job comes back about 70 minutes later by itself, the init Job
-likewise. The alert covers a Job that fails on a cluster whose observability is already running (a re-run, an upgrade): observed firing
+`openbao-vault-bootstrap` ended Failed for 15 minutes. Both Jobs retry in place (eight retries, no deadline: the waits are bounded by the scripts, 0.3.1); only after those
+retries does the Job end Failed and come back about 70 minutes later by itself. The alert covers a Job that fails on a cluster whose observability is already running (a re-run, an upgrade): observed firing
 and clearing on a real cluster. It can NOT show a failed first install, because the VMRule is deployed by `observability`, which waits for
 OpenBao-fed secrets; after an interruption inside the root window, `openbao-init` fails again (see above) and you see it with
 `kubectl -n foundation-vault get jobs` and the dependents staying NotReady. The OpenBao alerts (`OpenBaoWorkloadSealed`,
@@ -253,6 +253,26 @@ kube-apiserver, to create the Secrets).
 The configure Job runs about every 70 minutes (ttl 3600 s plus one sync), not once: each run rewrites the policies and the Kubernetes-auth
 roles from git, so a manual edit of either is reverted within about 70 minutes. Change the configuration in git, never by hand (a drill
 that needs a temporary grant should expect it to disappear).
+
+## Placement and replacing a worker
+
+The three replicas keep their raft data on `local-path-retain` volumes, each pinned to the node where its pod first ran. The StatefulSet
+therefore asks for one replica per worker (hostname spread, `DoNotSchedule`, `maxSkew: 1`; the control planes are not used): 3 workers hold
+1+1+1, 2 workers hold 2+1, one worker holds all three (a single-worker cluster is accepted, it has no node-loss tolerance). A worker that
+is registered but not Ready yet counts, so a pod waits for it. A node that has not registered at all is invisible to the scheduler: after
+the first install, and before touching a worker, check that the pods sit on at least two nodes (one worker is enough only on a one-worker cluster):
+
+```bash
+kubectl -n foundation-vault get pods -l app=openbao -o wide      # the NODE column: not all the same
+```
+
+A cluster installed before 0.3.1 whose three pods already share a worker is NOT moved by the new constraint (the volumes are pinned).
+To spread it, one replica at a time, only when `bao operator raft list-peers` shows three voters and every pod is Ready: cordon nothing,
+delete the standby's PVC and then its pod (`kubectl -n foundation-vault delete pvc data-openbao-N --wait=false` then `delete pod openbao-N`),
+wait for the new pod to join (`retry_join`) and for the three voters again, and release the old PersistentVolume (Retain keeps it and its
+data on the old node: wipe it before reuse). Never do two replicas at once, and never the active node first. This procedure was written from
+the design, not run on a cluster. Replacing a worker that holds ONE replica is safe once the other two are Ready (the PodDisruptionBudget
+keeps two); one that holds several is not: spread first.
 
 ## Limits, stated plainly
 

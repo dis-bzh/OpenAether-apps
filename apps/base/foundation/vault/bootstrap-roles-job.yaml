@@ -26,10 +26,11 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: openbao-vault-bootstrap
 spec:
-  backoffLimit: 5
-  # 60 minutes: wait_api (15) plus login_bootstrap (15) can spend 30 before any work starts, and the deadline spans every
-  # in-place restart. scripts/dev/check-bootstrap-jobs.sh keeps it above that sum.
-  activeDeadlineSeconds: 3600
+  # No activeDeadlineSeconds (#34): a deadline is terminal and spans the waits for openbao-init, so a slow first start ended
+  # the Job Failed for about 70 minutes. The waits are bounded in the script (wait_api 15 minutes, login_bootstrap 15) and the
+  # pod restarts in place with a growing delay: eight retries, then Failed, then re-created after the ttl. Every step is
+  # idempotent (create-only secrets, check-and-set 0).
+  backoffLimit: 8
   # Without a ttl a Failed Job stays Failed: Flux does not re-apply an unchanged object (#34). Kept for an hour so the
   # first run's PKI CSR can be read from its log (README: PKI intermediate).
   ttlSecondsAfterFinished: 3600

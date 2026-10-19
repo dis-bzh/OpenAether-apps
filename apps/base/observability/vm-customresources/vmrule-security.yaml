@@ -130,9 +130,19 @@ spec:
               registered key or remove the unexpected commit; docs/signed-commits.md.
 
         # 5) Suspended and forgotten: git no longer applies to it. Often deliberate during an operation.
+        #    HelmRelease services-observability/alloy-audit is suspended by design (the audit collector is opt-in,
+        #    apps/flux/components/audit-log-collector), so it is excluded: without that the alert fired after 24 h on
+        #    every default install (lab 17). A suspension of any other object still alerts. Suspending alloy-audit
+        #    after enabling the collector is not reported (use FluxObjectNotReady / the log alerts for it).
         - alert: FluxObjectSuspended
           expr: |
-            max by (customresource_kind, exported_namespace, name) (gotk_resource_info{suspended="true"}) == 1
+            max by (customresource_kind, exported_namespace, name) (
+              gotk_resource_info{suspended="true"}
+              unless on (customresource_kind, exported_namespace, name)
+              gotk_resource_info{
+                customresource_kind="HelmRelease", exported_namespace="services-observability", name="alloy-audit"
+              }
+            ) == 1
           for: 24h
           labels:
             severity: warning

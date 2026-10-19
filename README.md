@@ -6,7 +6,7 @@
 
 🇫🇷 [Version française](README.fr.md)
 
-**Versions.** apps 0.3.0 (released 2026-10-19; release notes under `[0.3.0]` in CHANGELOG.md) pairs with OpenAether-infra 0.3.0: a fresh install lands on the upgraded components, and a 0.2.0 cluster hops one minor at a time as `docs/patching.md` says. apps 0.2.0 is for new clusters: a cluster initialised by 0.1.0 cannot be moved to it in place, and a 0.1.1 cluster
+**Versions.** The current release is apps 0.3.1, a patch of 0.3.0 (hotfix, no new scope; notes under `[0.3.1]` in CHANGELOG.md), paired with OpenAether-infra 0.3.1. What follows is the history: apps 0.3.0 (released 2026-10-19; release notes under `[0.3.0]` in CHANGELOG.md) pairs with OpenAether-infra 0.3.0: a fresh install lands on the upgraded components, and a 0.2.0 cluster hops one minor at a time as `docs/patching.md` says. apps 0.2.0 is for new clusters: a cluster initialised by 0.1.0 cannot be moved to it in place, and a 0.1.1 cluster
 needs its VictoriaMetrics volumes recreated, which loses their metric history (CHANGELOG, Upgrade notes; #71). It pairs with OpenAether-infra 0.2.1, not with
 0.2.0. The pairing table, what was validated where and what is not fixed are in [CHANGELOG.md](CHANGELOG.md).
 

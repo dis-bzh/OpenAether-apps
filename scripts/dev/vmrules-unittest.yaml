@@ -230,6 +230,26 @@ tests:
               description: >-
                 flux get all -A, then kubectl describe HelmRelease
                 -n services-observability grafana. Objects that depend on it wait too.
+  # alloy-audit is suspended by design (opt-in audit collector): no alert after 24 h; any other suspended object alerts.
+  - name: Flux object suspended for a day alerts, the by-design suspended alloy-audit does not
+    interval: 1m
+    input_series:
+      # yamllint disable-line rule:line-length
+      - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability", name="alloy-audit", ready="True", suspended="true"}'
+        values: '1+0x1600'
+      # yamllint disable-line rule:line-length
+      - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability", name="grafana", ready="True", suspended="true"}'
+        values: '1+0x1600'
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: FluxObjectSuspended
+        exp_alerts:
+          - exp_labels:
+              {customresource_kind: HelmRelease, exported_namespace: services-observability, name: grafana,
+               severity: warning, component: flux}
+            exp_annotations:
+              summary: "Flux HelmRelease grafana has been suspended for 24 h"
+              description: "flux resume ... when the operation is over."
   # A rejected signature is named at once (infra #337); a verified or unverified-because-off source does not alert.
   - name: Flux source with a rejected signature alerts, a verified one does not
     interval: 1m
@@ -258,3 +278,50 @@ tests:
                 kubectl describe gitrepository -n flux-system openaether
                 (condition SourceVerified), then git log --show-signature on the branch. Sign the push with a
                 registered key or remove the unexpected commit; docs/signed-commits.md.
+  # WAL archiving (#138): "failing now", not "failed once in the last half hour". The old rule (increase over 30m, for
+  # 15m) was
+  # pending for about 25 minutes after a drained reboot and fired on a second incident inside the window.
+  - name: WAL archiving fails continuously, nothing archived
+    interval: 1m
+    input_series:
+      - series: 'cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster="grafana-db", pod="grafana-db-1"}'
+        values: '0+1x59'
+      - series: 'cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster="grafana-db", pod="grafana-db-1"}'
+        values: '10+0x59'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CnpgWalArchiveFailing
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: CnpgWalArchiveFailing
+        exp_alerts:
+          - exp_labels: {cnpg_io_cluster: grafana-db, severity: critical, component: backup}
+            exp_annotations:
+              summary: "CNPG grafana-db: WAL archiving fails"
+              description: >-
+                barman cannot write to the object store (credentials, endpoint, egress).
+                kubectl logs -n foundation-databases <primary-pod> -c postgres | grep -i archiv.
+  - name: two isolated archive failures around a drain, archiving resumes
+    interval: 1m
+    input_series:
+      - series: 'cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster="grafana-db", pod="grafana-db-1"}'
+        values: '0x10 1 2 2x48'
+      - series: 'cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster="grafana-db", pod="grafana-db-1"}'
+        values: '10x12 11+1x47'
+    alert_rule_test:
+      - {eval_time: 14m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
+      - {eval_time: 20m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
+      - {eval_time: 30m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
+      - {eval_time: 45m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
+  - name: two isolated archive failures, then an idle database (nothing to archive)
+    interval: 1m
+    input_series:
+      - series: 'cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster="grafana-db", pod="grafana-db-1"}'
+        values: '0x10 1 2 2x48'
+      - series: 'cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster="grafana-db", pod="grafana-db-1"}'
+        values: '10+0x59'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
+      - {eval_time: 26m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
+      - {eval_time: 30m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
+      - {eval_time: 45m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
