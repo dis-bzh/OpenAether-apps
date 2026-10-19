@@ -26,6 +26,10 @@ issues list as open (see each entry).
 - **OpenBao bootstrap Jobs retry instead of ending Failed on a slow start** (#34): the terminal `activeDeadlineSeconds` is gone from `openbao-init` and
   `openbao-vault-bootstrap` (its clock counted the wait for the StatefulSet); both retry in place eight times, the waits stay bounded by the scripts,
   and `check-bootstrap-jobs.sh` now refuses a deadline that does not cover every attempt. A Job that exhausts its retries still comes back about 70 minutes later.
+- **The three OpenBao replicas spread over the workers** (#129): the hostname constraint is `DoNotSchedule` (`maxSkew: 1`, not-Ready workers counted, control
+  planes left out), so a replica waits for a second worker instead of joining the first two on it. A cluster whose pods already share a worker is not moved by
+  this (the volumes are pinned): `foundation/vault/README.md` has the one-replica-at-a-time procedure and the check. Not covered: a node that has not
+  registered at all when the pods are placed; a one-control-plane-only cluster (the control planes are excluded, the pods stay Pending).
 
 ---
 

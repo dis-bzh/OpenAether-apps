@@ -163,6 +163,12 @@ jobs:
       - name: The Gateway keeps two replicas and a disruption budget (lab 15c)
         run: python3 -I scripts/dev/test-gateway-ha.py
 
+      - name: The OpenBao replicas spread over the workers (#129)
+        run: |
+          python3 -I scripts/dev/test-openbao-spread.py
+          python3 -I scripts/dev/test-openbao-spread.py --selftest | tee spread.out
+          ! grep -q "NOT detected" spread.out
+
       - name: Container securityContext is set where the operators read it (#47)
         run: python3 -I scripts/dev/test-container-security-context.py
 
