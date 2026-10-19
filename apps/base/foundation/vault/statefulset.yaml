@@ -43,12 +43,17 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
-      # One replica per worker (#129, lab 15a: all three pods and their local-path volumes sat on ONE worker, so replacing it
-      # destroyed the quorum). DoNotSchedule, maxSkew 1: 2 workers hold 2+1, 3 workers 1+1+1; a single worker holds all three
-      # (skew 0, nothing stays Pending). nodeTaintsPolicy Ignore counts a worker that is registered but not Ready yet as a domain,
-      # so a pod waits for it instead of piling onto the first Ready worker (the cause in lab 15a). The control planes are left
+      # One replica per worker (#129, lab 15a: all three pods and their local-path volumes sat on ONE worker, so
+      # replacing it
+      # destroyed the quorum). DoNotSchedule, maxSkew 1: 2 workers hold 2+1, 3 workers 1+1+1; a single worker holds
+      # all three
+      # (skew 0, nothing stays Pending). nodeTaintsPolicy Ignore counts a worker that is registered but not Ready yet
+      # as a domain,
+      # so a pod waits for it instead of piling onto the first Ready worker (the cause in lab 15a). The control planes
+      # are left
       # out of the count by the node affinity: otherwise their empty domains would cap every worker at one pod.
-      # LIMIT: a node that has not registered at all is invisible to the scheduler; README "Placement" has the check to run.
+      # LIMIT: a node that has not registered at all is invisible to the scheduler; README "Placement" has the check
+      # to run.
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

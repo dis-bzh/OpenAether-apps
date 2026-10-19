@@ -1,12 +1,18 @@
-# Flux failures reach the cluster's Alertmanager (#139). Before this, Flux errors (a Kustomization that fails, a HelmRelease that
-# does not install, a commit whose signature is rejected) were seen only through the VMRules, so a cluster whose receiver
+# Flux failures reach the cluster's Alertmanager (#139). Before this, Flux errors (a Kustomization that fails, a
+# HelmRelease that
+# does not install, a commit whose signature is rejected) were seen only through the VMRules, so a cluster whose
+# receiver
 # was not wired showed nothing from Flux itself.
 #
-# The Provider is of type `alertmanager` and points at the in-cluster VMAlertmanager (the same notifier as vmalert): Alertmanager
-# is the one place that knows the receivers (Slack, the dead-man's switch). No URL or credential is needed here, so there is
+# The Provider is of type `alertmanager` and points at the in-cluster VMAlertmanager (the same notifier as vmalert):
+# Alertmanager
+# is the one place that knows the receivers (Slack, the dead-man's switch). No URL or credential is needed here, so
+# there is
 # nothing to seed. If the receiver is not configured, Alertmanager is the component that says so.
-# Only `error` events are sent. A HelmRelease is listed per namespace because the notification controller matches an event
-# source on one namespace; scripts/dev/test-flux-notifications.py fails when a HelmRelease namespace of apps/base is missing.
+# Only `error` events are sent. A HelmRelease is listed per namespace because the notification controller matches an
+# event
+# source on one namespace; scripts/dev/test-flux-notifications.py fails when a HelmRelease namespace of apps/base is
+# missing.
 apiVersion: notification.toolkit.fluxcd.io/v1beta3
 kind: Provider
 metadata:
