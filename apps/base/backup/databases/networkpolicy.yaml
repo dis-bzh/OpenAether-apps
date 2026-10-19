@@ -63,3 +63,40 @@ spec:
         - ports:
             - port: "9000"
               protocol: TCP
+---
+# cnpg-store-replicate: reads the primary store, writes the replica store, nothing else.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg-store-replicate
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "CNPG store replication: egress DNS + the provider S3 endpoints (443)"
+  endpointSelector:
+    matchLabels:
+      app: cnpg-store-replicate
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchPattern: "s3.*.scw.cloud"          # Scaleway Object Storage
+        - matchPattern: "s3.*.io.cloud.ovh.net"   # OVH Object Storage (standard class)
+        - matchPattern: "oos.*.outscale.com"      # Outscale OSU
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

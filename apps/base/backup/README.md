@@ -14,7 +14,7 @@ been timed on a cluster (the drill below is how it becomes a number).
 |---|---|---|---|---|---|---|---|
 | OpenBao (raft: KV, PKI intermediate, policies) | `openbao-snapshot` CronJob, daily 02:17 UTC, restic | 24 h / 4 h (target) | 14 d / 8 w / 12 m | the 2 restic repositories | restic password (OpenBao itself + offline escrow) AND the OpenBao seal key (offline escrow) | monthly `openbao-snapshot-restore-test` (checksums and unpack); a full restore is manual | retention `--prune`; decommission below |
 | CNPG databases (zitadel, grafana): logical dump | `cnpg-dump` CronJob, daily 02:47 UTC, `pg_dump -Fc`, restic | 24 h / 4 h (target) | 14 d / 8 w / 12 m | the 2 restic repositories | restic password | monthly `cnpg-dump-restore-test` (`pg_restore --list` on every dump) | as above |
-| CNPG databases: continuous archive (PITR) | CNPG Barman Cloud plugin (`ObjectStore` objects in `cnpg/objectstores.yaml`), WAL archive plus a `ScheduledBackup` at 03:10 / 03:25 UTC | minutes / 4 h (target) | 30 d | the primary store (see the replica copy in `cnpg-store-replicate`) | S3 credentials; server-side encryption requested, **no client-side encryption** | none automated | bucket lifecycle at the provider |
+| CNPG databases: continuous archive (PITR) | CNPG Barman Cloud plugin (`ObjectStore` objects in `cnpg/objectstores.yaml`), WAL archive plus a `ScheduledBackup` at 03:10 / 03:25 UTC | minutes / 4 h (target) | 30 d | the primary store, copied to the replica store every 15 min (`cnpg-store-replicate`, replica key pair) | S3 credentials; server-side encryption requested, **no client-side encryption** | none automated | bucket lifecycle at the provider |
 | Longhorn volumes | opt-in RecurringJob group (`storage/backup-target`) | per job / not set | per job | the `backupTarget` of the environment | LUKS passphrase | none | at the provider |
 | Kubernetes resources | none: GitOps (Flux re-applies the repository) | n/a | Git history | Git | n/a | the DAG on a fresh cluster | n/a |
 | tfstate, kubeconfig/talosconfig, etcd snapshots | OpenAether-infra (`task` targets, encrypted with the state passphrase) | see the infra backup policy | see infra | 2 buckets | state passphrase | infra | infra |
@@ -135,6 +135,16 @@ The monthly restore tests (the `*-restore-test` CronJobs) go one step past resti
 restored dump (the archive must be readable by a client at least as recent as the server), the OpenBao one unpacks the raft
 snapshot and checks its `SHA256SUMS`. Neither loads the data into a live database or OpenBao: a real restore is still a manual
 exercise (this section, and the OpenBao runbook in `foundation/vault/README.md`).
+
+**The CNPG archive on the replica store.** The plugin archives to one store per Cluster. The `cnpg-store-replicate` CronJob
+(every 15 min, `backup/databases`) copies `cnpg/<cluster>/` from the primary bucket to the replica bucket with the replica key pair
+(`backup/s3-replica`, never the primary pair): objects the replica lacks or holds with another size are copied, base-backup data
+before its `backup.info`, uploaded with the SSE-S3 request. So the replica trails the primary by up to 15 min plus the copy time: that is
+the RPO of a recovery **from the replica store**, not the minutes of a WAL switch. An object that left the primary (Barman
+retention) is removed from the replica only after 45 days, and never against an empty primary or when it would remove more than half
+of a cluster's replica objects (the job fails instead). The `<cluster>-replica` ObjectStores name the replica bucket
+(`BACKUP_REPLICA_S3_*` in `cluster-identity`) for a recovery. A failed job is the signal (`BackupJobFailed`, plus the freshness
+series of the verifier). Not exercised on a cluster: UNVERIFIED until the M2 lab.
 
 CNPG point-in-time recovery (Barman Cloud plugin, RPO of minutes). Restore into a NEW Cluster next to the original, in
 `foundation-databases` (the namespace of the ObjectStore objects, the S3 credentials Secret `cnpg-backup-s3` and the egress

@@ -5,4 +5,5 @@ resources:
   - externalsecret.yaml
   - cronjob.yaml
   - restore-test-cronjob.yaml
+  - cnpg-store-replicate-cronjob.yaml
   - networkpolicy.yaml

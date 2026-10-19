@@ -83,7 +83,19 @@ def main(path="apps/base/cnpg"):
             errs.append(f"Cluster {n}: want exactly one {PLUGIN} plugin with isWALArchiver, got {len(arch)}"); continue
         ref = arch[0].get("parameters", {}).get("barmanObjectName")
         if (c["metadata"]["namespace"], ref) not in stores:
-            errs.append(f"Cluster {n}: barmanObjectName {ref!r} is not an ObjectStore of its namespace")
+            errs.append(f"Cluster {n}: barmanObjectName {ref!r} is not an ObjectStore of its namespace"); continue
+        # The replica store: its own ObjectStore, its own key pair, its own destination (infra #368).
+        rep = stores.get((c["metadata"]["namespace"], f"{n}-replica"))
+        if rep is None:
+            errs.append(f"Cluster {n}: no ObjectStore {n}-replica for the second store"); continue
+        pc, rc = stores[(c["metadata"]["namespace"], ref)]["spec"]["configuration"], rep["spec"]["configuration"]
+        if pc["s3Credentials"]["accessKeyId"]["name"] == rc["s3Credentials"]["accessKeyId"]["name"]:
+            errs.append(f"{n}: the replica ObjectStore reads the primary key pair")
+        for f in ("destinationPath", "endpointURL"):
+            if "REPLICA" not in rc[f] or "REPLICA" in pc[f]:
+                errs.append(f"{n}: {f} of the replica must come from BACKUP_REPLICA_S3_*, the primary's from BACKUP_S3_*")
+        if rc["destinationPath"].split("/", 3)[-1] != pc["destinationPath"].split("/", 3)[-1]:
+            errs.append(f"{n}: the replica path inside the bucket differs from the primary's (the copy keeps the layout)")
     for d in docs:
         if d["kind"] == "ScheduledBackup":
             if d["spec"].get("method") != "plugin" or d["spec"].get("pluginConfiguration", {}).get("name") != PLUGIN:

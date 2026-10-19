@@ -19,6 +19,7 @@ ignore: |
   **/observability/dashboards/*.yaml
   **/foundation/vault/bootstrap-roles-job.yaml
   **/backup/*/cronjob.yaml
+  **/backup/*/cnpg-store-replicate-cronjob.yaml
 
 rules:
   document-start: disable

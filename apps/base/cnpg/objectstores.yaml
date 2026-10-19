@@ -64,3 +64,57 @@ spec:
     resources:
       requests: { cpu: 50m, memory: 128Mi }
       limits: { cpu: 500m, memory: 512Mi }
+---
+# Replica copy of zitadel-db: read side only. The Cluster does not archive here (the plugin writes to one store); the
+# backup brick copies the primary archive here (cnpg-store-replicate): a recovery from the replica store names this.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: zitadel-db-replica
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg
+spec:
+  configuration:
+    destinationPath: "s3://${BACKUP_REPLICA_S3_BUCKET:=}/cnpg/zitadel-db"
+    endpointURL: "${BACKUP_REPLICA_S3_ENDPOINT:=}"
+    s3Credentials:
+      accessKeyId: { name: cnpg-backup-s3-replica, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: cnpg-backup-s3-replica, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip, encryption: AES256 }
+    data: { compression: gzip, encryption: AES256 }
+  instanceSidecarConfiguration:
+    env:
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: when_required }
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: when_required }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+---
+# Replica copy of grafana-db: read side only. The Cluster does not archive here (the plugin writes to one store); the
+# backup brick copies the primary archive here (cnpg-store-replicate): a recovery from the replica store names this.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: grafana-db-replica
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg
+spec:
+  configuration:
+    destinationPath: "s3://${BACKUP_REPLICA_S3_BUCKET:=}/cnpg/grafana-db"
+    endpointURL: "${BACKUP_REPLICA_S3_ENDPOINT:=}"
+    s3Credentials:
+      accessKeyId: { name: cnpg-backup-s3-replica, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: cnpg-backup-s3-replica, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip, encryption: AES256 }
+    data: { compression: gzip, encryption: AES256 }
+  instanceSidecarConfiguration:
+    env:
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: when_required }
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: when_required }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
