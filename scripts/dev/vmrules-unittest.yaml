@@ -331,3 +331,97 @@ tests:
       - {eval_time: 26m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
       - {eval_time: 30m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
       - {eval_time: 45m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
+
+  # --- alert delivery (0.4.0 M1). Synthetic Alertmanager counters; the real names are UNVERIFIED until a lab. ---
+  - name: delivery probe fires in its two windows only
+    interval: 10m
+    input_series: []
+    alert_rule_test:
+      - {eval_time: 5h50m, alertname: AlertDeliveryProbe, exp_alerts: []}
+      - eval_time: 6h
+        alertname: AlertDeliveryProbe
+        exp_alerts:
+          - exp_labels: {severity: none, component: alerting, probe: delivery}
+            exp_annotations: &probe_annotations
+              summary: "Scheduled alert delivery test"
+              description: "Twice a day. Receiving it in chat proves vmalert, Alertmanager and the receiver."
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alertdeliveryprobe"
+      - {eval_time: 6h10m, alertname: AlertDeliveryProbe, exp_alerts: []}
+      - {eval_time: 12h, alertname: AlertDeliveryProbe, exp_alerts: []}
+      - eval_time: 18h
+        alertname: AlertDeliveryProbe
+        exp_alerts:
+          - exp_labels: {severity: none, component: alerting, probe: delivery}
+            exp_annotations: *probe_annotations
+  - name: probe fired and the chat notification succeeded
+    interval: 10m
+    input_series:
+      - series: 'ALERTS{alertname="AlertDeliveryProbe", alertstate="firing"}'
+        values: '_x36 1 _x100'
+      - series: 'alertmanager_notifications_total{integration="slack"}'
+        values: '0+0x36 1+0x100'
+    alert_rule_test:
+      - {eval_time: 8h, alertname: AlertDeliveryNotAcknowledged, exp_alerts: []}
+  - name: probe fired and every chat attempt failed
+    interval: 10m
+    input_series:
+      - series: 'ALERTS{alertname="AlertDeliveryProbe", alertstate="firing"}'
+        values: '_x36 1 _x100'
+      - series: 'alertmanager_notifications_total{integration="slack"}'
+        values: '0+0x36 3+0x100'
+      - series: 'alertmanager_notifications_failed_total{integration="slack"}'
+        values: '0+0x36 3+0x100'
+    alert_rule_test:
+      - {eval_time: 6h10m, alertname: AlertDeliveryNotAcknowledged, exp_alerts: []}   # inside the for: 20m
+      - eval_time: 8h
+        alertname: AlertDeliveryNotAcknowledged
+        exp_alerts:
+          - exp_labels: {severity: critical, component: alerting}
+            exp_annotations:
+              summary: "The scheduled alert delivery test was not acknowledged by the chat receiver"
+              description: >-
+                While this fires, Alertmanager stops the heartbeat on purpose, so the external dead-man's-switch
+                pages you by its own channel.
+              runbook_url: >-
+                https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alertdeliverynotacknowledged
+  - name: no probe yet, no verdict (a cluster younger than its first window)
+    interval: 10m
+    input_series:
+      - series: 'alertmanager_notifications_total{integration="slack"}'
+        values: '0+0x100'
+    alert_rule_test:
+      - {eval_time: 5h, alertname: AlertDeliveryNotAcknowledged, exp_alerts: []}
+  - name: vmalert cannot reach Alertmanager
+    interval: 10m
+    input_series:
+      - series: 'vmalert_alerts_send_errors_total{addr="http://alertmanager:9093"}'
+        values: '0+2x20'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: VMAlertNotifierErrors, exp_alerts: []}
+      - eval_time: 1h
+        alertname: VMAlertNotifierErrors
+        exp_alerts:
+          - exp_labels: {addr: "http://alertmanager:9093", severity: critical, component: alerting}
+            exp_annotations:
+              summary: "VMAlert cannot hand alerts to Alertmanager (http://alertmanager:9093)"
+              description: >-
+                Every alert evaluated here is lost on its way to Alertmanager. Check the Alertmanager pod, the Service
+                and the vmalert egress policy.
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+                vmalertnotifiererrors"
+  - name: Alertmanager gone
+    interval: 10m
+    input_series:
+      - series: 'up{job="other"}'
+        values: '1+0x20'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: AlertmanagerAbsent, exp_alerts: []}
+      - eval_time: 30m
+        alertname: AlertmanagerAbsent
+        exp_alerts:
+          - exp_labels: {severity: critical, component: alerting}
+            exp_annotations:
+              summary: "Alertmanager is not scraped or not running: no alert can leave the cluster"
+              description: >-
+                The heartbeat stops with it, so an external dead-man's-switch (if configured) pages you.
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alertmanagerabsent"

@@ -129,10 +129,25 @@ spec:
           # alarm this is meant to avoid.
           group_interval: 1m
           repeat_interval: 5m
+        # The scheduled delivery test (opt-in component alert-delivery-probe, docs/alert-delivery.md): one chat message
+        # per window, never a "resolved" one. Without the component nothing carries this label.
+        - matchers:
+            - probe="delivery"
+          receiver: delivery-probe
+          group_wait: 30s
+          repeat_interval: 12h
         - matchers:
             - severity="critical"
           receiver: slack
           repeat_interval: 1h
+    # While a delivery test went unacknowledged, the heartbeat stops on purpose: the external dead-man's-switch then
+    # pages through its own channel, the one path that does not use the chat receiver. Nothing carries the source alert
+    # unless the opt-in probe component is on.
+    inhibit_rules:
+      - source_matchers:
+          - alertname="AlertDeliveryNotAcknowledged"
+        target_matchers:
+          - alertname="Watchdog"
     receivers:
       # The dead-man's switch. Its URL is a ping endpoint (healthchecks.io,
       # PagerDuty DMS, Better Stack…) that raises the alarm when pings STOP.
@@ -141,6 +156,12 @@ spec:
         webhook_configs:
           - url_file: /etc/vm/secrets/alertmanager-deadmansswitch/url
             send_resolved: false
+      - name: delivery-probe
+        slack_configs:
+          - api_url_file: /etc/vm/secrets/alertmanager-slack/webhook-url
+            send_resolved: false
+            title: "[PROBE] alert delivery test"
+            text: "Scheduled test of the alert path, no action. See docs/alert-delivery.md."
       - name: slack
         slack_configs:
           - api_url_file: /etc/vm/secrets/alertmanager-slack/webhook-url

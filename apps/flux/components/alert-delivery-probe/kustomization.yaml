@@ -1,0 +1,14 @@
+# OPT-IN, off by default. Adds the scheduled alert-delivery test: a VMRule that fires a labelled alert twice a day, the
+# rules that say when it was not delivered, and (in the base Alertmanager config, inert without this component) the
+# route to a quiet receiver and the stop of the heartbeat while delivery is broken. It needs a real chat webhook and a
+# real heartbeat URL in OpenBao (OA_SLACK_WEBHOOK_URL, OA_DEADMANSSWITCH_URL of the seed script): with the placeholders
+# it would raise AlertDeliveryFailing for good, so it is not in any profile. docs/alert-delivery.md.
+#
+# Use it from a cluster's own overlay (generated profiles are rewritten by pick.py, do not edit those):
+#   resources:  [../../workload]            # or the profile the cluster uses
+#   components: [../components/alert-delivery-probe]
+# Rollback: remove the component line; Flux prunes the Kustomization and its VMRule (prune: true).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - observability-alert-probe.yaml

@@ -26,7 +26,8 @@ fi
 
 # The VMRules of the observability brick, and those of the companions that need a CRD or a namespace of their own.
 { kubectl kustomize "$ROOT/apps/base/observability/vm-customresources"; echo "---"
-  kubectl kustomize "$ROOT/apps/base/observability-openbao"; } > "$WORK/built.yaml"
+  kubectl kustomize "$ROOT/apps/base/observability-openbao"; echo "---"
+  kubectl kustomize "$ROOT/apps/base/observability-alert-probe"; } > "$WORK/built.yaml"
 python3 -I - "$WORK" "$ROOT" <<'PY'
 import os, re, sys, yaml
 work, root = sys.argv[1:3]

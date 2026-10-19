@@ -1,0 +1,77 @@
+# The alerting chain watching itself, with no external endpoint: VMAlert -> Alertmanager and the evaluator's own
+# health. What needs the chat receiver or a heartbeat service is in apps/base/observability-alert-probe (opt-in).
+# Metrics: the vmalert and vmalertmanager self-scrape (vmalert.yaml). Rung: static + synthetic series; the metric names
+# are UNVERIFIED on a cluster until a lab runs `task check-alerts` (docs/detection.md).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: alerting-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: alerting
+spec:
+  groups:
+    - name: openaether-alerting
+      interval: 1m
+      rules:
+        - alert: VMAlertNotifierErrors
+          expr: sum by (addr) (increase(vmalert_alerts_send_errors_total[10m])) > 0
+          for: 10m
+          labels:
+            severity: critical
+            component: alerting
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#vmalertnotifiererrors"
+            summary: "VMAlert cannot hand alerts to Alertmanager ({{ $labels.addr }})"
+            description: >-
+              Every alert evaluated here is lost on its way to Alertmanager. Check the Alertmanager pod, the Service
+              and the vmalert egress policy.
+        - alert: VMAlertRuleEvaluationErrors
+          expr: sum(increase(vmalert_execution_errors_total[10m])) > 0
+          for: 15m
+          labels:
+            severity: warning
+            component: alerting
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              vmalertruleevaluationerrors"
+            summary: "VMAlert fails to evaluate rules"
+            description: >-
+              A rule group errors out (datasource unreachable, bad expression): the alerts of that group are blind.
+        - alert: VMAlertRemoteWriteErrors
+          expr: sum by (addr) (increase(vmalert_remotewrite_errors_total[10m])) > 0
+          for: 15m
+          labels:
+            severity: warning
+            component: alerting
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              vmalertremotewriteerrors"
+            summary: "VMAlert cannot persist alert state ({{ $labels.addr }})"
+            description: >-
+              Without the state written back, a restart resets every `for:` timer and the long-window alerts
+              (26 h backup staleness) never fire.
+        - alert: AlertmanagerConfigReloadFailed
+          expr: alertmanager_config_last_reload_successful == 0
+          for: 10m
+          labels:
+            severity: critical
+            component: alerting
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              alertmanagerconfigreloadfailed"
+            summary: "Alertmanager runs an old configuration: the last reload failed"
+            description: >-
+              The routes and receivers in force are not the ones in git. Read the config-reloader and alertmanager logs.
+        - alert: AlertmanagerAbsent
+          expr: absent(alertmanager_build_info)
+          for: 10m
+          labels:
+            severity: critical
+            component: alerting
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alertmanagerabsent"
+            summary: "Alertmanager is not scraped or not running: no alert can leave the cluster"
+            description: >-
+              The heartbeat stops with it, so an external dead-man's-switch (if configured) pages you.

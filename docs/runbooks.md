@@ -296,3 +296,45 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: The OpenBao VMServiceScrape (TLS) and the metrics listener.
 - Do: Restore the scrape; the seal alerts are blind meanwhile.
+
+## Alerting chain
+
+### VMAlertNotifierErrors
+
+- Check: `kubectl -n services-observability get pods -l app.kubernetes.io/name=vmalertmanager`; vmalert log; the vmalert CiliumNetworkPolicy.
+- Do: restore Alertmanager or the policy. Meanwhile nothing leaves the cluster, the heartbeat included.
+
+### VMAlertRuleEvaluationErrors
+
+- Check: `kubectl -n services-observability logs deploy/vmalert-vmalert | grep -i error`; vmselect health.
+- Do: fix the datasource or the expression named in the log.
+
+### VMAlertRemoteWriteErrors
+
+- Check: vmalert log, vminsert health.
+- Do: restore vminsert; until then a vmalert restart resets all `for:` timers.
+
+### AlertmanagerConfigReloadFailed
+
+- Check: `kubectl -n services-observability logs vmalertmanager-alertmanager-0 -c config-reloader`.
+- Do: fix the `configRawYaml` of `vmalert.yaml` in git (`docs/alert-delivery.md`, Routing); the old config stays in force.
+
+### AlertmanagerAbsent
+
+- Check: `kubectl -n services-observability get vmalertmanager,pods`; the secrets `alertmanager-slack` and `alertmanager-deadmansswitch` (the pod does not start without them).
+- Do: seed the two secrets in OpenBao or fix the pod; read the Alertmanager init container log.
+
+### AlertDeliveryProbe
+
+- Check: not a fault. It fires 10 minutes at 06:00 and 18:00 UTC and reaches the chat once, quietly.
+- Do: nothing. If it stops arriving, read AlertDeliveryNotAcknowledged and AlertDeliveryFailing.
+
+### AlertDeliveryFailing
+
+- Check: Alertmanager `alertmanager_notifications_failed_total{integration}` and its log (`kubectl -n services-observability logs vmalertmanager-alertmanager-0 -c alertmanager | grep -i 'notify\|error'`).
+- Do: `slack`: renew the webhook in OpenBao (`secret/observability/alertmanager-slack`); `webhook`: the heartbeat URL or its host in the egress policy.
+
+### AlertDeliveryNotAcknowledged
+
+- Check: as AlertDeliveryFailing, and whether the chat channel or webhook still exists (a deleted webhook answers 4xx).
+- Do: fix the receiver. The heartbeat is stopped meanwhile on purpose; it resumes when this resolves.
