@@ -93,6 +93,7 @@ tests:
           - exp_labels: {severity: warning, component: kyverno}
             exp_annotations:
               summary: "No Kyverno policy result is reported: violation alerts are blind"
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#kyvernometricsabsent"
               description: "The kyverno CiliumNetworkPolicy must accept vmagent on :8000; kubectl get cpol."
   - name: Kyverno deployed and reporting
     interval: 10m
@@ -174,6 +175,7 @@ tests:
           - exp_labels: {instance: cp-b, severity: critical, component: logging}
             exp_annotations:
               summary: "No Kubernetes API audit line read on cp-b for 15 min"
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#k8sauditlogsilent"
               description: >-
                 kubectl -n services-observability-audit logs ds/alloy-audit (permission denied? file missing?), then
                 talosctl -n <control plane> ls /var/log/audit/kube. The audit trail is not reaching Loki.
@@ -227,6 +229,7 @@ tests:
                severity: warning, component: flux}
             exp_annotations:
               summary: "Flux HelmRelease grafana is not Ready"
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#fluxobjectnotready"
               description: >-
                 flux get all -A, then kubectl describe HelmRelease
                 -n services-observability grafana. Objects that depend on it wait too.
@@ -249,6 +252,7 @@ tests:
                severity: warning, component: flux}
             exp_annotations:
               summary: "Flux HelmRelease grafana has been suspended for 24 h"
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#fluxobjectsuspended"
               description: "flux resume ... when the operation is over."
   # A rejected signature is named at once (infra #337); a verified or unverified-because-off source does not alert.
   - name: Flux source with a rejected signature alerts, a verified one does not
@@ -274,6 +278,7 @@ tests:
               {exported_namespace: flux-system, name: openaether, severity: critical, component: flux}
             exp_annotations:
               summary: "Flux rejected the commit of GitRepository openaether: unsigned or unknown signer"
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#fluxsourcenotverified"
               description: >-
                 kubectl describe gitrepository -n flux-system openaether
                 (condition SourceVerified), then git log --show-signature on the branch. Sign the push with a
@@ -298,6 +303,7 @@ tests:
           - exp_labels: {cnpg_io_cluster: grafana-db, severity: critical, component: backup}
             exp_annotations:
               summary: "CNPG grafana-db: WAL archiving fails"
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgwalarchivefailing"
               description: >-
                 barman cannot write to the object store (credentials, endpoint, egress).
                 kubectl logs -n foundation-databases <primary-pod> -c postgres | grep -i archiv.

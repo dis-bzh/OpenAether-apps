@@ -27,9 +27,17 @@ fi
 # The VMRules of the observability brick, and those of the companions that need a CRD or a namespace of their own.
 { kubectl kustomize "$ROOT/apps/base/observability/vm-customresources"; echo "---"
   kubectl kustomize "$ROOT/apps/base/observability-openbao"; } > "$WORK/built.yaml"
-python3 -I - "$WORK" <<'PY'
-import sys, yaml
-work = sys.argv[1]
+python3 -I - "$WORK" "$ROOT" <<'PY'
+import os, re, sys, yaml
+work, root = sys.argv[1:3]
+RB_PREFIX = "https://github.com/dis-bzh/OpenAether-apps/blob/main/"
+def anchors(path):  # GitHub heading slugs of a Markdown file
+    out = set()
+    for line in open(path, encoding="utf-8"):
+        m = re.match(r"#{1,6}\s+(.*?)\s*#*\s*$", line)
+        if m:
+            out.add(re.sub(r"[^\w\- ]", "", m.group(1).lower().replace("`", "")).replace(" ", "-"))
+    return out
 groups, fails, seen = [], 0, {}
 def check(label, ok):
     global fails
@@ -50,6 +58,11 @@ for d in yaml.safe_load_all(open(f"{work}/built.yaml")):
             check(f"{a}: severity label in none/info/warning/critical",
                   (r.get("labels") or {}).get("severity") in ("none", "info", "warning", "critical"))
             check(f"{a}: summary annotation", bool((r.get("annotations") or {}).get("summary")))
+            url = (r.get("annotations") or {}).get("runbook_url", "")
+            path, _, frag = url.partition("#")
+            ok = path.startswith(RB_PREFIX) and os.path.isfile(os.path.join(root, path[len(RB_PREFIX):]))
+            ok = ok and (not frag or frag in anchors(os.path.join(root, path[len(RB_PREFIX):])))
+            check(f"{a}: runbook_url names a file of this repo and a heading that exists", ok)
 check("at least 40 alert rules are loaded", len(seen) >= 40)
 yaml.safe_dump({"groups": groups}, open(f"{work}/rules.yaml", "w"))
 print(f"{fails} failed")
