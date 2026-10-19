@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Run the `loki.process "scrub"` block of apps/base/observability/alloy.yaml in a real Alloy (the chart's appVersion)
 # and check that a token in a query string (an OIDC logout's id_token_hint) is blanked in Zitadel's access log, that the
-# parameter and the rest of the line stay, and that other namespaces and lines are not touched. Needs docker and python3
+# parameter and the rest of the line stay, and that other namespaces and lines are not touched; and that the OpenBao
+# audit lines (and only those) get the label log_type=audit. Needs docker and python3
 # with PyYAML. Rung: a real Alloy reading a file, no Kubernetes, no Loki (loki.echo prints what would be pushed).
 #   Usage: scripts/dev/test-alloy-scrub.sh
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-IMAGE="docker.io/grafana/alloy:v1.6.1"   # appVersion of the alloy chart 0.11.0 pinned in alloy.yaml
+IMAGE="docker.io/grafana/alloy:v1.20.1"   # appVersion of the alloy chart 1.13.1 pinned in alloy.yaml
 command -v docker >/dev/null && command -v python3 >/dev/null || { echo "docker and python3 are required" >&2; exit 2; }
 W="$(mktemp -d)"; NAME="alloyscrub$$"; PASS=0; FAIL=0
 trap 'docker rm -f "$NAME" >/dev/null 2>&1; rm -rf "$W"' EXIT
@@ -25,7 +26,15 @@ if not block:
 cfg = block.group(0).replace("loki.write.default.receiver", "loki.echo.out.receiver")
 cfg += '''
 loki.echo "out" {}
-local.file_match "in" { path_targets = [{"__path__" = "/in/z.log", "namespace" = "services-identity"}, {"__path__" = "/in/o.log", "namespace" = "other"}] }
+local.file_match "in" {
+  path_targets = [
+    {"__path__" = "/in/z.log", "namespace" = "services-identity"},
+    {"__path__" = "/in/o.log", "namespace" = "other"},
+    {"__path__" = "/in/a.log", "namespace" = "foundation-vault", "container" = "openbao"},
+    {"__path__" = "/in/b.log", "namespace" = "foundation-vault", "container" = "cert-reload"},
+    {"__path__" = "/in/c.log", "namespace" = "other", "container" = "openbao"},
+  ]
+}
 loki.source.file "in" {
   targets    = local.file_match.in.targets
   forward_to = [loki.process.scrub.receiver]
@@ -44,11 +53,18 @@ cat > "$W/in/z.log" <<'LOGS'
 LOGS
 sed -i "s/TOKEN/$T/" "$W/in/z.log"
 printf '%s\n' '{"requestUrl":"/x?id_token_hint='"$T"'"}' > "$W/in/o.log"
+# OpenBao: the audit device and the server log share stdout, both JSON. Only the first line below is audit.
+cat > "$W/in/a.log" <<'LOGS'
+{"time":"2026-10-15T15:28:54.231377246Z","type":"request","auth":{"token_type":"default"},"request":{"operation":"read","path":"sys/mounts"}}
+{"@level":"info","@message":"post-unseal setup complete","@module":"core","@timestamp":"2026-10-15T15:28:29.842673Z","type":"request"}
+LOGS
+printf '%s\n' '{"time":"2026-10-15T15:28:54.231377246Z","type":"response","request":{"path":"x"}}' > "$W/in/b.log"
+printf '%s\n' '{"time":"2026-10-15T15:28:54.231377246Z","type":"response","request":{"path":"x"}}' > "$W/in/c.log"
 chmod -R a+rX "$W"
 docker run -d --name "$NAME" -v "$W/config.alloy:/etc/alloy/config.alloy:ro" -v "$W/in:/in:ro" "$IMAGE" run --server.http.listen-addr=127.0.0.1:12345 \
   --storage.path=/tmp/alloy /etc/alloy/config.alloy >/dev/null
-for _ in $(seq 1 40); do   # four lines are expected on stdout
-  [ "$(docker logs "$NAME" 2>&1 | grep -c 'component_id=loki.echo.out')" -ge 4 ] && break
+for _ in $(seq 1 40); do   # seven lines are expected on stdout
+  [ "$(docker logs "$NAME" 2>&1 | grep -c 'component_id=loki.echo.out')" -ge 7 ] && break
   sleep 1
 done
 docker logs "$NAME" > "$W/out.log" 2>&1
@@ -63,5 +79,10 @@ grep -q 'id_token_hint=REDACTED' "$W/zitadel.log" && grep -q 'post_logout_redire
 ! grep -q 'SECRETVALUE' "$W/zitadel.log" && grep -q 'client_secret=REDACTED' "$W/zitadel.log" && ok "client_secret in a query string is blanked too" || bad "client_secret value kept"
 grep -q 'ui/console/healthz' "$W/zitadel.log" && ok "a line without a token is unchanged" || bad "the untouched line is missing"
 grep -q 'CANARYPAYLOAD' "$W/other.log" && ok "another namespace is not touched (the selector is services-identity)" || bad "another namespace was rewritten"
+grep 'in/a\.log' "$W/echo.log" > "$W/openbao.log"
+[ "$(wc -l < "$W/openbao.log")" = 2 ] && [ "$(grep -c 'log_type=[^,]*audit' "$W/openbao.log")" = 1 ] && grep 'log_type=[^,]*audit' "$W/openbao.log" | grep -q 'sys/mounts' \
+  && ok "of two OpenBao lines, only the audit one carries log_type=audit" || bad "OpenBao labelling: $(cat "$W/openbao.log")"
+! grep 'in/b\.log\|in/c\.log' "$W/echo.log" | grep -q 'log_type' && ok "an audit-shaped line of another container or namespace is not labelled" || bad "a line outside foundation-vault/openbao got log_type"
+! grep 'in/z\.log\|in/o\.log' "$W/echo.log" | grep -q 'log_type' && ok "the Zitadel lines get no log_type" || bad "log_type leaked onto another stream"
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

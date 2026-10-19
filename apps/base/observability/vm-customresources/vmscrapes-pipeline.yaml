@@ -3,8 +3,8 @@
 # were not scraped at all (loki.yaml also disables the chart's self-monitoring), so no rule could see them fail.
 # Each needs an ingress rule for vmagent in its own CiliumNetworkPolicy and the port in vmagent's egress list
 # (observability/networkpolicy.yaml): without them the target is dropped and `up` has no series, not a zero.
-# Selectors and port names read from the rendered charts (alloy 0.11.0, loki 6.25.0, grafana 8.6.4,
-# zitadel 10.0.2) and the vendored Kyverno 1.12.1 and CNPG 1.23.1 manifests.
+# Selectors and port names read from the rendered charts (alloy 1.13.1, loki 18.16.2, grafana 14.0.1,
+# zitadel 10.4.0) and the vendored Kyverno 1.19.1 and CNPG 1.30.1 manifests.
 ---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
@@ -21,6 +21,26 @@ spec:
   namespaceSelector:
     matchNames:
       - services-observability
+  podMetricsEndpoints:
+    - port: http-metrics
+      path: /metrics
+---
+# The control-plane audit-log collector (alloy.yaml's twin, own namespace): its read counters feed K8sAuditLogSilent.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: alloy-audit
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmagent-scrapes
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  namespaceSelector:
+    matchNames:
+      - services-observability-audit
   podMetricsEndpoints:
     - port: http-metrics
       path: /metrics

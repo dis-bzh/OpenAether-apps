@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kyverno-admission-controller
+  namespace: kyverno
+spec:
+  template:
+    spec:
+      containers:
+        - name: kyverno
+          resources:
+            limits:
+              cpu: "1"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kyverno-background-controller
+  namespace: kyverno
+spec:
+  template:
+    spec:
+      containers:
+        - name: controller
+          resources:
+            limits:
+              cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kyverno-cleanup-controller
+  namespace: kyverno
+spec:
+  template:
+    spec:
+      containers:
+        - name: controller
+          resources:
+            limits:
+              cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kyverno-reports-controller
+  namespace: kyverno
+spec:
+  template:
+    spec:
+      containers:
+        - name: controller
+          resources:
+            limits:
+              cpu: "500m"

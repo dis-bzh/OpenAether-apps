@@ -4,7 +4,7 @@
 # - github.com (GitRepository + Helm charts GitHub Pages)
 # - Helm registries: charts.jetstack.io, charts.longhorn.io, charts.min.io,
 #   istio-release.storage.googleapis.com, victoriametrics.github.io,
-#   grafana.github.io, prometheus-community.github.io, kubernetes-sigs.github.io
+#   grafana.github.io, grafana-community.github.io, prometheus-community.github.io, kubernetes-sigs.github.io
 # - CoreDNS (cluster) for DNS resolution
 # - Kube-API (cluster) for Kubernetes operations
 apiVersion: cilium.io/v2
@@ -73,9 +73,10 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-    # 7. Grafana Loki Helm (GitHub Pages)
+    # 7. Grafana Helm (GitHub Pages): Alloy on grafana.github.io, Loki (and Grafana) on grafana-community.github.io
     - toFQDNs:
         - matchName: grafana.github.io
+        - matchName: grafana-community.github.io
       toPorts:
         - ports:
             - port: "443"

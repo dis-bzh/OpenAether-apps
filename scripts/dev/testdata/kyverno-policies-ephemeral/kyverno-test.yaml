@@ -1,0 +1,59 @@
+# Run by scripts/dev/test-kyverno-policies.sh on the ephemeral policies rewritten to match Pod.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kyverno-policies-ephemeral
+policies:
+- policies/restrict-capabilities-ephemeral.yaml
+- policies/restrict-privileged-ephemeral.yaml
+resources:
+- pods.yaml
+results:
+- policy: restrict-capabilities-ephemeral
+  rule: deny-sensitive-capabilities-ephemeral
+  resources:
+  - eph-general
+  kind: Pod
+  result: pass
+- policy: restrict-capabilities-ephemeral
+  rule: deny-sensitive-capabilities-ephemeral
+  resources:
+  - eph-netadmin
+  kind: Pod
+  result: fail
+- policy: restrict-capabilities-ephemeral
+  rule: deny-sensitive-capabilities-ephemeral
+  resources:
+  - eph-sysadmin
+  kind: Pod
+  result: pass
+- policy: restrict-capabilities-ephemeral
+  rule: deny-sensitive-capabilities-ephemeral
+  resources:
+  - eph-sysadmin-ks
+  kind: Pod
+  result: skip
+- policy: restrict-privileged-ephemeral
+  rule: deny-privileged-ephemeral
+  resources:
+  - eph-general
+  kind: Pod
+  result: pass
+- policy: restrict-privileged-ephemeral
+  rule: deny-privileged-ephemeral
+  resources:
+  - eph-netadmin
+  kind: Pod
+  result: pass
+- policy: restrict-privileged-ephemeral
+  rule: deny-privileged-ephemeral
+  resources:
+  - eph-sysadmin
+  kind: Pod
+  result: fail
+- policy: restrict-privileged-ephemeral
+  rule: deny-privileged-ephemeral
+  resources:
+  - eph-sysadmin-ks
+  kind: Pod
+  result: skip

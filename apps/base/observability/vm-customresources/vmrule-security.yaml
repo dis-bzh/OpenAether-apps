@@ -21,12 +21,14 @@ spec:
         # 1) A new object broke a policy, at admission time. Background scans are left out on purpose: they recount
         #    every existing violation on each pass and would fire for ever. require-security-context is left out
         #    until its known violations (vendored charts) are fixed: it is in Audit and alone would keep this firing.
+        #    require-ro-rootfs and require-limits are informational reports, read with the policy report, not alerts.
         #    A policy added later alerts by default. Review: kubectl get cpol,polr -A (docs/detection.md).
         - alert: KyvernoPolicyViolation
           expr: |
             sum by (policy_name, rule_name, resource_namespace) (
               increase(kyverno_policy_results_total{
-                rule_result="fail", rule_execution_cause="admission_request", policy_name!="require-security-context"
+                rule_result="fail", rule_execution_cause="admission_request",
+                policy_name!~"require-security-context|require-ro-rootfs|require-limits"
               }[15m])
             ) > 0
           for: 0m
@@ -84,11 +86,15 @@ spec:
       rules:
         # 4) A Flux object stuck in a non-Ready state: the cluster no longer converges to git. Unlike
         #    FluxReconciliationStalled (a flat counter) this catches "reconciling but failing". 20 min lets a slow
-        #    install (Longhorn, Istio) finish. Ready is "" for an object Flux has not yet looked at.
+        #    install (Longhorn, Istio) finish. Ready is "" for an object Flux has not yet looked at;
+        #    a HelmRepository of type oci never gets a Ready condition at all (source-controller does not
+        #    reconcile it), so it is excluded or the alert would fire for it forever (seen live: talos-ccm).
         - alert: FluxObjectNotReady
           expr: |
             max by (customresource_kind, exported_namespace, name) (
               gotk_resource_info{ready!="True", suspended!="true"}
+              unless on (customresource_kind, exported_namespace, name)
+              gotk_resource_info{customresource_kind="HelmRepository", ready=""}
             ) == 1
           for: 20m
           labels:
@@ -99,6 +105,29 @@ spec:
             description: >-
               flux get all -A, then kubectl describe {{ $labels.customresource_kind }}
               -n {{ $labels.exported_namespace }} {{ $labels.name }}. Objects that depend on it wait too.
+
+        # 4b) Flux rejected the HEAD commit because its signature does not verify (git-verify component, infra #337).
+        #     FluxObjectNotReady says the source is not Ready after 20 minutes and nothing more; this one says why,
+        # at once:
+        #     either a legitimate push was not signed (or by a key not in the signer table), or something pushed
+        # that should
+        #     not have. The cluster keeps running the last verified revision. Silent (no series with the label) while
+        #     spec.verify is off.
+        - alert: FluxSourceNotVerified
+          expr: |
+            max by (exported_namespace, name) (
+              gotk_resource_info{customresource_kind="GitRepository", source_verified="False"}
+            ) == 1
+          for: 5m
+          labels:
+            severity: critical
+            component: flux
+          annotations:
+            summary: "Flux rejected the commit of GitRepository {{ $labels.name }}: unsigned or unknown signer"
+            description: >-
+              kubectl describe gitrepository -n {{ $labels.exported_namespace }} {{ $labels.name }}
+              (condition SourceVerified), then git log --show-signature on the branch. Sign the push with a
+              registered key or remove the unexpected commit; docs/signed-commits.md.
 
         # 5) Suspended and forgotten: git no longer applies to it. Often deliberate during an operation.
         - alert: FluxObjectSuspended

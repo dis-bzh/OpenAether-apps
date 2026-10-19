@@ -1,0 +1,35 @@
+# vmagent scrapes the OpenBao metrics listener (:8202, configmap.yaml) over TLS, verifying the server certificate.
+#
+# The object lives in foundation-vault because the operator reads a tlsConfig Secret from the NAMESPACE OF THE SCRAPE
+# object: the CA is the `ca.crt` of `openbao-server-tls` (the operator copies it into vmagent's own config, so
+# vmagent's ClusterRole still has no `secrets`). The metrics port is on the headless Service, which publishes NotReady
+# addresses: a sealed pod is NotReady and must still be scraped, it is the one the sealed alert is about.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: openbao
+  namespace: foundation-vault
+spec:
+  selector:
+    matchLabels:
+      app: openbao
+  namespaceSelector:
+    matchNames:
+      - foundation-vault
+  # Both Services carry app=openbao; only the headless one has a `metrics` port, so `openbao-ui` yields no target.
+  endpoints:
+    - port: metrics
+      scheme: https
+      path: /v1/sys/metrics
+      params:
+        format:
+          - prometheus
+      interval: 30s
+      scrapeTimeout: 10s
+      tlsConfig:
+        # The targets are pod IPs: the name to verify is the Service's, which the certificate carries.
+        serverName: openbao.foundation-vault.svc.cluster.local
+        ca:
+          secret:
+            name: openbao-server-tls
+            key: ca.crt

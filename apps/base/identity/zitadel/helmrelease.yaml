@@ -29,7 +29,7 @@ spec:
   chart:
     spec:
       chart: zitadel
-      version: "10.0.2"
+      version: "10.4.0"
       sourceRef:
         kind: HelmRepository
         name: zitadel
@@ -41,6 +41,19 @@ spec:
   upgrade:
     remediation:
       retries: 3
+  # Zitadel's server and login pods never call the Kubernetes API
+  # (only the setup Job does, and its pod spec is not touched).
+  # The chart has no automount value, hence the post-renderer. Rollback: delete this block.
+  # Addresses FT082-R12 and NSA12-POD-06.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+            patch: |-
+              - op: add
+                path: /spec/template/spec/automountServiceAccountToken
+                value: false
   values:
     replicaCount: 2
 
@@ -67,6 +80,25 @@ spec:
         image:
           # renovate: datasource=docker depName=alpine/k8s
           tag: "1.37.1"
+      # The readiness-wait init container of the login pods had no limit (Kyverno require-limits, lab 11).
+      wait4x:
+        resources:
+          requests:
+            cpu: 5m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+
+    # The login UI had no limit at all (the `resources:` below are the server's). Measured 191 Mi on a lab cluster.
+    login:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 192Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
 
     # ── securityContext conforme Kyverno (global / fallback) ─────────────────
     # Used as-is by the initJob/setupJob containers (a direct reference to
@@ -141,11 +173,13 @@ spec:
             User:
               Username: zitadel
               SSL:
-                Mode: disable
+                # `require` = encrypted, server not authenticated: CNPG serves TLS (self-signed CA) and
+                # needs no CA mounted. verify-full is a later step. Rollback: `disable`.
+                Mode: require
             Admin:
               Username: zitadel
               SSL:
-                Mode: disable
+                Mode: require
 
         # ── Authentication policy (ANSSI PA-079, PG-078, docs/zitadel-hardening.md) ─────────────────────────────
         # TWO scopes, and the difference is the whole risk of this block:

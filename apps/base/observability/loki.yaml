@@ -34,6 +34,21 @@ spec:
   url: https://grafana.github.io/helm-charts
   interval: 1h
 ---
+# The Loki OSS chart moved to grafana-community on 2026-03-16 (the old repo's last Loki chart is 7.3.0, Loki 3.6.12;
+# chart numbering restarts at 7 there and continues to 18 here, Loki 3.7.8). Alloy stays on the repository above.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: grafana-community
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprintC"
+    openaether.io/component: loki
+spec:
+  url: https://grafana-community.github.io/helm-charts
+  interval: 1h
+---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -48,18 +63,27 @@ spec:
   chart:
     spec:
       chart: loki
-      version: "6.25.0"
+      version: "18.16.2"
       sourceRef:
         kind: HelmRepository
-        name: grafana
+        name: grafana-community
         namespace: services-observability
       interval: 1h
+  # A fresh install keeps its three retries (nothing to lose). An UPGRADE is never rolled back by Helm:
+  # in lab 15c the chart hop 6.25 -> 6.55 timed out at the default 5 minutes (loki-1 never Ready, the
+  # memberlist join dialled a stale pod IP) and the automatic rollback re-rolled the StatefulSet to the
+  # old chart, which hit the same join and left it at 1 of 2 Ready. A rolling update of the replicas
+  # needs more than 5 minutes, and a rollback across a chart major only repeats the same roll. So: a
+  # 15 minute budget, no automatic rollback, and the recovery is the documented forward step
+  # (docs/patching.md, "Loki chart hop"). Chart 18 also sets -memberlist.advertise-addr to the pod IP.
   install:
     remediation:
       retries: 3
   upgrade:
+    timeout: 15m
     remediation:
-      retries: 3
+      retries: 0
+      remediateLastFailure: false
   valuesFrom:
     - kind: Secret
       name: loki-s3-credentials
@@ -100,6 +124,14 @@ spec:
   values:
     deploymentMode: SingleBinary
     singleBinary:
+      # Under singleBinary: the top-level podDisruptionBudget is deprecated and Helm 3 (Flux's helm-controller)
+      # merges the empty singleBinary one over it, which renders no PDB at all (Helm 4 does not).
+      # Never evict the last replica. minAvailable 2 would keep the write quorum, but the pods are
+      # pinned to their node by local-path, so a drain of a node holding two of them would wait
+      # forever for the first to come back. An unready pod never blocks an eviction.
+      podDisruptionBudget:
+        minAvailable: 1
+        unhealthyPodEvictionPolicy: AlwaysAllow
       replicas: 3
       securityContext:
         fsGroup: 10001
@@ -226,18 +258,10 @@ spec:
       replicas: 0
     write:
       replicas: 0
-    # Never evict the last replica. minAvailable 2 would keep the write quorum, but the pods are
-    # pinned to their node by local-path, so a drain of a node holding two of them would wait
-    # forever for the first to come back. An unready pod never blocks an eviction.
-    podDisruptionBudget:
-      minAvailable: 1
-      unhealthyPodEvictionPolicy: AlwaysAllow
     monitoring:
       serviceMonitor:
         enabled: false
-      selfMonitoring:
-        enabled: false
-    # Top-level in chart 6.25.0 (it was under monitoring:, which is ignored): no canary
+    # Top-level (it was under monitoring: before chart 6.25.0, which is ignored): no canary
     # DaemonSet on every node, nothing reads its metrics.
     lokiCanary:
       enabled: false

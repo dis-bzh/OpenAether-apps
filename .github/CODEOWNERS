@@ -1,1 +1,6 @@
 * @vde-dis
+# What Flux applies with cluster-admin, and who may do what: name the owner explicitly so a second reviewer
+# can be added here (and enforced by a ruleset "require code owner review") without hunting for the paths.
+/apps/flux/ @vde-dis
+/apps/base/platform/rbac/ @vde-dis
+/.github/ @vde-dis

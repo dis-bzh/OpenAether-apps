@@ -97,7 +97,7 @@ spec:
       app.kubernetes.io/name: prometheus-node-exporter
   namespaceSelector:
     matchNames:
-      - services-observability
+      - services-observability-node
   endpoints:
     # ⚠️ The chart names this port `metrics`, not `http-metrics`. With the wrong
     # name the target is never DISCOVERED — no `up` series at all, so even
@@ -257,9 +257,9 @@ spec:
     matchNames:
       - cert-manager
   endpoints:
-    # The chart still names this port `tcp-prometheus-servicemonitor` (v1.15.3),
-    # not the http-metrics you would expect. Verified with `helm template`.
-    - port: tcp-prometheus-servicemonitor
+    # Chart 1.21 names the controller's metrics port `http-metrics` (1.15 named it
+    # `tcp-prometheus-servicemonitor`). Verified with `helm template`.
+    - port: http-metrics
       path: /metrics
       # certmanager_certificate_* carries the CERTIFICATE's namespace, not the
       # controller's — same reason as kube-state-metrics.
@@ -287,6 +287,13 @@ spec:
   endpoints:
     - port: https
       scheme: https
+      # The apiserver certificate carries kubernetes.default.svc; the node-address endpoints do not, hence serverName.
       tlsConfig:
-        insecureSkipVerify: true
+        caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        serverName: kubernetes.default.svc
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      # The default cap is 16 MiB of uncompressed response, checked BEFORE any relabelling; the apiserver that
+      # holds the leader exposed more (lab 11: one of three control planes unmonitored). 32 MiB leaves 2x headroom
+      # without letting a runaway target fill the 512 MiB of vmagent. This scrape only; no sampleLimit (no series
+      # count was measured).
+      max_scrape_size: 32MiB

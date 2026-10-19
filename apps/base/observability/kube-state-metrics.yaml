@@ -31,7 +31,7 @@ spec:
   chart:
     spec:
       chart: kube-state-metrics
-      version: "5.25.1"
+      version: "8.6.0"
       sourceRef:
         kind: HelmRepository
         name: prometheus-community
@@ -54,9 +54,10 @@ spec:
           - ALL
       seccompProfile:
         type: RuntimeDefault
-    # The chart's default collectors minus `secrets` and `configmaps` (chart 5.25.1 key): the default ClusterRole
-    # lists Secrets cluster-wide, which returns their data, and no rule, scrape or dashboard reads kube_secret_*
-    # or kube_configmap_*. A list REPLACES the default: a collector added upstream later must be added here.
+    # The chart's default collectors minus `secrets` and `configmaps` (chart key, unchanged to 8.6.0): the default
+    # ClusterRole lists Secrets cluster-wide, which returns their data, and no rule, scrape or dashboard reads
+    # kube_secret_* or kube_configmap_*. A list REPLACES the default: a collector added upstream later must be
+    # added here.
     collectors:
       - certificatesigningrequests
       - cronjobs
@@ -154,6 +155,10 @@ spec:
                     exported_namespace: [metadata, namespace]
                     ready: [status, conditions, "[type=Ready]", status]
                     suspended: [spec, suspend]
+                    # False when spec.verify rejected the HEAD commit (unsigned or signed by an unknown key); empty
+                    # while
+                    # git-verify is off (no such condition). Read by FluxSourceNotVerified (infra #337).
+                    source_verified: [status, conditions, "[type=SourceVerified]", status]
             - groupVersionKind: {group: source.toolkit.fluxcd.io, version: v1, kind: HelmRepository}
               metricNamePrefix: gotk
               metrics:
@@ -176,7 +181,7 @@ spec:
             - helm.toolkit.fluxcd.io
           resources: [gitrepositories, helmrepositories, kustomizations, helmreleases]
           verbs: [list, watch]
-    # podDisruptionBudget: the kube-state-metrics 5.25.1 chart expects the raw PDB spec
+    # podDisruptionBudget: the kube-state-metrics chart expects the raw PDB spec
     # (minAvailable/maxUnavailable), WITHOUT an `enabled` field, which breaks the schema.
     #
     # maxUnavailable, NOT minAvailable. `minAvailable: 1` on a one-replica

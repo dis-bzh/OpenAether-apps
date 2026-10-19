@@ -1,0 +1,556 @@
+# Expected result of every Audit rule on pods.yaml (schema v1alpha1, what Kyverno CLI 1.19.1 reads).
+# Results carry no namespace (1.19 rejects the field): resource names are unique in pods.yaml.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kyverno-policies
+policies:
+- ../../../../apps/base/kyverno-policies/restrict-capabilities.yaml
+- ../../../../apps/base/kyverno-policies/restrict-capabilities-ephemeral.yaml
+- ../../../../apps/base/kyverno-policies/require-security-context.yaml
+- ../../../../apps/base/kyverno-policies/restrict-privileged.yaml
+- ../../../../apps/base/kyverno-policies/require-ro-rootfs.yaml
+- ../../../../apps/base/kyverno-policies/require-limits.yaml
+resources:
+- pods.yaml
+results:
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - good
+  kind: Pod
+  result: pass
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - bad
+  kind: Pod
+  result: fail
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - ztunnel-abc
+  kind: Pod
+  result: skip
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - other-abc
+  kind: Pod
+  result: fail
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - nosec
+  kind: Pod
+  result: pass
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - ctr-level
+  kind: Pod
+  result: pass
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - init-bad
+  kind: Pod
+  result: pass
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - mixed
+  kind: Pod
+  result: pass
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - hostpath
+  kind: Pod
+  result: pass
+- policy: require-security-context
+  rule: check-container-security-context
+  resources:
+  - good
+  kind: Pod
+  result: pass
+- policy: require-security-context
+  rule: check-container-security-context
+  resources:
+  - bad
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-container-security-context
+  resources:
+  - ztunnel-abc
+  kind: Pod
+  result: skip
+- policy: require-security-context
+  rule: check-container-security-context
+  resources:
+  - other-abc
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-container-security-context
+  resources:
+  - nosec
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-container-security-context
+  resources:
+  - ctr-level
+  kind: Pod
+  result: pass
+- policy: require-security-context
+  rule: check-container-security-context
+  resources:
+  - init-bad
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-container-security-context
+  resources:
+  - mixed
+  kind: Pod
+  result: pass
+- policy: require-security-context
+  rule: check-container-security-context
+  resources:
+  - hostpath
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-run-as-non-root
+  resources:
+  - good
+  kind: Pod
+  result: pass
+- policy: require-security-context
+  rule: check-run-as-non-root
+  resources:
+  - bad
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-run-as-non-root
+  resources:
+  - ztunnel-abc
+  kind: Pod
+  result: skip
+- policy: require-security-context
+  rule: check-run-as-non-root
+  resources:
+  - other-abc
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-run-as-non-root
+  resources:
+  - nosec
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-run-as-non-root
+  resources:
+  - ctr-level
+  kind: Pod
+  result: pass
+- policy: require-security-context
+  rule: check-run-as-non-root
+  resources:
+  - init-bad
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-run-as-non-root
+  resources:
+  - mixed
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-run-as-non-root
+  resources:
+  - hostpath
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-seccomp-profile
+  resources:
+  - good
+  kind: Pod
+  result: pass
+- policy: require-security-context
+  rule: check-seccomp-profile
+  resources:
+  - bad
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-seccomp-profile
+  resources:
+  - ztunnel-abc
+  kind: Pod
+  result: skip
+- policy: require-security-context
+  rule: check-seccomp-profile
+  resources:
+  - other-abc
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-seccomp-profile
+  resources:
+  - nosec
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-seccomp-profile
+  resources:
+  - ctr-level
+  kind: Pod
+  result: pass
+- policy: require-security-context
+  rule: check-seccomp-profile
+  resources:
+  - init-bad
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-seccomp-profile
+  resources:
+  - mixed
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-seccomp-profile
+  resources:
+  - hostpath
+  kind: Pod
+  result: fail
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - good
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - bad
+  kind: Pod
+  result: fail
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - ztunnel-abc
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - other-abc
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - nosec
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - ctr-level
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - init-bad
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - mixed
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - hostpath
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - good
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - bad
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - ztunnel-abc
+  kind: Pod
+  result: skip
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - other-abc
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - nosec
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - ctr-level
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - init-bad
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - mixed
+  kind: Pod
+  result: pass
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - hostpath
+  kind: Pod
+  result: fail
+- policy: require-ro-rootfs
+  rule: check-readonly-rootfs
+  resources:
+  - good
+  kind: Pod
+  result: pass
+- policy: require-ro-rootfs
+  rule: check-readonly-rootfs
+  resources:
+  - bad
+  kind: Pod
+  result: fail
+- policy: require-ro-rootfs
+  rule: check-readonly-rootfs
+  resources:
+  - ztunnel-abc
+  kind: Pod
+  result: fail
+- policy: require-ro-rootfs
+  rule: check-readonly-rootfs
+  resources:
+  - other-abc
+  kind: Pod
+  result: fail
+- policy: require-ro-rootfs
+  rule: check-readonly-rootfs
+  resources:
+  - nosec
+  kind: Pod
+  result: fail
+- policy: require-ro-rootfs
+  rule: check-readonly-rootfs
+  resources:
+  - ctr-level
+  kind: Pod
+  result: fail
+- policy: require-ro-rootfs
+  rule: check-readonly-rootfs
+  resources:
+  - init-bad
+  kind: Pod
+  result: fail
+- policy: require-ro-rootfs
+  rule: check-readonly-rootfs
+  resources:
+  - mixed
+  kind: Pod
+  result: fail
+- policy: require-ro-rootfs
+  rule: check-readonly-rootfs
+  resources:
+  - hostpath
+  kind: Pod
+  result: fail
+- policy: require-limits
+  rule: check-memory-limit
+  resources:
+  - good
+  kind: Pod
+  result: pass
+- policy: require-limits
+  rule: check-memory-limit
+  resources:
+  - bad
+  kind: Pod
+  result: fail
+- policy: require-limits
+  rule: check-memory-limit
+  resources:
+  - ztunnel-abc
+  kind: Pod
+  result: fail
+- policy: require-limits
+  rule: check-memory-limit
+  resources:
+  - other-abc
+  kind: Pod
+  result: fail
+- policy: require-limits
+  rule: check-memory-limit
+  resources:
+  - nosec
+  kind: Pod
+  result: fail
+- policy: require-limits
+  rule: check-memory-limit
+  resources:
+  - ctr-level
+  kind: Pod
+  result: fail
+- policy: require-limits
+  rule: check-memory-limit
+  resources:
+  - init-bad
+  kind: Pod
+  result: fail
+- policy: require-limits
+  rule: check-memory-limit
+  resources:
+  - mixed
+  kind: Pod
+  result: fail
+- policy: require-limits
+  rule: check-memory-limit
+  resources:
+  - hostpath
+  kind: Pod
+  result: fail
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - init-priv
+  kind: Pod
+  result: pass
+- policy: require-security-context
+  rule: check-container-security-context
+  resources:
+  - init-priv
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-run-as-non-root
+  resources:
+  - init-priv
+  kind: Pod
+  result: fail
+- policy: require-security-context
+  rule: check-seccomp-profile
+  resources:
+  - init-priv
+  kind: Pod
+  result: fail
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - init-priv
+  kind: Pod
+  result: fail
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - init-priv
+  kind: Pod
+  result: pass
+- policy: require-ro-rootfs
+  rule: check-readonly-rootfs
+  resources:
+  - init-priv
+  kind: Pod
+  result: fail
+- policy: require-limits
+  rule: check-memory-limit
+  resources:
+  - init-priv
+  kind: Pod
+  result: fail
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - prometheus-node-exporter-abc
+  kind: Pod
+  result: skip
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - prometheus-node-exporter-abc
+  kind: Pod
+  result: skip
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - intruder
+  kind: Pod
+  result: fail
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - intruder
+  kind: Pod
+  result: fail
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - alloy-audit-abc
+  kind: Pod
+  result: skip
+- policy: restrict-capabilities
+  rule: deny-sensitive-capabilities
+  resources:
+  - intruder-audit
+  kind: Pod
+  result: fail
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - alloy-audit-abc
+  kind: Pod
+  result: skip
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - intruder-audit
+  kind: Pod
+  result: fail
+- policy: restrict-privileged
+  rule: deny-privileged
+  resources:
+  - waypoint-abc
+  kind: Pod
+  result: fail
+- policy: restrict-privileged
+  rule: deny-hostpath
+  resources:
+  - waypoint-abc
+  kind: Pod
+  result: pass

@@ -145,14 +145,68 @@ jobs:
       - name: CiliumLoadBalancerIPPool stays on cilium.io/v2 (#49)
         run: ./scripts/dev/test-cilium-lb-ipam-api.sh
 
-      - name: Kyverno cleanup CronJobs render and behave as fixed (#48)
-        run: python3 -I scripts/dev/test-kyverno-cleanup-render.py
-
       - name: Provider S3 egress rules admit every region of the provider (#53)
         run: python3 -I scripts/dev/test-s3-egress-fqdns.py
 
+      - name: "CNPG clusters send checksums only when required (barman-cloud on Outscale OOS, #132)"
+        run: python3 -I scripts/dev/test-cnpg-s3-checksum-env.py
+
+      - name: CNPG clusters roll the primary by switchover, not by an in-place restart (lab 15c)
+        run: python3 -I scripts/dev/test-cnpg-primary-update.py
+
+      - name: "Longhorn values are keys the pinned chart reads, and its remediation stays off (#115, #134)"
+        run: python3 -I scripts/dev/test-longhorn-values.py
+
+      - name: "VictoriaMetrics images are pinned and the operator values are chart keys (#117)"
+        run: python3 -I scripts/dev/test-vm-pins.py
+
+      - name: The Gateway keeps two replicas and a disruption budget (lab 15c)
+        run: python3 -I scripts/dev/test-gateway-ha.py
+
       - name: Container securityContext is set where the operators read it (#47)
         run: python3 -I scripts/dev/test-container-security-context.py
+
+      - name: In-cluster transport and metadata egress deny (B25, static)
+        run: python3 -I scripts/dev/test-in-cluster-transport.py
+
+      - name: Named-identity RBAC brick (B26, static)
+        run: python3 -I scripts/dev/test-rbac-brick.py
+
+      - name: Certificates name their rotation policy and cover every route hostname (static)
+        run: python3 -I scripts/dev/test-certificates.py
+
+      - name: Container hardening and resource bounds hold (B21, static)
+        run: python3 -I scripts/dev/test-container-bounds.py
+
+      # Runs the Audit policies against fixture pods. The release publishes no checksum file, only a cosign signature:
+      # the sha256 below is the one of the tarball as first downloaded (trust on first use), so a changed asset fails.
+      - name: Kyverno policies report what they should (Kyverno CLI 1.19.1, the vendored version)
+        env:
+          KYVERNO_CLI_SHA256: b38228f367fc0fdc2b08f4c83ea50ac5f16c60ff8d62d76a66157c33c47b70ae
+        run: |
+          set -euo pipefail
+          d="$(mktemp -d)"
+          url=https://github.com/kyverno/kyverno/releases/download/v1.19.1
+          curl -fsSL -o "$d/k.tgz" "$url/kyverno-cli_v1.19.1_linux_x86_64.tar.gz"
+          echo "${KYVERNO_CLI_SHA256}  $d/k.tgz" | sha256sum -c -
+          tar -xzf "$d/k.tgz" -C "$d" kyverno
+          KYVERNO="$d/kyverno" ./scripts/dev/test-kyverno-policies.sh
+
+      - name: Vendored upstream dumps match their recorded sha256 (critic, static)
+        run: |
+          ./scripts/dev/check-vendored-lock.sh
+          ./scripts/dev/test-check-vendored-lock.sh
+
+      - name: Kyverno Enforce switch is per namespace and off by default (B29, static)
+        run: python3 -I scripts/dev/test-kyverno-enforcement.py
+
+      - name: Opt-in component raising Pod Security enforce to restricted (B29, static)
+        run: python3 -I scripts/dev/test-psa-restricted.py
+
+      - name: node-exporter, its scrape and its privileged namespace agree
+        run: python3 -I scripts/dev/test-node-exporter-namespace.py
+      - name: the audit-log collector keeps its narrow shape (read-only hostPath, control planes, exempt by name)
+        run: python3 -I scripts/dev/test-audit-collector.py
 
       - name: dependsOn covers the cross-Kustomization contracts (#38)
         run: |
@@ -173,6 +227,14 @@ jobs:
       # patches it hands to Flux to the real bricks, and see exactly those two routes go.
       - name: Private-admin-routes component
         run: python3 scripts/dev/test-private-admin-routes.py
+
+      # The opt-in component that makes metrics-server and the kubelet scrapes verify the kubelet cert (off by default).
+      - name: Kubelet-verified-tls component
+        run: python3 scripts/dev/test-kubelet-verified-tls.py
+
+      # The opt-in component that makes Flux verify the signature of the HEAD commit (off by default).
+      - name: Git-verify component
+        run: python3 scripts/dev/test-git-verify.py
 
       # The openbao ClusterSecretStore only serves the namespaces it lists; an
       # ExternalSecret rendered anywhere else would stay NotReady on a cluster.
@@ -208,6 +270,9 @@ jobs:
           grep -qE '^[0-9]+ passed, 0 failed$' backup-checks.out
           # The pg_restore tests are the main check: a skipped part must not pass.
           ! grep -q 'SKIPPED' backup-checks.out
+
+      - name: The S3 rights probe of a dedicated backup key names a missing right (stub aws)
+        run: ./scripts/dev/test-backup-key-rights.sh
 
   loki-render:
     name: Loki chart render
@@ -249,6 +314,16 @@ jobs:
           set -euo pipefail
           ./scripts/dev/test-observability-rbac.sh | tee observability-rbac.out
           grep -qE '^0 failed$' observability-rbac.out
+
+      - name: The Longhorn policy lets the managers reach each other's webhooks (static)
+        run: python3 -I scripts/dev/test-longhorn-netpol.py
+
+      - name: The RWX StorageClasses give up on a vanished NFS server within a minute (static)
+        run: python3 -I scripts/dev/test-longhorn-rwx-sc.py
+
+      # Alloy, cert-manager, Zitadel login and Grafana read resources under their own key: render, require limits.
+      - name: Charts that read resources under their own key have memory limits (rendered)
+        run: python3 -I scripts/dev/test-chart-limits.py
 
   vmrules:
     name: VMRules (vmalert dry run)
@@ -336,6 +411,13 @@ jobs:
 
       - name: No commit authored by a tool
         run: ./scripts/dev/check-commit-authors.sh "origin/${{ github.base_ref }}..HEAD"
+
+      # A WARNING until every maintainer signs (0 signed commits today): add --strict then. docs/signed-commits.md.
+      - name: The signature check behaves
+        run: ./scripts/dev/test-check-commit-signatures.sh
+
+      - name: Commits carry a signature (warning only)
+        run: ./scripts/dev/check-commit-signatures.sh "origin/${{ github.base_ref }}..HEAD"
 
       # Scoped by the tree, not by a date: a commit is checked only if the rule already existed in it, so
       # commits that predate the rule are skipped rather than rewritten.
@@ -503,6 +585,12 @@ jobs:
           set -euo pipefail
           ./scripts/dev/test-alloy-scrub.sh | tee alloy-scrub.out
           grep -qE '^[0-9]+ passed, 0 failed$' alloy-scrub.out
+
+      - name: Alloy reads the API audit log, labels it and skips the backlog (real Alloy)
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-alloy-audit.sh | tee alloy-audit.out
+          grep -qE '^[0-9]+ passed, 0 failed$' alloy-audit.out
 
       - name: Grafana authentication settings (base and SSO-only overlay)
         run: |

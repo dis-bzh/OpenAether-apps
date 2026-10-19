@@ -37,21 +37,35 @@ spec:
   chart:
     spec:
       chart: longhorn
-      version: "1.9.2"
+      version: "1.12.1"
       sourceRef:
         kind: HelmRepository
         name: longhorn
         namespace: longhorn-system
       interval: 1h
+  # No automatic remediation: Longhorn refuses downgrades, so a Helm rollback after a failed upgrade is
+  # refused by its pre-upgrade job and strands the release; an install remediation uninstalls Longhorn.
+  # A failure is read and fixed by a person (docs/patching.md, "Longhorn in-place hops").
+  # The same holds for a FIRST install that hits one transient error (apps #134: `etcdserver: request timed out` on
+  # a busy
+  # control plane left the release Stalled): retries stay 0 on purpose, because Helm's remediation is an uninstall and
+  # Longhorn's pre-delete uninstall Job refuses to run while deleting-confirmation-flag is false (checked in
+  # longhorn-manager v1.12.1) and could remove data when it is true. The reset is one command (docs/patching.md, "A
+  # first install that stalls"); retrying it by itself is a 0.4.0 item.
   install:
     crds: CreateReplace
     remediation:
-      retries: 3
+      retries: 0
   upgrade:
     crds: CreateReplace
     remediation:
-      retries: 3
+      retries: 0
+      remediateLastFailure: false
   values:
+    # 1.12 renders NetworkPolicies by default (restrictInternalTraffic); the CiliumNetworkPolicy of this
+    # brick already governs longhorn-system, so keep it the single authority until a cluster has shown both agree.
+    networkPolicies:
+      restrictInternalTraffic: false
     defaultSettings:
       # Longhorn's data path on each node → a dedicated, encrypted (LUKS2) Talos
       # user volume, mounted at /var/mnt/longhorn (see OpenAether-infra
@@ -63,15 +77,16 @@ spec:
       defaultReplicaCount: 2
       # Minimum free space before refusing new volumes.
       storageMinimalAvailablePercentage: 15
-      # Automatically delete orphaned volumes (with no PVC).
-      orphanAutoDeletion: true
-      # backupTarget: deliberately left empty HERE. `defaultSettings` is only
-      # read on the FIRST deployment; the truth then lives in the CRs laid down
-      # by the `storage-backup-target` brick
-      # (apps/base/storage/backup-target), which gets the URL from the
-      # `cluster-identity` ConfigMap and the credentials from OpenBao. A value
-      # here would only serve the initial install and would diverge afterwards.
-      backupTarget: ""
+      # Orphan auto-deletion is deliberately NOT enabled (apps #115). The old key here (`orphanAutoDeletion`) is not a
+      # key of the chart (it reads `orphanResourceAutoDeletion`) and was ignored since 1.9, so nothing was ever enabled
+      # and the comment promised a behaviour that did not exist. An "orphan" is replica data on a node with no
+      # matching replica object, which is exactly what a restore of etcd or a rebuilt node looks like for a while:
+      # deleting it automatically could remove the only copy. Reclaim space by reading `kubectl get orphans.longhorn.io`
+      # first. A test fails on a key the pinned chart does not read.
+      # No backup target here either: it is the chart's `defaultBackupStore.backupTarget` (defaultSettings.backupTarget
+      # is not read), and it is deliberately left empty. The truth lives in the CRs laid down by the
+      # `storage-backup-target` brick (apps/base/storage/backup-target), which gets the URL from the
+      # `cluster-identity` ConfigMap and the credentials from OpenBao.
       # kubelet path Talos
       kubernetesClusterAutoscalerEnabled: false
     longhornManager:

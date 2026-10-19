@@ -1,0 +1,186 @@
+# Pods the Audit policies are run against: `scripts/dev/test-kyverno-policies.sh` (Kyverno CLI, the vendored version).
+apiVersion: v1
+kind: Pod
+metadata: {name: good, namespace: app}
+spec:
+  securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+  containers:
+    - name: c
+      image: ghcr.io/fluxcd/x:1
+      resources: {limits: {memory: 64Mi}}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: {drop: [ALL], add: [NET_BIND_SERVICE]}
+---
+# Everything wrong at once: host network, a privileged init container, sensitive capabilities added.
+apiVersion: v1
+kind: Pod
+metadata: {name: bad, namespace: app}
+spec:
+  hostNetwork: true
+  initContainers:
+    - name: i
+      image: ghcr.io/fluxcd/x:1
+      securityContext: {privileged: true, capabilities: {add: [SYS_ADMIN]}}
+  containers:
+    - name: c
+      image: ghcr.io/fluxcd/x:1
+      securityContext: {capabilities: {add: [NET_RAW]}}
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: ztunnel-abc, namespace: istio-system}
+spec:
+  containers:
+    - name: c
+      image: docker.io/istio/ztunnel:1
+      securityContext: {capabilities: {add: [NET_ADMIN, SYS_ADMIN, NET_RAW]}}
+---
+# Same namespace as ztunnel, another name: the exception is the pod, not the namespace.
+apiVersion: v1
+kind: Pod
+metadata: {name: other-abc, namespace: istio-system}
+spec:
+  containers:
+    - name: c
+      image: docker.io/istio/x:1
+      securityContext: {capabilities: {add: [NET_ADMIN]}}
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: nosec, namespace: app}
+spec:
+  containers:
+    - name: c
+      image: ghcr.io/fluxcd/x:1
+---
+# Everything at the container level, nothing on the pod, no read-only rootfs, no limit.
+apiVersion: v1
+kind: Pod
+metadata: {name: ctr-level, namespace: app}
+spec:
+  containers:
+    - name: c
+      image: ghcr.io/fluxcd/x:1
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        seccompProfile: {type: RuntimeDefault}
+---
+# The main container is hardened, the init container is not.
+apiVersion: v1
+kind: Pod
+metadata: {name: init-bad, namespace: app}
+spec:
+  initContainers:
+    - name: i
+      image: ghcr.io/fluxcd/x:1
+  containers:
+    - name: c
+      image: ghcr.io/fluxcd/x:1
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        seccompProfile: {type: RuntimeDefault}
+---
+# runAsNonRoot on one container only, no pod-level default.
+apiVersion: v1
+kind: Pod
+metadata: {name: mixed, namespace: app}
+spec:
+  containers:
+    - name: a
+      image: ghcr.io/fluxcd/x:1
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        seccompProfile: {type: RuntimeDefault}
+    - name: b
+      image: ghcr.io/fluxcd/x:1
+      securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: hostpath, namespace: app}
+spec:
+  volumes:
+    - {name: h, hostPath: {path: /proc}}
+  containers:
+    - name: c
+      image: ghcr.io/fluxcd/x:1
+---
+# Only the init container is privileged: the case restrict-privileged did not see.
+apiVersion: v1
+kind: Pod
+metadata: {name: init-priv, namespace: app}
+spec:
+  initContainers:
+    - name: i
+      image: ghcr.io/fluxcd/x:1
+      securityContext: {privileged: true}
+  containers:
+    - name: c
+      image: ghcr.io/fluxcd/x:1
+---
+# node-exporter in its own namespace: host network, PID and path by design, exempt by name.
+apiVersion: v1
+kind: Pod
+metadata: {name: prometheus-node-exporter-abc, namespace: services-observability-node}
+spec:
+  hostNetwork: true
+  hostPID: true
+  volumes:
+    - {name: root, hostPath: {path: /}}
+  containers:
+    - name: c
+      image: quay.io/prometheus/node-exporter:1
+---
+# Same namespace, another name: the exemption is the pod, not the namespace.
+apiVersion: v1
+kind: Pod
+metadata: {name: intruder, namespace: services-observability-node}
+spec:
+  hostNetwork: true
+  volumes:
+    - {name: root, hostPath: {path: /}}
+  containers:
+    - name: c
+      image: ghcr.io/fluxcd/x:1
+---
+# The audit-log collector: a read-only hostPath by design, exempt by name.
+apiVersion: v1
+kind: Pod
+metadata: {name: alloy-audit-abc, namespace: services-observability-audit}
+spec:
+  volumes:
+    - {name: audit, hostPath: {path: /var/log/audit/kube}}
+  containers:
+    - name: c
+      image: docker.io/grafana/alloy:v1
+      securityContext: {capabilities: {add: [DAC_READ_SEARCH]}}
+---
+# Same namespace, another name: the exemption is the pod, not the namespace.
+apiVersion: v1
+kind: Pod
+metadata: {name: intruder-audit, namespace: services-observability-audit}
+spec:
+  volumes:
+    - {name: root, hostPath: {path: /}}
+  containers:
+    - name: c
+      image: ghcr.io/fluxcd/x:1
+      securityContext: {capabilities: {add: [DAC_READ_SEARCH]}}
+---
+# The ambient mesh namespace no longer gets a wholesale pass.
+apiVersion: v1
+kind: Pod
+metadata: {name: waypoint-abc, namespace: foundation-service-mesh}
+spec:
+  hostNetwork: true
+  containers:
+    - name: c
+      image: docker.io/istio/x:1

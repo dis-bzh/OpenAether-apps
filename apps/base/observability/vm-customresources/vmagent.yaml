@@ -108,6 +108,9 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: vmagent
 spec:
+  # Pinned (apps #117): the operator's default moves with every operator bump (0.68.1 defaults to this one).
+  image:
+    tag: v1.136.0
   replicaCount: 2
   shardCount: 2
   # Kyverno reads the container level (#47). The operator copies this flat block onto every container

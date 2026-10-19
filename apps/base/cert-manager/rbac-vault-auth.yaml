@@ -14,6 +14,8 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["serviceaccounts/token"]
+    # Its own ServiceAccount only (the ClusterIssuer's serviceAccountRef), not any ServiceAccount of the namespace.
+    resourceNames: ["cert-manager"]
     verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

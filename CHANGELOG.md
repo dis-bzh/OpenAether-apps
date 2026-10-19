@@ -15,37 +15,246 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ---
 
-## [Unreleased]
+## [0.3.0] — 2026-10-19
 
-ANSSI hardening work, not released yet. **Nothing here is a claim of compliance with any ANSSI document**: each entry names the requirements it addresses and the rung it reached; the ones that only a cluster can show are listed in the lab checklist of the maintainers.
+0.3.0 is the pair of OpenAether-infra 0.3.0: a **version upgrade campaign** (every component that was past support, plus the independent low-risk bumps) and a
+**security hardening wave**, the latter opt-in or in Audit unless stated. The project follows ANSSI recommendations as far as possible.
+**Nothing here is a claim of compliance with any ANSSI document**: each entry names the requirements it addresses and the rung it reached.
 
-### Validated
+**A fresh install lands on the new versions (run on Scaleway, OVH and Outscale, labs 12 to 15). A running cluster must hop one minor at a time where the
+table says so** (`docs/patching.md`; the in-place hops were rehearsed on Scaleway only, in lab 15c, and not all of them).
 
-- **The first wave on three real clouds, 2026-10-15: once per cloud, by hand, with OpenAether-infra `claude/anssi-wave1` and this branch
-  followed by Flux.** Scaleway and OVH ran the full DAG (36 Kustomizations Ready), Outscale the reduced profile (19 Kustomizations: no
-  observability, CNPG, Longhorn or Istio, so most of the entries below are not observed there). Seen:
-  - **Defects only a real cluster showed, fixed on the branch while the clusters ran** (see Fixed): the vmagent config-reloader could not read
-    its Secret under the least-privilege RBAC, and the third Loki replica could not schedule on two workers. After the fixes every pod was
-    Running on OVH, and Scaleway (created before the fixes landed) converged on the same commits.
-  - **Escrow:** the infra tooling attested a two-custodian escrow and the CronJob `openbao-escrow-check` read it ("attested 0 day(s) ago by
-    2 holders", Outscale); an OpenBao snapshot job pushed to both destinations (Outscale).
-  - **Zitadel (B14):** the administrator password generated into OpenBao (32 characters) opens a session (201), the public default
-    `Password1!` does not (400); Grafana's sessions are 2 h idle and 12 h (Scaleway).
-  - **Kyverno:** 2 results on the report (the Istio-generated proxies, #70); **CloudNativePG** `grafana-db` and `zitadel-db` archiving True
-    (after the reload that OpenAether-infra's seeding now does), Longhorn's backup target available, Loki's objects in its own bucket.
-  - **Not run:** the OpenBao TLS 1.3, metrics and audit-label work (a later branch), Kyverno Enforce, the SSO-only Grafana overlay, the
-    private-admin-routes component on a cluster, a restore, an upgrade of a cluster built on 0.2.0 except the Loki rollout described in
-    the Upgrade notes.
+### Version upgrades
 
-### Upgrade notes
+| Component | 0.2.0 | 0.3.0 | Running cluster |
+|---|---|---|---|
+| Longhorn | 1.9.2 | 1.12.1 | hop 1.10.2 -> 1.11.3 -> 1.12.1; **pre-step on the five CRDs with a conversion webhook before 1.10** (lab 15c: the 1.10 hop failed without it, 14 min without attach); no downgrade exists; the HelmRelease no longer remediates |
+| cert-manager | 1.15.3 | 1.21.2 | one minor at a time, six Flux hops, 221-255 s each, no probe failure |
+| Kyverno | 1.12.1 | 1.19.1 | 1.13 -> 1.15 -> 1.17 -> 1.19 ran in 57-123 s each; **1.19 is the last line serving `kyverno.io/v1`; migrate before 1.20** (#113) |
+| CloudNativePG operator | 1.23.1 | 1.30.1 | every hop rolls the Clusters; with the new `primaryUpdateMethod: switchover` the write gap is about 10 s instead of 195 s; take the 0.3.0 `cnpg` Kustomization no later than the 1.27 hop (CRD substitute opt-out) |
+| PostgreSQL (Grafana DB image) | 16.3 | 16.15 | a minor roll of that Cluster |
+| External Secrets Operator | 1.2.0 | 2.13.0 | 1.3.2 then 2.13.0 ran without failure |
+| Loki chart (Loki) | 6.25.0 (3.3.2) | 18.16.2 (3.7.8), chart now from `grafana-community` | procedure below; the 6.25 -> 6.55 hop timed out in lab 15c |
+| Grafana chart (Grafana) | 8.6.4 | 14.0.1 (13.2.4), from `grafana-community` | **not rehearsed in place**; take a CNPG backup first |
+| Alloy chart (Alloy) | 0.11.0 (1.6.1) | 1.13.1 (1.20.1) | **not rehearsed in place** |
+| Zitadel chart (Zitadel) | 10.0.2 | 10.4.0 (4.19.2) | 4.14 -> 4.15 -> 4.17 -> 4.19.2 ran in 219-250 s each; migrations are forward-only: CNPG backup first |
+| victoria-metrics-operator | 0.65.1 | 0.68.1 | one rolling restart of the VM pods |
+| Flux on the children | 2.8.8 | 2.9.6 | not rehearsed |
+| cluster-api-operator / ORC | 0.27.0 / 2.4.0 | 0.29.0 / 2.6.0 | the ORC version the pinned CAPO needs |
+| Cilium on the children | 1.19.2 | 1.19.9 | a patch; one minor behind the management cluster on purpose |
+| Gateway API CRDs | 1.1.0 | 1.2.1 | **not 1.5.x** (Istio 1.24 does not become Ready with them); CRDs are not rolled back; check `storedVersions` first |
+| restic | 0.18.0 | 0.19.1 | exit code 3 now fails the Job; `prune` repacks more |
+| local-path-provisioner | 0.0.31 | 0.0.37 | restarts once; PVs untouched |
+| node-exporter chart / kube-state-metrics chart / metrics-server chart | 4.39.0 / 5.25.1 / 3.12.2 | 4.60.0 / 8.6.0 / 3.14.0 | each restarts once |
+| Kubernetes / Talos (infra) | 1.37.1 / 1.14.2 | unchanged | |
+| Istio, OpenBao, MinIO | 1.24.2, 2.7.1, RELEASE.2024-04-18 | unchanged | Istio and MinIO waived to 2026-12-31 (`docs/eol-calendar.md`) |
 
-- **Loki goes from 2 to 3 replicas, and the pods of a cluster on 0.2.0 hold a hard anti-affinity that blocks the third.** The chart's
-  default is a required pod anti-affinity (one Loki per node); the new values clear it and keep a preferred one, but the existing pods keep
-  the old spec until they are replaced. On a 3+2 cluster the new pod stays Pending behind them and the rollout waits. Seen on OVH
-  (2026-10-15, a cluster built on the first wave, then fixed in place): delete the old pods one at a time (`kubectl -n services-observability
-  delete pod loki-0`, then `loki-1`), let each come back Ready, then reconcile the HelmRelease. Logs written to the local-path volumes are kept.
+### Upgrade notes by component (from 0.2.0)
+
+- **Longhorn.** Follow `docs/patching.md` ("Longhorn in-place hops") in order: the CRD conversion pre-step, then 1.10.2, 1.11.3, 1.12.1, engines upgrade automatically afterwards.
+  The chart NetworkPolicies are off and the brick's CiliumNetworkPolicy opens the new ports (9503/9600, 10000-30000, NFS 2049). The RWX StorageClasses
+  now carry `softerr,timeo=100,retrans=3` (a graceful reboot of a node with a share-manager and a client no longer hangs for more than 12 minutes, apps #124);
+  a volume created earlier keeps its old mount options until it is recreated.
+- **Loki chart 6.x -> 18.** A fresh install takes 18 directly. In place: the StatefulSet selector and volume claim template are unchanged. The HelmRelease has a 15 minute
+  timeout and **no automatic upgrade rollback**: on a stalled hop follow "Loki chart hop" in `docs/patching.md` (inspect the pod that is not Ready, delete all Loki pods at
+  once if only the memberlist ring waits, `flux reconcile helmrelease loki --reset --force`). Logs are not lost: Alloy retries and the chunks are in the object store.
+- **Kyverno.** The five Pod policies get a per-namespace Enforce through the **rule-level `failureAction` / `failureActionOverrides` spelling**; the old spec-level
+  `validationFailureActionOverrides` is ignored on 1.19.1 and denies nothing (lab 15a, apps 669494b). Enforce stays off by default.
+- **CloudNativePG.** Both Clusters use `primaryUpdateMethod: switchover`. `barmanObjectStore` stays until the Barman Cloud plugin replaces it (removed in CNPG 1.31, #114).
+- **Disk.** The infra default root volume is 50 GB; a 20 GB node exhausts EPHEMERAL after the larger images of 0.3.0 (DiskPressure, evictions). Grow the disks before the hops (infra CHANGELOG).
+- **OpenBao** metrics move to a second listener on 8202 (headless Service only); the listeners accept TLS 1.3 only.
+- **Grafana and Zitadel** database migrations are forward-only. Take a CNPG Backup first.
+
+### BREAKING and behaviour changes
+
+- `Longhorn` HelmRelease: `retries: 0`, no remediation (a person fixes forward). `Loki` likewise.
+- Kyverno is on 1.19.1: the cleanup CronJobs no longer exist; `PolicyException` stays off; images come from `reg.kyverno.io`.
+- node-exporter runs in its own privileged namespace `services-observability-node`; four namespaces can drop to the baseline Pod Security level (opt-in).
+- Zitadel no longer installs with its public admin password: a generated 32-character password is used.
+- The kubelet and apiserver scrapes verify TLS (the kubelet side is an opt-in component that needs infra's `kubelet_serving_cert_rotation`).
+- Kyverno reports sensitive capabilities, init containers and read-only rootfs in Audit (new violations to review, none blocking).
+- The Gateway API CRDs v1alpha2 `GRPCRoute`/`ReferenceGrant` versions disappear.
+
+### Known limitations
+
+- **Unsigned history:** no commit on the history verifies yet, so the Flux Git verification component cannot be turned on (#86; infra #332, #333). The maintainer creates a dedicated signing key later.
+- **CNPG `barmanObjectStore` is removed in CNPG 1.31** (#114) and **Kyverno `kyverno.io/v1` ClusterPolicy is removed in Kyverno 1.20** (#113): stay on 1.30.x and 1.19.x until migrated.
+- **In-place hops not rehearsed:** Loki chart 6.25 -> 18 (the lab hop stopped at 6.55 and timed out), Grafana 8.6 -> 14, Alloy, Gateway API CRDs, Flux on the children,
+  Cilium and Talos patches, Istio (#121). A fresh install of these versions was run on three clouds.
+- **Scaleway first install with the app load balancer allow-list needs two applies** (infra #361).
+- **OVH S3 has no bucket policies through the S3 API** (infra #379); **Outscale did not pass the stability criteria with the full stack in lab 16** (3 CP + 3 W of 3 vCPU / 6 GB: an IO and memory
+  cascade after one backup and restore and one drained reboot, not cured by a live `io1 3000`; the 20 vCPU quota allows no larger shape, infra #376) and OOS refused dedicated EIM keys (infra #377).
+- **Losing a worker.** The shipped 2-worker examples could not be rolled (172% of CPU requested, infra #378; the infra examples now ship 3, not re-run); only the CPU gate is checked. Replicas with a required
+  spread stay short while a worker is out. `CnpgWalArchiveFailing` can stay pending about 25 minutes after a drained reboot (#138), and Flux has no notification Alert or Provider (#139): both 0.4.0.
+- **MinIO (dev profile) is archived upstream;** the waiver runs to 2026-12-31 (#104). Istio 1.24 is waived to the same date.
+- **Kubernetes 1.37 is outside the range cert-manager 1.21, CNPG 1.30, Flux 2.9 and others test upstream** (#105, #120); the labs ran on it.
+- **Loki retention deletion of expired chunks was never exercised** (#127); Alloy keeps log batches in memory only (#80, #119); **Zitadel -> Grafana login with MFA** was not run (#126).
+- OpenBao replicas and volumes can land on one worker (#129); the Zitadel setup Job killed half way leaves a migration lock (#133); the Longhorn install has no retries (#134).
+- The alert thresholds are estimates; most rules have run against synthetic series only.
+
+### Validated on
+
+The same labs as the infra CHANGELOG (11 to 15c, 2026-10-16 to 2026-10-18; Scaleway full DAG in 12, 13, 14 and 15c, OVH complete in 15a, Outscale full in 15b),
+each torn down and checked clean. At the end of a fresh install on the defaults: 38 Kustomizations and 16 HelmReleases Ready, `cluster-verify` 16/16, `cluster-security` 33/36 to 34/36
+(the rest skipped, not failed), strict plan "No changes". Lab 15c ran 40 upgrade hops and drills from apps 0.2.0 on Scaleway: 20896 HTTP samples through the load balancer,
+135 failed, one 73 s episode (a drain evicting the single Gateway pod); CNPG primary kill 24 s of write gap, planned switchover 12 s; Loki outage of 240 s lost no line.
+Offline: Kyverno CLI 1.19.1 (90 + 8 fixtures), Alloy 1.20.1, Zitadel 4.19.2 with PostgreSQL, Loki `-verify-config`, Grafana 13.2.4, CRD schema validation, vmalert dry runs.
+
+**Lab 16 (2026-10-18, final validation on the head of this branch with a signed throwaway Flux branch, each cloud torn down and checked clean):** Scaleway and OVH, a fresh install from the shipped
+examples: 38 Kustomizations and 16 HelmReleases Ready 23.5 min (Scaleway) and 29 min (OVH) after the start, idle alerts Watchdog only (61 rules healthy), Longhorn RWO, LUKS2 and RWX backups restored with matching
+checksums, CNPG backup and restore into a new cluster (150 tables = origin), the five Kyverno Enforce policies and the ephemeral-container denials, OpenBao TLS 1.3 only with re-key, ESO 15/15, Zitadel setup, Loki
+write and read-back, a drained worker reboot and a control-plane reboot. Outscale (3 CP + 3 W of 3 vCPU / 6 GB): everything passed for the first hour, then the cascade above; its control-plane reboot, alert drill and
+final acceptance were not run. A provoked alert reached Alertmanager (the webhook-receiver leg was skipped on purpose). Found and filed: #137 (fixed here), #138, #139.
+
+**NOT run:** the etcd snapshot restore; OpenBao raft snapshot restore; Istio hops; Alloy, Grafana and Gateway API CRD in-place hops; Flux (children) and Cilium/Talos patch hops;
+Zitadel -> Grafana interactive login; the alert drills (no alert was provoked); Loki retention expiry; the Flux Git verification (no signing key); an unattended run to completion.
+
+---
+
+### Detail of the 0.3.0 entries
+
+ANSSI hardening work, released with 0.3.0. **Nothing here is a claim of compliance with any ANSSI document**: each entry names the requirements it addresses and the rung it reached; the ones that only a cluster can show are listed in the lab checklist of the maintainers.
 
 ### Security
+
+- **Review fixes (mirrors the infra review). Static / mocked, not run on a cluster.**
+  - `check-commit-signatures.sh` skips merge commits: on a PR run HEAD is GitHub's unsigned synthetic merge commit, so the documented `--strict`
+    switch-on would have failed every PR. Its test now has a merge-commit case and expired-key/signature cases (status X/Y, throwaway key signed in the past).
+  - `docs/signed-commits.md` and the `git-verify` component comment no longer say Flux checks OpenPGP only: the Flux CRD vendored in infra documents
+    SSH keys (`.sshpub`) too. OpenPGP is this repository's choice, and SSH keys are NOT wired.
+
+- **Critic follow-ups: apps areas the audit had not read** (no ANSSI requirement id was assigned to them by the audit; they sit near DP-02, DP-03/F06, LOG-13 and SSDLC-CICD-AIP-01; mocked/static, not run on a cluster):
+  - CAPI provider egress: `capi-system` no longer allows the Outscale endpoints and `capi-outscale-system` no longer allows Scaleway and OVH
+    (each namespace runs the providers of its own cloud). Rollback: restore the removed `toFQDNs` lines.
+  - `cert-manager-vault-token` Role: `serviceaccounts/token` `create` is limited to the `cert-manager` ServiceAccount (`resourceNames`), not every
+    ServiceAccount of the namespace.
+  - `openbao-snapshot` CronJob: the Job revokes its own token right after the snapshot (it read a copy of every secret); a failed revoke only warns.
+  - Alloy (logs): `discovery.kubernetes` is limited to the pods of the node (`NODE_NAME` from the downward API). The DaemonSet had every instance
+    tail every pod through the API server. The config parses with Alloy 1.6.1 (`alloy fmt`); that logs still arrive from every node is a lab check.
+  - `apps/vendored-dumps.sha256` + `scripts/dev/check-vendored-lock.sh` (CI): the six vendored upstream dumps are hash-locked, so a change to one
+    moves the lock in the same commit.
+  - Does NOT: prove a dump equals its upstream release, narrow the ClusterRoles that the vendored External Secrets dump grants, split the
+    `openbao-snapshot` pod so the restic container has no ServiceAccount token, or restrict who may use the `openbao-ca` ClusterIssuer.
+
+- **Flux Git source verification, opt-in** (ANSSI SSDLC-CICD-AIP-03, SSDLC-CONT-REC06; apps half of F04, F10; mocked/static, not run on a cluster):
+  - New component `apps/flux/components/git-verify`: adds `spec.verify {mode: HEAD, secretRef: git-signers}` to the `GitRepository`, only when a cluster's overlay lists it. Default unchanged (`scripts/dev/test-git-verify.py`, in CI).
+  - `scripts/dev/check-commit-signatures.sh` in the `commits` job: a WARNING for unsigned commits of a PR (the history has none signed), `--strict` to fail; own test with a throwaway key. `CODEOWNERS` names the Flux, RBAC and workflow paths. `docs/signed-commits.md`: GPG as the standard, signer table (to fill), enable order, break-glass.
+  - Does NOT: change any GitHub ruleset, publish a key, create the `git-signers` Secret or the bootstrap `verify` (OpenAether-infra, `flux_git_verify`), verify tags, or prove source-controller accepts it on a cluster.
+
+- **Named operator identities** (ANSSI PA022 R38, R40, NSA12 AUTH-02; apps half of F04, F13, F20):
+  - New brick `platform/rbac` (Flux `platform-rbac`, in the baseline of every generated profile): `ClusterRoleBinding`
+    `oa-admins` (group `oa:admins` to `cluster-admin`) and `oa-readers` (group `oa:readers` to `view`). Inert until a credential
+    carries one of these groups; nothing existing changes. Rollback: remove the Kustomization.
+  - **Not done here**: the CSR-based kubeconfig tool, the RBAC review script, the break-glass rules and the apiserver OIDC
+    configuration belong to `OpenAether-infra`; OIDC groups, the OpenBao OIDC/JWT auth method and the Zitadel MFA login policy
+    need an issuer reachable outside the cluster and are **not** attempted. A client certificate stays non-revocable: the control is
+    its short lifetime, a group binding cannot single out one holder.
+  - **Rung: static** (`scripts/dev/test-rbac-brick.py` in CI), mocked/static, not run on a cluster.
+- **In-cluster transport and metadata egress** (ANSSI HYG-M21, PG078-R11, NT-35, NSA12 NET-07, NET-09, HYG-M22; apps half of
+  F14, F12, DP-11, F20, F05):
+  - Zitadel (User and Admin) and Grafana connect to CNPG with `sslmode=require`: the credentials stop crossing the pod network
+    in clear. It encrypts but does **not authenticate the server**; `verify-full` needs the CNPG CA copied into the consuming
+    namespaces with a rotation-safe mechanism and is **not done**. Rollback: `disable`.
+  - No TLS version floor is set in istiod's `meshConfig`: `tlsDefaults.minProtocolVersion` (added then removed in this release
+    cycle) is ignored by Istio, which reads only `ecdhCurves` and `cipherSuites` there and leaves ISTIO_MUTUAL to `meshMTLS`.
+    Envoy's own TLS 1.2 floor applies, unchanged. A TLS 1.3 floor and cipher lists are **not** set (client versions not
+    measured); the Gateway floor would be a per-listener `tls.options`, not done.
+  - New CCNP `deny-cloud-metadata-egress`: every pod is denied 169.254.169.254 and 169.254.42.42 (deny-only, no default-deny
+    side effect, Talos hostDNS untouched).
+  - The cert-manager egress rule no longer names the Let's Encrypt hosts: no issuer in the repo is ACME. Anyone with an ACME
+    ClusterIssuer must add its directory FQDN back.
+  - **Not done / already done**: Loki `insecure` was fixed in 0.2.0; the kubelet and metrics-server CA path is the opt-in component of
+    B23; Zitadel's own TLS (gateway to Zitadel stays h2c behind WireGuard and the CNPs), the gateway key algorithm, node-level egress
+    (infra) are not touched.
+  - **Rung: static** (`scripts/dev/test-in-cluster-transport.py` in CI), mocked/static, not run on a cluster.
+- **Container hardening and resource bounds** (ANSSI FT082 R10, R11, R12, NSA12 POD-06, BP028 R64, PA012 R10, R14; apps half of
+  K8S/F09, K8S/F10, LOG-13, LOG-14):
+  - Alloy and its config-reloader, Grafana and the CAPI operator run with a **read-only root filesystem**; what each writes
+    goes to an emptyDir (Alloy's storage path, Grafana's and the operator's `/tmp`). The CAPI operator also gets a pod and a
+    container `securityContext` (uid 65532, drop ALL, seccomp RuntimeDefault). Alloy's `loki.write` retries 30 times with
+    at most 1 minute between tries instead of giving up after about 5 minutes (Alloy v1.6 has no write-ahead log).
+  - **local-path-provisioner**: the provisioner has a restricted `securityContext`, its helper image is `busybox:1.37.0`
+    instead of the bare `busybox`. It does NOT change `mkdir -m 0777` to 0770: the volumes are used by non-root pods with
+    other uids and the hostPath volumes ignore `fsGroup`, so 0770 would stop them from writing; that needs a different
+    storage design (Longhorn, or a Talos user volume), not a mode.
+  - **ServiceAccount token dropped** from the Zitadel server and login pods and the MinIO pod (Helm post-renderer: neither
+    chart has a value for it). Grafana keeps it (its dashboards sidecar reads ConfigMaps through the API); the Zitadel setup
+    Job keeps it (it runs kubectl).
+  - **Bounds**: `sizeLimit` on the OpenBao `tmp` and openbao-init emptyDirs (64Mi); memory and CPU limits on the three ESO
+    Deployments, CPU limits on the four Kyverno controllers (their memory limits were already in the vendored file).
+    **The ESO and Kyverno values are generous guesses, not measured** (no cluster here); the lab step tightens them.
+  - **Rung: static** (`scripts/dev/test-container-bounds.py` in CI, `helm template` of the Alloy, Grafana, CAPI operator,
+    Zitadel and MinIO charts at the pinned versions, `kubectl kustomize`, and the new `loki.write` block loaded by a real
+    Alloy v1.6.1); **not run on a cluster**. Whether each workload really starts and works with a read-only root filesystem is
+    unproven until then. It does NOT add LimitRange or ResourceQuota (deferred), `ephemeral-storage` requests, or the Talos
+    `podPidsLimit` (infra), and does not bump any chart (Renovate PRs); Alloy to Loki stays cleartext HTTP, covered by
+    WireGuard and the CiliumNetworkPolicy, not by TLS.
+
+- **Four namespaces can drop from the privileged to the baseline Pod Security level, opt-in** (ANSSI FT082 R4, R6, NSA12 POD-05;
+  apps half of K8S/F08, OSN/F16, SCC/F09): `services-observability` (node-exporter has left it), `services-gateway` (the Envoy proxy
+  istiod generates), `foundation-service-mesh` (HelmReleases and the waypoint Gateway; ztunnel and istiod run in `istio-system`) and
+  `foundation-storage` (MinIO). **Off by default**: `enforce` stays `privileged` as released, `warn`/`audit` are restricted (they only
+  log); the new component `apps/flux/components/psa-baseline` (tested by `scripts/dev/test-psa-restricted.py`) lowers them. It is the
+  one change of the series that can stop a pod at admission, and the required server-side dry run (`LAB-CHECKLIST`) was NOT run:
+  do that dry run first. Baseline is only checked on pods created or rescheduled after it. To go back, remove the component.
+  **Upgrade note**: a cluster owner who wants it adds `components: [../components/psa-baseline]` to the cluster overlay; it patches
+  `spec.patches` of three Flux Kustomizations (`namespaces`, `istio`, `storage`), which replaces a list, so merge by hand if the
+  overlay already patches them or also uses `psa-restricted`. It does NOT lower `istio-system`, `longhorn-system`,
+  `kube-system` or the new node-exporter namespace, nor raise `foundation-networking` (Cilium hostPort), `zitadel`, `kyverno`,
+  `cnpg-system`, `orc-system` or `flux-system` (their warn logs have to be read first).
+
+- **node-exporter moves to its own privileged namespace, `services-observability-node`** (ANSSI FT082 R4, R6, NSA12 POD-05;
+  apps half of K8S/F08, OSN/F16, SCC/F09). It is the only observability workload that needs hostPath, hostNetwork and hostPID,
+  and Pod Security has no per-pod level, so the whole `services-observability` namespace was privileged for it. The HelmRelease,
+  the `node-exporter` VMServiceScrape and the Kyverno exemptions (`restrict-privileged` by pod name, `disallow-root-user` by
+  namespace as before) follow; `services-observability` itself is NOT lowered here (previous entry, opt-in). The CiliumNetworkPolicies and Istio
+  policies need no change: node-exporter is hostNetwork, out of the mesh, and reached through vmagent's host egress on :9100.
+  `restrict-privileged` also stops sparing `foundation-service-mesh` wholesale (ztunnel and the Istio CNI agent by name).
+  **Rung: static (`scripts/dev/test-node-exporter-namespace.py` in CI, render, Kyverno CLI fixtures); not run on a cluster.**
+  **Upgrade note**: Flux uninstalls the old release and installs the new one, so node_* series stop for one or two scrape
+  intervals and the `node` DaemonSet briefly has both pods wanting :9100; series gain `namespace="services-observability-node"`
+  (no shipped rule or dashboard selects on it). It does NOT touch the Talos or Cilium host policies.
+
+- **Kyverno: sensitive capabilities, init containers and read-only rootfs are reported, all in Audit** (ANSSI FT082 R1, R8, R15
+  in part, NSA12 POD-01, BP028 R64; apps half of K8S/F04). New `restrict-capabilities` (names `capabilities.add` values such as
+  SYS_ADMIN, NET_ADMIN, NET_RAW, SYS_PTRACE, SYS_MODULE on containers, initContainers and, through `Pod/ephemeralcontainers`,
+  ephemeral containers; NET_BIND_SERVICE is left alone; ztunnel and the Istio CNI agent are exempt by pod name, the
+  single-purpose system namespaces by namespace), plus the informational `require-ro-rootfs` and `require-limits` (memory only).
+  `restrict-privileged` now also reads initContainers; `require-security-context` is split into three rules so that
+  runAsNonRoot and seccomp are satisfied at the pod OR the container level (the two fields exist at both), while
+  allowPrivilegeEscalation and `drop: [ALL]` stay container-level, initContainers included. The alert `KyvernoPolicyViolation`
+  skips the two informational policies. The header of `apps/base/kyverno/kustomization.yaml` named v1.18.2; the vendored file is
+  v1.12.1 (same sha256), so the `validationFailureAction` syntax is the right one. **Rung: Kyverno CLI 1.12.1 on fixture pods
+  (`scripts/dev/test-kyverno-policies.sh`, 80 expectations, in CI), static render; not run on a cluster**: the report counts on a
+  fresh install and after a node reboot, the ephemeral-container match and `names` against real pod names are for the lab. It does
+  NOT flip any policy to Enforce, narrow the exclusions of `disallow-root-user` (the one Enforce policy that spares whole
+  namespaces), cover the Gateway-generated pods' needs, or add `verifyImages` (the registry allow-list was already per organisation).
+
+- **OpenBao PKI: ECDSA keys, a server-only role, revocation information and auto-tidy** (ANSSI IGC-BP-03, NT-35 R8, R27-R29, R33,
+  IGC-BP-06; TLS-07, TLS-08, TLS-09, DP-08, apps half). `configure.sh` generates an ECDSA P-384 intermediate CSR and writes the
+  `openaether` role as ECDSA P-256, serverAuth only, `DigitalSignature` only, no wildcard, bare domain, IP SAN or required CN; it
+  also sets `pki/config/urls` (AIA, CRL, OCSP on the in-cluster service), `pki/config/crl` (automatic rebuild, delta, 72 h) and
+  `pki/config/auto-tidy`. The gateway Certificate becomes ECDSA P-256 with `rotationPolicy: Always`, the four explicit hostnames
+  (no wildcard, no commonName) and `renewBefore` of one third. `OA_PKI_KEY_TYPE=rsa` is the documented RSA-3072 + PSS variant;
+  `OA_PKI_DEFAULT_FOLLOWS_LATEST` (off) lets a renewed intermediate become the default issuer, which a plain import does not.
+  Rung: mocked/static plus the real-OpenBao harness (`scripts/dev/test-openbao-bootstrap.sh`: EC leaf, RSA/wildcard/bare/IP/outside
+  names refused, URLs in the leaf, revoked serial on the CRL, idempotent re-run, both key types, a throwaway EC root signing the
+  intermediate); not run on a cluster. It does NOT: convert an existing RSA-2048 intermediate (regenerate it, runbook section 5), make
+  any client check revocation (none does; Envoy does not hard-fail), replace the Istio mesh root (deferred to the Istio upgrade),
+  replace the `openbao-ca-bundle` leaf Certificate (needs trust-manager), or alert on CRL age (OpenBao exposes no such metric, and
+  its 1 m metric retention would drop the tidy ones). **Upgrade note**: a new HTTPRoute hostname must be added to
+  `certificate-openaether-tls.yaml`; the gateway key is re-issued as ECDSA at the first sync.
+- **OpenBao's listeners accept TLS 1.3 only, and its server certificate re-keys at every renewal and is reloaded without a restart**
+  (ANSSI NT-35 R10, R11 and R25, IGC BP-08; TLS-02, TLS-10). `tls_min_version = tls13` and `tls_key_exchange_preferences`
+  (`X25519MLKEM768, CurveP384, CurveP256, X25519`, a key that OpenBao 2.7.1 does honour: P-521 is refused) on the API listener;
+  `OA_TLS_MIN_VERSION=tls12` on the container is the documented way back and an unknown value stops the entrypoint.
+  `openbao-server-tls` gets `rotationPolicy: Always` and `renewBefore: 2920h` (a third of its life, was 720h). OpenBao reads the pair at
+  start and on SIGHUP only, so a `cert-reload` sidecar (same image, pod `shareProcessNamespace`) hashes the two files every 30 s and
+  sends SIGHUP. **Real OpenBao in Docker (`scripts/dev/test-openbao-bootstrap.sh`): TLS 1.2 refused, 1.3 accepted, a new pair served on
+  both listeners with the server staying unsealed and the audit device still writing.** Not run on a cluster: that cert-manager,
+  ESO, the `bao` CLI in the Jobs, kubelet's probes and the Gateway's Envoy all speak 1.3, and a real renewal reaching a running pod
+  through the Secret volume. The StatefulSet pod template changes, so the three pods roll once. It does NOT re-key `openbao-ca`
+  (10 years; re-keying it means re-issuing every leaf) nor the Gateway certificate (a later batch).
 
 - **Every route on the shared Gateway is registered with what authenticates its callers, and an opt-in component takes the OpenBao
   and Grafana routes off it** (ANSSI BP-028 R51 and R79 in part; the Zitadel first-admin half is the
@@ -146,6 +355,12 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   2026-10-14. **Does not upgrade anything:** each hop is a cluster exercise, one minor per PR; whether the old releases carry
   unpatched advisories was not checked.
 
+- **The component upgrade campaign is written down, not run** (ANSSI NT-35 R2, HYG-M34; apps half of TLS-01, F02, DP-18): `docs/patching.md`
+  gains the order of the hops (cert-manager, Gateway API CRDs, Istio, Kyverno, CNPG operator, PostgreSQL, Longhorn), the `rotationPolicy`
+  prerequisite for cert-manager 1.18 and the reason each hop needs a cluster. Rung: documentation only. **No version is bumped**: no
+  upgrade path is provable offline (CRDs, ambient node DaemonSets, webhooks), and upstream tags and digests were not reachable. The
+  waivers in `docs/eol-calendar.yaml` stay until the hops are done. The rest of these findings (calendar, check, Renovate alerts) is in the entry above.
+
 - **The apps CI gets the checks the infra CI has, and every PR gets a run.** `pull_request` no longer filters on `branches: [main]` (a PR
   stacked on another PR's branch got no run at all, measured on OpenAether-infra PR #100; `edited` is added so a retarget re-runs).
   `persist-credentials: false` on all checkouts. New: actionlint; kubeconform (`-strict`, CRD schemas from a pinned commit of the
@@ -194,7 +409,122 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
   a cluster. Does not touch Alloy, Loki or Grafana (own entries) and cannot prove the scrapes stay up: that is the lab check
   (`up` per job before and after).
 
+- **The Kubernetes API audit log reaches Loki** (ANSSI PA-012 R2, R9 and Annex A; HYG-42 M36; batch B22 step 1, apps half
+  of LOG-01, K8S/F12, OSN/F08, ADM/F08). A second Alloy release, `alloy-audit`, runs on the **control planes only**
+  (nodeSelector, control-plane toleration) in its own privileged namespace `services-observability-audit`, reads
+  `/var/log/audit/kube/kube-apiserver.log` through a read-only hostPath (DirectoryOrCreate) and pushes it to Loki as
+  `{log_type="k8s-audit", node, cluster}`, the timestamp taken from the event's `stageTimestamp`. **Off by default**: the
+  HelmRelease is `suspend: true` and the opt-in component `apps/flux/components/audit-log-collector` starts it (the alerts stay
+  silent while the DaemonSet does not exist; a cluster owner adds `components: [../components/audit-log-collector]` to the overlay
+  after the lab gate; removing it suspends the release but does not uninstall it, delete the HelmRelease too). It runs as root with
+  a read-only root filesystem and ALL capabilities dropped except `DAC_READ_SEARCH` (the apiserver writes the file 0600 in a
+  directory it owns, so root alone is refused; the file's owner and mode are still to be confirmed on a node), starts from the end of the file, and
+  has no RBAC and no kube-apiserver egress: its CiliumNetworkPolicy allows DNS and Loki :3100 only, and Loki's ingress
+  accepts it. Kyverno exempts it **by pod name** (`alloy-audit-*`) from `deny-hostpath`, `disallow-root-user` and the capabilities rule, not its
+  namespace. Three alerts: `K8sAuditCollectorNotRunning`, `K8sAuditLogSilent` (no line read for 15 min), `K8sAuditLogNeverRead`.
+  The local Docker overlay removes it. Retention needed no change here: Loki already keeps 8760h.
+  **Rung: mocked/static, not run on a cluster**: `scripts/dev/test-alloy-audit.sh` runs the shipped config in a real Alloy
+  on a fixture file (labels, backlog skipped), `scripts/dev/test-audit-collector.py` pins the narrow shape, the Kyverno CLI
+  fixtures and the vmalert unit test cover the exemption and the silence alert. **Does NOT**: change the audit policy
+  (Talos's default Metadata level stays: no request bodies), ship Talos service or kernel logs or the bastion's (infra),
+  survive a pod re-creation without a gap (positions are in an emptyDir), or prove the file is readable on a real node.
+- **Kyverno Enforce, per policy and per namespace, off by default** (ANSSI FT082 R1, R4, R8, R15 in part, NSA12 POD-01, POD-05,
+  SSDLC-CONT-REC04; apps half of K8S/F04, SCC/F09, SCC/F03, K8S/F10; mocked/static, not run on a cluster):
+  - `restrict-privileged`, `restrict-capabilities`, `require-security-context`, `restrict-image-registries` and `require-limits`
+    carry `validationFailureActionOverrides`: Enforce in a namespace labelled `kyverno.openaether.io/enforce-<policy>: "true"`, Audit
+    everywhere else. No namespace carries a label, so **behaviour is unchanged**; the only measurement on file (a fresh OVH cluster, 2
+    Istio-generated proxies still failing `require-security-context`) is not zero, and the rules added since were never measured.
+    Rollback: remove the label. Order, gate, exceptions and the Kyverno-outage note are in `docs/kyverno-enforcement.md`.
+  - The flippable rules now match Pods at **CREATE only** (an update of a running pod is never denied). In Audit that means a pod
+    changed after creation is no longer re-reported at admission; the background scan still sees it. `restrict-capabilities` is split in
+    two rules so the `kubectl debug` ephemeral containers (an UPDATE) are still judged; the Pod rule is `deny-sensitive-capabilities`.
+  - New opt-in component `apps/flux/components/psa-restricted`: Pod Security enforce baseline to restricted on foundation-networking,
+    foundation-policy-engine, services-identity and the `capi-*` namespaces, for a cluster whose warn/audit lines are clean.
+  - Does NOT: enforce anything by default, move kyverno off baseline, add Kyverno HA,
+    `verifyImages`, digest pins, `LimitRange`/`ResourceQuota`, nor use Kyverno 1.13's `validate.failureActionOverrides` (the vendored
+    1.12.1 rejects it). `KyvernoPolicyViolation` still ignores `require-security-context`.
+  - **Rung: static** (`scripts/dev/test-kyverno-enforcement.py`, `test-psa-restricted.py`, the Kyverno CLI fixtures; all in CI).
+
+
+### Changed
+
+Upgrade campaign, phase 1 (independent low-risk bumps, one commit each; static / rendered offline, **not run on a cluster**).
+Phase 2 follows below.
+
+- **local-path-provisioner v0.0.31 -> v0.0.37** (re-vendored; the dump joins `apps/vendored-dumps.sha256`). Local changes kept: provisioner
+  securityContext, no `--debug`, the `local-path-retain` StorageClass, the `busybox:1.37.0` helper pin. v0.0.36 validates the helper-pod template
+  (security fix GHSA-7fxv-8wr2-mfc4); this repository's template passes. Upgrade note: the provisioner Deployment restarts once (new probes on :8080);
+  existing PVs are untouched.
+- **prometheus-node-exporter chart 4.39.0 -> 4.60.0** (node_exporter 1.8.2 -> 1.12.1). Upgrade note: the DaemonSet rolls node by node; the chart now
+  excludes kubelet/containerd/docker mount points and erofs from `node_filesystem_*`; the `/var` alerts keep their series. No metric the repository reads was renamed.
+- **kube-state-metrics chart 5.25.1 -> 8.6.0** (2.13.0 -> 2.20.0). Upgrade note: the pod restarts once; `kube_pod_status_reason` now has a row only for the
+  reason that is set; `kube_endpoint_address_*` is gone (no rule used it). The explicit collectors list is kept, so endpointslices stay off.
+  The `customResourceState` for the Flux kinds was not run against 2.20.0: check `gotk_resource_info` after the roll.
+- **metrics-server chart 3.12.2 -> 3.14.0** (0.7.2 -> 0.9.0). Upgrade note: the pod restarts once and is Ready only when both node and pod metrics exist.
+- **restic 0.18.0 -> 0.19.1** (the four backup CronJobs). Upgrade note: the push scripts handle the new exit codes explicitly (3 = incomplete snapshot: the Job
+  fails at once; a failed retention fails the Job after the replica got its snapshot); `prune` repacks small packs more, so expect more S3 traffic.
+  The repository format is unchanged in the release notes read.
+- **Gateway API CRDs v1.1.0 -> v1.2.1** (standard). Upgrade note: the CRDs are not rolled back by Helm or Flux pruning; GRPCRoute/ReferenceGrant `v1alpha2`
+  disappear (check `storedVersions` first, see the lab checklist); `Gateway.spec.infrastructure` is now accepted. **Deliberately not 1.5.x**: Istio 1.24
+  has no maximum-version filter and istiod does not become Ready with the 1.5 CRDs (istio/istio#59443); 1.5.x waits for the Istio hops.
+
+Upgrade campaign, phase 2 (the operators, data services and charts that were past support, one commit each; rendered, schema-checked and, where a
+container image exists, run offline; **nothing run on a cluster**). Not in this phase: Istio (still 1.24.2, waived), MinIO (dev profile only, no
+maintained upstream, waiver kept), OpenBao (stays 2.7.1), talos-cloud-controller-manager on the children (0.5.8 moves the CCM to the Talos 1.14 line, the children run Talos 1.13).
+**A fresh install lands on the new versions; a running cluster must hop one minor at a time where the project says so** (docs/patching.md).
+
+- **Longhorn 1.9.2 -> 1.12.1.** A cluster on 1.9 hops 1.10.2 -> 1.11.3 -> 1.12.1 (Longhorn refuses a skipped minor and any downgrade); the preconditions are in
+  `docs/patching.md`. The HelmRelease no longer remediates (install and upgrade `retries: 0`): a failed upgrade is not rolled back by Flux, a person fixes forward.
+  The chart's own NetworkPolicies are switched off (`networkPolicies.restrictInternalTraffic: false`) so the brick's CiliumNetworkPolicy stays the only authority.
+  `defaultSettings.orphanAutoDeletion` is not a chart key and never was in effect: orphan auto-deletion is NOT on.
+- **cert-manager v1.15.3 -> v1.21.2.** `installCRDs` replaced by `crds.enabled` + `crds.keep` (same CRDs). The controller metrics port is renamed
+  `http-metrics`: the VMServiceScrape follows. All Certificates already named their `rotationPolicy`. Step one minor at a time on a running cluster.
+- **Kyverno 1.12.1 -> 1.19.1** (re-vendored). The two cleanup CronJobs no longer exist upstream (their patch and test are gone); PolicyException stays off and
+  `--exceptionNamespace=kyverno` is set; images come from `reg.kyverno.io` (allow-list updated); the CLI test fixtures and CI pin CLI 1.19.1.
+  **1.19 is the last line serving `kyverno.io/v1` ClusterPolicy: the policies must move to `policies.kyverno.io` before 1.20.**
+- **CloudNativePG operator 1.23.1 -> 1.30.1** (re-vendored) and the grafana-db image 16.3 -> 16.15. Every operator upgrade rolls each Cluster with a switchover.
+  **`barmanObjectStore` (used by both Clusters) is removed in CNPG 1.31: stay on 1.30.x until the Barman Cloud plugin replaces it.**
+- **External Secrets Operator 1.2.0 -> 2.13.0** (re-vendored from the chart, local patches re-applied). Released the day it was vendored; upstream supports only the latest minor.
+- **Flux on the children 2.8.8 -> 2.9.6; cluster-api-operator 0.27.0 -> 0.29.0; OpenStack Resource Controller 2.4.0 -> 2.6.0** (what the pinned CAPO v0.15.0 requires);
+  **victoria-metrics-operator 0.65.1 -> 0.68.1** (one rolling restart of the VMAgent, VMAlert, VMSingle and VMAlertmanager pods; the VM component versions are the operator's
+  defaults and move with it, they are not pinned here).
+- **Alloy 0.11.0 -> 1.13.1** (Alloy 1.6.1 -> 1.20.1; the config-reloader image changes, allow-list updated), **Zitadel chart 10.0.2 -> 10.4.0** (v4.19.2, not 4.18.0),
+  **Loki 6.25.0 -> 18.16.2 (3.7.8)** and **Grafana 8.6.4 -> 14.0.1 (13.2.4)**, both now from the `grafana-community` chart repository (new HelmRepository, new Flux egress FQDN).
+  Grafana: the duplicate `tmp` mount is removed and default plugin preinstall is disabled. Zitadel and Grafana database migrations are forward-only: take a CNPG Backup first.
+- **Cilium on the children 1.19.2 -> 1.19.9** (one minor behind the parent foundation, on purpose).
+- Offline checks that now run the real software: Kyverno CLI 1.19.1 (90 fixtures), Alloy 1.20.1 (`validate`, scrub and audit tests), Zitadel v4.19.2 + PostgreSQL (32 checks),
+  Loki 3.7.8 `-verify-config`, Grafana 13.2.4 with the shipped ini and dashboards, CRD-schema validation of the Cluster, ExternalSecret, provider and VM objects.
+
 ### Added
+
+- **Kubelet and apiserver scrapes verify TLS; metrics-server and the kubelet scrapes can too, opt-in** (ANSSI TLS-11, K8S-F14; apps half of
+  B23). The `kube-apiserver` VMServiceScrape no longer sets `insecureSkipVerify`: it verifies against the ServiceAccount CA with
+  `serverName: kubernetes.default.svc`. The new component `apps/flux/components/kubelet-verified-tls` (default off, a cluster adds it to its
+  own overlay, rollback = remove the line) drops `--kubelet-insecure-tls` from metrics-server (it gets `--kubelet-certificate-authority`)
+  and `insecureSkipVerify` from the `kubelet` and `cadvisor` VMNodeScrapes (they get `caFile`). **Enable it only once infra's
+  `kubelet_serving_cert_rotation` is on**: on Talos' default self-signed kubelet certificates `kubectl top` and the node targets would fail.
+  **Rung: mocked/static, not run on a cluster**: `scripts/dev/test-kubelet-verified-tls.py` (in CI) renders both states and applies the Flux
+  patches to the real bricks. **Does NOT**: approve kubelet CSRs or change the kubelets (infra), cover the Grafana-to-Zitadel trust or the
+  Postgres `sslmode` hops (B25), or prove that the apiserver certificate carries `kubernetes.default.svc` on every provider.
+
+- **OpenBao's metrics are scraped and its alerts are deployed** (ANSSI PA-012 R12 and C3.1 in part; LOG-06). The earlier
+  `prometheusrule.yaml` and `servicemonitor.yaml` were never in a kustomization, used Prometheus Operator kinds this platform does
+  not install, and read `openbao_*` metrics: OpenBao 2.7.1 serves `vault_*`. They are replaced by a VMServiceScrape and a VMRule
+  in a new companion brick `observability-openbao` (Flux Kustomization of the same name; picked automatically with
+  observability + OpenBao): `OpenBaoWorkloadSealed`, `OpenBaoNoActiveNode`, `OpenBaoRaftNoFailureTolerance`, `OpenBaoRaftApplyLag`,
+  `OpenBaoMetricsDown`. Metrics need a token on the API port, so a second listener on 8202 serves them without one, on the
+  headless Service only (not on `openbao-ui`, so not through the Gateway route), admitted by the OpenBao network policy for vmagent
+  alone (the old rule named a pod that never existed); vmagent's egress port moves from 8200 to 8202. The scrape verifies the
+  certificate against the CA of `openbao-server-tls`. **Mocked/static: the real OpenBao serves every metric the rules read, sealed
+  and active (harness); vmalert parses the rules and `vmalert-tool` runs the sealed and no-active-node logic on synthetic series.
+  Not run on a cluster:** the operator reading the CA Secret across the scrape's namespace, a sealed pod being scraped, the
+  alerts firing. It does NOT cover the audit log (no Loki ruler) and leaves `scripts/ops/check-alert-metrics.py` (OpenAether-infra)
+  to be pointed at the new rules.
+- **OpenBao logs as JSON, and the audit trail carries `log_type="audit"` in Loki** (ANSSI PA-012 R1, R6 and R23 in part; LOG-15).
+  `log_format = json`, `log_level = info` in OpenBao; an Alloy `stage.match` on `foundation-vault`/`openbao` lines that start
+  `{"time":...,"type":"request"|"response"` adds the label (a real Alloy, `scripts/dev/test-alloy-scrub.sh`: only the audit lines get it).
+  `docs/detection.md` lists the format and level of each component. The `cluster` label stays the constant `management`: only that
+  cluster runs Alloy, and templating it needs a `substituteFrom` the local Docker lane cannot satisfy. Not run on a cluster.
 
 - **Alerts for the log pipeline, the policy engine, Flux, the node disk and clock, and the backups.** 29 rules in
   `vmrule-logging.yaml` (Alloy missing or dropping, Loki push errors, replica down, discards, ingestion burst, Grafana 5xx),
@@ -227,12 +557,77 @@ ANSSI hardening work, not released yet. **Nothing here is a claim of compliance 
 
 ### Fixed
 
-- **Two defects only a real cluster showed, found on the first lab of this wave (OVH, full DAG, 2026-10-15).** The least-privilege RBAC left
-  the config-reloader of each vmagent pod unable to read the Secret the operator generates for it (`vmagent-vmagent`): the init container
-  crash-looped on `secrets ... is forbidden`. A namespaced Role limited to that one Secret (read-only) now exists, and its test checks it is
-  the only Secret read. And the third Loki replica could not schedule on a cluster with two workers because of the chart's hard
-  anti-affinity (see Upgrade notes). Rung: real cloud, once, by hand; the two fixes were applied live by Flux on that cluster, which then
-  settled (every pod Running).
+- **Longhorn's csi-snapshotter no longer errors every 16 seconds (#137).** The `snapshot.storage.k8s.io` CRDs were not installed, so the sidecar failed to list `VolumeSnapshotContent` and
+  `VolumeSnapshotClass` for ever (about 290 error lines per 40 minutes on an idle cluster, three clouds, lab 16) and its pods restarted during the first hour. The chart cannot disable the sidecar
+  (only its replica count and image are values), so the `storage` brick now vendors the three external-snapshotter v8.6.0 CRDs (sha256 lock, Renovate and end-of-life calendar entries).
+  The snapshot controller is NOT shipped: CSI VolumeSnapshots stay unsupported, volume backups use Longhorn's own objects. `test-longhorn-values.py` fails without the CRDs.
+
+- **The Loki PodDisruptionBudget is rendered by Helm 3, which Flux uses (found by CI on the 0.3.0 pull request).** `podDisruptionBudget` was set at the top level of the Loki values, the key chart 18
+  deprecates; Helm 3 merges the empty `singleBinary.podDisruptionBudget` over it and renders no PDB, Helm 4 renders it. The value now sits under `singleBinary`. `test-loki-render.sh`
+  catches it with Helm 3 (it passed on the Helm 4 of the maintainer's host). A cluster that took the 0.3.0 candidates from the labs had no Loki PDB; whether the old chart honoured the top-level key was not checked.
+
+- **A rejected commit signature raises its own alert (infra #337).** kube-state-metrics now exposes the GitRepository condition `SourceVerified` as the label
+  `source_verified` of `gotk_resource_info`, and `FluxSourceNotVerified` (critical, 5 minutes) says "Flux rejected the commit: unsigned or unknown signer" instead of
+  leaving it to the generic `FluxObjectNotReady` after 20 minutes. Silent while `git-verify` is off. Synthetic-series unit test in `vmrules-unittest.yaml` (run by
+  `test-vmrules.sh`); that the condition really reaches the metric needs a cluster with git-verify on.
+
+- **The Kubernetes 1.37 decision is recorded (apps #105, #120).** `docs/patching.md` states the owner decision (keep 1.37.1, labs prove it), what the labs do and
+  do not show, and the per-hop re-read of each add-on's matrix. No automated matrix check: the matrices are prose, not data.
+
+- **VictoriaMetrics and Alertmanager images are pinned, and the operator probe values are real chart keys (apps #117).** VMCluster (`v1.136.0-cluster`),
+  VMAgent and VMAlert (`v1.136.0`) and VMAlertmanager (`v0.31.0`) now set `image.tag` to what operator 0.68.1 chose by default, so nothing moves today
+  and an operator bump no longer moves the storage engine with it. The operator's `probePath`, `livenessProbe` and `readinessProbe` were ignored by
+  the chart; they are now `probe.readiness` / `probe.liveness` `failureThreshold: 10`. New test `scripts/dev/test-vm-pins.py` (CI). VictoriaTraces is not
+  deployed here. Bumping the pins is now a deliberate edit with the operator hop.
+
+- **Zitadel: the recovery of a setup Job that died half way is written down (apps #133).** `docs/traps.md` gives the measured procedure (delete the Job, remove
+  the one `started` event and its unique-constraint row on a first install, reset the HelmRelease) and says to restore from backup instead on a database
+  that holds data. An automatic clean-up is not done (it edits the event store from a hook; needs a cluster, 0.4.0).
+
+- **Longhorn first-install remediation is decided and documented (apps #134).** `install.remediation.retries` stays 0: Helm's remediation is an
+  uninstall, and Longhorn's pre-delete Job refuses it while `deleting-confirmation-flag` is false (read in longhorn-manager v1.12.1) and could remove
+  data when it is true, so a retry would strand the release instead. The one-command reset after a transient first-install error is in
+  `docs/patching.md` ("A first install that stalls"); `test-longhorn-values.py` pins the choice. An automatic retry is left to 0.4.0.
+
+- **Longhorn: the dead `defaultSettings` keys are gone and orphan auto-deletion stays off on purpose (apps #115).** `orphanAutoDeletion` and
+  `defaultSettings.backupTarget` are not keys of the chart (1.12.1 reads `orphanResourceAutoDeletion` and `defaultBackupStore.backupTarget`);
+  they were silently dropped, and the comment claimed orphan deletion was on. It is not, and is left off: an orphan is replica data
+  with no replica object, which a restored etcd or a rebuilt node also looks like. New test `scripts/dev/test-longhorn-values.py` (CI) fails on a
+  `defaultSettings` key the pinned chart does not read. No cluster effect: the keys were already ignored.
+
+- **The two Gateway pods are spread over the nodes (lab 15c W2 follow-up).** The HPA floor of 2 and the PDB (dc6e12f) let a drain evict one
+  pod, but both replicas had landed on the same node, so a node loss still cut the ingress. Istio 1.24 offers no scheduling setting for the
+  Deployment it generates (`infrastructure.parametersRef` is in the CRDs, istiod 1.24 does not read it), so a Kyverno mutation
+  (`kyverno-policies/spread-gateway-pods.yaml`, pods of `openaether-gateway` at CREATE) adds a `topologySpreadConstraint` and a preferred
+  anti-affinity on the hostname. Soft on purpose: a one-worker cluster still runs both. Running pods keep their node until recreated
+  (`kubectl -n services-gateway rollout restart deployment openaether-gateway-istio`). Test: Kyverno CLI mutation test in
+  `scripts/dev/test-kyverno-policies.sh`; whether the scheduler then separates the pods needs a cluster.
+
+- **Loki chart hops are not rolled back by Helm, and get a 15 minute budget (apps #121, lab 15c).** The in-place hop 6.25 -> 6.55 timed out at
+  the default 5 minutes (loki-1 never Ready: the memberlist join dialled the address of a pod that no longer existed) and the automatic Helm
+  rollback re-rolled the StatefulSet to the old chart, which stalled the same way and left it at 1 of 2 Ready. `upgrade.timeout: 15m`,
+  `upgrade.remediation.retries: 0` and `remediateLastFailure: false` now; a fresh install keeps its three retries. Chart 18 starts Loki with
+  `-memberlist.advertise-addr=$(POD_IP)` (checked in the render). The exact recovery is in `docs/patching.md`, "Loki chart hop". Test:
+  `scripts/dev/test-loki-render.sh` (fails with the old values). Static; the stale-address behaviour itself needs a cluster.
+
+- **Certificates: rotation policy written down on every one, and a guard that routes are covered** (review of B18/B19; static,
+  not run on a cluster). `openbao-ca` and `openbao-ca-bundle` now say `privateKey.rotationPolicy: Never` (the value cert-manager
+  applies today, so no behaviour change on 1.15; without it the 1.18 hop would re-key the 10-year listener CA, as
+  `docs/patching.md` already warned). `scripts/dev/test-certificates.py` (CI) fails if a Certificate omits the policy or an
+  HTTPRoute hostname is missing from the Gateway Certificate's `dnsNames` (the role refuses wildcards). It does not stop a
+  route added from a cluster's own overlay outside this repository. `docs/key-inventory.md` renewal windows corrected.
+- **metrics-server args guard** (review of B23, static): `scripts/dev/test-kubelet-verified-tls.py` now checks that the
+  `kubelet-verified-tls` component leaves the other metrics-server args in place (the Flux patch replaces the list), so an arg
+  added to the base later cannot vanish silently when the component is on. Does not remove the list-replace itself.
+- **Alloy's control-plane toleration was ignored** (found while adding the audit collector; LOG-01). `tolerations` sat at the
+  top of the `alloy` HelmRelease values, where the chart does not read it (`controller.tolerations` is the key), so the
+  pod-log collector never ran on a tainted control plane. It now does. The same file's top-level `resources` is also not a
+  chart value (`alloy.resources` is): left as is, the limits would be a behaviour change on a running cluster, to be decided
+  with measurements. Rung: `helm template`, not run on a cluster.
+
+- **local-path-provisioner no longer runs with `--debug`** (ANSSI PA-012 R6; LOG-15). It is the default StorageClass of the base
+  profile and logged every volume path and helper-pod step. Static only.
+
 - **Zitadel's access log no longer carries tokens from a query string into Loki (review of the ANSSI branch, L9).** Zitadel's
   access log keeps the request URL, and an OIDC logout puts the ID token in it (`end_session?id_token_hint=...`): checked on a real
   Zitadel v4.14, the token reached stdout, and Loki keeps lines for a year. Alloy gets a `loki.process "scrub"` stage for the

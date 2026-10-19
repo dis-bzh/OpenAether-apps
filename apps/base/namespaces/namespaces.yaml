@@ -60,20 +60,49 @@ kind: Namespace
 metadata:
   name: services-observability
   labels:
-    # enforce: privileged — REQUIRED by prometheus-node-exporter (DaemonSet), which
-    # mounts hostPath /proc /sys /host + hostNetwork/hostPID/hostPort 9100 to
-    # expose system metrics. Those needs violate baseline WITH NO possible
-    # workaround (the hostPath is intrinsic to its function). Since PSA has no
-    # per-pod granularity, the whole namespace must go privileged.
-    # Consistent with designating "observability = trusted infrastructure":
+    # enforce: privileged by default (the released behaviour). node-exporter, the one workload here that needs
+    # hostPath/hostNetwork/hostPID, has its own privileged namespace (services-observability-node, below), so baseline
+    # would hold for everything left here (Grafana, Loki, vm-*, Alloy, kube-state-metrics): opt in with
+    # apps/flux/components/psa-baseline after its server-side dry run (see that file). The rest of the stack stays:
     #   - outside the ambient mesh (see the block above)
-    #   - excluded from Kyverno disallow-root-user (node-exporter/loki specific uids)
+    #   - excluded from Kyverno disallow-root-user (a broad exclusion, see that policy)
     #   - real security = L3/L4 CiliumNetworkPolicy (observability/networkpolicy.yaml)
-    # warn/audit stay restricted → drift of the other pods (grafana/loki/vm-*)
-    # remains visible in the apiserver logs without blocking node-exporter.
+    # warn/audit stay restricted → drift of the pods (grafana/loki/vm-*) stays visible in the apiserver logs.
     pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: "observability"
+---
+# prometheus-node-exporter ALONE: it mounts hostPath /proc /sys / and runs hostNetwork/hostPID on port 9100, which only
+# the privileged Pod Security level allows, and PSA has no per-pod granularity. The rest of the observability
+# stack stays in services-observability. Nothing else may be deployed here
+# (scripts/dev/test-node-exporter-namespace.py); Kyverno exempts node-exporter here by pod name.
+# Out of the mesh like services-observability.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: services-observability-node
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/audit: privileged
+    openaether.io/managed: "true"
+    openaether.io/component: "node-exporter"
+---
+# The control-plane audit-log collector ALONE (alloy-audit): it mounts the node's /var/log/audit/kube read-only, a
+# hostPath, which only the privileged Pod Security level allows. Same reasoning as services-observability-node above,
+# in its own namespace so that neither node-exporter nor the rest of the stack inherits the exemption. Nothing else may
+# be deployed here (scripts/dev/test-audit-collector.py); Kyverno exempts alloy-audit by pod name. Out of the mesh like
+# the rest of the observability stack.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: services-observability-audit
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/audit: privileged
+    openaether.io/managed: "true"
+    openaether.io/component: "audit-collector"

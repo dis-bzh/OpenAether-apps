@@ -45,6 +45,8 @@ spec:
         - ports:
             - port: "8429"
               protocol: TCP
+            - port: "8435"   # config-reloader sidecar (peer scrape, VM operator 0.68)
+              protocol: TCP
   egress:
     # DNS
     - toEndpoints:
@@ -85,11 +87,14 @@ spec:
         - ports:
             - port: "8080"   # kube-state-metrics, vmalert, many operators
               protocol: TCP
-            - port: "8200"   # OpenBao metrics
+            - port: "8202"   # OpenBao metrics listener (the API port 8200 is not needed to scrape)
               protocol: TCP
             - port: "8428"   # VMSingle (if present)
               protocol: TCP
             - port: "8429"   # vmagent self-metrics (peer scrape)
+              protocol: TCP
+            # config-reloader sidecar of vmagent and vmalert (VM operator 0.68 scrape; lab 12: Policy denied)
+            - port: "8435"
               protocol: TCP
             - port: "8480"   # vminsert
               protocol: TCP
@@ -396,6 +401,8 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
+            - port: "8435"   # config-reloader sidecar (VM operator 0.68 scrape)
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:
@@ -461,6 +468,8 @@ spec:
         - ports:
             - port: "9093"
               protocol: TCP
+            - port: "8435"   # config-reloader sidecar (VM operator 0.68 scrape)
+              protocol: TCP
   egress:
     # ⚠️ `rules.dns` is what makes toFQDNs work at all: without the DNS proxy
     # observing the lookup, Cilium never learns the IP behind hooks.slack.com
@@ -524,6 +533,15 @@ spec:
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: alloy
+      toPorts:
+        - ports:
+            - port: "3100"
+              protocol: TCP
+    # alloy-audit (control-plane audit log), from its own namespace
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability-audit
             app.kubernetes.io/name: alloy
       toPorts:
         - ports:
@@ -670,6 +688,51 @@ spec:
     # fallback toEntities → k8s SD (Alloy/vmagent/Grafana sidecar) breaks.
     - toEntities:
         - kube-apiserver
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: loki
+      toPorts:
+        - ports:
+            - port: "3100"
+              protocol: TCP
+
+# ── alloy-audit (DaemonSet on the control planes, own namespace) ───
+# egress: DNS + Loki :3100 only (it reads a local file: no kube-apiserver rule on purpose)
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: alloy-audit
+  namespace: services-observability-audit
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: alloy-audit
+spec:
+  description: "alloy-audit: egress DNS + Loki :3100 only; ingress vmagent :12345 (metrics)."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "12345"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability

@@ -43,6 +43,7 @@ spec:
         - matchName: istio-release.storage.googleapis.com
         - matchName: victoriametrics.github.io
         - matchName: grafana.github.io
+        - matchName: grafana-community.github.io
         - matchName: prometheus-community.github.io
         - matchName: kubernetes-sigs.github.io
       toPorts:
@@ -50,13 +51,8 @@ spec:
             - port: "443"
               protocol: TCP
     # ===== CERT-MANAGER =====
-    - toFQDNs:
-        - matchName: acme-v02.api.letsencrypt.org
-        - matchName: acme-staging-v02.api.letsencrypt.org
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
+    # No external egress: every issuer is in-cluster (OpenBao, self-signed), none is ACME. An ACME
+    # ClusterIssuer needs its directory FQDN (e.g. acme-v02.api.letsencrypt.org:443) added here.
     # ===== CAPI-SYSTEM (Cluster API controllers) =====
     # Cilium does not support toFQDNs + toCIDR in the same rule → separate rules
     - toFQDNs:

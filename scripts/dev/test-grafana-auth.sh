@@ -31,6 +31,14 @@ def release(env):
             return d
     sys.exit("no grafana HelmRelease in " + env)
 
+def repo_url(env, rel):
+    # The chart repository is whatever HelmRepository the release names (it moved to grafana-community in 2026).
+    name = rel["spec"]["chart"]["spec"]["sourceRef"]["name"]
+    for d in yaml.safe_load_all(open(f"{work}/{env}.yaml")):
+        if d and d.get("kind") == "HelmRepository" and d["metadata"]["name"] == name:
+            return d["spec"]["url"]
+    sys.exit(f"no HelmRepository {name} in {env}")
+
 base, only = release("base"), release("only")
 bi, oi = base["spec"]["values"]["grafana.ini"], only["spec"]["values"]["grafana.ini"]
 bo, oo = bi["auth.generic_oauth"], oi["auth.generic_oauth"]
@@ -76,7 +84,7 @@ else:
     for env, rel in (("base", base), ("only", only)):
         spec = rel["spec"]["chart"]["spec"]
         yaml.safe_dump(rel["spec"]["values"], open(f"{work}/{env}-values.yaml", "w"))
-        out = subprocess.run(["helm", "template", "grafana", spec["chart"], "--repo", "https://grafana.github.io/helm-charts",
+        out = subprocess.run(["helm", "template", "grafana", spec["chart"], "--repo", repo_url(env, rel),
                               "--version", spec["version"], "-n", "services-observability", "-f", f"{work}/{env}-values.yaml"],
                              capture_output=True, text=True)
         if out.returncode:

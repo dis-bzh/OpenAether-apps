@@ -22,6 +22,27 @@ spec:
         - ports:
             - port: "9500"
               protocol: TCP
+            # The managers call each other's conversion (9501) and admission (9502) webhooks through their Services:
+            # allowed on both sides, or Cilium drops them (lab 11: 66 denied flows).
+            - port: "9501"
+              protocol: TCP
+            - port: "9502"
+              protocol: TCP
+            # Longhorn 1.12: the share-manager reaches the manager's recovery backend on 9503 (lab 12: denied, RWX
+            # never mounted).
+            - port: "9503"
+              protocol: TCP
+            # The managers query the share-manager pod's gRPC (serving state, remount) on 9600: without it an RWX
+            # volume never
+            # comes back after its share-manager restarts (lab 12: "Failed to verify serving state", Policy denied).
+            - port: "9600"
+              protocol: TCP
+            # Replica/engine data path between instance managers on different nodes: the instance-manager port range
+            # (default 10000-30000, setting v1-data-engine-port-range). Without it a 2-replica volume stays degraded
+            # and its second replica never rebuilds (lab 12: 'dial tcp ...:10010 i/o timeout', Policy denied).
+            - port: "10000"
+              endPort: 30000
+              protocol: TCP
             - port: "8500"
               protocol: TCP
             - port: "8501"
@@ -60,6 +81,17 @@ spec:
         - ports:
             - port: "80"
               protocol: TCP
+    # RWX: the NFS client is the kernel of the node that mounts the volume, so the source of the flow to the
+    # share-manager pod is the node (host entity, remote-node when the client runs on another node). Without this
+    # a client on a different node than the share-manager never mounted (lab 13: Policy denied on :2049, MountDevice
+    # DeadlineExceeded); the same-node case only worked because the local host is always allowed.
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "2049"
+              protocol: TCP
   egress:
     # Intra-namespace: allow all (Longhorn pods don't always have ns label)
     - toEndpoints:
@@ -67,6 +99,17 @@ spec:
       toPorts:
         - ports:
             - port: "9500"
+              protocol: TCP
+            - port: "9501"
+              protocol: TCP
+            - port: "9502"
+              protocol: TCP
+            - port: "9503"
+              protocol: TCP
+            - port: "9600"
+              protocol: TCP
+            - port: "10000"
+              endPort: 30000
               protocol: TCP
             - port: "8500"
               protocol: TCP

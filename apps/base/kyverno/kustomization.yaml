@@ -3,27 +3,24 @@ kind: Kustomization
 
 resources:
   - networkpolicy.yaml
-  # VENDORED from https://github.com/kyverno/kyverno/releases/download/v1.18.2/install.yaml
-  #   sha256 888e26a13fa34b72d6fc321e4b29af4857539f46f89b606f624fddb518db4ebf
+  # VENDORED install.yaml of Kyverno v1.19.1, unmodified (the dump is replaced whole on re-vendoring, every local
+  # change is a patch below):
+  #   https://github.com/kyverno/kyverno/releases/download/v1.19.1/install.yaml
+  #   sha256 of the vendored file: d3322cb346d3d42dd0f41e230b0d1d7bc5619960e1c36fdac4d9151d724b88e6
   #
-  # This resource was a remote URL until 2026-07-27: Flux reconciliation then
-  # depended on GitHub's availability, the render was not reproducible offline,
-  # and nothing verified the downloaded artifact's integrity. Same reason — and
-  # same shape — as the vendoring of `cnpg-1.23.1.yaml` ("avoids a remote fetch
-  # (DNS/IPv6)"), of `cilium.yaml` and of `flux-install.yaml` on the infra side.
-  # The render was verified IDENTICAL before and after the switch.
+  # Same shape as `cnpg-*.yaml`: no remote fetch, a render reproducible offline, a hash recorded in
+  # apps/vendored-dumps.sha256. 1.19 is the last line that serves kyverno.io/v1 ClusterPolicy (removed in 1.20): the
+  # repo's policies must move to policies.kyverno.io before the next minor.
   #
-  #
-  # v1.12.1: upstream fix for the reports-controller backReconcile panic
-  # "index out of range [0] with length 0" (kyverno#10123, PR #10148).
-  # v1.12.0 → reports-controller CrashLoop (cpolr aggregation only,
-  # admission/enforce unaffected, but noisy and cluster reports missing).
-  #
-  # To upgrade: download the new install.yaml, replace this file, update the
-  # sha256 above, and replay the render diff.
-  - kyverno-1.12.1.yaml
+  # To upgrade: download the new install.yaml, replace this file, update the sha256 above and in the lock
+  # (scripts/dev/check-vendored-lock.sh --update), re-run scripts/dev/test-kyverno-policies.sh with the matching CLI.
+  - kyverno-1.19.1.yaml
 
 patches:
+  # CPU limits for the four controllers (the vendored file bounds memory, not CPU). FT082-R10.
+  # NOT measured on a cluster: 1 CPU for the admission webhook (a throttled webhook times out the API server's
+  # requests), 500m for the others. Tighten from `kubectl top pod -n kyverno` (LAB-CHECKLIST B21).
+  - path: patch-cpu-limits.yaml
   # The kyverno Namespace is ALREADY declared by install.yaml (vendored file).
   # Redeclaring it under resources: causes "may not add resource with an
   # already registered id: Namespace/kyverno". Our labels (Istio ambient + PSS
@@ -33,42 +30,21 @@ patches:
     target:
       kind: Namespace
       name: kyverno
-  # The two cleanup CronJobs (#48). The vendored image (bitnami/kubectl) is no longer published, and the previous patch
-  # downloaded kubectl from dl.k8s.io at every run: the egress policy allows only github.com and
-  # raw.githubusercontent.com, so the run hung ~2m20s, and `wget ... && ...` chained the script behind it, so a
-  # failed one left COUNT empty and exited 0. Now: an allow-listed image that already carries kubectl and bash
-  # (docker.io/alpine/k8s, also run by openbao-init), the upstream script untouched (`set -euo pipefail`: a failing
-  # `kubectl get` fails the Job), nothing downloaded.
+  # PolicyException is off in the dump (--enablePolicyException=false) and no PolicyException is shipped. If it is ever
+  # switched on, exceptions are accepted in this namespace only: the upstream default for an empty value is "none
+  # configured", and "*" would let any namespace's owner exempt itself from a policy (CVE-2024-48921, fixed in 1.13).
   - target:
-      kind: CronJob
-      name: kyverno-cleanup-admission-reports
-      namespace: kyverno
-    patch: &cleanup-patch |-
-      - op: replace
-        path: /spec/jobTemplate/spec/template/spec/containers/0/image
-        value: docker.io/alpine/k8s:1.36.5
-      # Numeric, because the image runs as root by default and runAsNonRoot needs a uid it can verify.
+      kind: Deployment
+      name: kyverno-admission-controller
+    patch: &exception-ns |-
       - op: add
-        path: /spec/jobTemplate/spec/template/spec/containers/0/securityContext/runAsUser
-        value: 65534
-      # readOnlyRootFilesystem: kubectl's discovery cache needs a writable HOME.
-      - op: add
-        path: /spec/jobTemplate/spec/template/spec/containers/0/env
-        value:
-          - name: HOME
-            value: /tmp
-      - op: add
-        path: /spec/jobTemplate/spec/template/spec/volumes
-        value:
-          - name: tmp
-            emptyDir: {}
-      - op: add
-        path: /spec/jobTemplate/spec/template/spec/containers/0/volumeMounts
-        value:
-          - mountPath: /tmp
-            name: tmp
+        path: /spec/template/spec/containers/0/args/-
+        value: --exceptionNamespace=kyverno
   - target:
-      kind: CronJob
-      name: kyverno-cleanup-cluster-admission-reports
-      namespace: kyverno
-    patch: *cleanup-patch
+      kind: Deployment
+      name: kyverno-background-controller
+    patch: *exception-ns
+  - target:
+      kind: Deployment
+      name: kyverno-reports-controller
+    patch: *exception-ns

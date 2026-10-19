@@ -61,6 +61,39 @@ anymore is not erased: only deleting the objects is.
    `backups-<env>` bucket of these backups (and its `-backup` twin, per the `backup.tf` convention) is created **by the operator**;
    the image buckets come from `talos-image.sh`. Local: the MinIO chart (`backups-primary` / `backups-replica` in its values).
 
+## S3 rights of a dedicated key pair
+
+The contract for a pair limited to the backups bucket (`backup/s3-primary`, `backup/s3-replica`). Each consumer needs these
+and nothing else; the bucket policy (or the provider's equivalent) must carry them on the right resource, bucket or objects:
+
+| Consumer | S3 action (API call) | On |
+|---|---|---|
+| restic, Barman, Longhorn | `ListBucket` (ListObjects, ListObjectsV2) | the bucket |
+| **Barman (CNPG WAL archive and base backup)** | **`ListBucket` as HeadBucket**: `barman-cloud-check-wal-archive` and every WAL archive start with HeadBucket; a refusal is `ContinuousArchiving=False`, "exit status 4", `HeadBucket ... 403` | the bucket |
+| all | `GetObject` (GetObject, HeadObject), `PutObject` (PutObject, CopyObject, CreateMultipartUpload, UploadPart, CompleteMultipartUpload), `DeleteObject` (DeleteObject, DeleteObjects: retention and `restic forget --prune`) | the objects (`<bucket>/*`) |
+| restic, Barman, Longhorn (large objects) | `AbortMultipartUpload`, `ListBucketMultipartUploads` (ListMultipartUploads), `ListMultipartUploadParts` (ListParts) | objects / the bucket |
+| Longhorn | `GetBucketLocation` (granted in the lab; not shown to be required) | the bucket |
+
+Withhold, so that a stolen pair cannot rewrite history: `DeleteObjectVersion`, bucket versioning, lifecycle, object-lock and
+retention changes, bucket deletion. Check a pair with `scripts/ops/check-backup-key-rights.sh` (every right above; reads and
+writes only under `.oa-rights-probe/`, removed at the end) BEFORE seeding it, and the Cluster condition after:
+`kubectl get cluster -n foundation-databases <name> -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")].status}'` is `True`.
+
+**Scaleway: the bucket policy is not enough.** Both layers must allow the call (bucket policy version `2023-04-17`: an action
+is permitted only if the bucket policy allows it AND an IAM policy allows the principal). HeadBucket maps to `s3:ListBucket`
+in the bucket policy, but in IAM it belongs only to the permission sets `ObjectStorageBucketsRead`, `ObjectStorageReadOnly`
+and `ObjectStorageFullAccess`, not to `ObjectStorageObjectsRead`/`Write`/`Delete`. A pair whose IAM policy holds only the
+`ObjectStorageObjects*` sets lists and writes (restic and Longhorn work) and gets a 403 on HeadBucket (lab 11, measured with a
+bucket policy granting ListBucket, GetBucketLocation and the object rights). Give the application's IAM policy
+`ObjectStorageBucketsRead` next to the object sets: it also lets the pair list the bucket NAMES of the project, which the bucket
+policy cannot narrow. Run in lab 12 (Scaleway): with `ObjectStorageBucketsRead` next to the three object sets the pair's HeadBucket succeeds
+(`check-backup-key-rights.sh`: every right held) and both CNPG clusters report `ContinuousArchiving=True`. **The IAM sets are
+project-wide, so the bucket policies carry the isolation, and a bucket WITHOUT a policy is open to the pair**: with policies
+only on the backups and logs buckets the pairs listed the tfstate and management buckets (`s3-isolation-check.sh`: 4 of 8
+assertions failed); with an operator-only policy on each of the other buckets, 10 of 10 held, the delete of a real object
+version included (`OA_ISOLATION_REAL_VERSION=1`). OVH and Outscale: not verified; the AWS rule (HeadBucket needs `s3:ListBucket`) is the
+expectation.
+
 ## Order of a full recovery
 
 The apps-side links of the chain, in the order that works (the infra documents carry the cluster-up step before them):
@@ -125,9 +158,10 @@ spec:
         targetTime: "2026-01-01 12:00:00+00"   # UTC, inside the archive range
   externalClusters:
     - name: zitadel-db-origin
-      # The archive lives under <destinationPath>/<serverName>.
-      serverName: zitadel-db
       barmanObjectStore:
+        # The archive lives under <destinationPath>/<serverName>; serverName belongs INSIDE barmanObjectStore (at the
+        # externalCluster level the API server refuses the manifest: unknown field).
+        serverName: zitadel-db
         destinationPath: s3://<bucket>/cnpg/zitadel-db   # as in cnpg/cluster.yaml
         endpointURL: <endpoint>
         s3Credentials:
@@ -136,8 +170,8 @@ spec:
 ```
 
 Check with `kubectl cnpg status zitadel-db-restore` and a `SELECT` on the data, then delete the scratch Cluster (its PVC is
-`Retain`: delete it too). This procedure is written from the CNPG 1.23 documentation and has NOT been run on a cluster: treat the
-first run as the test. The PITR chain lives on the cluster's own provider only (one destination in CNPG 1.23); the second provider
+`Retain`: delete it too). Run on a real cluster in lab 12 (CNPG 1.30.1, Scaleway): a Backup of zitadel-db, then this restore into a new
+Cluster, healthy in about 1 minute with the same 150 tables as the origin. The PITR chain lives on the cluster's own provider only (one destination in CNPG 1.23); the second provider
 holds the daily `pg_dump` (RPO 24 h). The barman objects carry no client-side encryption (CNPG 1.23 offers server-side AES256/KMS
 only, unset here): they rely on the bucket's own protection.
 

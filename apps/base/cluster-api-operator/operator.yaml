@@ -20,7 +20,7 @@ spec:
   chart:
     spec:
       chart: cluster-api-operator
-      version: "0.27.0"
+      version: "0.29.0"
       sourceRef:
         kind: HelmRepository
         name: capi-operator
@@ -35,6 +35,50 @@ spec:
     remediation:
       retries: 3
   values:
+    # distroless nonroot uid of the CAPI images; Kyverno reads the container level (#47).
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 65532
+      fsGroup: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      manager:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
+    # The chart's default volume plus a writable /tmp and /home/nonroot (the rest of the filesystem is read-only). The
+    # clusterctl config reader the operator embeds creates $HOME/.config/cluster-api before every reconcile; without a
+    # writable home no provider is ever installed ("could not create any of the following paths: [/home/nonroot/.config
+    # /etc/xdg]", lab 11). A list value replaces the chart's list, so the webhook certificate is repeated here.
+    volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: capi-operator-webhook-service-cert
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+      - name: home
+        emptyDir:
+          sizeLimit: 16Mi
+    volumeMounts:
+      manager:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /home/nonroot
+          name: home
     resources:
       manager:
         limits:

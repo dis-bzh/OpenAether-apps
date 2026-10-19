@@ -105,3 +105,156 @@ tests:
       - eval_time: 3h
         alertname: KyvernoMetricsAbsent
         exp_alerts: []
+  # OpenBao (observability-openbao/vmrule.yaml). The series names are the ones a real OpenBao 2.7.1 serves; the harness
+  # scripts/dev/test-openbao-bootstrap.sh checks that every metric the rules read exists there.
+  - name: one OpenBao pod sealed, one unsealed that still has its old series
+    interval: 10m
+    input_series:
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-1", cluster=""}'
+        values: '0+0x300'
+      # The pod that unsealed still exposes its pre-unseal series (cluster="") for the retention time: the sum hides it.
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-0", cluster=""}'
+        values: '0+0x300'
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-0", cluster="vault-cluster-1"}'
+        values: '1+0x300'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: OpenBaoWorkloadSealed
+        exp_alerts:
+          - exp_labels: {pod: openbao-1, severity: critical, component: openbao}
+            exp_annotations:
+              summary: "OpenBao pod openbao-1 is sealed"
+              description: >-
+                It unseals itself from the static key in the Secret openbao-seal-key: check that the Secret exists and
+                is mounted (kubectl -n foundation-vault describe pod openbao-1), that the key is the one the data was
+                sealed with, and the pod logs.
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md"
+  - name: OpenBao has no active node (a standby reports 0, a sealed pod reports nothing)
+    interval: 10m
+    input_series:
+      - series: 'vault_core_active{namespace="foundation-vault", pod="openbao-0", cluster="vault-cluster-1"}'
+        values: '0+0x300'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: OpenBaoNoActiveNode
+        exp_alerts:
+          - exp_labels: {severity: critical, component: openbao}
+            exp_annotations:
+              summary: "OpenBao has no active node"
+              description: >-
+                No pod reports itself active (or none is scraped): no secret can be read or written and no certificate
+                is issued. Look at raft first: bao operator raft list-peers from a pod that answers.
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md"
+  - name: OpenBao with one active node
+    interval: 10m
+    input_series:
+      - series: 'vault_core_active{namespace="foundation-vault", pod="openbao-0", cluster="vault-cluster-1"}'
+        values: '1+0x300'
+      - series: 'vault_core_active{namespace="foundation-vault", pod="openbao-1", cluster="vault-cluster-1"}'
+        values: '0+0x300'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: OpenBaoNoActiveNode
+        exp_alerts: []
+  # The audit file is read by one collector per control plane: a flat counter on one of them is silence.
+  - name: audit log read on one control plane stalls
+    interval: 1m
+    input_series:
+      - series: 'loki_source_file_read_lines_total{path="/var/log/audit/kube/kube-apiserver.log", instance="cp-a"}'
+        values: '0+60x80'
+      - series: 'loki_source_file_read_lines_total{path="/var/log/audit/kube/kube-apiserver.log", instance="cp-b"}'
+        values: '0+60x30 1800+0x50'   # stalls after 30 min
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: K8sAuditLogSilent
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: K8sAuditLogSilent
+        exp_alerts:
+          - exp_labels: {instance: cp-b, severity: critical, component: logging}
+            exp_annotations:
+              summary: "No Kubernetes API audit line read on cp-b for 15 min"
+              description: >-
+                kubectl -n services-observability-audit logs ds/alloy-audit (permission denied? file missing?), then
+                talosctl -n <control plane> ls /var/log/audit/kube. The audit trail is not reaching Loki.
+  # A CNPG instance pod stays Completed after a node shutdown (CNPG 1.23.1); a Job's finished pod must not alert.
+  - name: CNPG instance pod Succeeded, and a dump Job pod Succeeded
+    interval: 1m
+    input_series:
+      - series: 'kube_pod_status_phase{namespace="foundation-databases", pod="zitadel-db-1", phase="Succeeded"}'
+        values: '0+0x5 1+0x40'   # Succeeded from minute 6
+      - series: >-
+          kube_pod_owner{namespace="foundation-databases", pod="zitadel-db-1", owner_kind="Cluster"}
+        values: '1+0x45'
+      - series: 'kube_pod_status_phase{namespace="foundation-databases", pod="cnpg-dump-1-abc", phase="Succeeded"}'
+        values: '1+0x45'
+      - series: >-
+          kube_pod_owner{namespace="foundation-databases", pod="cnpg-dump-1-abc", owner_kind="Job"}
+        values: '1+0x45'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: CnpgInstancePodSucceeded
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: CnpgInstancePodSucceeded
+        exp_alerts:
+          - exp_labels:
+              {namespace: foundation-databases, pod: zitadel-db-1, phase: Succeeded, severity: critical,
+               component: databases}
+            exp_annotations:
+              summary: "CNPG instance pod zitadel-db-1 is Completed and will not be restarted"
+              description: >-
+                Left by a node shutdown (reboot without drain).
+                kubectl delete pod -n foundation-databases zitadel-db-1
+                (the PVC stays; the operator recreates the pod). Never delete the PVC. docs/traps.md, Databases.
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/traps.md"
+  # An OCI HelmRepository never gets a Ready condition (ready=""): it must not alert, a failing HelmRelease must.
+  - name: Flux object without a Ready condition (OCI HelmRepository) does not alert
+    interval: 1m
+    input_series:
+      # yamllint disable-line rule:line-length
+      - series: 'gotk_resource_info{customresource_kind="HelmRepository", exported_namespace="capi-clusters", name="talos-ccm", ready="", suspended=""}'
+        values: '1+0x60'
+      # yamllint disable-line rule:line-length
+      - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability", name="grafana", ready="False", suspended=""}'
+        values: '1+0x60'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: FluxObjectNotReady
+        exp_alerts:
+          - exp_labels:
+              {customresource_kind: HelmRelease, exported_namespace: services-observability, name: grafana,
+               severity: warning, component: flux}
+            exp_annotations:
+              summary: "Flux HelmRelease grafana is not Ready"
+              description: >-
+                flux get all -A, then kubectl describe HelmRelease
+                -n services-observability grafana. Objects that depend on it wait too.
+  # A rejected signature is named at once (infra #337); a verified or unverified-because-off source does not alert.
+  - name: Flux source with a rejected signature alerts, a verified one does not
+    interval: 1m
+    input_series:
+      # yamllint disable-line rule:line-length
+      - series: 'gotk_resource_info{customresource_kind="GitRepository", exported_namespace="flux-system", name="openaether", source_verified="False"}'
+        values: '1+0x30'
+      # yamllint disable-line rule:line-length
+      - series: 'gotk_resource_info{customresource_kind="GitRepository", exported_namespace="flux-system", name="other", source_verified="True"}'
+        values: '1+0x30'
+      # yamllint disable-line rule:line-length
+      - series: 'gotk_resource_info{customresource_kind="GitRepository", exported_namespace="flux-system", name="unverified-off", source_verified=""}'
+        values: '1+0x30'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FluxSourceNotVerified
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FluxSourceNotVerified
+        exp_alerts:
+          - exp_labels:
+              {exported_namespace: flux-system, name: openaether, severity: critical, component: flux}
+            exp_annotations:
+              summary: "Flux rejected the commit of GitRepository openaether: unsigned or unknown signer"
+              description: >-
+                kubectl describe gitrepository -n flux-system openaether
+                (condition SourceVerified), then git log --show-signature on the branch. Sign the push with a
+                registered key or remove the unexpected commit; docs/signed-commits.md.

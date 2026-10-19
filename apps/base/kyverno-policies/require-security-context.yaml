@@ -1,5 +1,5 @@
 # OpenAether 0.5.0 — Require SecurityContext on all containers
-# Blocks any pod without a container-level securityContext.
+# Reports (Audit) any pod without the restricted-level security context.
 # Exclusions: namespaces privileged (longhorn, istio-cni, capi, local-path)
 # where the workloads legitimately need privileges.
 apiVersion: kyverno.io/v1
@@ -15,6 +15,10 @@ metadata:
       allowPrivilegeEscalation:false, and seccompProfile RuntimeDefault.
 spec:
   validationFailureAction: Audit
+  # Enforce only in a namespace carrying the label below (docs/kyverno-enforcement.md); none does, so every namespace
+  # stays in Audit. Spelled per rule (`validate.failureActionOverrides`, Kyverno 1.13+): 1.19.1 ignores the spec-level
+  # `validationFailureActionOverrides` at all (a hostNetwork pod was admitted in a labelled namespace; lab 15A, OVH).
+  # Rollback: remove the label.
   background: true
   rules:
     - name: check-container-security-context
@@ -23,7 +27,10 @@ spec:
         - resources:
             kinds:
               - Pod
-      exclude:
+            # CREATE only: an update of a pod that already runs (label patch, finalizer) is never denied by Enforce.
+            operations:
+              - CREATE
+      exclude: &exclude
         any:
         - resources:
             namespaces:
@@ -44,29 +51,94 @@ spec:
             names:
               - "ztunnel-*"
       validate:
+        failureAction: Audit
+        failureActionOverrides:
+          - action: Enforce
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-require-security-context: "true"
         message: >-
-          Containers must have securityContext: runAsNonRoot=true,
-          allowPrivilegeEscalation=false, capabilities.drop=["ALL"],
-          seccompProfile.type=RuntimeDefault.
+          Containers (initContainers included) must set allowPrivilegeEscalation=false and
+          capabilities.drop=["ALL"]: both exist at the container level only.
         pattern:
           spec:
             containers:
             - securityContext:
-                runAsNonRoot: true
                 allowPrivilegeEscalation: false
                 capabilities:
                   drop:
                     - ALL
-                seccompProfile:
-                  type: RuntimeDefault
             # Conditional anchor: a pod WITHOUT initContainers is compliant. Written bare, the key itself
             # was required and 13 of the pods measured on a fresh cluster failed only there (#47).
             =(initContainers):
             - securityContext:
-                runAsNonRoot: true
                 allowPrivilegeEscalation: false
                 capabilities:
                   drop:
                     - ALL
+    # runAsNonRoot and seccompProfile exist at both levels; the pod-level one is the default of every container,
+    # so either form satisfies the restricted profile (same reasoning as disallow-root-user).
+    - name: check-run-as-non-root
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            # CREATE only: an update of a pod that already runs (label patch, finalizer) is never denied by Enforce.
+            operations:
+              - CREATE
+      exclude: *exclude
+      validate:
+        failureAction: Audit
+        failureActionOverrides:
+          - action: Enforce
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-require-security-context: "true"
+        message: >-
+          runAsNonRoot=true must be set on the pod securityContext, or on every container (initContainers included).
+        anyPattern:
+          - spec:
+              securityContext:
+                runAsNonRoot: true
+          - spec:
+              containers:
+              - securityContext:
+                  runAsNonRoot: true
+              =(initContainers):
+              - securityContext:
+                  runAsNonRoot: true
+    - name: check-seccomp-profile
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            # CREATE only: an update of a pod that already runs (label patch, finalizer) is never denied by Enforce.
+            operations:
+              - CREATE
+      exclude: *exclude
+      validate:
+        failureAction: Audit
+        failureActionOverrides:
+          - action: Enforce
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-require-security-context: "true"
+        message: >-
+          seccompProfile.type=RuntimeDefault must be set on the pod securityContext, or on every container
+          (initContainers included).
+        anyPattern:
+          - spec:
+              securityContext:
                 seccompProfile:
                   type: RuntimeDefault
+          - spec:
+              containers:
+              - securityContext:
+                  seccompProfile:
+                    type: RuntimeDefault
+              =(initContainers):
+              - securityContext:
+                  seccompProfile:
+                    type: RuntimeDefault

@@ -44,8 +44,22 @@ kv_create() { # PATH ENVVAR_HOLDING_DATA_JSON
 }
 rand() { head -c "$1" /dev/urandom | base64 | tr -d '/+=\n' | head -c "$2"; }
 
+# PKI key types (ANSSI IGC-BP-03, NT35-R8). ec = ECDSA P-384 intermediate and P-256 leaves; rsa = the documented legacy variant,
+# RSA-3072 with PSS signatures, for clients that cannot do ECDSA (then set the same on the Certificate: README, "PKI").
+# The role only constrains the key of the CSR it signs, so an existing RSA intermediate keeps signing EC leaves.
+: "${OA_PKI_KEY_TYPE:=ec}"
+# Off by default: a newly imported intermediate is NOT the default issuer (the role keeps signing with the old one) until
+# `pki/config/issuers default=<id>` is written, which the admin identity cannot do. On, the latest import becomes the default.
+: "${OA_PKI_DEFAULT_FOLLOWS_LATEST:=false}"
+
 pki() {
   log "════ PKI ════"
+  local int_params leaf_params
+  case "$OA_PKI_KEY_TYPE" in
+    ec)  int_params='"key_type":"ec","key_bits":384';  leaf_params='"key_type":"ec","key_bits":256,"use_pss":false' ;;
+    rsa) int_params='"key_type":"rsa","key_bits":3072'; leaf_params='"key_type":"rsa","key_bits":3072,"use_pss":true' ;;
+    *) die "OA_PKI_KEY_TYPE must be ec or rsa, got '$OA_PKI_KEY_TYPE'" ;;
+  esac
   mount_engine secret '{"type":"kv","options":{"version":"2"}}' # before the CSR, which is stored there
   mount_engine pki '{"type":"pki","config":{"max_lease_ttl":"87600h"}}'
   # The intermediate CA's CSR is PUBLIC data (a request to sign a public key): printing it is the runbook.
@@ -56,7 +70,7 @@ pki() {
     # one pending key is enough: every sync would otherwise add another, and the CSR already printed stays valid
     log "  intermediate CSR already generated, waiting for the signed certificate (README: PKI intermediate)"
   else
-    printf '{"common_name":"OpenAether Workload Intermediate CA","ttl":"17520h"}' | api POST /v1/pki/intermediate/generate/internal "$HDR"
+    printf '{"common_name":"OpenAether Workload Intermediate CA","ttl":"17520h",%s}' "$int_params" | api POST /v1/pki/intermediate/generate/internal "$HDR"
     local csr; csr="$(body | jq -r '.data.csr // empty')"
     if [ -n "$csr" ]; then
       log "  >>> MANUAL STEP (pki-root-offline-runbook.md): sign this CSR with the offline root, then import it."
@@ -67,10 +81,36 @@ pki() {
       log "  CSR generation answered HTTP $(code): retried on the next sync"
     fi
   fi
-  printf '%s' '{"allowed_domains":["openaether.local"],"allow_subdomains":true,"allow_bare_domains":true,"allow_localhost":false,"max_ttl":"2160h","key_type":"rsa","key_bits":2048,"server_flag":true,"client_flag":true}' \
+  # Server leaves only: no clientAuth, no key encipherment, no wildcard, no bare domain, no IP, no CN required (the Certificate
+  # lists its names as SANs). Names are checked against the CSR's SANs (the sign endpoint ignores `alt_names` with use_csr_sans).
+  printf '{"allowed_domains":["openaether.local"],"allow_subdomains":true,"allow_bare_domains":false,"allow_wildcard_certificates":false,"allow_ip_sans":false,"allow_localhost":false,"require_cn":false,"max_ttl":"2160h",%s,"server_flag":true,"client_flag":false,"key_usage":["DigitalSignature"],"ext_key_usage":[]}' "$leaf_params" \
     | api POST /v1/pki/roles/openaether "$HDR"
   ok || die "pki role: HTTP $(code)"
-  log "  pki role openaether"
+  log "  pki role openaether ($OA_PKI_KEY_TYPE)"
+  pki_revocation
+}
+
+# Revocation information (ANSSI NT35-R33, IGC-BP-06): the leaves carry the CRL/OCSP/AIA URLs of the in-cluster service, the CRL is
+# rebuilt on its own, and expired certificates leave the store. No client in the platform checks revocation today (README, "PKI").
+pki_revocation() {
+  local u="https://openbao.${VAULT_NS}.svc.cluster.local:8200/v1/pki" r
+  for r in \
+    "config/urls|$(U="$u" jq -nc '{issuing_certificates:[$ENV.U+"/ca"],crl_distribution_points:[$ENV.U+"/crl"],ocsp_servers:[$ENV.U+"/ocsp"]}')" \
+    'config/crl|{"auto_rebuild":true,"enable_delta":true,"expiry":"72h","delta_rebuild_interval":"15m","auto_rebuild_grace_period":"12h"}' \
+    'config/auto-tidy|{"enabled":true,"interval_duration":"12h","safety_buffer":"72h","tidy_cert_store":true,"tidy_revoked_certs":true,"tidy_revoked_cert_issuer_associations":true}'; do
+    printf '%s' "${r#*|}" | api POST "/v1/pki/${r%%|*}" "$HDR"
+    ok || die "pki ${r%%|*}: HTTP $(code) $(body | jq -c '.errors // empty')"
+  done
+  log "  pki revocation URLs, CRL rebuild and auto-tidy set"
+  if [ "$OA_PKI_DEFAULT_FOLLOWS_LATEST" = true ]; then
+    none | api GET /v1/pki/config/issuers "$HDR"
+    local def; def="$(body | jq -r '.data.default // empty')"
+    if [ -n "$def" ]; then
+      D="$def" jq -nc '{default:$ENV.D,default_follows_latest_issuer:true}' | api POST /v1/pki/config/issuers "$HDR"
+      ok || die "pki config/issuers: HTTP $(code) $(body | jq -c '.errors // empty')"
+      log "  the default issuer follows the latest import"
+    fi
+  fi
 }
 
 policies_and_roles() {

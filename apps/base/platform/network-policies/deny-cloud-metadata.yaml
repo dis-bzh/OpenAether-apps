@@ -1,0 +1,19 @@
+# Explicit egress DENY to the cloud instance-metadata endpoints, for every pod.
+# Unlike an allow policy, a deny-only CCNP does not switch on default-deny egress, so it does not
+# intersect with allow-dns / allow-kube-api (see default-deny-all.yaml). Deny wins over any allow.
+# Talos hostDNS is a different link-local address and stays reachable (coredns-egress-hostdns.yaml).
+# hostNetwork pods use the host identity and are not selected. Rollback: remove from kustomization.yaml.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: deny-cloud-metadata-egress
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: platform
+spec:
+  description: "Deny pod egress to the cloud metadata endpoints (169.254.169.254, 169.254.42.42)"
+  endpointSelector: {}
+  egressDeny:
+    - toCIDR:
+        - 169.254.169.254/32
+        - 169.254.42.42/32

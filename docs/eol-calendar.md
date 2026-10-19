@@ -17,34 +17,36 @@ or a vendored dump has no row.
 | Istio control plane (`istio`) | 1.24.2 | Istio 1.24 | 2025-06-24 | 2026-12-31 | 2026-12-14 |
 | Istio CNI (`istio`) | 1.24.2 | Istio 1.24 | 2025-06-24 | 2026-12-31 | 2026-12-14 |
 | Istio ztunnel (`istio`) | 1.24.2 | Istio 1.24 | 2025-06-24 | 2026-12-31 | 2026-12-14 |
-| cert-manager (`cert-manager`) | v1.15.3 | cert-manager 1.15 | 2025-02-03 | 2026-12-31 | 2026-12-14 |
-| longhorn (`storage`) | 1.9.2 | Longhorn 1.9 | 2026-11-27 |  | 2026-12-14 |
-| grafana (`observability`) | 8.6.4 | Grafana 11.3 (chart appVersion) | 2025-07-22 | 2026-12-31 | 2026-12-14 |
-| loki (`observability`) | 6.25.0 | Loki 3.3 (chart appVersion) | 2025-04-17 | 2026-12-31 | 2026-12-14 |
-| alloy (`observability`) | 0.11.0 | Alloy 1.6 (chart appVersion) | unknown |  | 2026-12-14 |
-| zitadel (`identity`) | 10.0.2 | Zitadel v4.14.0 (chart appVersion) | unknown |  | 2026-12-14 |
-| victoria-metrics-operator (`observability`) | 0.65.1 | VictoriaMetrics operator v0.72.0 (chart appVersion) | unknown |  | 2026-12-14 |
-| kube-state-metrics (`observability`) | 5.25.1 | kube-state-metrics 2.13.0 (chart appVersion) | unknown |  | 2026-12-14 |
-| prometheus-node-exporter (`observability`) | 4.39.0 | node_exporter 1.8.2 (chart appVersion) | unknown |  | 2026-12-14 |
-| metrics-server (`platform`) | 3.12.2 | metrics-server 0.7.2 (chart appVersion) | unknown |  | 2026-12-14 |
-| cluster-api-operator (`cluster-api-operator`) | 0.27.0 | cluster-api-operator 0.27.0 | unknown |  | 2026-12-14 |
-| minio (`storage`) | 5.2.0 | MinIO RELEASE.2024-04-18 (chart appVersion) | unknown |  | 2026-12-14 |
-| Kyverno (vendored dump) (`kyverno`) | 1.12.1 | Kyverno 1.12 | 2025-07-31 | 2026-12-31 | 2026-12-14 |
-| CloudNativePG operator (vendored dump) (`cnpg`) | 1.23.1 | CNPG 1.23 | unsupported | 2026-12-31 | 2026-12-14 |
+| cert-manager (`cert-manager`) | v1.21.2 | cert-manager 1.21 | not-yet |  | 2026-12-14 |
+| longhorn (`storage`) | 1.12.1 | Longhorn 1.12 | 2027-08-14 |  | 2026-12-14 |
+| grafana (`observability`) | 14.0.1 | Grafana 13.2 (chart appVersion) | 2027-05-18 |  | 2026-12-14 |
+| loki (`observability`) | 18.16.2 | Loki 3.7 (chart appVersion) | not-yet |  | 2026-12-14 |
+| alloy (`observability`) | 1.13.1 | Alloy 1.20 (chart appVersion) | unknown |  | 2026-12-14 |
+| alloy-audit (second Alloy release, API audit log) (`observability`) | 1.13.1 | Alloy 1.20 (chart appVersion) | unknown |  | 2026-12-14 |
+| zitadel (`identity`) | 10.4.0 | Zitadel v4.19.2 (chart appVersion) | unknown |  | 2026-12-14 |
+| victoria-metrics-operator (`observability`) | 0.68.1 | VictoriaMetrics operator v0.75.0 (chart appVersion) | unknown |  | 2026-12-14 |
+| kube-state-metrics (`observability`) | 8.6.0 | kube-state-metrics 2.20.0 (chart appVersion) | unknown |  | 2026-12-14 |
+| prometheus-node-exporter (`observability`) | 4.60.0 | node_exporter 1.12.1 (chart appVersion) | unknown |  | 2026-12-14 |
+| metrics-server (`platform`) | 3.14.0 | metrics-server 0.9.0 (chart appVersion) | unknown |  | 2026-12-14 |
+| cluster-api-operator (`cluster-api-operator`) | 0.29.0 | cluster-api-operator 0.29.0 | unknown |  | 2026-12-14 |
+| minio (`storage`) | 5.2.0 | MinIO RELEASE.2024-04-18 (chart appVersion) | unsupported | 2026-12-31 | 2026-12-14 |
+| Kyverno (vendored dump) (`kyverno`) | 1.19.1 | Kyverno 1.19 | not-yet |  | 2026-12-14 |
+| CloudNativePG operator (vendored dump) (`cnpg`) | 1.30.1 | CNPG 1.30 | not-yet |  | 2026-12-14 |
 | PostgreSQL (zitadel cluster) (`cnpg`) | 18.6 | PostgreSQL 18 | 2030-11-14 |  | 2026-12-14 |
-| PostgreSQL (grafana cluster) (`cnpg`) | 16.3 | PostgreSQL 16 | 2028-11-09 |  | 2026-12-14 |
-| External Secrets Operator (vendored dump) (`external-secrets`) | 1.2.0 | ESO v1.2 | unknown |  | 2026-12-14 |
-| OpenStack Resource Controller (vendored dump) (`orc`) | 2.4.0 | ORC v2.4 | unknown |  | 2026-12-14 |
-| Gateway API CRDs (vendored dump) (`platform/gateway-api`) | 1.1.0 | Gateway API v1.1 | unknown |  | 2026-12-14 |
-| local-path-provisioner (vendored dump) (`platform/local-path-provisioner`) | 0.0.31 | local-path v0.0.31 | unknown |  | 2026-12-14 |
-| Flux controllers pushed to child clusters (vendored dump) (`cluster-api-clusters/flux-gotk`) | 2.8.8 | Flux 2.8 | not-yet |  | 2026-12-14 |
-| restic (`backup`) | 0.18.0 | restic 0.18 | unknown |  | 2026-12-14 |
+| PostgreSQL (grafana cluster) (`cnpg`) | 16.15 | PostgreSQL 16 | 2028-11-09 |  | 2026-12-14 |
+| External Secrets Operator (vendored dump) (`external-secrets`) | 2.13.0 | ESO v2.13 | unknown |  | 2026-12-14 |
+| OpenStack Resource Controller (vendored dump) (`orc`) | 2.6.0 | ORC v2.6 | unknown |  | 2026-12-14 |
+| CSI external-snapshotter CRDs (vendored dump, CRDs only) (`storage`) | 8.6.0 | external-snapshotter v8.6 | unknown |  | 2026-12-14 |
+| Gateway API CRDs (vendored dump) (`platform/gateway-api`) | 1.2.1 | Gateway API v1.2 | unknown |  | 2026-12-14 |
+| local-path-provisioner (vendored dump) (`platform/local-path-provisioner`) | 0.0.37 | local-path v0.0.37 | unknown |  | 2026-12-14 |
+| Flux controllers pushed to child clusters (vendored dump) (`cluster-api-clusters/flux-gotk`) | 2.9.6 | Flux 2.9 | not-yet |  | 2026-12-14 |
+| restic (`backup`) | 0.19.1 | restic 0.19 | unknown |  | 2026-12-14 |
 | OpenBao (snapshot job image; the server is pinned in infra's bootstrap) (`backup`) | 2.7.1 | OpenBao 2.7 | not-yet |  | 2026-12-14 |
-| Cilium on child cluster edge-1 (`clusters`) | 1.19.2 | Cilium 1.19 | not-yet |  | 2026-12-14 |
+| Cilium on child cluster edge-1 (`clusters`) | 1.19.9 | Cilium 1.19 | not-yet |  | 2026-12-14 |
 | Talos cloud controller manager on child cluster edge-1 (`clusters`) | 0.5.5 | talos-ccm 0.5 | unknown |  | 2026-12-14 |
-| Cilium on child cluster edge-2 (`clusters`) | 1.19.2 | Cilium 1.19 | not-yet |  | 2026-12-14 |
+| Cilium on child cluster edge-2 (`clusters`) | 1.19.9 | Cilium 1.19 | not-yet |  | 2026-12-14 |
 | Talos cloud controller manager on child cluster edge-2 (`clusters`) | 0.5.5 | talos-ccm 0.5 | unknown |  | 2026-12-14 |
-| Cilium on child cluster edge-3 (`clusters`) | 1.19.2 | Cilium 1.19 | not-yet |  | 2026-12-14 |
+| Cilium on child cluster edge-3 (`clusters`) | 1.19.9 | Cilium 1.19 | not-yet |  | 2026-12-14 |
 | Talos cloud controller manager on child cluster edge-3 (`clusters`) | 0.5.5 | talos-ccm 0.5 | unknown |  | 2026-12-14 |
 <!-- eol-table:end -->
 

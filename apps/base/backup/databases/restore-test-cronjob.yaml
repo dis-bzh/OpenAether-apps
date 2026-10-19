@@ -57,7 +57,7 @@ spec:
           initContainers:
             # 1) restic: check + restore of BOTH repositories into /restore.
             - name: restic-restore
-              image: docker.io/restic/restic:0.18.0
+              image: docker.io/restic/restic:0.19.1
               command:
                 - /bin/sh
                 - -c

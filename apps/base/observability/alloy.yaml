@@ -23,7 +23,7 @@ spec:
   chart:
     spec:
       chart: alloy
-      version: "0.11.0"
+      version: "1.13.1"
       sourceRef:
         kind: HelmRepository
         name: grafana
@@ -38,8 +38,29 @@ spec:
   values:
     controller:
       type: daemonset
+      # Deployed on the control-plane nodes too. This stood at the top level of the values, where the chart ignores it
+      # (the key is controller.tolerations): control-plane pods were not collected.
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      volumes:
+        extra:
+          - name: storage
+            emptyDir:
+              sizeLimit: 256Mi
     configReloader:
+      # The chart's default is a request with no limit. Measured 1-9 Mi.
+      resources:
+        requests:
+          cpu: 1m
+          memory: 8Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi
       securityContext:
+        # The reloader only calls Alloy's reload endpoint: it writes nothing (FT082-R12).
+        readOnlyRootFilesystem: true
         runAsUser: 65534
         runAsGroup: 65534
         runAsNonRoot: true
@@ -50,8 +71,33 @@ spec:
         seccompProfile:
           type: RuntimeDefault
     alloy:
+      # Under `alloy.`, the only path the chart reads: a top-level `resources` was ignored, so the container ran with
+      # no limit at all (lab 11). Measured on the workers (the log tailing sits there) 335-353 Mi, 41 Mi on a control
+      # plane; one DaemonSet, so one figure: request near the workers' use, limit about 1.9x it.
+      resources:
+        requests:
+          cpu: 50m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 640Mi
+      # Default is /tmp/alloy, a directory of the image's writable layer. An emptyDir keeps the position and
+      # component state across a CONTAINER restart (not a pod re-creation: hostPath is refused by PSA baseline).
+      storagePath: /var/lib/alloy/data
+      # The node this instance runs on, for the pod selector in the config (the HOSTNAME variable is the POD name).
+      extraEnv:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+      mounts:
+        extra:
+          - name: storage
+            mountPath: /var/lib/alloy/data
       # Kyverno reads the container level (#47): all four fields are set here.
       securityContext:
+        # Alloy's only writable path is the storage path below (an emptyDir), so the root filesystem can be read-only.
+        readOnlyRootFilesystem: true
         runAsUser: 473
         runAsGroup: 473
         runAsNonRoot: true
@@ -64,8 +110,14 @@ spec:
       configMap:
         content: |
           // ── Kubernetes pod discovery ───────────────────────────────────
+          // Only the pods of THIS node. Alloy is a DaemonSet: without the selector every instance tails every pod of
+          // the cluster through the API server (N copies of every log line, N times the API reads).
           discovery.kubernetes "pods" {
             role = "pod"
+            selectors {
+              role  = "pod"
+              field = "spec.nodeName=" + sys.env("NODE_NAME")
+            }
           }
 
           // ── Relabeling: enrich the logs with k8s metadata ──────────────
@@ -123,12 +175,23 @@ spec:
             forward_to = [loki.process.scrub.receiver]
           }
 
-          // ── Scrub tokens that travel in a query string ─────────────────
+          // ── Scrub tokens that travel in a query string, label the OpenBao audit trail ─────
           // Zitadel's access log keeps the request URL, and an OIDC logout puts the ID token in it
           // (end_session?id_token_hint=...). Loki keeps lines for a year: blank the value, keep the parameter.
           // The line filter keeps the cost off every other line. scripts/dev/test-alloy-scrub.sh runs this block.
           loki.process "scrub" {
             forward_to = [loki.write.default.receiver]
+
+            // OpenBao writes its audit trail to the same stdout as its server log, both as JSON (log_format = json).
+            // Audit lines start with {"time":...,"type":"request"|"response"; the server log starts with {"@level".
+            // `{log_type="audit"}` then selects the trail without text matching (docs/detection.md).
+            stage.match {
+              // "type":"re..." is request or response, the only two audit types.
+              selector = `{namespace="foundation-vault",container="openbao"} |~ "^\\{\"time\":\"[^\"]+\",\"type\":\"re"`
+              stage.static_labels {
+                values = { log_type = "audit" }
+              }
+            }
 
             stage.match {
               selector = `{namespace="services-identity"} |~ "(?i)(_token_hint|_token|_secret|assertion)="`
@@ -143,26 +206,25 @@ spec:
           loki.write "default" {
             endpoint {
               url = "http://loki.services-observability.svc.cluster.local:3100/loki/api/v1/push"
+              // The optional `wal` block of loki.write is not enabled: a batch is held in memory and dropped when its
+              // retries run out.
+              // The default gives up after 10 tries (about 5 min of Loki down, e.g. a node drain or an upgrade);
+              // 30 tries capped at 1 min between them rides out about 30 min. The memory limit bounds the queue.
+              min_backoff_period  = "500ms"
+              max_backoff_period  = "1m"
+              max_backoff_retries = 30
             }
             // External labels common to every log of this cluster.
+            // Constant on purpose: only the management cluster runs Alloy and Loki today (a spoke has no
+            // observability). Templating it needs a Flux substituteFrom on the cluster-identity ConfigMap, which the
+            // local Docker lane does not have (scripts/dev/local-docker-lane.sh). Change it with the first profile
+            // that ships logs from another cluster.
             external_labels = {
               cluster = "management",
             }
           }
-    resources:
-      requests:
-        cpu: 50m
-        memory: 128Mi
-      limits:
-        cpu: 200m
-        memory: 256Mi
     # The chart's ClusterRole reads every Secret and ConfigMap; rbac-alloy.yaml is the narrow one.
     rbac:
       create: false
     serviceAccount:
       create: true
-    # Tolerations so it is deployed on the control-plane nodes too.
-    tolerations:
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
-        effect: NoSchedule

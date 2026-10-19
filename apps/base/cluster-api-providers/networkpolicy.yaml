@@ -51,9 +51,7 @@ spec:
         - matchPattern: "*.cloud.ovh.net"
         - matchPattern: "*.*.cloud.ovh.net"
         - matchPattern: "*.*.*.cloud.ovh.net"
-        # Outscale (CAPOSC): API + regional endpoints.
-        - matchPattern: "*.outscale.com"
-        - matchPattern: "*.*.outscale.com"
+        # No Outscale here: CAPOSC runs in capi-outscale-system, which has its own policy (networkpolicy-outscale.yaml).
       toPorts:
         - ports:
             - port: "443"

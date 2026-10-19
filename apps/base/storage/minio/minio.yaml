@@ -61,6 +61,18 @@ spec:
       name: minio-root-credentials
       valuesKey: secretKey
       targetPath: rootPassword
+  # The MinIO server pod never calls the Kubernetes API (the post-job does not either).
+  # The chart has no automount value, hence the post-renderer. Rollback: delete this block.
+  # Addresses FT082-R12 and NSA12-POD-06.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+            patch: |-
+              - op: add
+                path: /spec/template/spec/automountServiceAccountToken
+                value: false
   values:
     # Single node — local testing only.
     mode: standalone

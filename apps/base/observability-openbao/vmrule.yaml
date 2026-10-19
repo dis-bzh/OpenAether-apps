@@ -1,0 +1,84 @@
+# OpenBao alerts. Metric names are the ones a real OpenBao 2.7.1 serves (scripts/dev/test-openbao-bootstrap.sh checks
+# each one): the prefix is `vault_`, not `openbao_`, which the first draft of these rules (never deployed) had wrong.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: openbao-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/component: openbao
+spec:
+  groups:
+    - name: openaether-openbao
+      interval: 30s
+      rules:
+        # A sealed pod is NotReady but still scraped. Summed per pod: core_unsealed changes its `cluster` label when the
+        # pod unseals, and the series with the old label lingers for prometheus_retention_time (1m, configmap.yaml).
+        - alert: OpenBaoWorkloadSealed
+          expr: sum by (pod) (vault_core_unsealed{namespace="foundation-vault"}) == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: openbao
+          annotations:
+            summary: "OpenBao pod {{ $labels.pod }} is sealed"
+            description: >-
+              It unseals itself from the static key in the Secret openbao-seal-key: check that the Secret exists and is
+              mounted (kubectl -n foundation-vault describe pod {{ $labels.pod }}), that the key is the one the data was
+              sealed with, and the pod logs.
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md"
+
+        # `vault_core_active`: 1 on the active node, 0 on standbys; a sealed pod does not report it (hence vector(0)).
+        - alert: OpenBaoNoActiveNode
+          expr: (sum(vault_core_active{namespace="foundation-vault"}) or vector(0)) < 1
+          for: 2m
+          labels:
+            severity: critical
+            component: openbao
+          annotations:
+            summary: "OpenBao has no active node"
+            description: >-
+              No pod reports itself active (or none is scraped): no secret can be read or written and no certificate is
+              issued. Look at raft first: bao operator raft list-peers from a pod that answers.
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md"
+
+        # Autopilot's own figure: how many servers can be lost before quorum goes. 1 on three healthy replicas.
+        - alert: OpenBaoRaftNoFailureTolerance
+          expr: max(vault_autopilot_failure_tolerance{namespace="foundation-vault"}) < 1
+          for: 10m
+          labels:
+            severity: warning
+            component: openbao
+          annotations:
+            summary: "OpenBao can not lose another replica"
+            description: >-
+              Autopilot reports a failure tolerance of 0: a replica is down or unhealthy and one more loss costs the
+              quorum. kubectl -n foundation-vault get pods; bao operator raft list-peers.
+
+        # The FSM applies committed entries; a persistent gap is slow disk or a stuck apply.
+        - alert: OpenBaoRaftApplyLag
+          expr: >-
+            max by (pod) (
+              vault_raft_storage_stats_commit_index{namespace="foundation-vault"}
+              - vault_raft_storage_stats_applied_index{namespace="foundation-vault"}
+            ) > 100
+          for: 5m
+          labels:
+            severity: warning
+            component: openbao
+          annotations:
+            summary: "OpenBao {{ $labels.pod }} applies raft entries late"
+            description: "More than 100 committed entries are not applied yet: slow disk or I/O pressure on the node."
+
+        # Without this, a broken scrape (certificate, network policy, listener) looks like a quiet OpenBao.
+        - alert: OpenBaoMetricsDown
+          expr: up{namespace="foundation-vault", job=~".*openbao.*"} == 0
+          for: 10m
+          labels:
+            severity: warning
+            component: openbao
+          annotations:
+            summary: "The OpenBao metrics of {{ $labels.pod }} are not scraped"
+            description: >-
+              vmagent can not read :8202 (certificate verification against openbao-server-tls, the CiliumNetworkPolicy
+              openbao ingress, or the pod is down). The OpenBao alerts above are blind meanwhile.

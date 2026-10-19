@@ -1,0 +1,100 @@
+# Sensitive Linux capabilities in capabilities.add, on containers, initContainers and ephemeral containers (ANSSI FT082
+# R8, NSA12 POD-01). Audit: it reports, nothing is blocked until a namespace is
+# labelled for Enforce. NET_BIND_SERVICE is the one add left alone.
+# autogen is off: the rule judges the Pod, so its reports and the `names` exceptions below read the same way everywhere.
+# Two rules: pods at CREATE only (an update of a running pod is never denied by Enforce), and the ephemeral containers
+# of `kubectl debug`, which only ever arrive as an UPDATE of the Pod/ephemeralcontainers subresource.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-capabilities
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/title: Restrict Capabilities
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Adding a sensitive capability (SYS_ADMIN, NET_ADMIN, NET_RAW, SYS_PTRACE, SYS_MODULE, ...) gives a container
+      most of what root on the node has. Only the named node agents below may.
+spec:
+  validationFailureAction: Audit
+  # Enforce only in a namespace carrying the label below (docs/kyverno-enforcement.md); none does, so every namespace
+  # stays in Audit. Spelled per rule (`validate.failureActionOverrides`, Kyverno 1.13+): 1.19.1 ignores the spec-level
+  # `validationFailureActionOverrides` at all (a hostNetwork pod was admitted in a labelled namespace; lab 15A, OVH).
+  # Rollback: remove the label.
+  background: true
+  rules:
+    - name: deny-sensitive-capabilities
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            operations:
+              - CREATE
+      exclude:
+        any:
+        # Single-purpose system namespaces: Cilium and the CNI agents, Longhorn, local-path, the CAPI controllers.
+        - resources:
+            namespaces:
+              - kube-system
+              - kyverno
+              - longhorn-system
+              - local-path-storage
+              - capi-system
+              - orc-system
+              - capi-operator-system
+              - capi-outscale-system
+        # ztunnel adds NET_ADMIN, SYS_ADMIN and NET_RAW by design; the Istio CNI agent installs the redirection rules.
+        - resources:
+            namespaces:
+              - istio-system
+              - foundation-service-mesh
+            names:
+              - "ztunnel-*"
+              - "istio-cni-node-*"
+        # alloy-audit adds DAC_READ_SEARCH alone, to read the apiserver's 0600 audit file (alloy-
+        # audit.yaml); by pod name,
+        # never the whole namespace.
+        - resources:
+            namespaces:
+              - services-observability-audit
+            names:
+              - "alloy-audit-*"
+      validate:
+        failureAction: Audit
+        failureActionOverrides:
+          - action: Enforce
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-restrict-capabilities: "true"
+        message: >-
+          A sensitive capability is added (capabilities.add). Drop ALL and add back only what the process needs;
+          NET_BIND_SERVICE is the usual one.
+        foreach:
+          - list: request.object.spec.[initContainers, containers][]
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.capabilities.add[] || `[]` }}"
+                    operator: AnyIn
+                    value:
+                      - ALL
+                      - AUDIT_CONTROL
+                      - BPF
+                      - CHECKPOINT_RESTORE
+                      - DAC_READ_SEARCH
+                      - IPC_LOCK
+                      - MAC_ADMIN
+                      - MAC_OVERRIDE
+                      - MKNOD
+                      - NET_ADMIN
+                      - NET_RAW
+                      - PERFMON
+                      - SYS_ADMIN
+                      - SYS_BOOT
+                      - SYS_MODULE
+                      - SYS_PTRACE
+                      - SYS_RAWIO
+                      - SYS_TIME

@@ -1,0 +1,36 @@
+# OPT-IN, off by default. Makes Flux verify the signature of the commit at HEAD of the GitRepository
+# before it applies anything. Addresses ANSSI SSDLC-CICD-AIP-03 and SSDLC-CONT-REC06 (supply-chain finding F04);
+# mocked/static, never run on a cluster.
+#
+# PREREQUISITES, in this order (docs/signed-commits.md): the Secret `git-signers` (armored OpenPGP public keys as
+# `*.asc`, including GitHub's web-flow key for squash merges; OpenPGP is this repository's choice, SSH keys `.sshpub`
+# are not wired) must exist in flux-system, created by the infra side
+# (tofu variable flux_git_verify) or by hand; every maintainer and bot commit on the tracked ref must be signed.
+# Otherwise the GitRepository goes NotReady, Flux keeps the last good artifact and applies nothing new.
+#
+# Gitception: this file reapplies Flux's own source, so the infra bootstrap GitRepository must carry the SAME
+# `spec.verify` (flux_git_verify = {enabled = true}), or the first reconcile of this block removes or adds it.
+# Use it from a cluster's own overlay (generated profiles are rewritten by pick.py, do not edit those):
+#   resources:  [../../workload]            # or the profile the cluster uses
+#   components: [../components/git-verify]
+# Rollback / break-glass: flux suspend source git openaether -n flux-system, remove the component line (or
+# kubectl patch the spec.verify away), flux resume. Only `mode: HEAD`: Tag modes wait for signed release tags.
+# scripts/dev/test-git-verify.py renders it.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target:
+      group: source.toolkit.fluxcd.io
+      kind: GitRepository
+      name: openaether
+    patch: |-
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: GitRepository
+      metadata:
+        name: openaether
+        namespace: flux-system
+      spec:
+        verify:
+          mode: HEAD
+          secretRef:
+            name: git-signers

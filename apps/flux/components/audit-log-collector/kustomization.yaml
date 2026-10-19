@@ -1,0 +1,49 @@
+# OPT-IN, off by default. Starts alloy-audit, the DaemonSet that ships the Kubernetes API audit log of the control
+# planes to
+# Loki (ANSSI PA-012 R2/R9, HYG-42 M36; mocked/static, never run on a cluster). By default the HelmRelease exists but is
+# suspended (`spec.suspend: true`), so nothing runs and the alerts that watch the collector stay silent (they read the
+# DaemonSet, which does not exist).
+#
+# Why off: it is a root DaemonSet with CAP_DAC_READ_SEARCH and a read-only hostPath on every control plane, in a
+# privileged
+# namespace, and whether it can read the apiserver's file is only provable on a Talos node (LAB-CHECKLIST, B22 and the
+# review section). Enable it on a staging cluster first and read `kubectl -n services-observability-audit logs
+# ds/alloy-audit`.
+#
+# Use it from a cluster's own overlay (generated profiles are rewritten by pick.py, do not edit those):
+#   resources:  [../../workload]            # or the profile the cluster uses
+#   components: [../components/audit-log-collector]
+# Rollback: remove the component line and the release is suspended again, but a suspended HelmRelease does NOT uninstall
+# what it installed: also delete it (`kubectl -n services-observability-audit delete helmrelease alloy-audit`, Flux
+# recreates it suspended) so that the DaemonSet goes.
+#
+# It adds a Flux `spec.patches` to the `observability` Kustomization. That field REPLACES a list, so a cluster that
+# already
+# patches it must merge by hand. scripts/dev/test-audit-collector.py renders this component and applies the patch.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+      name: observability
+    patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: observability
+        namespace: flux-system
+      spec:
+        patches:
+          - target:
+              group: helm.toolkit.fluxcd.io
+              kind: HelmRelease
+              name: alloy-audit
+            patch: |-
+              apiVersion: helm.toolkit.fluxcd.io/v2
+              kind: HelmRelease
+              metadata:
+                name: alloy-audit
+                namespace: services-observability-audit
+              spec:
+                suspend: false

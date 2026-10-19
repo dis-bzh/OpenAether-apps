@@ -9,7 +9,7 @@ metadata:
     # "operation not permitted" (EPERM) → every object creation subject to the
     # webhook fails (dry-run included). An admission webhook MUST be reachable
     # by the apiserver outside the mesh. Same reason as cert-manager/external-secrets.
-    # enforce baseline, warn/audit restricted: kyverno-1.12.1.yaml sets no hostPID, hostNetwork or
+    # enforce baseline, warn/audit restricted: kyverno-1.19.1.yaml sets no hostPID, hostNetwork or
     # privileged on any Kyverno pod, so nothing here needs baseline; raising enforce is not yet tested.
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/warn: restricted

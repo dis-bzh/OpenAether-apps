@@ -1,0 +1,15 @@
+# OpenBao's scrape and alerts: a companion of foundation-vault + observability-vm-customresources.
+# Its own Kustomization (apps/flux/base/30-observability.yaml) because it needs the VM CRDs AND the foundation-vault
+# namespace: in vm-customresources it would break every cluster that runs observability without OpenBao.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - vmservicescrape.yaml
+  - vmrule.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      openaether.io/managed: "true"
+      openaether.io/component: openbao

@@ -13,6 +13,17 @@ resources:
   - ../observability
 
 patches:
+  # No Talos control plane, so no /var/log/audit/kube: the audit collector would sit idle on a Docker node.
+  - target:
+      group: helm.toolkit.fluxcd.io
+      kind: HelmRelease
+      name: alloy-audit
+    patch: |-
+      $patch: delete
+      apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      metadata:
+        name: alloy-audit
   - target:
       group: helm.toolkit.fluxcd.io
       kind: HelmRelease

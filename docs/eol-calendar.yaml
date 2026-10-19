@@ -71,127 +71,129 @@ components:
 - id: cert-manager
   brick: cert-manager
   component: cert-manager
-  pin: v1.15.3
+  pin: v1.21.2
   file: apps/base/cert-manager/helmrelease.yaml
   pattern: chart:\s*cert-manager\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: cert-manager 1.15
-  eol: '2025-02-03'
+  cycle: cert-manager 1.21
+  eol: not-yet
   eol_source: https://endoflife.date/api/cert-manager.json
-  waiver:
-    until: '2026-12-31'
-    reason: cert-manager issues every certificate from the OpenBao PKI; each minor is stepped on a cluster
-      after the rotationPolicy is set explicitly; no hop is scheduled
+  note: a fresh install lands on 1.21.2; a running 1.15 cluster steps one minor at a time (docs/patching.md)
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: longhorn
   brick: storage
   component: longhorn
-  pin: 1.9.2
+  pin: 1.12.1
   file: apps/base/storage/longhorn.yaml
   pattern: chart:\s*longhorn\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Longhorn 1.9
-  eol: '2026-11-27'
+  cycle: Longhorn 1.12
+  eol: '2027-08-14'
   eol_source: https://endoflife.date/api/longhorn.json
-  note: 'EOL is within two months of the snapshot: plan the hop to 1.10 or later before it'
+  note: a fresh install lands on 1.12.1; a running 1.9 cluster must hop 1.10.2, 1.11.3, 1.12.1 (docs/patching.md)
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: grafana
   brick: observability
   component: grafana
-  pin: 8.6.4
+  pin: 14.0.1
   file: apps/base/observability/grafana.yaml
   pattern: chart:\s*grafana\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Grafana 11.3 (chart appVersion)
-  eol: '2025-07-22'
+  cycle: Grafana 13.2 (chart appVersion)
+  eol: '2027-05-18'
   eol_source: https://endoflife.date/api/grafana.json
-  waiver:
-    until: '2026-12-31'
-    reason: the chart pin 8.6.4 ships Grafana 11.3.1; bumping needs the Zitadel login and the datasources
-      checked on a cluster
+  note: chart from the grafana-community repository (the old repository stops at Grafana 12.3.1)
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: loki
   brick: observability
   component: loki
-  pin: 6.25.0
+  pin: 18.16.2
   file: apps/base/observability/loki.yaml
   pattern: chart:\s*loki\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Loki 3.3 (chart appVersion)
-  eol: '2025-04-17'
+  cycle: Loki 3.7 (chart appVersion)
+  eol: not-yet
   eol_source: https://endoflife.date/api/grafana-loki.json
-  waiver:
-    until: '2026-12-31'
-    reason: the chart pin 6.25.0 ships Loki 3.3.2; the log store was reworked in this branch and is not
-      yet validated on a cluster, so it is not moved again before that
+  note: chart from the grafana-community repository (the OSS chart moved there on 2026-03-16); the log store is
+    not yet validated on a cluster
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: alloy
   brick: observability
   component: alloy
-  pin: 0.11.0
+  pin: 1.13.1
   file: apps/base/observability/alloy.yaml
   pattern: chart:\s*alloy\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Alloy 1.6 (chart appVersion)
+  cycle: Alloy 1.20 (chart appVersion)
+  eol: unknown
+  owner: '@vde-dis'
+  next_review: '2026-12-14'
+- id: alloy-audit
+  brick: observability
+  component: alloy-audit (second Alloy release, API audit log)
+  pin: 1.13.1
+  file: apps/base/observability/alloy-audit.yaml
+  pattern: chart:\s*alloy\s*\n\s*version:\s*"?([^"\s]+)
+  cycle: Alloy 1.20 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: zitadel
   brick: identity
   component: zitadel
-  pin: 10.0.2
+  pin: 10.4.0
   file: apps/base/identity/zitadel/helmrelease.yaml
   pattern: chart:\s*zitadel\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Zitadel v4.14.0 (chart appVersion)
+  cycle: Zitadel v4.19.2 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: vm-operator
   brick: observability
   component: victoria-metrics-operator
-  pin: 0.65.1
+  pin: 0.68.1
   file: apps/base/observability/vm-operator.yaml
   pattern: chart:\s*victoria-metrics-operator\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: VictoriaMetrics operator v0.72.0 (chart appVersion)
+  cycle: VictoriaMetrics operator v0.75.0 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: kube-state-metrics
   brick: observability
   component: kube-state-metrics
-  pin: 5.25.1
+  pin: 8.6.0
   file: apps/base/observability/kube-state-metrics.yaml
   pattern: chart:\s*kube-state-metrics\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: kube-state-metrics 2.13.0 (chart appVersion)
+  cycle: kube-state-metrics 2.20.0 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: node-exporter
   brick: observability
   component: prometheus-node-exporter
-  pin: 4.39.0
+  pin: 4.60.0
   file: apps/base/observability/node-exporter.yaml
   pattern: chart:\s*prometheus-node-exporter\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: node_exporter 1.8.2 (chart appVersion)
+  cycle: node_exporter 1.12.1 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: metrics-server
   brick: platform
   component: metrics-server
-  pin: 3.12.2
+  pin: 3.14.0
   file: apps/base/platform/metrics-server/metrics-server.yaml
   pattern: chart:\s*metrics-server\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: metrics-server 0.7.2 (chart appVersion)
+  cycle: metrics-server 0.9.0 (chart appVersion)
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: capi-operator
   brick: cluster-api-operator
   component: cluster-api-operator
-  pin: 0.27.0
+  pin: 0.29.0
   file: apps/base/cluster-api-operator/operator.yaml
   pattern: chart:\s*cluster-api-operator\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: cluster-api-operator 0.27.0
+  cycle: cluster-api-operator 0.29.0
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
@@ -202,42 +204,41 @@ components:
   file: apps/base/storage/minio/minio.yaml
   pattern: chart:\s*minio\s*\n\s*version:\s*"?([^"\s]+)
   cycle: MinIO RELEASE.2024-04-18 (chart appVersion)
-  eol: unknown
-  note: local/dev profile only
+  eol: unsupported
+  eol_source: https://github.com/minio/minio
+  note: local/dev profile only; upstream archived the community edition (last release RELEASE.2025-10-15), no bump
+    is possible
+  waiver:
+    until: '2026-12-31'
+    reason: owner decision 2026-10-16, MinIO is the dev/local S3 only and is never part of a production profile;
+      no maintained upstream to move to, so the pin stays and the waiver is renewed or the brick is replaced
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: kyverno
   brick: kyverno
   component: Kyverno (vendored dump)
-  pin: 1.12.1
-  file: apps/base/kyverno/kyverno-1.12.1.yaml
-  pattern: image:\s*"?ghcr\.io/kyverno/kyverno:v([0-9.]+)"?
-  cycle: Kyverno 1.12
-  eol: '2025-07-31'
+  pin: 1.19.1
+  file: apps/base/kyverno/kyverno-1.19.1.yaml
+  pattern: image:\s*"?reg\.kyverno\.io/kyverno/kyverno:v([0-9.]+)"?
+  cycle: Kyverno 1.19
+  eol: not-yet
   eol_source: https://endoflife.date/api/kyverno.json
-  note: re-vendored by hand; the 'vendored from' comment in kustomization.yaml is a Renovate tracking
-    comment, not the vendored version
-  waiver:
-    until: '2026-12-31'
-    reason: the vendored dump is re-vendored by hand and every policy re-checked against the new release
-      on a cluster; no hop is scheduled
+  note: re-vendored by hand; 1.19 is the last line that serves kyverno.io/v1 ClusterPolicy (removed in 1.20), so the
+    policies must move to policies.kyverno.io before the next minor
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: cnpg-operator
   brick: cnpg
   component: CloudNativePG operator (vendored dump)
-  pin: 1.23.1
-  file: apps/base/cnpg/cnpg-1.23.1.yaml
+  pin: 1.30.1
+  file: apps/base/cnpg/cnpg-1.30.1.yaml
   pattern: image:\s*ghcr\.io/cloudnative-pg/cloudnative-pg:([0-9.]+)
-  cycle: CNPG 1.23
-  eol: unsupported
+  cycle: CNPG 1.30
+  eol: not-yet
   eol_source: https://github.com/cloudnative-pg/cloudnative-pg/blob/main/docs/src/supported_releases.md
   note: the project's table lists 1.29 and 1.30 as supported; a minor is supported until 3 months after
-    the next one
-  waiver:
-    until: '2026-12-31'
-    reason: the operator owns the Postgres clusters of Zitadel and Grafana; a bump needs a backup restore
-      on a cluster first; no hop is scheduled
+    the next one. barmanObjectStore (both Clusters) is removed in 1.31, so the 1.30 pin cannot go to 1.31 before
+    the move to the Barman Cloud plugin
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: postgres-main
@@ -254,43 +255,54 @@ components:
 - id: postgres-grafana
   brick: cnpg
   component: PostgreSQL (grafana cluster)
-  pin: '16.3'
+  pin: '16.15'
   file: apps/base/cnpg/grafana-db-cluster.yaml
   pattern: imageName:\s*ghcr\.io/cloudnative-pg/postgresql:([0-9.]+)
   cycle: PostgreSQL 16
   eol: '2028-11-09'
   eol_source: https://endoflife.date/api/postgresql.json
-  note: the major is supported until 2028; the pin 16.3 is many patch releases behind (CNPG's operator
-    is what rolls it)
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: external-secrets
   brick: external-secrets
   component: External Secrets Operator (vendored dump)
-  pin: 1.2.0
+  pin: 2.13.0
   file: apps/base/external-secrets/install.yaml
   pattern: app\.kubernetes\.io/version:\s*"v([0-9.]+)"
-  cycle: ESO v1.2
+  cycle: ESO v2.13
   eol: unknown
+  note: upstream supports only the latest minor and ships one every 10 to 20 days; the dump is `helm template
+    --set installCRDs=true -n external-secrets` of the chart of the same version, then the local patches
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: orc
   brick: orc
   component: OpenStack Resource Controller (vendored dump)
-  pin: 2.4.0
+  pin: 2.6.0
   file: apps/base/orc/install.yaml
   pattern: image:\s*quay\.io/orc/openstack-resource-controller:v([0-9.]+)
-  cycle: ORC v2.4
+  cycle: ORC v2.6
   eol: unknown
+  owner: '@vde-dis'
+  next_review: '2026-12-14'
+- id: external-snapshotter-crds
+  brick: storage
+  component: CSI external-snapshotter CRDs (vendored dump, CRDs only)
+  pin: 8.6.0
+  file: apps/base/storage/external-snapshotter-crds.yaml
+  pattern: vendored from v([0-9.]+)
+  cycle: external-snapshotter v8.6
+  eol: unknown
+  note: no snapshot-controller is shipped; CSI VolumeSnapshots are not a supported feature (apps #137)
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: gateway-api
   brick: platform/gateway-api
   component: Gateway API CRDs (vendored dump)
-  pin: 1.1.0
+  pin: 1.2.1
   file: apps/base/platform/gateway-api/standard-install.yaml
   pattern: gateway\.networking\.k8s\.io/bundle-version:\s*v([0-9.]+)
-  cycle: Gateway API v1.1
+  cycle: Gateway API v1.2
   eol: unknown
   note: the 'vendored from' comment in kustomization.yaml is a Renovate tracking comment, not the vendored
     version
@@ -299,10 +311,10 @@ components:
 - id: local-path
   brick: platform/local-path-provisioner
   component: local-path-provisioner (vendored dump)
-  pin: 0.0.31
+  pin: 0.0.37
   file: apps/base/platform/local-path-provisioner/local-path-storage.yaml
-  pattern: image:\s*rancher/local-path-provisioner:v([0-9.]+)
-  cycle: local-path v0.0.31
+  pattern: image:\s*(?:docker\.io/)?rancher/local-path-provisioner:v([0-9.]+)
+  cycle: local-path v0.0.37
   eol: unknown
   note: local/dev profile; the 'vendored from' comment in kustomization.yaml is a Renovate tracking comment,
     not the vendored version
@@ -311,22 +323,22 @@ components:
 - id: flux-gotk
   brick: cluster-api-clusters/flux-gotk
   component: Flux controllers pushed to child clusters (vendored dump)
-  pin: 2.8.8
+  pin: 2.9.6
   file: apps/base/cluster-api-clusters/flux-gotk/gotk-components.yaml
   pattern: Flux Version:\s*v([0-9.]+)
-  cycle: Flux 2.8
+  cycle: Flux 2.9
   eol: not-yet
   eol_source: https://endoflife.date/api/flux.json
-  note: 2.8 is still supported upstream
+  note: 2.9 is supported upstream; the dump is the upstream install.yaml asset under the `flux install --export` header
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: restic
   brick: backup
   component: restic
-  pin: 0.18.0
+  pin: 0.19.1
   file: apps/base/backup/openbao/cronjob.yaml
   pattern: image:\s*docker\.io/restic/restic:([0-9.]+)
-  cycle: restic 0.18
+  cycle: restic 0.19
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
@@ -345,13 +357,14 @@ components:
 - id: cilium-edge-1
   brick: clusters
   component: Cilium on child cluster edge-1
-  pin: 1.19.2
+  pin: 1.19.9
   file: apps/clusters/edge-1.yaml
   pattern: chart:\s*cilium\s*\n\s*version:\s*"?([^"\s]+)
   cycle: Cilium 1.19
   eol: not-yet
   eol_source: https://endoflife.date/api/cilium.json
-  note: Cilium 1.19 is still supported; the pin follows the parent foundation (infra)
+  note: Cilium 1.19 is still supported; the latest 1.19 patch, one minor behind the parent foundation (infra, 1.20);
+    the hop to 1.20 goes with the NetworkPolicy review its NodePort change asks for
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: talos-ccm-edge-1
@@ -367,13 +380,14 @@ components:
 - id: cilium-edge-2
   brick: clusters
   component: Cilium on child cluster edge-2
-  pin: 1.19.2
+  pin: 1.19.9
   file: apps/clusters/edge-2.yaml
   pattern: chart:\s*cilium\s*\n\s*version:\s*"?([^"\s]+)
   cycle: Cilium 1.19
   eol: not-yet
   eol_source: https://endoflife.date/api/cilium.json
-  note: Cilium 1.19 is still supported; the pin follows the parent foundation (infra)
+  note: Cilium 1.19 is still supported; the latest 1.19 patch, one minor behind the parent foundation (infra, 1.20);
+    the hop to 1.20 goes with the NetworkPolicy review its NodePort change asks for
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: talos-ccm-edge-2
@@ -389,13 +403,14 @@ components:
 - id: cilium-edge-3
   brick: clusters
   component: Cilium on child cluster edge-3
-  pin: 1.19.2
+  pin: 1.19.9
   file: apps/clusters/edge-3.yaml
   pattern: chart:\s*cilium\s*\n\s*version:\s*"?([^"\s]+)
   cycle: Cilium 1.19
   eol: not-yet
   eol_source: https://endoflife.date/api/cilium.json
-  note: Cilium 1.19 is still supported; the pin follows the parent foundation (infra)
+  note: Cilium 1.19 is still supported; the latest 1.19 patch, one minor behind the parent foundation (infra, 1.20);
+    the hop to 1.20 goes with the NetworkPolicy review its NodePort change asks for
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: talos-ccm-edge-3

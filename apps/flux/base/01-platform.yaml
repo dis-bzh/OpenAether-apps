@@ -109,3 +109,22 @@ spec:
   wait: true
   dependsOn:
     - name: namespaces
+---
+# Group bindings for named operator identities (oa:admins, oa:readers); inert until such a credential is issued.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: platform-rbac
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 3m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/platform/rbac
+  prune: true
+  wait: true
+  dependsOn:
+    - name: namespaces

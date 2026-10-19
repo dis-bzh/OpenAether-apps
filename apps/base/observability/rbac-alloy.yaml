@@ -1,8 +1,8 @@
 # Alloy's RBAC, hand-written so it can be narrow. The chart's own ClusterRole (rbac.create) also
 # grants get/list/watch on every ConfigMap and Secret in the cluster, nodes/proxy, events and
 # replicasets, for components this config does not use (remote.kubernetes.*, prometheus.operator.*).
-# What loki.source.kubernetes does need, from Alloy v1.6.1 (the 0.11.0 chart's appVersion),
-# kubetail/tailer.go: GET pods and GET pods/log. discovery.kubernetes role=pod lists and
+# What loki.source.kubernetes does need, read in Alloy v1.6.1 and again in v1.20.1 (the 1.13.1 chart's
+# appVersion), kubetail/tailer.go: GET pods and GET pods/log. discovery.kubernetes role=pod lists and
 # watches pods. `namespaces` is kept as the chart had it for the label lookups; the lab can
 # try without it. Accepted residual: Alloy still reads pod specs and logs of every namespace.
 # Named alloy-pod-logs, not alloy: Helm removes the chart's `alloy` ClusterRole on upgrade and

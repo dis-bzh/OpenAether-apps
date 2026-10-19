@@ -47,4 +47,7 @@ spec:
       # authenticating the server. `caCertificates` was unusable: it expects a
       # FILE PATH inside the Envoy, which Istio generates and where we cannot
       # easily mount anything.
+      #
+      # The gateway ServiceAccount must be allowed to read that Secret over SDS, or Envoy answers 503 "Secret is not
+      # supplied by SDS": see gateway-sds-rbac.yaml (and why it cannot be limited to this one Secret).
       credentialName: openbao-ca-bundle

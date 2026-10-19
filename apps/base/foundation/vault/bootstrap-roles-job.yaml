@@ -69,6 +69,11 @@ spec:
               value: "foundation-vault"
             - name: OA_TMP
               value: "/tmp"
+            # PKI key type (ec | rsa) and whether a newly imported intermediate becomes the default issuer: README, "PKI".
+            - name: OA_PKI_KEY_TYPE
+              value: "ec"
+            - name: OA_PKI_DEFAULT_FOLLOWS_LATEST
+              value: "false"
           command: ["/bin/bash", "/scripts/configure.sh"]
           securityContext:
             capabilities:

@@ -3,7 +3,12 @@ kind: Namespace
 metadata:
   name: foundation-service-mesh
   labels:
+    # privileged by default (the released behaviour). Only HelmRelease objects and the waypoint Gateway live
+    # here, so baseline
+    # would do: opt in with apps/flux/components/psa-baseline. warn/audit restricted show what drifts.
     pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprintB"
     openaether.io/component: "istio"
@@ -14,7 +19,13 @@ kind: Namespace
 metadata:
   name: services-gateway
   labels:
+    # privileged by default (the released behaviour). Only the Envoy proxy istiod generates for the Gateway runs
+    # here and it
+    # needs no host access: opt in to baseline with apps/flux/components/psa-baseline. warn/audit restricted
+    # show the drift.
     pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprintB"
     openaether.io/component: "gateway"

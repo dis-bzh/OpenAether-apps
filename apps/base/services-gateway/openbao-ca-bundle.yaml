@@ -30,6 +30,8 @@ spec:
   privateKey:
     algorithm: ECDSA
     size: 256
+    # Written down (the value cert-manager applies today): 1.18 flips the unwritten default to Always.
+    rotationPolicy: Never
   issuerRef:
     name: openbao-ca
     kind: ClusterIssuer

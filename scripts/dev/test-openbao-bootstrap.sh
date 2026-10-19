@@ -40,7 +40,7 @@ src, out = sys.argv[1:3]
 os.makedirs(out, exist_ok=True)
 t = open(src).read()
 data = t[t.index('data:\n'):]
-for name in ('config.hcl.tpl', 'entrypoint.sh'):
+for name in ('config.hcl.tpl', 'entrypoint.sh', 'cert-reload.sh'):
     m = re.search(r'^  ' + re.escape(name) + r': \|\n((?:    .*\n|\n)+)', data, re.M)
     body = ''.join(l[4:] if l.startswith('    ') else l for l in m.group(1).splitlines(True))
     open(os.path.join(out, name), 'w').write(body)
@@ -89,11 +89,14 @@ mkpgp() { # N — N test identities with an encryption subkey; public keys as ba
 }
 
 run_bao() { # NAME PORT — (re)start the container for NAME on its existing data and seal directories; waits for the API
+  # TLS_DIR replaces the shared certificate directory; BAO_ENV holds extra "-e VAR=value" words. The metrics listener
+  # (8202) is published on PORT+1000.
   local name="$1" port="$2"
   docker rm -f "bao-test-$name" >/dev/null 2>&1
-  docker run -d --label "oa-test=$$" --user "$(id -u):$(id -g)" --name "bao-test-$name" --hostname openbao-0 -p "127.0.0.1:$port:8200" \
+  docker run -d --label "oa-test=$$" --user "$(id -u):$(id -g)" --name "bao-test-$name" --hostname openbao-0 \
+    -p "127.0.0.1:$port:8200" -p "127.0.0.1:$((port + 1000)):8202" ${BAO_ENV:-} \
     -e POD_NAMESPACE=foundation-vault \
-    -v "$T/conf:/bao/config:ro" -v "$T/$name/seal:/bao/seal:ro" -v "$T/tls:/bao/tls:ro" -v "$T/$name/data:/bao/data" \
+    -v "$T/conf:/bao/config:ro" -v "$T/$name/seal:/bao/seal:ro" -v "${TLS_DIR:-$T/tls}:/bao/tls:ro" -v "$T/$name/data:/bao/data" \
     -v "$T/sa:/var/run/secrets/kubernetes.io/serviceaccount:ro" \
     --entrypoint /bin/sh "$IMAGE" /bao/config/entrypoint.sh >/dev/null 2>&1
   local _; for _ in $(seq 1 40); do
@@ -200,7 +203,7 @@ grep -q "openaether.io/dev-bootstrap=true" "$T/dev/k8s/secret/openbao-recovery-d
 grep -q "root token revoked" "$T/dev/init.sh.out" && ok "the root token was revoked" || bad "no revocation line"
 # CI runners start OpenBao slowly: 15 s was a race (one red run on the 2026-10-15 wave-1 PR, green locally in a minute).
 AUDIT=0; for _ in $(seq 1 90); do
-  docker logs bao-test-dev 2>&1 | grep -q "enabled audit backend: path=stdout/ type=file" && { AUDIT=1; break; }; sleep 1
+  docker logs bao-test-dev 2>&1 | grep -q '"@message":"enabled audit backend".*"path":"stdout/","type":"file"' && { AUDIT=1; break; }; sleep 1
 done
 [ "$AUDIT" = 1 ] && ok "the audit device from the configuration is enabled" || bad "the audit device is not enabled"
 # The audit trail is the witness: the revocation request was made by a ROOT token and was answered.
@@ -273,6 +276,72 @@ NKEYS="$(curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X LIST https://127.0.0.1:
 grep -q "already generated" "$T/dev/configure.sh.out" && ok "the second run says the CSR is pending" || bad "no 'already generated' line"
 [ "$(bao_get /v1/secret/data/pki/intermediate-csr | jq -r '.data.data.csr // empty')" = "$CSR1" ] && [ "$(bao_get /v1/secret/data/pki/intermediate-csr | jq -r '.data.metadata.version')" = 1 ] \
   && ok "the stored CSR is unchanged by the second run (still version 1)" || bad "the stored CSR changed or was rewritten"
+echo "--- PKI: key types, role, revocation information, tidy (a throwaway EC root signs the intermediate, as the runbook does)"
+bao_post() { local d="${2:-}"; [ -n "$d" ] || d='{}'; printf '%s' "$d" | curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X POST -d @- "https://127.0.0.1:18211$1"; }
+P="$T/pki"; mkdir -p "$P"
+openssl req -in <(printf '%s' "$CSR1") -noout -text 2>/dev/null | grep -q "secp384r1" && ok "the intermediate CSR is an ECDSA P-384 key" || bad "the intermediate CSR is not P-384"
+openssl ecparam -genkey -name secp384r1 -noout -out "$P/root.key" 2>/dev/null
+openssl req -x509 -new -key "$P/root.key" -sha384 -days 30 -subj "/CN=Throwaway Root" -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign -out "$P/root.crt"
+printf '[v3]\nbasicConstraints=critical,CA:TRUE,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n' > "$P/ext.cnf"
+printf '%s' "$CSR1" > "$P/int.csr"
+openssl x509 -req -in "$P/int.csr" -CA "$P/root.crt" -CAkey "$P/root.key" -CAcreateserial -days 20 -sha384 -extfile "$P/ext.cnf" -extensions v3 -out "$P/int.crt" >/dev/null 2>&1
+SET="$(bao_post /v1/pki/intermediate/set-signed "$(jq -nc --rawfile c "$P/int.crt" '{certificate:$c}')" | jq -r '.data.imported_issuers[0] // empty')"
+[ -n "$SET" ] && ok "the intermediate signed by the offline root is imported" || bad "set-signed refused the intermediate"
+ROLE="$(bao_get /v1/pki/roles/openaether | jq -c .data)"
+for kv in key_type=ec key_bits=256 client_flag=false server_flag=true allow_wildcard_certificates=false allow_bare_domains=false allow_ip_sans=false; do
+  [ "$(jq -r ".${kv%%=*}" <<<"$ROLE")" = "${kv#*=}" ] && ok "role openaether: $kv" || bad "role openaether: $kv ($ROLE)"
+done
+[ "$(jq -c .key_usage <<<"$ROLE")" = '["DigitalSignature"]' ] && ok "role openaether: key usage is DigitalSignature only" || bad "role key_usage: $(jq -c .key_usage <<<"$ROLE")"
+mkcsr() { # NAME SAN [SUBJECT] [ec|rsa2048|rsa3072]
+  local k=(-newkey ec -pkeyopt ec_paramgen_curve:prime256v1)
+  case "${4:-ec}" in rsa2048) k=(-newkey rsa:2048) ;; rsa3072) k=(-newkey rsa:3072) ;; esac
+  openssl req -new "${k[@]}" -nodes -keyout "$P/$1.key" -out "$P/$1.csr" -subj "${3:-/}" -addext "subjectAltName=$2" 2>/dev/null
+}
+sign() { bao_post /v1/pki/sign/openaether "$(jq -nc --rawfile c "$P/$1.csr" '{csr:$c,ttl:"24h"}')"; }
+mkcsr gw "DNS:grafana.openaether.local,DNS:vault.openaether.local"
+sign gw > "$P/gw.json"; jq -r '.data.certificate // empty' "$P/gw.json" > "$P/gw.crt"
+TXT="$(openssl x509 -in "$P/gw.crt" -noout -text 2>/dev/null)"
+grep -q "Public Key Algorithm: id-ecPublicKey" <<<"$TXT" && ok "the role issues an ECDSA leaf" || bad "no EC leaf: $(jq -c .errors "$P/gw.json")"
+grep -q "TLS Web Server Authentication" <<<"$TXT" && ! grep -q "TLS Web Client Authentication" <<<"$TXT" && ok "…with serverAuth and no clientAuth" || bad "extended key usage is wrong"
+grep -A1 "Key Usage" <<<"$TXT" | grep -v Extended | grep -q "Digital Signature" && ! grep -q "Key Encipherment\|Key Agreement" <<<"$TXT" && ok "…and Digital Signature as its only key usage" || bad "key usage is wrong"
+grep -q "CRL Distribution Points" <<<"$TXT" && grep -q "svc.cluster.local:8200/v1/pki/crl" <<<"$TXT" && ok "…carrying the CRL distribution point" || bad "no CRL distribution point"
+grep -q "OCSP - URI:https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/ocsp" <<<"$TXT" && grep -q "CA Issuers - URI:.*v1/pki/ca" <<<"$TXT" && ok "…and the OCSP and CA Issuers URLs of the in-cluster service" || bad "no OCSP/AIA URL"
+openssl verify -CAfile "$P/root.crt" -untrusted "$P/int.crt" "$P/gw.crt" >/dev/null 2>&1 && ok "the chain verifies up to the throwaway root" || bad "chain does not verify"
+refused() { # DESCRIPTION CSRNAME
+  local r; r="$(sign "$2" | jq -r '.errors[0] // "ISSUED"')"; [ "$r" != ISSUED ] && ok "$1 is refused ($r)" || bad "$1 was issued"
+}
+mkcsr rsa "DNS:grafana.openaether.local" / rsa2048; refused "an RSA key" rsa
+mkcsr wc "DNS:*.openaether.local";                refused "a wildcard name" wc
+mkcsr bare "DNS:openaether.local";                refused "the bare domain" bare
+mkcsr out "DNS:evil.example.com";                 refused "a name outside the domain" out
+mkcsr ip "IP:10.0.0.1,DNS:grafana.openaether.local"; refused "an IP address SAN" ip
+mkcsr cn "DNS:grafana.openaether.local" "/CN=openaether.local"; refused "a bare-domain common name" cn
+U1="$(bao_get /v1/pki/config/urls | jq -c '.data | [.issuing_certificates, .crl_distribution_points, .ocsp_servers]')"
+[ "$U1" = '[["https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/ca"],["https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/crl"],["https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/ocsp"]]' ] \
+  && ok "config/urls points at the in-cluster service" || bad "config/urls: $U1"
+CRLC="$(bao_get /v1/pki/config/crl | jq -c '.data | [.auto_rebuild, .enable_delta, .expiry]')"
+[ "$CRLC" = '[true,true,"72h"]' ] && ok "the CRL is rebuilt automatically (delta CRLs on, 72h)" || bad "config/crl: $CRLC"
+TIDY="$(bao_get /v1/pki/config/auto-tidy | jq -c '.data | [.enabled, .tidy_cert_store, .tidy_revoked_certs]')"
+[ "$TIDY" = '[true,true,true]' ] && ok "auto-tidy is enabled for the cert store and revoked certificates" || bad "config/auto-tidy: $TIDY"
+SERIAL="$(jq -r '.data.serial_number' "$P/gw.json")"
+REVOKED_AT="$(bao_post /v1/pki/revoke "$(jq -nc --arg s "$SERIAL" '{serial_number:$s}')" | jq -r '.data.revocation_time // .errors[0] // "?"')"
+bao_get /v1/pki/crl/rotate >/dev/null
+curl -s --cacert "$T/tls/ca.crt" https://127.0.0.1:18211/v1/pki/crl/pem > "$P/crl.pem"
+SN_HEX="$(tr -d ':' <<<"$SERIAL" | tr a-f A-F)"
+openssl crl -in "$P/crl.pem" -noout -text 2>/dev/null | grep -i "Serial Number" | tr -d ' :' | grep -qi "$SN_HEX" && ok "a revoked leaf is on the CRL, served without a token" || bad "the revoked serial $SN_HEX is not in the CRL (revoke answered: $REVOKED_AT; $(openssl crl -in "$P/crl.pem" -noout -text 2>&1 | grep -i 'serial' | head -3 | tr '\n' ' '))"
+openssl crl -in "$P/crl.pem" -noout -CAfile "$P/int.crt" >/dev/null 2>&1 && ok "…and the CRL is signed by the intermediate" || bad "CRL signature does not verify"
+echo "--- PKI: a second run changes nothing; the default issuer only follows imports on request; the RSA-3072 variant"
+run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT" && ok "configure.sh on a mount with a signed intermediate exits 0" || bad "configure.sh failed: $(tail -4 "$T/dev/configure.sh.out")"
+grep -q "intermediate CA present" "$T/dev/configure.sh.out" && ok "…and finds it present" || bad "no 'intermediate CA present'"
+[ "$(bao_get /v1/pki/config/issuers | jq -r '.data.default_follows_latest_issuer')" = false ] && ok "the default issuer does not follow imports by default" || bad "default_follows_latest_issuer is on"
+run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT" OA_PKI_DEFAULT_FOLLOWS_LATEST=true && ok "configure.sh with OA_PKI_DEFAULT_FOLLOWS_LATEST=true exits 0" || bad "configure.sh failed: $(tail -4 "$T/dev/configure.sh.out")"
+[ "$(bao_get /v1/pki/config/issuers | jq -r '.data.default_follows_latest_issuer')" = true ] && ok "…and the default issuer follows the latest import" || bad "default_follows_latest_issuer is still off"
+run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT" OA_PKI_KEY_TYPE=rsa && ok "configure.sh with OA_PKI_KEY_TYPE=rsa exits 0" || bad "configure.sh failed: $(tail -4 "$T/dev/configure.sh.out")"
+mkcsr r3 "DNS:grafana.openaether.local" / rsa3072; [ "$(sign r3 | jq -r '.errors[0] // "ISSUED"')" = ISSUED ] && ok "the RSA variant signs an RSA-3072 key" || bad "RSA-3072 refused"
+mkcsr r2 "DNS:grafana.openaether.local" / rsa2048; refused "an RSA-2048 key under the RSA variant" r2
+[ "$(bao_get /v1/pki/roles/openaether | jq -r '.data.use_pss')" = true ] && ok "…with PSS signatures" || bad "use_pss is off"
+if run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT" OA_PKI_KEY_TYPE=dsa; then bad "an unknown key type was accepted"; else grep -q "must be ec or rsa" "$T/dev/configure.sh.out" && ok "an unknown OA_PKI_KEY_TYPE stops configure.sh with a message" || bad "no message"; fi
+run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT" && [ "$(bao_get /v1/pki/roles/openaether | jq -r '.data.key_type')" = ec ] && ok "back to the default: the role is EC again" || bad "the role did not return to ec"
 echo "--- the seeding identity can create and test, never overwrite or read a value"
 printf '{"policies":["secret-seeder"],"ttl":"10m"}' | curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X POST -d @- https://127.0.0.1:18211/v1/auth/token/create > "$T/dev/seeder.json"
 SEEDER_CODE="$(jq -r '.errors[0] // "created"' "$T/dev/seeder.json")"
@@ -425,6 +494,75 @@ GOT="$(curl -s --cacert "$DRCA" -H "@$T/rot.root" "$RA/v1/secret/data/x" | jq -r
 [ "$GOT" = survives ] && ok "the data is intact after the rotation" || bad "data after rotation: '$GOT'"
 sleep 3; rm -f "$T/rot/seal/previous-key"
 run_bao rot 18216; wait_active_port 18216 && ok "restart with key 2 only: unsealed (the previous key is no longer needed)" || bad "no unseal with key 2 alone"
+
+echo "=== TLS 1.3 only, the metrics listener, and the certificate reload (the real template, entrypoint and cert-reload.sh) ==="
+TLSD="$T/tls-rl"; mkdir -p "$TLSD"; cp "$T/tls/tls.crt" "$T/tls/tls.key" "$T/tls/ca.crt" "$TLSD/"; chmod a+r "$TLSD"/*
+export TLS_DIR="$TLSD"
+start_bao tls 18221 && ok "OpenBao started with the TLS directory of the test" || bad "tls instance did not start"
+AP="127.0.0.1:18221"; MP="127.0.0.1:19221"; CA="$T/tls/ca.crt"
+serial() { echo | openssl s_client -connect "$1" -CAfile "$CA" 2>/dev/null | openssl x509 -noout -serial 2>/dev/null; }
+# Captured into variables: under pipefail a `grep -q` that exits early makes the producer die of SIGPIPE and the test flap.
+hs() { echo | openssl s_client -connect "$@" 2>&1; }
+refused() { local o; o="$(hs "$@")"; grep -q -E 'alert (protocol version|handshake failure)|alert number (40|70)|no protocols available|unsupported protocol' <<<"$o"; }
+accepted() { local o; o="$(hs "$@")"; grep -q 'Verify return code: 0' <<<"$o"; }
+accepted "$AP" -tls1_3 -CAfile "$CA" && ok "TLS 1.3 is accepted and the certificate verifies" || bad "TLS 1.3 handshake failed"
+refused "$AP" -tls1_2 && ok "the API listener refuses TLS 1.2" || bad "TLS 1.2 was not refused on 8200"
+refused "$MP" -tls1_2 && ok "the metrics listener refuses TLS 1.2" || bad "TLS 1.2 was not refused on 8202"
+for g in X25519 secp384r1 secp256r1; do
+  accepted "$AP" -tls1_3 -groups "$g" -CAfile "$CA" && ok "key exchange $g is accepted" || bad "key exchange $g was refused"
+done
+refused "$AP" -tls1_3 -groups secp521r1 && ok "a curve outside tls_key_exchange_preferences (secp521r1) is refused" || bad "secp521r1 was accepted"
+if curl -s --cacert "$CA" --tls-max 1.2 -o /dev/null "https://$AP/v1/sys/health"; then bad "curl limited to TLS 1.2 got an answer"; else ok "a TLS 1.2 client (curl --tls-max 1.2) gets no answer"; fi
+MCODE() { curl -s --cacert "$CA" -o "${2:-/dev/null}" -w '%{http_code}' "https://$1/v1/sys/metrics?format=prometheus"; }
+[ "$(MCODE "$AP")" != 200 ] && ok "the API listener does not serve the metrics without a token" || bad "8200 served the metrics unauthenticated"
+[ "$(MCODE "$MP" "$T/metrics.sealed")" = 200 ] && ok "the metrics listener serves them without a token, SEALED and uninitialised" || bad "no metrics from a sealed pod"
+grep -E '^vault_core_unsealed(\{[^}]*\})? 0$' "$T/metrics.sealed" >/dev/null && ok "a sealed pod reports vault_core_unsealed 0 (the alert reads this)" || bad "sealed pod: $(grep core_unsealed "$T/metrics.sealed")"
+INIT="$(curl -s --cacert "$CA" -X PUT -d '{"recovery_shares":1,"recovery_threshold":1}' "https://$AP/v1/sys/init")"
+wait_active_port 18221 && ok "initialised and unsealed" || bad "tls instance not active"
+sleep 12   # the metrics loop emits the raft and autopilot gauges every ~10 s
+MCODE "$MP" "$T/metrics.active" >/dev/null
+python3 -I - "$V/../../observability-openbao/vmrule.yaml" "$T/metrics.active" <<'PY' && ok "every vault_* metric the OpenBao alerts read is served by this OpenBao" || bad "an alert reads a metric this OpenBao does not serve"
+import re, sys, yaml
+served = set(re.findall(r'^(vault_[A-Za-z0-9_]+)', open(sys.argv[2]).read(), re.M))
+names = set()
+for d in yaml.safe_load_all(open(sys.argv[1])):
+    for g in d["spec"]["groups"]:
+        for r in g["rules"]:
+            names |= set(re.findall(r'\b(vault_[A-Za-z0-9_]+)', r["expr"]))
+missing = sorted(names - served)
+print("  rules read:", ", ".join(sorted(names)), "| missing:", missing or "none")
+sys.exit(1 if missing or not names else 0)
+PY
+grep -q '^vault_core_unsealed{cluster="vault-cluster-[^"]*"} 1$' "$T/metrics.active" && ok "an unsealed pod reports vault_core_unsealed 1 under its cluster name" || bad "unsealed gauge missing"
+docker exec "bao-test-tls" sh -c 'netstat -tln' 2>/dev/null | grep -q '127.0.0.1:8203' && ! docker exec "bao-test-tls" sh -c 'netstat -tln' | grep -E '(:::|0\.0\.0\.0:)8203' >/dev/null \
+  && ok "the metrics listener's cluster port is on the loopback only" || bad "port 8203 is not confined to the loopback"
+
+# Certificate reload: a new pair is written (as kubelet does for a renewed Secret) and the sidecar signals the server.
+BEFORE="$(serial "$AP")"
+docker run -d --label "oa-test=$$" --name bao-test-tls-reload --pid container:bao-test-tls --user "$(id -u):$(id -g)" -e OA_RELOAD_INTERVAL=1 \
+  -v "$T/conf:/bao/config:ro" -v "$TLSD:/bao/tls:ro" --entrypoint /bin/sh "$IMAGE" /bao/config/cert-reload.sh >/dev/null
+sleep 3
+openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout "$TLSD/new.key" -out "$T/new.csr" -subj "/CN=localhost" >/dev/null 2>&1
+openssl x509 -req -in "$T/new.csr" -CA "$T/tls/ca.crt" -CAkey "$T/tls/ca.key" -set_serial 4242 -out "$TLSD/new.crt" -days 2 -extfile "$T/tls/san.ext" >/dev/null 2>&1
+mv "$TLSD/new.key" "$TLSD/tls.key"; mv "$TLSD/new.crt" "$TLSD/tls.crt"; chmod a+r "$TLSD"/*
+AFTER="$BEFORE"; for _ in $(seq 1 20); do AFTER="$(serial "$AP")"; [ "$AFTER" != "$BEFORE" ] && break; sleep 1; done
+[ "$AFTER" != "$BEFORE" ] && ok "the API listener serves the renewed certificate without a restart ($BEFORE -> $AFTER)" || bad "certificate not reloaded"
+[ "$(serial "$MP")" = "$AFTER" ] && ok "so does the metrics listener" || bad "the metrics listener kept the old certificate"
+RELOADLOG="$(docker logs bao-test-tls-reload 2>&1)"; grep -q 'SIGHUP sent to bao' <<<"$RELOADLOG" && ok "the sidecar logged the signal" || bad "no signal in the sidecar log: $(tail -2 <<<"$RELOADLOG")"
+[ "$(docker inspect -f '{{.State.Running}}' bao-test-tls)" = true ] && ok "the server survived the SIGHUP" || bad "the server stopped"
+curl -s --cacert "$CA" -H "X-Vault-Token: nope" -o /dev/null "https://$AP/v1/sys/mounts"
+sleep 1; TLSLOG="$(docker logs bao-test-tls 2>&1)"
+grep -q '"type":"request"' <<<"$TLSLOG" && ok "the audit device still writes to stdout after the reload" || bad "no audit line after the reload"
+grep -q -E '^\{"time":"[^"]+","type":"(request|response)"' <<<"$TLSLOG" && ok "audit lines start with {\"time\",\"type\" (the Alloy log_type selector keys on it)" || bad "unexpected audit line shape"
+TLSLOG="$(docker logs bao-test-tls 2>&1)"
+grep -q -E '^\{"@level"' <<<"$TLSLOG" && ok "the server log is JSON too (log_format = json)" || bad "server log is not JSON"
+unset TLS_DIR
+
+echo "=== OA_TLS_MIN_VERSION: tls12 is the documented way back; anything else is refused ==="
+BAO_ENV="-e OA_TLS_MIN_VERSION=tls12" start_bao old 18222 && ok "OpenBao started with OA_TLS_MIN_VERSION=tls12" || bad "old instance did not start"
+accepted 127.0.0.1:18222 -tls1_2 -CAfile "$CA" && ok "…and then accepts TLS 1.2" || bad "TLS 1.2 refused although tls12 was asked for"
+if docker run --rm --user "$(id -u):$(id -g)" -e OA_TLS_MIN_VERSION=tls11 -e POD_NAMESPACE=x -v "$T/conf:/bao/config:ro" -v "$T/tls:/bao/seal:ro" \
+     --entrypoint /bin/sh "$IMAGE" /bao/config/entrypoint.sh >"$T/badtls.out" 2>&1; then bad "tls11 was accepted"; else grep -q 'must be tls12 or tls13' "$T/badtls.out" && ok "an unknown value stops the entrypoint with a message" || bad "no message: $(cat "$T/badtls.out")"; fi
 
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$PASS" -gt 0 ] && [ "$FAIL" -eq 0 ]

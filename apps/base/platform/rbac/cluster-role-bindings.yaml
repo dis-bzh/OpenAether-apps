@@ -1,0 +1,33 @@
+# The group names must not start with `system:`. Only the CSR signer (system:masters, the break-glass credential) can
+# mint a certificate carrying them. Revoke an operator by letting the short-lived certificate expire: a group binding
+# cannot single out one holder.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oa-admins
+  labels:
+    app.kubernetes.io/part-of: openaether-platform
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: oa:admins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+---
+# `view` excludes Secrets and RBAC objects: the read-only default for routine inspection.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oa-readers
+  labels:
+    app.kubernetes.io/part-of: openaether-platform
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: oa:readers
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view

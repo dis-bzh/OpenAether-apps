@@ -9,7 +9,8 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: prometheus-node-exporter
-  namespace: services-observability
+  # Its own privileged namespace (declared in apps/base/namespaces): services-observability no longer has to be.
+  namespace: services-observability-node
   labels:
     openaether.io/managed: "true"
     openaether.io/sprint: "0.5.0-sprintC"
@@ -19,11 +20,11 @@ spec:
   chart:
     spec:
       chart: prometheus-node-exporter
-      version: "4.39.0"
+      version: "4.60.0"
       sourceRef:
         kind: HelmRepository
         name: prometheus-community
-        namespace: services-observability
+        namespace: services-observability  # the HelmRepository stays with the other charts
       interval: 1h
   install:
     remediation:

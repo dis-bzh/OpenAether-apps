@@ -1,0 +1,31 @@
+# Lets the gateway's Envoy fetch the openbao-ca-bundle Secret that the DestinationRule `credentialName` names.
+# For a Gateway-API gateway istiod serves, with no RBAC, only the Secrets its own listeners reference (openaether-tls);
+# any other SDS secret is refused ("is not authorized to read secrets", the Vault UI answers 503 "Secret is not supplied
+# by SDS", lab 11). The check is a SubjectAccessReview `list secrets` in the PROXY's namespace with no resource name
+# (istio 1.24.2, pilot/pkg/credentials/kube/secrets.go Authorize), so a Role limited by `resourceNames` would still be
+# refused: the Role covers the Secrets of this namespace, which holds only the gateway's own (openaether-tls, whose key
+# the same Envoy already holds, and the openbao-ca-bundle). Keep nothing else in services-gateway.
+# The ServiceAccount is the one Istio creates for a Gateway named openaether-gateway of class istio: <name>-<class>.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gateway-sds-secrets
+  namespace: services-gateway
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gateway-sds-secrets
+  namespace: services-gateway
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gateway-sds-secrets
+subjects:
+  - kind: ServiceAccount
+    name: openaether-gateway-istio
+    namespace: services-gateway

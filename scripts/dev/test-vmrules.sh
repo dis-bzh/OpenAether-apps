@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Parse every VMRule of the observability brick with the real vmalert (-dryRun: PromQL/MetricsQL syntax, group and
+# Parse every VMRule of the observability brick (and of observability-openbao) with the real vmalert (-dryRun: PromQL/MetricsQL syntax, group and
 # rule validity) and check the conventions the tooling relies on: unique alert names, a severity and a summary on
 # each, alert rules only (OpenAether-infra's scripts/ops/check-alert-metrics.py reads `alert:` and would fail on a
 # `record:`). It also runs scripts/dev/vmrules-unittest.yaml (synthetic series, vmalert-tool) for the alerts whose
@@ -24,7 +24,9 @@ if [[ -z "$VMALERT" || -z "$VMALERT_TOOL" ]]; then
   VMALERT="${VMALERT:-$WORK/vmalert-prod}"; VMALERT_TOOL="${VMALERT_TOOL:-$WORK/vmalert-tool-prod}"
 fi
 
-kubectl kustomize "$ROOT/apps/base/observability/vm-customresources" > "$WORK/built.yaml"
+# The VMRules of the observability brick, and those of the companions that need a CRD or a namespace of their own.
+{ kubectl kustomize "$ROOT/apps/base/observability/vm-customresources"; echo "---"
+  kubectl kustomize "$ROOT/apps/base/observability-openbao"; } > "$WORK/built.yaml"
 python3 -I - "$WORK" <<'PY'
 import sys, yaml
 work = sys.argv[1]

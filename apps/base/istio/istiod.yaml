@@ -51,6 +51,9 @@ spec:
         type: RuntimeDefault
     meshConfig:
       enableAutoMtls: true
+      # No TLS floor is set here on purpose: meshConfig.tlsDefaults only carries ecdhCurves and cipherSuites for traffic
+      # that is NOT ISTIO_MUTUAL (istio/api 1.24 config.proto), so a minProtocolVersion there is accepted and ignored.
+      # Envoy's own floor (TLS 1.2) applies; a Gateway floor is a per-listener setting (tls.options), not a mesh one.
       # trustDomain = cluster.local (Istio default). Single-cluster dev → idiomatic.
       # If multi-cluster mesh federation ever happens, reintroduce a trustDomain
       # single name + aliases (e.g. openaether.local) and migrate the principals.

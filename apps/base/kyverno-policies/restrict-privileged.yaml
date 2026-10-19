@@ -1,7 +1,7 @@
 # OpenAether 0.5.0 — Restrict Privileged Containers
 # Forbids privileged, hostNetwork, hostPID and hostIPC pods.
-# Exclusions: namespaces where legitimate workloads need it
-# (longhorn, istio-cni, capi, local-path, node-exporter).
+# Exclusions: the single-purpose system namespaces (longhorn, capi, local-path), and by pod name node-exporter, ztunnel
+# and the Istio CNI agent.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -15,6 +15,10 @@ metadata:
       except in system namespaces where they are required.
 spec:
   validationFailureAction: Audit
+  # Enforce only in a namespace carrying the label below (docs/kyverno-enforcement.md); none does, so every namespace
+  # stays in Audit. Spelled per rule (`validate.failureActionOverrides`, Kyverno 1.13+): 1.19.1 ignores the spec-level
+  # `validationFailureActionOverrides` at all (a hostNetwork pod was admitted in a labelled namespace; lab 15A, OVH).
+  # Rollback: remove the label.
   background: true
   rules:
     - name: deny-privileged
@@ -23,6 +27,9 @@ spec:
         - resources:
             kinds:
               - Pod
+            # CREATE only: an update of a pod that already runs (label patch, finalizer) is never denied by Enforce.
+            operations:
+              - CREATE
       exclude:
         any:
         - resources:
@@ -34,13 +41,35 @@ spec:
               - capi-system
               - orc-system
               - capi-operator-system
-              - services-observability
+        # Named, not their namespace, so that a new host-network pod next to them is still flagged (#47):
+        # node-exporter in its own namespace, ztunnel and the Istio CNI agent.
+        - resources:
+            namespaces:
+              - services-observability-node
+            names:
+              - "*node-exporter*"
+        - resources:
+            namespaces:
+              - istio-system
               - foundation-service-mesh
+            names:
+              - "ztunnel-*"
+              - "istio-cni-node-*"
       validate:
+        failureAction: Audit
+        failureActionOverrides:
+          - action: Enforce
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-restrict-privileged: "true"
         message: "Privileged containers are not allowed."
         pattern:
           spec:
             containers:
+            - =(securityContext):
+                =(privileged): false
+            # Conditional anchor: initContainers is optional (Cilium's privileged init is the case this catches).
+            =(initContainers):
             - =(securityContext):
                 =(privileged): false
             =(hostNetwork): false
@@ -52,6 +81,9 @@ spec:
         - resources:
             kinds:
               - Pod
+            # CREATE only: an update of a pod that already runs (label patch, finalizer) is never denied by Enforce.
+            operations:
+              - CREATE
       exclude:
         any:
         - resources:
@@ -68,9 +100,15 @@ spec:
         # ztunnel and the Istio CNI agent (the CNI socket and binaries).
         - resources:
             namespaces:
-              - services-observability
+              - services-observability-node
             names:
               - "*node-exporter*"
+        # alloy-audit: /var/log/audit/kube, read-only (deny-privileged is not relaxed for it: no host namespace).
+        - resources:
+            namespaces:
+              - services-observability-audit
+            names:
+              - "alloy-audit-*"
         - resources:
             namespaces:
               - istio-system
@@ -79,6 +117,12 @@ spec:
               - "ztunnel-*"
               - "istio-cni-node-*"
       validate:
+        failureAction: Audit
+        failureActionOverrides:
+          - action: Enforce
+            namespaceSelector:
+              matchLabels:
+                kyverno.openaether.io/enforce-restrict-privileged: "true"
         message: "HostPath volumes are not allowed."
         pattern:
           spec:

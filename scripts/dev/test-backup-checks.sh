@@ -41,7 +41,7 @@ mk; sed -i 's#postgresql:18\.[0-9]*#postgresql:16.3#' "$W/t/apps/base/backup/dat
 expect "dump image below the highest Cluster major fails" fail "$CHK" "$W/t"
 mk; sed -i 's#postgresql:18\.[0-9]*#postgresql:16.3#' "$W/t/apps/base/backup/databases/restore-test-cronjob.yaml"
 expect "restore-test image below the highest Cluster major fails" fail "$CHK" "$W/t"
-mk; sed -i 's#imageName: \(.*\)postgresql:16\.3#imageName: \1postgresql:19.0#' "$W/t/apps/base/cnpg/grafana-db-cluster.yaml"
+mk; sed -i 's#imageName: \(.*\)postgresql:16\.[0-9]*#imageName: \1postgresql:19.0#' "$W/t/apps/base/cnpg/grafana-db-cluster.yaml"
 expect "a Cluster bumped above the dump image fails" fail "$CHK" "$W/t"
 mk; rm -rf "$W/t/apps/base/backup"; mkdir "$W/t/apps/base/backup"
 expect "no client image found fails instead of passing vacuously" fail "$CHK" "$W/t"
@@ -66,6 +66,8 @@ case "$1" in
   check) exit 0 ;;
   stats) [ "${STUB_STATS:-}" = fail ] && exit 1
          printf '{"total_size":%s,"total_file_count":1,"snapshots_count":1}\n' "${STUB_BYTES:-1000}" ;;
+  backup) echo "backup $RESTIC_REPOSITORY" >> "${CALLS:-/dev/null}"; exit "${STUB_RC_BACKUP:-0}" ;;
+  forget) echo "forget $RESTIC_REPOSITORY" >> "${CALLS:-/dev/null}"; exit "${STUB_RC_FORGET:-0}" ;;
   restore) while [ $# -gt 0 ]; do [ "$1" = --target ] && t="$2"; shift; done
            mkdir -p "$t/backup"; cp -r "$FIXTURE"/. "$t/backup/" ;;
 esac
@@ -157,6 +159,23 @@ if have_image "$IMG"; then
 else
   skipped "pg_restore part ($IMG)"
 fi
+
+echo "=== restic-push scripts: restic 0.19 exit codes ==="
+# restic 0.19: `backup` exits 3 on a missing/unreadable source, `forget` exits 3 when it cannot remove snapshots,
+# 130 on SIGINT. A bad backup must fail the Job at once; a failed retention must fail it only after the replica got its snapshot.
+for spec in "openbao/cronjob.yaml openbao" "databases/cronjob.yaml cnpg"; do
+  set -- $spec; F="$ROOT/apps/base/backup/$1"; N="$2"
+  script "$F" restic-push | sed 's#/tmp/restic-cache#'"$W"'/rc#' > "$W/push-$N.sh"
+  push() { env PATH="$W/bin:$PATH" CALLS="$W/calls-$N" CLUSTER_NAME=t PRIMARY_ENDPOINT=e PRIMARY_BUCKET=b PRIMARY_ACCESS_KEY=a \
+      PRIMARY_SECRET_KEY=s REPLICA_ENDPOINT=e REPLICA_BUCKET=b REPLICA_ACCESS_KEY=a REPLICA_SECRET_KEY=s "$@" sh "$W/push-$N.sh"; }
+  rm -f "$W/calls-$N"; expect "$N push: all exit codes 0 passes" 0 push
+  [ "$(grep -c '^backup' "$W/calls-$N")" = 2 ] && ok "$N push: both repositories got a snapshot" || bad "$N push: backup calls: $(cat "$W/calls-$N")"
+  rm -f "$W/calls-$N"; expect "$N push: backup exit 3 (missing source) fails" fail push STUB_RC_BACKUP=3
+  [ "$(grep -c '^backup' "$W/calls-$N")" = 1 ] && ok "$N push: stops at the first incomplete snapshot" || bad "$N push: calls: $(cat "$W/calls-$N")"
+  push STUB_RC_BACKUP=130 >/dev/null 2>&1; [ $? = 130 ] && ok "$N push: SIGINT code 130 is passed on" || bad "$N push: 130 not passed on"
+  rm -f "$W/calls-$N"; expect "$N push: forget exit 3 fails the Job" fail push STUB_RC_FORGET=3
+  [ "$(grep -c '^backup' "$W/calls-$N")" = 2 ] && ok "$N push: ... but only after the replica got its snapshot" || bad "$N push: calls: $(cat "$W/calls-$N")"
+done
 
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$PASS" -gt 0 ] && [ "$FAIL" -eq 0 ]

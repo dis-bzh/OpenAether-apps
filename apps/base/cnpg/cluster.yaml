@@ -14,6 +14,12 @@ metadata:
 spec:
   instances: 3
   imageName: ghcr.io/cloudnative-pg/postgresql:18.6
+  # A rolling update (operator or image upgrade, restart-needing parameter) restarts the PRIMARY in place by default
+  # ("restart"): lab 15c measured 195 s without a write per operator hop. "switchover" updates the replicas first
+  # and then
+  # promotes one, so the write gap is a failover, not a restart of the only writer.
+  primaryUpdateStrategy: unsupervised
+  primaryUpdateMethod: switchover
 
   # HA Configuration
   postgresql:
@@ -60,6 +66,15 @@ spec:
   # Monitoring
   monitoring:
     enablePodMonitor: true
+
+  # barman-cloud (boto3) against an S3 store that rejects the trailing checksum newer boto3 sends by default
+  # ("PutObject: trailing checksum is not supported", measured on Outscale OOS: continuous archiving False and
+  # every Backup stuck "running"). Send checksums only where the API requires them; harmless on stores that accept both.
+  env:
+    - name: AWS_REQUEST_CHECKSUM_CALCULATION
+      value: when_required
+    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
+      value: when_required
 
   # Affinity: preferred anti-affinity to spread the 3 instances across nodes
   # (same config as grafana-db-cluster.yaml)
