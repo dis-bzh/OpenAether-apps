@@ -1,0 +1,133 @@
+# Backup verifier: once a day, prove that what the backups hold can be read, and publish the result as metrics.
+#
+#   stage 1  restic image      restic check on a rotating tenth of the data of each repository on BOTH stores (openbao,
+#                              cnpg dumps, etcd), and a restore of the latest openbao and etcd snapshots
+#   stage 2  PostgreSQL image  the CNPG Barman archive on both stores: latest base backup complete and read to its end,
+#                              WAL contiguous from its begin to the newest segment, replica not behind (barman_check.py)
+#   stage 3  kubectl image     content checks on the restored snapshots (raft snapshot sums, bolt meta pages and hash
+#                              of the etcd snapshot), Longhorn Backup objects, then the metrics into a ConfigMap the
+#                              exporter serves
+#
+# Series: oa_backup_verify_ok and oa_backup_verify_last_success_timestamp_seconds per dataset (the alerts of the
+# observability brick), see verify/collect.py. A failed check is a metric and a log line, not a failed Job: the Job
+# fails only when the verifier itself cannot run. Only stage 3 holds a ServiceAccount token (apps #74), and only the
+# right to patch one ConfigMap and, through storage/backup-target, to read the Longhorn backup objects.
+# The key pairs are the ones of the backup jobs (restic needs to write its lock files): a read-only pair is a follow-up.
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-verify
+  namespace: foundation-databases
+  labels:
+    app: backup-verify
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  schedule: "10 5 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app: backup-verify
+            openaether.io/component: backup
+        spec:
+          serviceAccountName: backup-verify
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: scripts
+              configMap: { name: backup-verify-scripts, defaultMode: 0555 }
+            - name: results
+              emptyDir: { sizeLimit: 64Mi }
+            - name: work
+              emptyDir: { sizeLimit: 3Gi }
+            - name: tmp
+              emptyDir: { sizeLimit: 1Gi }
+            - name: token
+              projected:
+                sources:
+                  - serviceAccountToken: { path: token, expirationSeconds: 3600 }
+                  - configMap: { name: kube-root-ca.crt, items: [{ key: ca.crt, path: ca.crt }] }
+                  - downwardAPI: { items: [{ path: namespace, fieldRef: { fieldPath: metadata.namespace } }] }
+          initContainers:
+            - name: restic-stage
+              image: docker.io/restic/restic:0.19.1
+              command: ["/bin/sh", "/scripts/restic-stage.sh"]
+              envFrom:
+                - secretRef: { name: backup-restic-env }
+                - configMapRef: { name: cluster-identity }
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: scripts, mountPath: /scripts, readOnly: true }
+                - { name: results, mountPath: /results }
+                - { name: work, mountPath: /work }
+                - { name: tmp, mountPath: /tmp }
+              resources:
+                requests: { cpu: 100m, memory: 256Mi }
+                limits: { cpu: "1", memory: 1Gi }
+            # Same image as the dump job (check-pg-dump-version.sh): its python3 has boto3 and it carries barman-cloud.
+            - name: barman-stage
+              image: ghcr.io/cloudnative-pg/postgresql:18.6
+              command: ["/bin/sh", "-c", "python3 /scripts/barman_check.py > /results/cnpg.tsv"]
+              env:
+                - { name: PYTHONWARNINGS, value: ignore }
+                - { name: HOME, value: /tmp }
+              envFrom:
+                - secretRef: { name: backup-restic-env }
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: scripts, mountPath: /scripts, readOnly: true }
+                - { name: results, mountPath: /results }
+                - { name: tmp, mountPath: /tmp }
+              resources:
+                requests: { cpu: 100m, memory: 256Mi }
+                limits: { cpu: "1", memory: 1Gi }
+          containers:
+            - name: collect
+              image: docker.io/alpine/k8s:1.36.5
+              command: ["/bin/sh", "-c", "python3 /scripts/collect.py --publish"]
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: scripts, mountPath: /scripts, readOnly: true }
+                - { name: results, mountPath: /results, readOnly: true }
+                - { name: work, mountPath: /work, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+                - { name: token, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true }
+              env:
+                - { name: HOME, value: /tmp }
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: 500m, memory: 512Mi }

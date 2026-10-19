@@ -325,3 +325,44 @@ tests:
       - {eval_time: 26m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
       - {eval_time: 30m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
       - {eval_time: 45m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
+  - name: the CNPG archive copy is stale after an hour without a success
+    interval: 10m
+    input_series:
+      - series: >-
+          kube_cronjob_status_last_successful_time{namespace="foundation-databases", cronjob="cnpg-store-replicate"}
+        values: '946684800+0x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: CnpgStoreReplicationStale
+        exp_alerts: []
+      - eval_time: 3h
+        alertname: CnpgStoreReplicationStale
+        exp_alerts:
+          - exp_labels:
+              {namespace: foundation-databases, cronjob: cnpg-store-replicate, severity: warning, component: backup}
+            exp_annotations:
+              summary: "The CNPG archive was not copied to the replica store for over an hour"
+              description: >-
+                cnpg-store-replicate runs every 15 minutes. Past an hour the replica store is behind by more than its
+                stated RPO. Look at the last Jobs of the CronJob in foundation-databases.
+  - name: a store that fails verification is named
+    interval: 10m
+    input_series:
+      - series: 'oa_backup_verify_store_ok{dataset="cnpg", store="replica"}'
+        values: '1 0+0x30'
+      - series: 'oa_backup_verify_store_ok{dataset="cnpg", store="primary"}'
+        values: '1+0x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: BackupStoreVerificationFailed
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: BackupStoreVerificationFailed
+        exp_alerts:
+          - exp_labels:
+              {dataset: cnpg, store: replica, severity: critical, component: backup}
+            exp_annotations:
+              summary: "The cnpg backup failed verification on the replica store"
+              description: >-
+                A copy that cannot be read is no copy. The verifier log says what: kubectl logs -n foundation-databases
+                job/<latest backup-verify job> -c collect (stage 3 prints PASS or FAIL per dataset and store).

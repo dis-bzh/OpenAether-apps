@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The provider-S3 egress rules must admit every region of a provider, not one hard-coded host (apps #53).
 
-Five CiliumNetworkPolicies (observability, backup/openbao, backup/databases, cnpg, storage) let a workload reach the provider's object storage on :443 through `toFQDNs`.
+Six files of CiliumNetworkPolicies (observability, backup/openbao, backup/databases, cnpg, storage) let a workload reach the provider's object storage on :443 through `toFQDNs`.
 They used to name ONE host per provider (`s3.eu-west-par.io.cloud.ovh.net`), so a real OVH config with
 `s3.gra.io.cloud.ovh.net` had Loki, the CNPG backups and the OpenBao snapshot job dropped by Cilium
 ("Policy denied", measured on a real OVH cluster). This test reads those rules and checks them against
@@ -17,7 +17,7 @@ REPO = Path(__file__).resolve().parents[2]
 FILES = [
     "apps/base/observability/networkpolicy.yaml",
     "apps/base/backup/openbao/networkpolicy.yaml",
-    "apps/base/backup/databases/networkpolicy.yaml",
+    "apps/base/backup/databases/networkpolicy.yaml",   # the dump, the store replication and the verifier: one block each
     "apps/base/cnpg/networkpolicy-db-restricted.yaml",
     "apps/base/storage/networkpolicy.yaml",
 ]
@@ -95,23 +95,24 @@ if not matches(OLD_RULES, "s3.eu-west-par.io.cloud.ovh.net"):
 sets = {}
 for f in FILES:
     blocks = s3_rules(f)
-    if len(blocks) != 1:
-        fail(f"{f}: expected exactly one provider-S3 toFQDNs block, found {len(blocks)}")
+    if not blocks:
+        fail(f"{f}: no provider-S3 toFQDNs block found")
         continue
-    rules, ports = blocks[0]
-    if ports != ["443"]:
-        fail(f"{f}: the provider-S3 rule must open exactly 443/TCP, found ports {ports}")
-    sets[f] = sorted(rules)
-    for host in MUST_MATCH:
-        if not matches(rules, host):
-            fail(f"{f}: does not admit {host}")
-    for host in MUST_NOT_MATCH:
-        if matches(rules, host):
-            fail(f"{f}: admits {host}, which it must not")
+    for n, (rules, ports) in enumerate(blocks):
+        where = f"{f} (block {n + 1} of {len(blocks)})"
+        if ports != ["443"]:
+            fail(f"{where}: the provider-S3 rule must open exactly 443/TCP, found ports {ports}")
+        sets[where] = sorted(rules)
+        for host in MUST_MATCH:
+            if not matches(rules, host):
+                fail(f"{where}: does not admit {host}")
+        for host in MUST_NOT_MATCH:
+            if matches(rules, host):
+                fail(f"{where}: admits {host}, which it must not")
 
 if len({tuple(v) for v in sets.values()}) > 1:
-    fail("the five files carry different provider-S3 rules: " + "; ".join(f"{k}={v}" for k, v in sets.items()))
+    fail("the files carry different provider-S3 rules: " + "; ".join(f"{k}={v}" for k, v in sets.items()))
 
-print(f"{failures} failed" if failures else "ok: the five provider-S3 egress rules admit every region of Scaleway, OVH and Outscale on 443 only, "
+print(f"{failures} failed" if failures else f"ok: the {len(sets)} provider-S3 egress rules admit every region of Scaleway, OVH and Outscale on 443 only, "
       "refuse the look-alike hosts and are identical; the former single-host rule is shown to miss s3.gra.io.cloud.ovh.net")
 sys.exit(1 if failures else 0)

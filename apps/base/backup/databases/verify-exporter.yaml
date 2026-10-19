@@ -1,0 +1,84 @@
+# The metrics endpoint of the backup verifier: busybox httpd serving the file that backup-verify patches into a
+# ConfigMap (no code to maintain, no Pushgateway, nothing to scrape that is not alive between runs). The ConfigMap is
+# created once and never overwritten by Flux (IfNotPresent): its content is the verifier's, the series appear after its
+# first run. vmagent scrapes the Service (observability brick, VMServiceScrape backup-verify); the kubelet refreshes the
+# mounted file within about a minute of a patch.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oa-backup-verify-metrics
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+  annotations:
+    kustomize.toolkit.fluxcd.io/ssa: IfNotPresent
+data:
+  metrics: |
+    # no verification has run yet
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup-verify-exporter
+  namespace: foundation-databases
+  labels:
+    app: backup-verify-exporter
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: backup-verify-exporter }
+  template:
+    metadata:
+      labels:
+        app: backup-verify-exporter
+        openaether.io/component: backup
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: { type: RuntimeDefault }
+      volumes:
+        - name: www
+          configMap:
+            name: oa-backup-verify-metrics
+      containers:
+        - name: httpd
+          image: docker.io/library/busybox:1.37.0
+          command: ["httpd", "-f", "-p", "9101", "-h", "/www"]
+          ports:
+            - { name: metrics, containerPort: 9101, protocol: TCP }
+          readinessProbe:
+            httpGet: { path: /metrics, port: metrics }
+            periodSeconds: 30
+          securityContext:
+            capabilities: { drop: ["ALL"] }
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - { name: www, mountPath: /www, readOnly: true }
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+            limits: { cpu: 50m, memory: 32Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-verify-exporter
+  namespace: foundation-databases
+  labels:
+    app: backup-verify-exporter
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  selector: { app: backup-verify-exporter }
+  ports:
+    - { name: metrics, port: 9101, targetPort: metrics, protocol: TCP }

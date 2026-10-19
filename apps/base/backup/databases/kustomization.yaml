@@ -6,4 +6,14 @@ resources:
   - cronjob.yaml
   - restore-test-cronjob.yaml
   - cnpg-store-replicate-cronjob.yaml
+  - verify-rbac.yaml
+  - verify-cronjob.yaml
+  - verify-exporter.yaml
   - networkpolicy.yaml
+# The verifier's scripts are files (tested as such), mounted read-only; the hash suffix rolls the next run on a change.
+configMapGenerator:
+  - name: backup-verify-scripts
+    files:
+      - verify/restic-stage.sh
+      - verify/barman_check.py
+      - verify/collect.py

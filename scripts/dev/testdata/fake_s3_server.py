@@ -181,12 +181,26 @@ class H(BaseHTTPRequestHandler):
                 if k.startswith(prefix) and k > after:
                     keys.append(k)
         keys.sort()
+        delim = q.get("delimiter", [""])[0]
+        common = []
+        if delim:
+            rolled = []
+            for k in keys:
+                rest = k[len(prefix):]
+                if delim in rest:
+                    cp = prefix + rest.split(delim, 1)[0] + delim
+                    if cp not in common:
+                        common.append(cp)
+                else:
+                    rolled.append(k)
+            keys = rolled
         page, more = keys[:maxk], len(keys) > maxk
         items = "".join(
             "<Contents><Key>%s</Key><LastModified>%s</LastModified><ETag>\"x\"</ETag><Size>%d</Size><StorageClass>STANDARD</StorageClass></Contents>"
             % (escape(k), iso(os.path.getmtime(os.path.join(bdir, k))), os.path.getsize(os.path.join(bdir, k))) for k in page)
+        cps = "".join(f"<CommonPrefixes><Prefix>{escape(c)}</Prefix></CommonPrefixes>" for c in common)
         nxt = f"<NextContinuationToken>{escape(page[-1])}</NextContinuationToken>" if more else ""
-        self._reply(200, f"<ListBucketResult xmlns='{NS}'><Name>b</Name><Prefix>{escape(prefix)}</Prefix><KeyCount>{len(page)}</KeyCount><MaxKeys>{maxk}</MaxKeys><IsTruncated>{'true' if more else 'false'}</IsTruncated>{items}{nxt}</ListBucketResult>".encode())
+        self._reply(200, f"<ListBucketResult xmlns='{NS}'><Name>b</Name><Prefix>{escape(prefix)}</Prefix><KeyCount>{len(page)}</KeyCount><MaxKeys>{maxk}</MaxKeys><IsTruncated>{'true' if more else 'false'}</IsTruncated>{items}{cps}{nxt}</ListBucketResult>".encode())
 
     do_GET = do_PUT = do_POST = do_DELETE = do_HEAD = _route
 

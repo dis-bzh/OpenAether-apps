@@ -1,0 +1,95 @@
+# The copies of the backups and their verification: CNPG archive to the replica store, etcd snapshot, the verifier
+# itself. The verifier's own series (oa_backup_verify_*) come from apps/base/backup/databases/verify-*.yaml; the
+# dataset-level alerts on them belong to the monitoring rules. This file adds what names the store, and the jobs that
+# feed the copies.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: backup-copies-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  groups:
+    - name: openaether-backup-copies
+      interval: 5m
+      rules:
+        - alert: BackupCopyJobFailed
+          expr: |
+            max by (namespace, job_name) (
+              kube_job_status_failed{namespace=~"foundation-.*",
+                job_name=~"(cnpg-store-replicate|backup-verify|etcd-snapshot)-.*"}
+            ) > 0
+          for: 15m
+          labels:
+            severity: critical
+            component: backup
+          annotations:
+            summary: "Backup copy or verification failed: {{ $labels.namespace }}/{{ $labels.job_name }}"
+            description: >-
+              The Job failed and was not retried. cnpg-store-replicate: a store or its key pair refuses (the
+              replica pair is backup/s3-replica), or a prune was refused because the primary lists far fewer
+              objects than the replica. etcd-snapshot: the Talos API, the role os:etcd:backup or restic.
+              backup-verify: the verifier itself could not run (a failed CHECK is a metric, not a failed Job).
+              Logs: kubectl logs -n {{ $labels.namespace }} job/{{ $labels.job_name }}
+
+        - alert: CnpgStoreReplicationStale
+          expr: |
+            time() - max by (namespace, cronjob) (
+              kube_cronjob_status_last_successful_time{namespace="foundation-databases", cronjob="cnpg-store-replicate"}
+            ) > 3600
+          for: 15m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "The CNPG archive was not copied to the replica store for over an hour"
+            description: >-
+              cnpg-store-replicate runs every 15 minutes. Past an hour the replica store is behind by more than
+              its stated RPO. Look at the last Jobs of the CronJob in foundation-databases.
+
+        - alert: EtcdSnapshotStale
+          expr: |
+            time() - max by (namespace, cronjob) (
+              kube_cronjob_status_last_successful_time{namespace="foundation-databases", cronjob="etcd-snapshot"}
+            ) > 36 * 3600
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "No successful etcd snapshot for over 36 hours"
+            description: >-
+              The in-cluster etcd-snapshot CronJob (daily) has not completed. Without a snapshot a lost control
+              plane is a rebuild from Git and the other backups. See the Talos service-account grant and the Job
+              logs in foundation-databases.
+
+        - alert: BackupVerifierStale
+          expr: |
+            time() - max by (namespace, cronjob) (
+              kube_cronjob_status_last_successful_time{namespace="foundation-databases", cronjob="backup-verify"}
+            ) > 36 * 3600
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "The backup verifier has not completed for over 36 hours"
+            description: >-
+              backup-verify is the only thing that proves the backups readable. When it does not run, the
+              oa_backup_verify_* series go stale and a corrupt backup would not be reported.
+
+        - alert: BackupStoreVerificationFailed
+          expr: |
+            min by (dataset, store) (oa_backup_verify_store_ok) == 0
+          for: 10m
+          labels:
+            severity: critical
+            component: backup
+          annotations:
+            summary: "The {{ $labels.dataset }} backup failed verification on the {{ $labels.store }} store"
+            description: >-
+              A copy that cannot be read is no copy. The verifier log says what: kubectl logs -n
+              foundation-databases job/<latest backup-verify job> -c collect (stage 3 prints PASS or FAIL per
+              dataset and store).
