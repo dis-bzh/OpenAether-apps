@@ -15,6 +15,20 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ---
 
+## [0.3.1] — unreleased
+
+Hotfix for the problems that block the goals of 0.4.0 (resilience and monitoring). Nothing else changes. Every fix below reached the rung
+**mocked** (static checks, unit tests, Kyverno CLI), not yet observed on a cluster: the lab has to prove each one. It does not fix what the
+issues list as open (see each entry).
+
+### Fixed
+
+- **OpenBao bootstrap Jobs retry instead of ending Failed on a slow start** (#34): the terminal `activeDeadlineSeconds` is gone from `openbao-init` and
+  `openbao-vault-bootstrap` (its clock counted the wait for the StatefulSet); both retry in place eight times, the waits stay bounded by the scripts,
+  and `check-bootstrap-jobs.sh` now refuses a deadline that does not cover every attempt. A Job that exhausts its retries still comes back about 70 minutes later.
+
+---
+
 ## [0.3.0] — 2026-10-19
 
 0.3.0 is the pair of OpenAether-infra 0.3.0: a **version upgrade campaign** (every component that was past support, plus the independent low-risk bumps) and a

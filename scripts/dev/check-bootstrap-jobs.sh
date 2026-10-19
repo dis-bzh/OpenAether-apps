@@ -11,7 +11,8 @@ if [ "${1:-}" = "--selftest" ]; then
   mut() { rm -rf "$t/r"; mkdir -p "$t/r"; cp -r "$src/apps" "$src/scripts" "$t/r/"; }
   check() { if "$me" "$t/r" >/dev/null 2>&1; then echo "selftest: $1 NOT detected"; rc=1; else echo "selftest: $1 detected"; fi; }
   mut; sed -i '/ttlSecondsAfterFinished/d' "$t/r/apps/base/foundation/vault/bootstrap-roles-job.yaml"; check "missing ttl"
-  mut; sed -i 's/activeDeadlineSeconds: 3600/activeDeadlineSeconds: 1800/' "$t/r/apps/base/foundation/vault/bootstrap-roles-job.yaml"; check "short deadline"
+  mut; sed -i 's/^  backoffLimit: 8/  backoffLimit: 8\n  activeDeadlineSeconds: 1800/' "$t/r/apps/base/foundation/vault/openbao-init.yaml"; check "short deadline"
+  mut; sed -i 's/^  backoffLimit: 8/  backoffLimit: 1/' "$t/r/apps/base/foundation/vault/bootstrap-roles-job.yaml"; check "low backoffLimit"
   mut; sed -i 's/openbao-init|//' "$t/r/apps/base/observability/vm-customresources/vmrule-bootstrap.yaml"; check "alert without openbao-init"
   mut; sed -i 's/ttlSecondsAfterFinished: 3600/ttlSecondsAfterFinished: 999999/' "$t/r/apps/base/foundation/vault/bootstrap-roles-job.yaml"; check "ttl above 2 hours"
   mut; sed -i 's/ttlSecondsAfterFinished: 3600/ttlSecondsAfterFinished: 300/' "$t/r/apps/base/foundation/vault/bootstrap-roles-job.yaml"; check "ttl below the alert's for"
@@ -34,10 +35,13 @@ jobs = {d["metadata"]["name"]: d["spec"] for d in yaml.safe_load_all(open(render
 if set(jobs) != {"openbao-init", "openbao-vault-bootstrap"}:
     bad.append("unexpected Jobs: %s" % sorted(jobs))
 for n, sp in jobs.items():
+    # #34: a deadline is terminal and its clock includes the waits, so it must cover every retry; at least 6 retries.
+    if sp.get("backoffLimit", 6) < 6:
+        bad.append("%s backoffLimit %s is below 6" % (n, sp.get("backoffLimit")))
+    if "activeDeadlineSeconds" in sp and sp["activeDeadlineSeconds"] <= waits * (sp.get("backoffLimit", 6) + 1):
+        bad.append("%s deadline %s does not cover %d attempts of %d s of waits" % (n, sp["activeDeadlineSeconds"], sp.get("backoffLimit", 6) + 1, waits))
     if "activeDeadlineSeconds" in sp and "ttlSecondsAfterFinished" not in sp:
         bad.append("%s has a deadline and no ttlSecondsAfterFinished" % n)
-if jobs.get("openbao-vault-bootstrap", {}).get("activeDeadlineSeconds", 0) <= waits:
-    bad.append("the configure Job deadline is not above its waits (%d s)" % waits)
 rules = [r for g in yaml.safe_load(open(rule))["spec"]["groups"] for r in g["rules"]]
 exprs = [r["expr"] for r in rules]
 def secs(d):

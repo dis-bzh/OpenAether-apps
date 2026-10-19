@@ -214,8 +214,8 @@ cluster that holds nothing yet, as above.
 ## Alerts and network
 
 `OpenBaoBootstrapJobFailed` (critical, `observability/vm-customresources/vmrule-bootstrap.yaml`): `openbao-init` or
-`openbao-vault-bootstrap` ended Failed for 15 minutes; the configure Job comes back about 70 minutes later by itself, the init Job
-likewise. The alert covers a Job that fails on a cluster whose observability is already running (a re-run, an upgrade): observed firing
+`openbao-vault-bootstrap` ended Failed for 15 minutes. Both Jobs retry in place (eight retries, no deadline: the waits are bounded by the scripts, 0.3.1); only after those
+retries does the Job end Failed and come back about 70 minutes later by itself. The alert covers a Job that fails on a cluster whose observability is already running (a re-run, an upgrade): observed firing
 and clearing on a real cluster. It can NOT show a failed first install, because the VMRule is deployed by `observability`, which waits for
 OpenBao-fed secrets; after an interruption inside the root window, `openbao-init` fails again (see above) and you see it with
 `kubectl -n foundation-vault get jobs` and the dependents staying NotReady. The OpenBao alerts (`OpenBaoWorkloadSealed`,

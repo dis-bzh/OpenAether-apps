@@ -79,8 +79,11 @@ metadata:
     # cluster it checks and exits). The annotation only matters when a patch hits an immutable field.
     kustomize.toolkit.fluxcd.io/force: "enabled"
 spec:
-  backoffLimit: 10
-  activeDeadlineSeconds: 1800
+  # No activeDeadlineSeconds (#34): a deadline is terminal and its clock also counts the time spent waiting for the
+  # StatefulSet, so a slow start ended the Job Failed for about 70 minutes. The script's own waits are bounded (15 minutes
+  # each) and the pod restarts in place with a growing delay: eight retries, then Failed, then re-created after the ttl.
+  # Retrying is safe: init.sh asks OpenBao whether it is initialised before it does anything.
+  backoffLimit: 8
   ttlSecondsAfterFinished: 3600
   template:
     metadata:
