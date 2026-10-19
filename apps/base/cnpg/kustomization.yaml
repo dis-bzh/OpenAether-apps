@@ -50,6 +50,17 @@ patches:
           requests: { cpu: 25m, memory: 64Mi }
           limits: { cpu: 250m, memory: 128Mi }
 
+# The plugin's mTLS leaves come without a rotation policy; the repository names one on every Certificate (cert-manager 1.18
+# changed the unwritten default). Always, like the other leaves: a new key at each renewal (every 90 days, 15 before).
+  - target:
+      kind: Certificate
+      name: barman-cloud-(client|server)
+    patch: |-
+      - op: add
+        path: /spec/privateKey
+        value:
+          rotationPolicy: Always
+
 # CNPG 1.30 CRD descriptions quote the operator's own placeholder syntax (`${podselector:NAME}`, `${`image_root`}`,
 # `$${...}`).
 # Flux's post-build envsubst fails on them ("unable to parse variable name") and the whole brick never applies (lab 12).

@@ -82,6 +82,15 @@ belong to. What follows has no skill of its own yet.
   Either bootstrap the new cluster from that archive (recovery), or, once you are sure you do not need it, remove that path
   from the bucket. Seen on a Scaleway lab that reused its bucket (105 objects under `cnpg/`).
 
+- **With the Barman Cloud plugin, the S3 settings live in the ObjectStore, not in the Cluster** (offline findings, not yet seen on a
+  cluster). The boto3 process is the plugin's sidecar, so the Outscale checksum variables belong to the ObjectStore's
+  `instanceSidecarConfiguration.env` (a `spec.env` on the Cluster no longer reaches it); the ObjectStore must sit in the Cluster's
+  namespace; `serverName` is a parameter of the Cluster's plugin entry, not of the ObjectStore (the CRD refuses it there); the
+  plugin's mTLS certificates need cert-manager before the operator can call it, which is why `cnpg` depends on `cert-manager`. The
+  plugin writes to one store: the second copy is a job (`cnpg-store-replicate`), so the replica trails by its schedule.
+- **A mid-file flip in a gzip base backup passes a tar walk.** Reading a `data.tar.gz` through `tarfile` stops at the end-of-archive
+  blocks and never checks the gzip CRC; the verifier decompresses itself and drains the stream (found by its own damage test).
+
 - **A CloudNativePG instance does not see an S3 Secret that appeared after its pod started.** `ContinuousArchiving` stays False with
   `failed to get envs: cache miss` in the instance log, although the ExternalSecret is synced. Annotate the Cluster
   (`kubectl -n foundation-databases annotate cluster.postgresql.cnpg.io <name> cnpg.io/reloadedAt="$(date -u +%FT%TZ)" --overwrite`): archiving
