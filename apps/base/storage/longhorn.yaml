@@ -48,8 +48,8 @@ spec:
   # A failure is read and fixed by a person (docs/patching.md, "Longhorn in-place hops").
   # A FIRST install that hits one transient error (apps #134: `etcdserver: request timed out` on a busy control
   # plane left the release Stalled) is retried by `strategy: RetryOnFailure` (helm-controller >= 1.5): it retries the
-  # install every retryInterval WITHOUT the uninstall that remediation would run (Longhorn's pre-delete Job refuses it
-  # while deleting-confirmation-flag is false, checked in longhorn-manager v1.12.1, and could remove data when it is true).
+  # install every retryInterval WITHOUT the uninstall that remediation would run (Longhorn's pre-delete Job refuses
+  # it while deleting-confirmation-flag is false, checked in longhorn-manager v1.12.1, and could remove data if true).
   # The upgrade path keeps retries 0 and the default strategy on purpose.
   install:
     crds: CreateReplace
