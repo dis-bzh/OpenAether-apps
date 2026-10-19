@@ -31,5 +31,17 @@ for f in "${DUMPS[@]}"; do
   grep -q " $f\$" "$LOCK" || { echo "ERROR: $f is not in $LOCK" >&2; rc=1; }
 done
 [[ $(wc -l < "$LOCK") -eq ${#DUMPS[@]} ]] || { echo "ERROR: $LOCK lists entries that are not vendored dumps" >&2; rc=1; }
+# The "vendored from vX" comment must equal the version the dump says (apps #106): Renovate bumps only the comment, which then lies.
+# VENDORED_TREE points the two lookups at another tree (the test mutates a copy).
+T="${VENDORED_TREE:-.}"
+ver_comment() { sed -n 's/.*# vendored from \(v[0-9][0-9.]*\).*/\1/p' "$T/$1" | head -1; }
+check_comment() { # <kustomization> <what the dump says>
+  local c; c="$(ver_comment "$1")"
+  if [[ -z "$c" || "$c" != "$2" ]]; then echo "ERROR: $1 says 'vendored from ${c:-nothing}', the dump says $2" >&2; rc=1; fi
+}
+check_comment apps/base/platform/local-path-provisioner/kustomization.yaml \
+  "$(sed -n 's#.*image: docker.io/rancher/local-path-provisioner:\(v[0-9.]*\).*#\1#p' "$T/apps/base/platform/local-path-provisioner/local-path-storage.yaml" | head -1)"
+check_comment apps/base/platform/gateway-api/kustomization.yaml \
+  "$(sed -n 's#.*gateway.networking.k8s.io/bundle-version: \(v[0-9.]*\).*#\1#p' "$T/apps/base/platform/gateway-api/standard-install.yaml" | head -1)"
 [[ $rc -eq 0 ]] && echo "vendored dumps match $LOCK (${#DUMPS[@]} files)"
 exit $rc
