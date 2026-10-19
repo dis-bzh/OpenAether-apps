@@ -205,6 +205,8 @@ jobs:
           echo "${KYVERNO_CLI_SHA256}  $d/k.tgz" | sha256sum -c -
           tar -xzf "$d/k.tgz" -C "$d" kyverno
           KYVERNO="$d/kyverno" ./scripts/dev/test-kyverno-policies.sh
+          KYVERNO="$d/kyverno" ./scripts/dev/test-backup-kyverno.sh
+          KYVERNO="$d/kyverno" python3 -I scripts/dev/test-cnpg-barman-plugin.py
 
       - name: Vendored upstream dumps match their recorded sha256 (critic, static)
         run: |

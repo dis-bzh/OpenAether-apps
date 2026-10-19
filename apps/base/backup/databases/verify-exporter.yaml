@@ -1,8 +1,9 @@
-# The metrics endpoint of the backup verifier: busybox httpd serving the file that backup-verify patches into a
-# ConfigMap (no code to maintain, no Pushgateway, nothing to scrape that is not alive between runs). The ConfigMap is
-# created once and never overwritten by Flux (IfNotPresent): its content is the verifier's, the series appear after its
-# first run. vmagent scrapes the Service (observability brick, VMServiceScrape backup-verify); the kubelet refreshes the
-# mounted file within about a minute of a patch.
+# The metrics endpoint of the backup verifier: the Python standard library's file server (from the alpine/k8s image the
+# verifier already pulls) serving the file that backup-verify patches into a ConfigMap. No code to maintain, no
+# Pushgateway, and nothing to scrape that is not alive between runs. The ConfigMap is created once and never overwritten
+# by Flux (IfNotPresent): its content is the verifier's, the series appear after its first run. vmagent scrapes the
+# Service (observability brick, VMServiceScrape backup-verify); the kubelet refreshes the mounted file within about a
+# minute of a patch.
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -49,8 +50,10 @@ spec:
             name: oa-backup-verify-metrics
       containers:
         - name: httpd
-          image: docker.io/library/busybox:1.37.0
-          command: ["httpd", "-f", "-p", "9101", "-h", "/www"]
+          image: docker.io/alpine/k8s:1.36.5
+          command: ["python3", "-m", "http.server", "9101", "--directory", "/www"]
+          env:
+            - { name: PYTHONDONTWRITEBYTECODE, value: "1" }
           ports:
             - { name: metrics, containerPort: 9101, protocol: TCP }
           readinessProbe:
@@ -66,8 +69,8 @@ spec:
           volumeMounts:
             - { name: www, mountPath: /www, readOnly: true }
           resources:
-            requests: { cpu: 5m, memory: 8Mi }
-            limits: { cpu: 50m, memory: 32Mi }
+            requests: { cpu: 5m, memory: 24Mi }
+            limits: { cpu: 100m, memory: 64Mi }
 ---
 apiVersion: v1
 kind: Service
