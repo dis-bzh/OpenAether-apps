@@ -139,7 +139,9 @@ spec:
             max by (customresource_kind, exported_namespace, name) (
               gotk_resource_info{suspended="true"}
               unless on (customresource_kind, exported_namespace, name)
-              gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability", name="alloy-audit"}
+              gotk_resource_info{
+                customresource_kind="HelmRelease", exported_namespace="services-observability", name="alloy-audit"
+              }
             ) == 1
           for: 24h
           labels:
