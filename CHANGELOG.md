@@ -22,6 +22,16 @@ Bug fixes, documentation corrections and safety nets after 0.3.1, for the next r
 in 9 min 07 s, `cluster-verify` 15 passed, 0 failed, 38 Kustomizations and 16 HelmReleases Ready except `alloy-audit` (suspended by design). It fixes neither #42 nor #375 (infra), **does not
 fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
 
+### Added (0.4.0 milestone M1, monitoring that proves itself)
+
+Rung: **mocked/static** (vmalert unit tests on synthetic series, render and policy checks, a real Alloy in a container for one probe); nothing has fired on a cluster, and about 40 metric names are UNVERIFIED until a lab (`docs/monitoring-0.4.md`). Not a compliance claim.
+
+- Every alert has a `runbook_url` to a heading of `docs/runbooks.md`; `test-vmrules.sh` fails otherwise.
+- Alerting chain: rules for VMAlert to Alertmanager errors, evaluation errors, alert state not persisted, config reload failure, Alertmanager absent. Opt-in component `alert-delivery-probe` (off in every profile; needs a real chat webhook and heartbeat URL): a probe alert twice a day to a quiet receiver, `AlertDeliveryFailing`, `AlertDeliveryNotAcknowledged`, and the Watchdog stops on purpose while the chat leg is broken so the external dead-man's-switch pages. `docs/alert-delivery.md`.
+- RED at the gateway (error-budget burn at 99.9 %, p99, replicas) and USE (OOM kills, CPU throttling, node I/O and memory pressure, disk busy and latency, Pending pods, PDB allowing no disruption, requests near capacity), Longhorn health, CNPG replica health; new scrapes for the gateway Envoy and the Longhorn managers with their network policy rules.
+- Backup signals on the last success, and the series contract of the M2 verifier (dormant until it ships). Loki compactor retention signal (#127: the sweep, not the deletion).
+- `test-alert-metrics.py`: offline blind-rule check (catalogue, scrape, UNVERIFIED listed). `probe-alloy-wal.sh` (#119): with the real Alloy v1.20.1 the WAL does not replay after a hard restart nor survive exhausted retries, so it is **not** enabled.
+
 ### Fixed
 
 - **Longhorn: a first install that fails once is retried, PARTIAL** (#134, stays open): the HelmRelease sets `install.strategy: RetryOnFailure` (`retryInterval: 2m`, `install.remediation.retries: 0`),
