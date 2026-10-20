@@ -329,6 +329,7 @@ jobs:
       - name: "The backup verifier sees each damage (real restic, a real Barman archive, an etcd snapshot)"
         run: |
           set -euo pipefail
+          ./scripts/dev/test-backup-verify-listing.sh
           CI=true ./scripts/dev/test-backup-verify.sh | tee verify.out
           grep -qE '^[0-9]+ passed, 0 failed$' verify.out
           ! grep -q 'SKIPPED' verify.out

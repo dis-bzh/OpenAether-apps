@@ -24,17 +24,22 @@ one() { # dataset store endpoint bucket path host restore(yes|no) ak sk
     fi
     return
   fi
-  snap="$(restic snapshots --json --latest 1 --host "$host" 2>"$err" | sed -n 's/.*"time":"\([^"]*\)".*/\1/p' | head -1)"
+  # A failed listing is a failure, not "no snapshot yet": a skip leaves no series and no alert (lab 19: the daily openbao-snapshot
+  # held the repository's lock while the verifier read it, and the dataset was reported as a skip). --retry-lock waits for it.
+  if ! list="$(timeout 600 restic snapshots --json --latest 1 --host "$host" --retry-lock 3m 2>"$err")"; then
+    emit "$ds" "$store" 0 "" "snapshots unreadable: $(tail -1 "$err" | tr '\t' ' ')"; return
+  fi
+  snap="$(printf '%s' "$list" | sed -n 's/.*"time":"\([^"]*\)".*/\1/p' | head -1)"
   if [ -z "$snap" ]; then emit "$ds" "$store" skip "" "no snapshot yet"; return; fi
-  if ! timeout 3000 restic check --read-data-subset="${N}/${M}" >"$err" 2>&1; then
+  if ! timeout 3000 restic check --retry-lock 3m --read-data-subset="${N}/${M}" >"$err" 2>&1; then
     emit "$ds" "$store" 0 "$snap" "restic check ${N}/${M} failed: $(grep -iE 'error|fatal|pack|id' "$err" | head -2 | tr '\n\t' '  ')"; return
   fi
   if [ "$restore" = yes ]; then
     rm -rf "${WORK:?}/$ds/$store"; mkdir -p "$WORK/$ds/$store"
-    if ! restic restore latest --host "$host" --target "$WORK/$ds/$store" >"$err" 2>&1; then
+    if ! restic restore latest --retry-lock 3m --host "$host" --target "$WORK/$ds/$store" >"$err" 2>&1; then
       emit "$ds" "$store" 0 "$snap" "restore of the latest snapshot failed: $(tail -1 "$err" | tr '\t' ' ')"; return
     fi
-  elif ! restic ls latest --host "$host" 2>/dev/null | grep -q '\.dump$'; then
+  elif ! restic ls latest --retry-lock 3m --host "$host" 2>/dev/null | grep -q '\.dump$'; then
     emit "$ds" "$store" 0 "$snap" "the latest snapshot holds no .dump file"; return
   fi
   emit "$ds" "$store" 1 "$snap" "restic check ${N}/${M} passed"
