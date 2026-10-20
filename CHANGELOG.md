@@ -51,6 +51,11 @@ fix #134** and does not make the Zitadel recovery automatic: a person still runs
 - Policy and hardening: the image registry policy (Audit) admits `ghcr.io/siderolabs/talosctl` alone for the etcd Job; the plugin's two mTLS Certificates name `rotationPolicy: Always`; `test-backup-kyverno.sh` runs the Kyverno CLI on the rendered workloads of the backup and CNPG bricks.
 - Tests: `test-cnpg-barman-plugin.py` (render, CRD shape, Kyverno CLI), `test-cnpg-store-replicate.sh`, `test-backup-verify.sh` (real restic, a real Barman archive from a throwaway PostgreSQL, a real etcd snapshot, damage injected), `test-etcd-snapshot.sh`, `test-backup-independent-stores.sh`; `scripts/dev/testdata/fake_s3_server.py` is the store they share.
 
+### Fixed (found by lab 20, Scaleway + OVH replica store, 2026-10-20)
+
+- The etcd snapshot Job's discovery init container failed on a real cluster: kubectl 1.36 ignores the in-cluster config when `--request-timeout` is passed and asks `localhost:8080` (the #150 fix had only met a fake kubectl). The timeout is the shell's now; the manifest test refuses the flag.
+- The Longhorn canary volume was never backed up: it is detached except for the seconds the hourly writer holds it, and Longhorn's recurring jobs skip a detached volume unless `allow-recurring-job-while-volume-detached` is true (default false). The opt-in `longhorn-restore-test` component sets it.
+
 ### Fixed (found by lab 19, Scaleway + OVH replica store, 2026-10-20)
 
 - `backup-databases` never became Ready: the generated verifier ConfigMap had no namespace (`test-backup-namespaces.sh`).

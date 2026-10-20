@@ -9,6 +9,7 @@ resources:
   - canary.yaml
   - restore.yaml
   - scratch.yaml
+  - longhorn-setting.yaml
 
 # The script lives in two namespaces: the writer and the restore Job (foundation-storage) and the verify pod (scratch).
 configMapGenerator:

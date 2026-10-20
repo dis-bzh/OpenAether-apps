@@ -188,6 +188,8 @@ check("the scripts are in foundation-storage and (the verifier only) in the scra
       {c["metadata"]["namespace"]: set(c["data"]) for c in cms} == {"foundation-storage": {"canary_volume.py", "restore_longhorn.py"}, "backup-restore-test": {"canary_volume.py"}})
 comp = yaml.safe_load(open(os.path.join(ROOT, "apps/flux/components/longhorn-restore-test/storage-restore-test.yaml")))
 check("the Flux Kustomization depends on the backup target and on the backup brick", {d["name"] for d in comp["spec"]["dependsOn"]} == {"storage-backup-target", "backup-databases"})
+check("recurring jobs may back up the detached canary volume (Longhorn skips a detached volume by default)",
+      any(d["metadata"]["name"] == "allow-recurring-job-while-volume-detached" and d["value"] == "true" for d in get("Setting")), "no Setting in the brick")
 rc = load(os.path.join(ROOT, "apps/base/backup/databases/restore/restore_cnpg.py"), "rc")
 check("the metric names are the CNPG test's", all(n in fl.build_metrics({"ok": True, "duration": 1, "recovery": 1}, 1.0, None) for n in ("oa_restore_test_ok", "oa_restore_test_last_success_timestamp_seconds", "oa_restore_test_last_run_timestamp_seconds", "oa_restore_test_duration_seconds", "oa_restore_test_recovery_seconds")))
 check("and the same publishing key space of the exporter", fl.CM == rc.CM and fl.METRICS_NS == rc.LIVE_NS)
