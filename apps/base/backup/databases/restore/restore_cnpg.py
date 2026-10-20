@@ -133,9 +133,19 @@ def compare(src, res, store, mode, pitr_row=None):
     elif c not in live and c < src["canary"][0][0]:
         why.append(f"restored canary row {c} is older than the whole live window")
     elif c not in live:
-        why.append(f"restored canary row {c} is newer than anything live: not from this database")
+        # The canary keeps writing while the copy is recovered (about 80 s after the live snapshot), and the archive of the primary
+        # store is immediate: the copy may END AFTER the live snapshot. That is a good copy exactly when it still holds the live
+        # snapshot's newest row with the same hash (lab 20: a good primary copy failed on a row written during the run).
+        newest = src["canary"][-1]
+        held = {cc: sh for cc, _t, sh in res["canary"]}
+        if c > newest[0] and held.get(newest[0]) == newest[2]:
+            info["ahead"] = c - newest[0]
+        else:
+            why.append(f"restored canary row {c} is newer than anything live: not from this database")
     if c in live:
         info["lag"] = epoch(src["canary"][-1][1]) - epoch(live[c][0])
+    elif info.get("ahead"):
+        info["lag"] = 0.0
     if mode == "pitr":
         want = pitr_row[0]
         if c != want:
