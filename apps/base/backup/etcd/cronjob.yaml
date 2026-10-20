@@ -9,7 +9,14 @@
 # The snapshot holds every Secret of the cluster in clear: it goes to a memory-backed volume (never to a disk), is gated on the
 # bolt magic, is encrypted by restic before it leaves, and the Talos grant is scoped to this namespace. A compromised pod of
 # foundation-databases that mounts the grant Secret can take the snapshot: the namespace holds the CNPG instances and the backup
-# jobs only, the Secret is readable by the one ServiceAccount that needs it (RBAC of the namespace), the pod has no token.
+# jobs only, the Secret is readable by the one ServiceAccount that needs it (RBAC of the namespace), and only the discovery
+# init container holds a Kubernetes token (read right on Nodes, nothing else); the containers that see the snapshot hold none.
+# Which control planes to ask: the grant's talosconfig names `talos.default` as its endpoint, a Service that the Talos API
+# access feature does not create here (lab 19: "produced zero addresses"), and `talosctl etcd snapshot` refuses to run
+# without a node. The first init container therefore lists the control-plane nodes through the Kubernetes API (its own
+# ServiceAccount, read right on Nodes only), tries each InternalIP on port 50000 until one accepts a connection, and writes a
+# copy of the grant's talosconfig whose endpoint AND node are that address. Nothing is seeded: a replaced or added control plane
+# is found at the next run. No control plane answering is a failure of the Job (BackupCopyJobFailed), never a silent skip.
 # Restore (disaster only): restic restore the latest `etcd` snapshot, then `talosctl bootstrap --recover-from=<file>`
 # (add --recover-skip-hash-check only if the file has no sha256 trailer).
 ---
@@ -38,7 +45,7 @@ spec:
             app: etcd-snapshot
             openaether.io/component: backup
         spec:
-          serviceAccountName: cnpg-dump
+          serviceAccountName: etcd-snapshot
           automountServiceAccountToken: false
           restartPolicy: OnFailure
           securityContext:
@@ -57,12 +64,64 @@ spec:
               secret:
                 secretName: etcd-snapshot-talos
                 defaultMode: 0440
+            - name: work
+              emptyDir: { medium: Memory, sizeLimit: 1Mi }
+            - name: token
+              projected:
+                sources:
+                  - serviceAccountToken: { path: token, expirationSeconds: 3600 }
+                  - configMap: { name: kube-root-ca.crt, items: [{ key: ca.crt, path: ca.crt }] }
+                  - downwardAPI: { items: [{ path: namespace, fieldRef: { fieldPath: metadata.namespace } }] }
           initContainers:
+            - name: discover-controlplane
+              image: docker.io/alpine/k8s:1.36.5
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  IN="${TALOS_GRANT_CONFIG:-/var/run/secrets/talos.dev/config}"
+                  OUT="${TALOS_WORK_CONFIG:-/work/config}"
+                  [ -s "$IN" ] || { echo "ERROR: the Talos grant config ${IN} is missing or empty (Secret etcd-snapshot-talos)"; exit 1; }
+                  ips="$(kubectl get nodes --request-timeout=30s -l node-role.kubernetes.io/control-plane \
+                    -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}')" \
+                    || { echo "ERROR: cannot list the control-plane nodes through the Kubernetes API"; exit 1; }
+                  ips="$(printf '%s\n' "$ips" | grep -v '^$' | shuf || true)"
+                  [ -n "$ips" ] || { echo "ERROR: no control-plane node with an InternalIP found (label node-role.kubernetes.io/control-plane)"; exit 1; }
+                  echo "control-plane candidates: $(printf '%s\n' "$ips" | wc -l)"
+                  for ip in $ips; do
+                    if nc -w 3 "$ip" 50000 </dev/null >/dev/null 2>&1; then
+                      cp "$IN" "$OUT"; chmod 0600 "$OUT"
+                      ip="$ip" yq -i '.contexts[.context].endpoints = [strenv(ip)] | .contexts[.context].nodes = [strenv(ip)]' "$OUT"
+                      echo "Talos API answers on ${ip}:50000: snapshot from this node"
+                      exit 0
+                    fi
+                    echo "WARN: ${ip}:50000 does not answer, trying the next control plane"
+                  done
+                  echo "ERROR: no control plane answers on port 50000: no snapshot taken"
+                  exit 1
+              env:
+                - { name: HOME, value: /tmp }
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: work, mountPath: /work }
+                - { name: tmp, mountPath: /tmp }
+                - { name: talos, mountPath: /var/run/secrets/talos.dev, readOnly: true }
+                - { name: token, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true }
+              resources:
+                requests: { cpu: 20m, memory: 64Mi }
+                limits: { cpu: 200m, memory: 192Mi }
             - name: talos-snapshot
               image: ghcr.io/siderolabs/talosctl:v1.14.2
               command: ["/talosctl", "etcd", "snapshot", "/snap/etcd.snap"]
               env:
-                - { name: TALOSCONFIG, value: /var/run/secrets/talos.dev/config }
+                - { name: TALOSCONFIG, value: /work/config }
                 - { name: HOME, value: /tmp }
               securityContext:
                 capabilities: { drop: ["ALL"] }
@@ -74,7 +133,7 @@ spec:
               volumeMounts:
                 - { name: snap, mountPath: /snap }
                 - { name: tmp, mountPath: /tmp }
-                - { name: talos, mountPath: /var/run/secrets/talos.dev, readOnly: true }
+                - { name: work, mountPath: /work, readOnly: true }
               resources:
                 requests: { cpu: 50m, memory: 128Mi }
                 limits: { cpu: 500m, memory: 768Mi }
