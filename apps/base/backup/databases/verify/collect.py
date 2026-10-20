@@ -143,6 +143,27 @@ def age_of(ref, now):
         return None
 
 
+def promote_missing(raw):
+    """raw: (dataset, store, st, ref, msg) with st '1', '0' or 'skip'. A store that has NO repository or archive (skip) while
+    another store of the same dataset passed its check is not a skip: it is a store that lost its copy (wiped bucket, lifecycle rule,
+    deleted prefix; lab 19, apps #151). It becomes a failure with a message that says so, so oa_backup_verify_ok and
+    store_ok go to 0 and BackupVerificationFailed fires. A skip on every store stays a skip (nothing backed up yet). The
+    cnpg dataset has one row per cluster: its rows are grouped by the cluster that prefixes the message."""
+    def key(r):
+        return (r[0], r[4].split(":", 1)[0] if r[0] == "cnpg" else "")
+    holders = {}
+    for r in raw:
+        if r[2] == "1":   # only a store that passed proves that data exists (an unreadable one already fails by itself)
+            holders.setdefault(key(r), []).append(r[1])
+    out = []
+    for r in raw:
+        if r[2] == "skip" and key(r) in holders:
+            r = (r[0], r[1], "0", r[3],
+                 f"MISSING: {r[4]}, while the {'/'.join(sorted(set(holders[key(r)])))} store holds data: this store lost its copy (wiped, expired or unreachable prefix)")
+        out.append(r)
+    return out
+
+
 def longhorn(now):
     """[(store, ok, age, msg)] or None when Longhorn or its backup objects are absent."""
     def get(kind):
@@ -240,15 +261,15 @@ def main():
     a = ap.parse_args()
     now = float(os.environ.get("NOW") or time.time())
     rows = []
-    for f in ("restic.tsv", "cnpg.tsv"):
-        for ds, store, st, ref, msg in read_tsv(os.path.join(a.results, f)):
-            if st == "skip":
-                print(f"SKIP {ds}/{store}: {msg}")
-                continue
-            ok = st == "1"
-            if ok and ds in ("openbao", "etcd"):
-                ok, msg = (check_openbao if ds == "openbao" else check_etcd)(os.path.join(a.work, ds, store))
-            rows.append((ds, store, ok, age_of(ref, now), msg))
+    raw = promote_missing([r for f in ("restic.tsv", "cnpg.tsv") for r in read_tsv(os.path.join(a.results, f))])
+    for ds, store, st, ref, msg in raw:
+        if st == "skip":
+            print(f"SKIP {ds}/{store}: {msg}")
+            continue
+        ok = st == "1"
+        if ok and ds in ("openbao", "etcd"):
+            ok, msg = (check_openbao if ds == "openbao" else check_etcd)(os.path.join(a.work, ds, store))
+        rows.append((ds, store, ok, age_of(ref, now), msg))
     lh = longhorn(now)
     if lh:
         rows += [("longhorn", s, ok, age, msg) for s, ok, age, msg in lh]

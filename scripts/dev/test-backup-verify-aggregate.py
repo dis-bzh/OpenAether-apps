@@ -26,4 +26,22 @@ check("the worst age is reported", 'oa_backup_verify_newest_backup_age_seconds{d
 check("the log names the failing cluster", any("FAIL cnpg/primary" in l and "zitadel-db" in l for l in log))
 text2, _ = c.build(list(reversed(rows[:2])), now, {})
 check("the order of the rows does not matter", 'oa_backup_verify_store_ok{dataset="cnpg",store="primary"} 0' in text2)
+
+# apps #151: a store that lost its copy is not a skip
+R = lambda ds, st, k, msg, ref="5": (ds, st, k, ref, msg)
+promoted = c.promote_missing([R("etcd", "primary", "skip", "no repository at etcd"), R("etcd", "replica", "1", "restic check passed")])
+check("skip on the primary while the replica passed becomes a failure (0), naming the replica as holder",
+      promoted[0][2] == "0" and "MISSING" in promoted[0][4] and "replica store holds data" in promoted[0][4] and promoted[1][2] == "1")
+promoted = c.promote_missing([R("etcd", "primary", "skip", "no snapshot yet"), R("etcd", "replica", "skip", "no snapshot yet")])
+check("skip on every store stays a skip (nothing backed up yet)", [r[2] for r in promoted] == ["skip", "skip"])
+promoted = c.promote_missing([R("etcd", "primary", "skip", "no snapshot yet"), R("etcd", "replica", "0", "repository unreadable")])
+check("skip next to an UNREADABLE store stays a skip (that store already fails by itself)", promoted[0][2] == "skip")
+promoted = c.promote_missing([R("cnpg", "primary", "skip", "zitadel-db: empty archive"), R("cnpg", "replica", "1", "zitadel-db: ok"),
+                              R("cnpg", "primary", "skip", "grafana-db: no base backup yet"), R("cnpg", "replica", "skip", "grafana-db: no base backup yet")])
+check("cnpg: grouped per cluster, zitadel-db primary fails while grafana-db (young on both) stays a skip",
+      [r[2] for r in promoted] == ["0", "1", "skip", "skip"])
+text, log = c.build([(r[0], r[1], r[2] == "1", None, r[4]) for r in c.promote_missing([R("etcd", "primary", "skip", "no repository at etcd"), R("etcd", "replica", "1", "ok")])], now, {})
+check("the exposition then says oa_backup_verify_ok 0 and store_ok{store=primary} 0 (not a missing series)",
+      'oa_backup_verify_ok{dataset="etcd"} 0' in text and 'oa_backup_verify_store_ok{dataset="etcd",store="primary"} 0' in text
+      and 'oa_backup_verify_store_ok{dataset="etcd",store="replica"} 1' in text)
 sys.exit(1 if fails else 0)

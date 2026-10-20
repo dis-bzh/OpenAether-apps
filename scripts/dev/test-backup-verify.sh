@@ -159,6 +159,16 @@ run_all
 chk "an object older than the grace period absent from the replica: cnpg fails on replica only" "[ \"\$(storeok cnpg replica)\" = 0 ] && [ \"\$(storeok cnpg primary)\" = 1 ] && grep -q 'missing from the replica' '$W/res/cnpg.tsv'"
 cp "$W/lbl.bak" "$lbl"; run_all
 chk "replica complete again: cnpg is 1" "[ \"\$(okv cnpg)\" = 1 ]"
+# a wiped primary store (apps #151): every repository and the cnpg archive gone from the primary, the replica intact
+mv "$W/P/bkp/lab" "$W/P/lab.away"; mv "$W/P/bkp/cnpg" "$W/P/cnpg.away"; mkdir "$W/P/bkp/cnpg"
+run_all
+for ds in openbao cnpg-dump etcd cnpg; do
+  chk "a wiped primary: $ds is 0 (not a skip), store_ok primary 0, replica 1" "[ \"\$(okv $ds)\" = 0 ] && [ \"\$(storeok $ds primary)\" = 0 ] && [ \"\$(storeok $ds replica)\" = 1 ]"
+done
+chk "the message says that the primary lost its copy" "grep -q 'MISSING' '$W/s3.out' && grep -q 'FAIL etcd/primary' '$W/s3.out'"
+chk "the grafana-db archive (empty on both stores) is still a skip, not a failure" "grep -q 'SKIP cnpg/primary: grafana-db' '$W/s3.out' || ! grep -q 'FAIL cnpg/primary: grafana-db' '$W/s3.out'"
+rm -rf "$W/P/bkp/cnpg"; mv "$W/P/lab.away" "$W/P/bkp/lab"; mv "$W/P/cnpg.away" "$W/P/bkp/cnpg"; run_all
+chk "the primary back: every dataset is 1 again" "[ \"\$(okv etcd)\" = 1 ] && [ \"\$(okv openbao)\" = 1 ] && [ \"\$(okv cnpg)\" = 1 ]"
 # longhorn
 lh Error; run_all
 chk "a Longhorn backup in Error: longhorn fails" "[ \"\$(okv longhorn)\" = 0 ]"

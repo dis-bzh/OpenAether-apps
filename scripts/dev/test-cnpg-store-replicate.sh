@@ -64,7 +64,13 @@ chk "and removed once older than the grace period" "[ $rc = 0 ] && [ ! -f '$W/R/
 mv "$W/P/bp/cnpg" "$W/P/cnpg.away"; mkdir "$W/P/bp/cnpg"
 find "$W/R/br/cnpg" -type f -exec touch -d '90 days ago' {} +
 run; rc=$?
-chk "an empty primary prunes nothing" "[ $rc = 0 ] && [ \"\$(find '$W/R/br/cnpg' -type f | wc -l)\" -ge 9 ] && grep -q 'WARN' '$W/out'"
+chk "an empty primary prunes nothing" "[ \"\$(find '$W/R/br/cnpg' -type f | wc -l)\" -ge 9 ] && grep -q 'nothing is pruned' '$W/out'"
+chk "an empty primary while the replica holds objects FAILS the job, naming both clusters (apps #151)" "[ $rc != 0 ] && grep -q 'ERROR: zitadel-db: the primary lists no object while the replica holds' '$W/out' && grep -q 'ERROR: grafana-db: the primary lists no object' '$W/out'"
+chk "a missing primary prefix is the same case (no prefix, not only an empty one)" "rmdir '$W/P/bp/cnpg' && run; rc=\$?; [ \$rc != 0 ] && grep -q 'wiped, emptied or unreadable' '$W/out'; mkdir '$W/P/bp/cnpg'"
+rm -rf "$W/R/br/cnpg.keep"; cp -a "$W/R/br/cnpg" "$W/R.keep"; rm -rf "$W/R/br/cnpg"; mkdir "$W/R/br/cnpg"
+run; rc=$?
+chk "both stores empty (nothing archived yet) is not a failure" "[ $rc = 0 ] && grep -q 'neither store holds an object yet' '$W/out'"
+rm -rf "$W/R/br/cnpg"; cp -a "$W/R.keep" "$W/R/br/cnpg"
 # more than half: the primary keeps one cluster only, the replica has >20 objects
 rm -rf "$W/P/bp/cnpg"; mkdir -p "$W/P/bp/cnpg/zitadel-db"; cp -r "$W/P/cnpg.away/zitadel-db/." "$W/P/bp/cnpg/zitadel-db/"
 for n in $(seq 25); do head -c 50 /dev/urandom >"$W/R/br/cnpg/grafana-db/extra$n"; touch -d '90 days ago' "$W/R/br/cnpg/grafana-db/extra$n"; done

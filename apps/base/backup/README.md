@@ -142,7 +142,9 @@ exercise (this section, and the OpenBao runbook in `foundation/vault/README.md`)
 before its `backup.info`, uploaded with the SSE-S3 request. So the replica trails the primary by up to 15 min plus the copy time: that is
 the RPO of a recovery **from the replica store**, not the minutes of a WAL switch. An object that left the primary (Barman
 retention) is removed from the replica only after 45 days, and never against an empty primary or when it would remove more than half
-of a cluster's replica objects (the job fails instead). The `<cluster>-replica` ObjectStores name the replica bucket
+of a cluster's replica objects (the job fails instead). A primary that lists NO object while the replica holds some (wiped bucket,
+lifecycle rule, deleted prefix) also fails the job (`BackupCopyJobFailed`, "the primary lists no object while the replica holds N"),
+it is no longer a quiet exit 0; both stores empty is a cluster that has archived nothing yet and passes. The `<cluster>-replica` ObjectStores name the replica bucket
 (`BACKUP_REPLICA_S3_*` in `cluster-identity`) for a recovery. A failed job is the signal (`BackupJobFailed`, plus the freshness
 series of the verifier). Not exercised on a cluster: UNVERIFIED until the M2 lab.
 
@@ -217,7 +219,10 @@ and sha256 trailer); `cnpg` (the Barman archive: the latest base backup is `DONE
 structure are verified, every WAL segment from its `begin_wal` to the newest exists, a sample reads to its end, and on the replica
 store no object older than two hours is missing compared with the primary); `longhorn` (the newest backup of each volume is
 `Completed`, with a size and no error: the blocks are NOT read). A repository that does not exist, a cluster with no base backup
-yet and an archive younger than 30 hours are skipped (no series), not failed. What it does NOT prove: that a restore into a running
+yet and an archive younger than 30 hours are skipped (no series), not failed, **unless another store of the same dataset (the same
+cluster for `cnpg`) passed its check**: then the store without repository or archive is a store that lost its copy, and it FAILS
+(`oa_backup_verify_ok{dataset} 0`, `oa_backup_verify_store_ok{dataset,store} 0`, message `MISSING ...`; apps #151). Not detected: both
+stores wiped at once (nothing is left to compare; the freshness alerts of the jobs and `BackupNotSucceededRecently` are the only signal). What it does NOT prove: that a restore into a running
 database or etcd works (the restore tests, M3), and that a byte flipped inside an etcd snapshot's data pages (no hash trailer) is
 seen (`etcdutl snapshot status` would; restic's own authentication covers the stored copy). It uses the key pairs of the backup
 Jobs (restic needs to write its lock files); a read-only pair is a follow-up.
