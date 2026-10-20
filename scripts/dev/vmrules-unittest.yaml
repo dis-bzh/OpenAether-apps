@@ -648,6 +648,18 @@ tests:
         alertname: BackupNotSucceededRecently
         exp_alerts:
           - exp_labels: {namespace: foundation-vault, cronjob: openbao-snapshot, severity: critical, component: backup}
+  - name: a failed restore-test Job is not a failed backup Job (lab 20, the name starts like cnpg-dump)
+    interval: 1m
+    input_series:
+      - series: 'kube_job_status_failed{namespace="foundation-databases", job_name="cnpg-dump-load-restore-test-29875250"}'
+        values: '1x60'
+      - series: 'kube_job_status_failed{namespace="foundation-databases", job_name="cnpg-dump-29875250"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: BackupJobFailed
+        exp_alerts:
+          - exp_labels: {namespace: foundation-databases, job_name: cnpg-dump-29875250, severity: critical, component: backup}
   - name: the etcd snapshot CronJob is watched for staleness too (lab 20)
     interval: 10m
     input_series:

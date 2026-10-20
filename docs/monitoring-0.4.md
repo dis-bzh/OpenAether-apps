@@ -40,20 +40,21 @@ availability, and one heartbeat service plus one chat receiver as the only out-o
 - **Etcd, certificates, Flux, Cilium, OpenBao rules** were already there; M1 only adds their runbooks.
 - Thresholds are starting values to tune during the first week of a soak.
 
-## UNVERIFIED: series and paths no cluster has shown (after lab 19)
+## UNVERIFIED: series and paths no cluster has shown (after lab 20)
 
-`longhorn_backup_state` (the other 41 were read on a cluster in lab 19, see below) and `kube_pod_init_container_status_running`
-(added after lab 19 for `PodPendingTooLong`: a Pod with an init container running is left out; read it while a backup Job runs).
+None is left among the catalogued metrics. Lab 19 read 41 of them; lab 20 (Scaleway + OVH replica store, 2026-10-20) read the last ones:
+`longhorn_backup_state` (one series per backup, value 3 for a completed one, with a backup target and the opt-in restore-test component),
+`kube_pod_init_container_status_running` (1 while a Pod's init container runs, back to 0 when it ends; `PodPendingTooLong` stayed
+silent for an 18-minute Pending Pod with a running init container and fired at 16 min 45 s for a Pod that was really unschedulable), and
+`oa_restore_test_ok`, `oa_restore_test_last_success_timestamp_seconds`, `oa_restore_test_last_run_timestamp_seconds` and
+`oa_restore_test_recovery_seconds` (published by the restore-test Jobs, scraped through the verifier's exporter: the value reaches
+VictoriaMetrics about 1 to 2 minutes after the Job ends).
 
-Read in lab 19 (Scaleway, Longhorn 1.12.1, Talos 1.14.2): all the other series above exist (`task check-alerts`-style query of each name),
-the scrapes `istio-gateway` (15090) and `longhorn-manager` (9500) are up, the PSI series exist on all six nodes (Talos exposes them),
-`istio_requests_total` carries `response_code` and `reporter` (`source` only, on the gateway), the `alertmanager_notification_requests_*` counters
-count per integration and per attempt. Two shapes differed from the assumption and were corrected: `longhorn_volume_robustness` is one-hot (a series per
-`state`, not 1/2/3), and the verifier's exporter could not be scraped until vmagent's egress allowed 9101. Still UNVERIFIED: the Longhorn
-backup series (`longhorn_backup_state`: no backup target in the lab).
-
-The restore tests (M3) add `oa_restore_test_ok`, `oa_restore_test_last_success_timestamp_seconds`, `oa_restore_test_last_run_timestamp_seconds`
-and `oa_restore_test_recovery_seconds` (same exporter and scrape as the verifier): UNVERIFIED until a lab has run the CronJobs once.
+Lab 19 (Scaleway, Longhorn 1.12.1, Talos 1.14.2) had read the others: the scrapes `istio-gateway` (15090) and `longhorn-manager` (9500) are up,
+the PSI series exist on all six nodes (Talos exposes them), `istio_requests_total` carries `response_code` and `reporter` (`source` only, on the
+gateway), the `alertmanager_notification_requests_*` counters count per integration and per attempt. Two shapes differed from the assumption and
+were corrected: `longhorn_volume_robustness` is one-hot (a series per `state`, not 1/2/3), and the verifier's exporter could not be scraped until
+vmagent's egress allowed 9101.
 
 ## What a short lab must observe (pass criteria)
 

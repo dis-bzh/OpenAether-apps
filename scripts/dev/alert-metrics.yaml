@@ -2,8 +2,9 @@
 #   status existing   : read by a rule that predates 0.4.0 M1 (`task check-alerts` of the labs found series for all of
 #                       them but kube_job_failed and kubelet_volume_stats_*, quiet by design: docs/detection.md), or
 #                       exported by code shipped in the repo (oa_backup_verify_*, the M2 verifier: no lab read them).
-#   status UNVERIFIED : added by M1, never read on a cluster. Lab 19 (Scaleway, 2026-10-20) read all of them but
-#                       longhorn_backup_state (no Longhorn backup target there).
+#   status UNVERIFIED : added by M1/M3, never read on a cluster. Lab 19 (2026-10-20) read the M1 ones but longhorn_backup_state;
+#                       lab 20 (Scaleway + OVH replica store, 2026-10-20) read that one, kube_pod_init_container_status_running
+#                       and the four oa_restore_test_* series. None is left.
 #   source            : the scrape that must exist (SCRAPES in the test), or `scrape` for `up`.
 ALERTS:
   source: vmalert
@@ -142,7 +143,7 @@ kube_pod_container_status_restarts_total:
   status: existing
 kube_pod_init_container_status_running:
   source: kube-state-metrics
-  status: UNVERIFIED
+  status: existing
 kube_pod_owner:
   source: kube-state-metrics
   status: existing
@@ -193,7 +194,7 @@ loki_write_sent_entries_total:
   status: existing
 longhorn_backup_state:
   source: longhorn
-  status: UNVERIFIED
+  status: existing
 longhorn_disk_capacity_bytes:
   source: longhorn
   status: existing
@@ -262,16 +263,16 @@ oa_backup_verify_store_ok:
   status: existing
 oa_restore_test_last_run_timestamp_seconds:
   source: backup-verify
-  status: UNVERIFIED
+  status: existing
 oa_restore_test_last_success_timestamp_seconds:
   source: backup-verify
-  status: UNVERIFIED
+  status: existing
 oa_restore_test_ok:
   source: backup-verify
-  status: UNVERIFIED
+  status: existing
 oa_restore_test_recovery_seconds:
   source: backup-verify
-  status: UNVERIFIED
+  status: existing
 up:
   source: scrape
   status: existing
