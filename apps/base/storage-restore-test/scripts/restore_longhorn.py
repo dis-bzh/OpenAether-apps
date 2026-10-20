@@ -104,7 +104,7 @@ def pod_manifest(image, created):
                      "securityContext": {"runAsNonRoot": True, "runAsUser": 1000, "runAsGroup": 1000, "fsGroup": 1000,
                                          "seccompProfile": {"type": "RuntimeDefault"}},
                      "containers": [{"name": "verify", "image": image, "securityContext": sc,
-                                     "command": ["python3", "/scripts/canary_volume.py", "verify", "/data", "--backup-created", f"{created:.0f}"],
+                                     "command": ["python3", "/scripts/canary_volume.py", "verify", "/data/canary", "--backup-created", f"{created:.0f}"],
                                      "volumeMounts": [{"name": "data", "mountPath": "/data", "readOnly": True},
                                                       {"name": "scripts", "mountPath": "/scripts", "readOnly": True}],
                                      "resources": {"requests": {"cpu": "20m", "memory": "64Mi"}, "limits": {"cpu": "500m", "memory": "256Mi"}}}],

@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 
 S = os.environ["FAKE_STATE"]
@@ -85,7 +86,12 @@ elif verb == "apply":
 elif verb == "logs":
     o = json.load(open(path("pod", a[1])))
     cmd = o["spec"]["containers"][0]["command"]
-    r = subprocess.run([sys.executable, CANARY, "verify", os.environ["FAKE_DATA"], "--backup-created", cmd[cmd.index("--backup-created") + 1]],
+    # The writer puts the files in <volume>/canary (canary.yaml: write /data/canary); the verify pod mounts the volume at /data. FAKE_DATA
+    # is that canary directory, and any other path the pod is told to verify holds nothing (lab 20: the pod verified /data and
+    # reported "no MANIFEST on the restored volume" on a good backup).
+    vdir = cmd[cmd.index("verify") + 1]
+    data = os.environ["FAKE_DATA"] if vdir == "/data/canary" else tempfile.mkdtemp()
+    r = subprocess.run([sys.executable, CANARY, "verify", data, "--backup-created", cmd[cmd.index("--backup-created") + 1]],
                        capture_output=True, text=True)
     say(r.stdout.strip())
 elif verb == "delete" and what in ("pod", "volumes.longhorn.io"):
