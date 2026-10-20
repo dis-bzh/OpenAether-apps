@@ -331,7 +331,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ### AlertDeliveryFailing
 
-- Check: Alertmanager `alertmanager_notifications_failed_total{integration}` and its log (`kubectl -n services-observability logs vmalertmanager-alertmanager-0 -c alertmanager | grep -i 'notify\|error'`).
+- Check: Alertmanager `alertmanager_notification_requests_failed_total{integration}` and its log (`kubectl -n services-observability logs vmalertmanager-alertmanager-0 -c alertmanager | grep -i 'notify\|error'`).
 - Do: `slack`: renew the webhook in OpenBao (`secret/observability/alertmanager-slack`); `webhook`: the heartbeat URL or its host in the egress policy.
 
 ### AlertDeliveryNotAcknowledged

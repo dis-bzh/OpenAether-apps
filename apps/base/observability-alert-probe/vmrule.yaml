@@ -3,6 +3,9 @@
 #
 # Chain proven when this works: vmalert evaluates -> Alertmanager routes `probe="delivery"` to the chat receiver ->
 # the receiver answers 2xx (Alertmanager counts any other answer as failed) -> the counters below show it.
+# The REQUEST counters (one per attempt, retries included), not alertmanager_notifications_*: those count one per notification
+# CYCLE at its start and the failure only when the cycle gives up (up to a group_interval later), so while a failing alert is
+# being retried total - failed stays above 0 and the unacknowledged alert could not fire (lab 19).
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:
@@ -29,7 +32,7 @@ spec:
             description: "Twice a day. Receiving it in chat proves vmalert, Alertmanager and the receiver."
         # A notification attempt failed lately (any receiver, the heartbeat included).
         - alert: AlertDeliveryFailing
-          expr: sum by (integration) (increase(alertmanager_notifications_failed_total[1h])) > 0
+          expr: sum by (integration) (increase(alertmanager_notification_requests_failed_total[1h])) > 0
           labels:
             severity: warning
             component: alerting
@@ -43,8 +46,8 @@ spec:
         - alert: AlertDeliveryNotAcknowledged
           expr: |
             (
-              sum(increase(alertmanager_notifications_total{integration="slack"}[14h]))
-              - (sum(increase(alertmanager_notifications_failed_total{integration="slack"}[14h])) or vector(0))
+              sum(increase(alertmanager_notification_requests_total{integration="slack"}[14h]))
+              - (sum(increase(alertmanager_notification_requests_failed_total{integration="slack"}[14h])) or vector(0))
               < 0.5
             )
             and on() (max_over_time(ALERTS{alertname="AlertDeliveryProbe", alertstate="firing"}[14h]) > 0)

@@ -37,7 +37,7 @@ Component `apps/flux/components/alert-delivery-probe`, off in every profile, for
 
 Limits, stated: the failing-chat alert cannot reach the chat; an Alertmanager restart is covered because counters keep their
 history in the window, but a lost counter series is not; the alert names above are tested on synthetic counters, the real
-`alertmanager_notifications_*` series are UNVERIFIED until a lab reads them.
+`alertmanager_notification_requests_*` series were read in lab 19 (one per attempt; the older `alertmanager_notifications_*` count a cycle at its start and its failure up to 5 min later, so they cannot say "no success").
 
 ## Routing
 

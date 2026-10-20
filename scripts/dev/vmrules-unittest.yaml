@@ -403,7 +403,7 @@ tests:
     input_series:
       - series: 'ALERTS{alertname="AlertDeliveryProbe", alertstate="firing"}'
         values: '_x36 1 _x100'
-      - series: 'alertmanager_notifications_total{integration="slack"}'
+      - series: 'alertmanager_notification_requests_total{integration="slack"}'
         values: '0+0x36 1+0x100'
     alert_rule_test:
       - {eval_time: 8h, alertname: AlertDeliveryNotAcknowledged, exp_alerts: []}
@@ -412,9 +412,9 @@ tests:
     input_series:
       - series: 'ALERTS{alertname="AlertDeliveryProbe", alertstate="firing"}'
         values: '_x36 1 _x100'
-      - series: 'alertmanager_notifications_total{integration="slack"}'
+      - series: 'alertmanager_notification_requests_total{integration="slack"}'
         values: '0+0x36 3+0x100'
-      - series: 'alertmanager_notifications_failed_total{integration="slack"}'
+      - series: 'alertmanager_notification_requests_failed_total{integration="slack"}'
         values: '0+0x36 3+0x100'
     alert_rule_test:
       - {eval_time: 6h10m, alertname: AlertDeliveryNotAcknowledged, exp_alerts: []}   # inside the for: 20m
@@ -432,7 +432,7 @@ tests:
   - name: no probe yet, no verdict (a cluster younger than its first window)
     interval: 10m
     input_series:
-      - series: 'alertmanager_notifications_total{integration="slack"}'
+      - series: 'alertmanager_notification_requests_total{integration="slack"}'
         values: '0+0x100'
     alert_rule_test:
       - {eval_time: 5h, alertname: AlertDeliveryNotAcknowledged, exp_alerts: []}

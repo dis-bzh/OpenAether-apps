@@ -13,10 +13,10 @@ alertmanager_build_info:
 alertmanager_config_last_reload_successful:
   source: alertmanager
   status: existing
-alertmanager_notifications_failed_total:
+alertmanager_notification_requests_failed_total:
   source: alertmanager
   status: existing
-alertmanager_notifications_total:
+alertmanager_notification_requests_total:
   source: alertmanager
   status: existing
 certmanager_certificate_expiration_timestamp_seconds:
