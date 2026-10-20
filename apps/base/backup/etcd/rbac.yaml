@@ -1,6 +1,6 @@
-# The identity of the etcd snapshot Job: LIST the control-plane nodes (their InternalIPs are the Talos API addresses) and
-# nothing else. Nodes are cluster-scoped, hence a ClusterRole; it grants no Secret, no write, no other kind. Only the first init
-# container mounts the token (the talosctl and restic containers never see it).
+# The identity of the etcd snapshot Job: LIST the control-plane nodes (their InternalIPs are the Talos API addresses)
+# and nothing else. Nodes are cluster-scoped, hence a ClusterRole; it grants no Secret, no write, no other kind. Only
+# the first init container mounts the token (the talosctl and restic containers never see it).
 ---
 apiVersion: v1
 kind: ServiceAccount

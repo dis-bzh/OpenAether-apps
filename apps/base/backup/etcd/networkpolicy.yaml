@@ -1,6 +1,6 @@
-# etcd-snapshot: the Kubernetes API (the first init container lists the control-plane nodes), the Talos API of the control
-# planes (50000, addressed by node IP: the `talos.default` name of the grant resolves to nothing) and the object stores. A pod
-# reaches a control-plane node as a node entity.
+# etcd-snapshot: the Kubernetes API (the first init container lists the control-plane nodes), the Talos API of the
+# control planes (50000, addressed by node IP: the `talos.default` name of the grant resolves to nothing) and the object
+# stores. A pod reaches a control-plane node as a node entity.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:

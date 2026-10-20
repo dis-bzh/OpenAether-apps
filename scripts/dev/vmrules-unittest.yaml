@@ -1,6 +1,7 @@
 # Behaviour tests of alert rules, run by scripts/dev/test-vmrules.sh with vmalert-tool (rules.yaml is the built
 # VMRules, restricted to the groups tested here). vmalert-tool starts its clock at 2000-01-01T00:00:00Z
 # (946684800), which is the "created" value of the series below. Rung: mocked/static, synthetic series only.
+# yamllint disable rule:line-length
 rule_files:
   - rules-under-test.yaml
 evaluation_interval: 10m
@@ -699,7 +700,7 @@ tests:
         alertname: CnpgReplicaNotStreaming
         exp_alerts:
           - exp_labels: {cnpg_io_cluster: db, pod: db-2, severity: warning, component: database}
-  - name: CNPG instance that left the exporters (apps #152, lab 19)
+  - name: CNPG instance that left the exporters (lab 19)
     interval: 1m
     input_series:
       - series: 'cnpg_collector_up{cnpg_io_cluster="db", pod="db-1"}'
@@ -721,7 +722,7 @@ tests:
         exp_alerts:
           - exp_labels: {cnpg_io_cluster: db, severity: warning, component: database}
           - exp_labels: {cnpg_io_cluster: gone, severity: warning, component: database}
-  - name: a Pod busy in its init containers is not Pending too long (apps #152, lab 19)
+  - name: a Pod busy in its init containers is not Pending too long (lab 19)
     interval: 1m
     input_series:
       - series: 'kube_pod_status_phase{namespace="foundation-databases", pod="backup-verify-1", phase="Pending"}'
@@ -737,7 +738,7 @@ tests:
         alertname: PodPendingTooLong
         exp_alerts:
           - exp_labels: {namespace: apps, pod: stuck, severity: warning, component: workload}
-  - name: a Pending pod that fits nowhere does not inflate the CPU requests ratio (apps #152, lab 19)
+  - name: a Pending pod that fits nowhere does not inflate the CPU requests ratio (lab 19)
     interval: 1m
     input_series:
       - series: 'kube_node_status_allocatable{resource="cpu", node="n1"}'
@@ -772,7 +773,7 @@ tests:
               runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#clustercpurequestshigh"
               summary: "CPU requests reach 95% of what the nodes offer"
               description: "Little room to reschedule after a node loss (a shipped example once ran at 172 % on two workers). Requests of Running pods only: a Pending pod that fits nowhere (lab 19: one 64-CPU pod gave a ratio of 3.1) and finished pods are left out. PodPendingTooLong owns the pods that cannot be placed."
-  - name: AlertDeliveryFailing clears 15 min after the last failed attempt, not one hour (apps #152, lab 19)
+  - name: AlertDeliveryFailing clears 15 min after the last failed attempt, not one hour (lab 19)
     interval: 1m
     input_series:
       - series: 'alertmanager_notification_requests_failed_total{integration="slack"}'
