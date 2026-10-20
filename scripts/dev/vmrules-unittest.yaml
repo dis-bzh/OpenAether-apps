@@ -648,17 +648,19 @@ tests:
         alertname: BackupNotSucceededRecently
         exp_alerts:
           - exp_labels: {namespace: foundation-vault, cronjob: openbao-snapshot, severity: critical, component: backup}
-  - name: a failed etcd snapshot Job is a backup failure (lab 20, BackupJobFailed only knew two other Jobs)
-    interval: 1m
+  - name: the etcd snapshot CronJob is watched for staleness too (lab 20)
+    interval: 10m
     input_series:
-      - series: 'kube_job_status_failed{namespace="foundation-databases", job_name="etcd-snapshot-29875250"}'
-        values: '1x60'
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="etcd-snapshot"}'
+        values: '946684800+0x400'
+      - series: 'kube_cronjob_status_last_successful_time{namespace="foundation-databases", cronjob="etcd-snapshot"}'
+        values: '946684800+0x400'
     alert_rule_test:
-      - {eval_time: 5m, alertname: BackupJobFailed, exp_alerts: []}
-      - eval_time: 30m
-        alertname: BackupJobFailed
+      - {eval_time: 10h, alertname: BackupNotSucceededRecently, exp_alerts: []}
+      - eval_time: 40h
+        alertname: BackupNotSucceededRecently
         exp_alerts:
-          - exp_labels: {namespace: foundation-databases, job_name: etcd-snapshot-29875250, severity: critical, component: backup}
+          - exp_labels: {namespace: foundation-databases, cronjob: etcd-snapshot, severity: critical, component: backup}
   - name: backup never succeeded since the CronJob was created
     interval: 10m
     input_series:

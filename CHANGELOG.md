@@ -55,7 +55,7 @@ fix #134** and does not make the Zitadel recovery automatic: a person still runs
 
 - The etcd snapshot Job's discovery init container failed on a real cluster: kubectl 1.36 ignores the in-cluster config when `--request-timeout` is passed and asks `localhost:8080` (the #150 fix had only met a fake kubectl). The timeout is the shell's now; the manifest test refuses the flag.
 - The Longhorn canary volume was never backed up: it is detached except for the seconds the hourly writer holds it, and Longhorn's recurring jobs skip a detached volume unless `allow-recurring-job-while-volume-detached` is true (default false). The opt-in `longhorn-restore-test` component sets it.
-- `BackupJobFailed`, `BackupNotSucceededRecently`, `BackupCronJobStale` and `BackupCronJobSuspended` did not know the etcd snapshot Job: a failing or stale `etcd-snapshot` (it failed daily in lab 19 and with the discovery bug in lab 20) alerted nobody but the verifier. They select it now; unit case added.
+- `BackupNotSucceededRecently`, `BackupCronJobStale` and `BackupCronJobSuspended` did not know the etcd snapshot CronJob (a failed Job was already seen by `BackupCopyJobFailed`, but a snapshot that stops being taken or succeeding was not). They select it now; unit case added.
 
 ### Fixed (found by lab 19, Scaleway + OVH replica store, 2026-10-20)
 

@@ -30,7 +30,7 @@ spec:
         - alert: BackupJobFailed
           expr: |
             max by (namespace, job_name) (
-              kube_job_status_failed{namespace=~"foundation-.*", job_name=~"(openbao-snapshot|cnpg-dump|etcd-snapshot)-.*"}
+              kube_job_status_failed{namespace=~"foundation-.*", job_name=~"(openbao-snapshot|cnpg-dump)-.*"}
             ) > 0
           for: 15m
           labels:
