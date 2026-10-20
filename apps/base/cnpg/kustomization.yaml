@@ -50,8 +50,8 @@ patches:
           requests: { cpu: 25m, memory: 64Mi }
           limits: { cpu: 250m, memory: 128Mi }
 
-# The plugin's mTLS leaves come without a rotation policy; the repository names one on every Certificate (cert-manager 1.18
-# changed the unwritten default). Always, like the other leaves: a new key at each renewal (every 90 days, 15 before).
+# The plugin's mTLS leaves come without a rotation policy; the repository names one on every Certificate (cert-manager
+# 1.18 changed the unwritten default). Always, like the other leaves: a new key at each renewal (90 days, 15 before).
   - target:
       kind: Certificate
       name: barman-cloud-(client|server)
