@@ -1,7 +1,7 @@
 # Where each metric read by an alert comes from, and how sure we are it exists. Checked by test-alert-metrics.py.
 #   status existing   : read by a rule that predates 0.4.0 M1 (`task check-alerts` of the labs found series for all of
-#                       them but kube_job_failed and kubelet_volume_stats_*, quiet by design: docs/detection.md), or exported by
-#                       code shipped in the repo (oa_backup_verify_*, the M2 verifier: a lab has not read them yet).
+#                       them but kube_job_failed and kubelet_volume_stats_*, quiet by design: docs/detection.md), or
+#                       exported by code shipped in the repo (oa_backup_verify_*, the M2 verifier: no lab read them).
 #   status UNVERIFIED : added by M1, never read on a cluster; the next lab runs `task check-alerts` and flips it.
 #   source            : the scrape that must exist (SCRAPES in the test), or `scrape` for `up`.
 ALERTS:

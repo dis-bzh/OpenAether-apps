@@ -474,13 +474,38 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ### BackupVerificationStale
 
-- Check: The verifier's CronJob and logs (from M2).
+- Check: The verifier's CronJob and logs (`backup-verify`, foundation-databases).
 - Do: Fix the verifier or the backup it reports on.
 
 ### BackupVerificationFailed
 
-- Check: The verifier's logs (from M2): which object or checksum failed.
+- Check: The verifier's logs (`backup-verify`, `-c collect`): which object or checksum failed.
 - Do: Treat the backup as corrupt: run a fresh backup and verify it.
+
+### BackupCopyJobFailed
+
+- Check: `kubectl -n <ns> logs job/<job>`; the Job is one of `cnpg-store-replicate`, `etcd-snapshot`, `backup-verify`.
+- Do: Fix what the log names (a store or its key pair, the Talos grant `os:etcd:backup`, restic), then `kubectl -n <ns> create job --from=cronjob/<cronjob> manual-$(date +%s)`. A failed CHECK of the verifier is a metric, not a failed Job.
+
+### CnpgStoreReplicationStale
+
+- Check: `kubectl -n foundation-databases get cronjob,job | grep cnpg-store-replicate` and the log of the last Job.
+- Do: Restore the replica store or its key pair (secret `backup/s3-replica`); run one copy by hand. Until then the replica store is behind its stated RPO.
+
+### EtcdSnapshotStale
+
+- Check: `kubectl -n foundation-databases get cronjob etcd-snapshot` and the log of the last Job.
+- Do: Fix the Talos access (role `os:etcd:backup`) or the restic destination, then run one snapshot by hand.
+
+### BackupVerifierStale
+
+- Check: `kubectl -n foundation-databases get cronjob backup-verify` and the log of the last Job.
+- Do: Fix the verifier, run it by hand; until it runs, no backup is proven readable.
+
+### BackupStoreVerificationFailed
+
+- Check: `kubectl logs -n foundation-databases job/<latest backup-verify job> -c collect`: stage 3 prints PASS or FAIL per dataset and store.
+- Do: Treat the copy on that store as unreadable: take a fresh backup, copy it, verify again. `BackupVerificationFailed` (per dataset) fires with it.
 
 ## Databases (CNPG)
 

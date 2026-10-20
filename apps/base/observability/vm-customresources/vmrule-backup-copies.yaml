@@ -26,6 +26,7 @@ spec:
             severity: critical
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#backupcopyjobfailed"
             summary: "Backup copy or verification failed: {{ $labels.namespace }}/{{ $labels.job_name }}"
             description: >-
               The Job failed and was not retried. cnpg-store-replicate: a store or its key pair refuses (the
@@ -44,6 +45,8 @@ spec:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              cnpgstorereplicationstale"
             summary: "The CNPG archive was not copied to the replica store for over an hour"
             description: >-
               cnpg-store-replicate runs every 15 minutes. Past an hour the replica store is behind by more than
@@ -59,6 +62,7 @@ spec:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#etcdsnapshotstale"
             summary: "No successful etcd snapshot for over 36 hours"
             description: >-
               The in-cluster etcd-snapshot CronJob (daily) has not completed. Without a snapshot a lost control
@@ -75,6 +79,7 @@ spec:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#backupverifierstale"
             summary: "The backup verifier has not completed for over 36 hours"
             description: >-
               backup-verify is the only thing that proves the backups readable. When it does not run, the
@@ -88,6 +93,8 @@ spec:
             severity: critical
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              backupstoreverificationfailed"
             summary: "The {{ $labels.dataset }} backup failed verification on the {{ $labels.store }} store"
             description: >-
               A copy that cannot be read is no copy. The verifier log says what: kubectl logs -n

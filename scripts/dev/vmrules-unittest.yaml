@@ -347,6 +347,8 @@ tests:
           - exp_labels:
               {namespace: foundation-databases, cronjob: cnpg-store-replicate, severity: warning, component: backup}
             exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+                cnpgstorereplicationstale"
               summary: "The CNPG archive was not copied to the replica store for over an hour"
               description: >-
                 cnpg-store-replicate runs every 15 minutes. Past an hour the replica store is behind by more than its
@@ -368,6 +370,8 @@ tests:
           - exp_labels:
               {dataset: cnpg, store: replica, severity: critical, component: backup}
             exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+                backupstoreverificationfailed"
               summary: "The cnpg backup failed verification on the replica store"
               description: >-
                 A copy that cannot be read is no copy. The verifier log says what: kubectl logs -n foundation-databases
