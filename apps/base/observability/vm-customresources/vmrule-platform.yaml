@@ -27,6 +27,8 @@ spec:
         #    so they get a 2.5 h window. HelmRepository (24 h) and the other kinds are not watched here.
         #    Does NOT catch "reconciling but failing": Flux 2.8 and 2.9 export no
         #    per-object Ready condition (OpenAether-infra CHANGELOG, Known limits).
+        # A suspended object does not reconcile on purpose (alloy-audit is suspended in every default install: lab 19
+        # saw this critical alert fire 2.5 h after install), hence the unless; FluxObjectSuspended owns that case.
         - alert: FluxReconciliationStalled
           expr: |
             (
@@ -34,10 +36,9 @@ spec:
               or
               increase(gotk_reconcile_duration_seconds_count{kind="HelmRelease"}[150m]) == 0
             )
-            # A suspended object does not reconcile on purpose (alloy-audit is suspended in every default install: lab 19 saw this
-            # critical alert fire 2.5 h after install). FluxObjectSuspended owns that case.
             unless on (kind, name, namespace)
-            label_replace(label_replace(gotk_resource_info{suspended="true"}, "kind", "$1", "customresource_kind", "(.*)"),
+            label_replace(
+              label_replace(gotk_resource_info{suspended="true"}, "kind", "$1", "customresource_kind", "(.*)"),
               "namespace", "$1", "exported_namespace", "(.*)")
           for: 10m
           labels:

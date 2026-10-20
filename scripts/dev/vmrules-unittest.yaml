@@ -553,11 +553,15 @@ tests:
     input_series:
       - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="alloy-audit", namespace="obs-audit"}'
         values: '5x40'
-      - series: 'gotk_resource_info{customresource_kind="HelmRelease", name="alloy-audit", exported_namespace="obs-audit", namespace="obs", suspended="true"}'
+      - series: >-
+          gotk_resource_info{customresource_kind="HelmRelease", name="alloy-audit",
+          exported_namespace="obs-audit", namespace="obs", suspended="true"}
         values: '1x40'
       - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="stuck", namespace="x"}'
         values: '5x40'
-      - series: 'gotk_resource_info{customresource_kind="HelmRelease", name="stuck", exported_namespace="x", namespace="obs", suspended="false"}'
+      - series: >-
+          gotk_resource_info{customresource_kind="HelmRelease", name="stuck", exported_namespace="x",
+          namespace="obs", suspended="false"}
         values: '1x40'
     alert_rule_test:
       - eval_time: 5h
@@ -594,9 +598,17 @@ tests:
   - name: a PDB that allows no disruption by design is not reported
     interval: 1m
     input_series:
-      - {series: 'kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="foundation-databases", poddisruptionbudget="zitadel-db-primary"}', values: '0x90'}
-      - {series: 'kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="longhorn-system", poddisruptionbudget="instance-manager-abc"}', values: '0x90'}
-      - {series: 'kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="a", poddisruptionbudget="web"}', values: '0x90'}
+      - series: >-
+          kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="foundation-databases",
+          poddisruptionbudget="zitadel-db-primary"}
+        values: '0x90'
+      - series: >-
+          kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="longhorn-system",
+          poddisruptionbudget="instance-manager-abc"}
+        values: '0x90'
+      - series: >-
+          kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="a", poddisruptionbudget="web"}
+        values: '0x90'
     alert_rule_test:
       - eval_time: 80m
         alertname: PdbBlocksDisruption

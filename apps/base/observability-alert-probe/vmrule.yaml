@@ -3,9 +3,9 @@
 #
 # Chain proven when this works: vmalert evaluates -> Alertmanager routes `probe="delivery"` to the chat receiver ->
 # the receiver answers 2xx (Alertmanager counts any other answer as failed) -> the counters below show it.
-# The REQUEST counters (one per attempt, retries included), not alertmanager_notifications_*: those count one per notification
-# CYCLE at its start and the failure only when the cycle gives up (up to a group_interval later), so while a failing alert is
-# being retried total - failed stays above 0 and the unacknowledged alert could not fire (lab 19).
+# The REQUEST counters (one per attempt, retries included), not alertmanager_notifications_*: those count one per
+# notification CYCLE at its start and the failure only when the cycle gives up (up to a group_interval later), so while
+# a failing alert is being retried total - failed stays above 0 and the unacknowledged alert could not fire (lab 19).
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:
