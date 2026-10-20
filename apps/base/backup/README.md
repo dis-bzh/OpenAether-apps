@@ -150,7 +150,7 @@ of a cluster's replica objects (the job fails instead). A primary that lists NO 
 lifecycle rule, deleted prefix) also fails the job (`BackupCopyJobFailed`, "the primary lists no object while the replica holds N"),
 it is no longer a quiet exit 0; both stores empty is a cluster that has archived nothing yet and passes. The `<cluster>-replica` ObjectStores name the replica bucket
 (`BACKUP_REPLICA_S3_*` in `cluster-identity`) for a recovery. A failed job is the signal (`BackupJobFailed`, plus the freshness
-series of the verifier). Not exercised on a cluster: UNVERIFIED until the M2 lab.
+series of the verifier). Run in lab 19: 46 s for 22 objects, SSE-S3 present on the replica objects, nothing copied on the second run; recovery from the replica store alone (primary emptied) took 66 s.
 
 CNPG point-in-time recovery (Barman Cloud plugin, RPO of minutes). Restore into a NEW Cluster next to the original, in
 `foundation-databases` (the namespace of the ObjectStore objects, the S3 credentials Secret `cnpg-backup-s3` and the egress
@@ -190,7 +190,9 @@ been run on a cluster** (UNVERIFIED until the M2 lab). To restore from the repli
 are server-side). The ObjectStores request `AES256` for WAL and data, so the store encrypts at rest if it honours the header
 (measured with the same header on artifacts: Scaleway and OVH; not measured through barman-cloud, and not measured on Outscale);
 transport is TLS. NOT encrypted by us: the WAL and base backup bytes before the store sees them, so whoever can read the bucket
-(a store operator, a stolen key) reads the database content. The provider-independent, client-side encrypted copy is the daily restic
+(a store operator, a stolen key) reads the database content; the copy on the replica store (`cnpg-store-replicate`) is the same bytes,
+uploaded with the same SSE-S3 request (read back on the OVH objects in lab 19), also without client-side encryption. Client-side
+encrypted, with the restic password: the `openbao`, `cnpg-dump` and `etcd` datasets only (apps #149 stays open). The provider-independent, client-side encrypted copy is the daily restic
 `pg_dump` (RPO 24 h).
 
 ## Scheduled etcd snapshot
@@ -198,13 +200,19 @@ transport is TLS. NOT encrypted by us: the WAL and base backup bytes before the 
 `backup-etcd` (its own Kustomization: the `talos.dev` ServiceAccount kind exists only where the control planes enable the Talos
 API access from Kubernetes, infra variable `etcd_snapshot_api_access`, on by default). The CronJob `etcd-snapshot` (04:10 UTC)
 takes a snapshot with `talosctl etcd snapshot` through a talosconfig that Talos generates for the grant `etcd-snapshot-talos`
-(role `os:etcd:backup` only, namespace `foundation-databases` only), keeps it in a memory-backed volume (the snapshot is every
+(role `os:etcd:backup` only, namespace `foundation-databases` only). That config names the endpoint `talos.default`, which resolved
+to nothing in lab 19, and `talosctl` refuses to run without a node: the init container `discover-controlplane` (ServiceAccount
+`etcd-snapshot`: get/list on Nodes, nothing else; the only container that holds a Kubernetes token) lists the control-plane nodes,
+tries each InternalIP on port 50000 in random order until one accepts a connection, and writes a copy of the config with that address as
+endpoint and node. No node, no answer or a refused API call fails the Job. Nothing is seeded. The snapshot is kept in a memory-backed volume (the snapshot is every
 Secret of the cluster in clear), refuses a file that is not a bolt database, and pushes it to both restic repositories
 `<cluster>/etcd` (client-side encryption, 14 d / 8 w / 12 m, `restic check`). Why not a bastion timer: it would need the tofu state,
 its passphrase, the S3 keys and a Talos admin credential on an internet-facing host with closed egress. The risk taken instead: a
 pod of the namespace that mounts the grant Secret can take a snapshot (RBAC keeps that to the Job's ServiceAccount; the namespace
 holds the CNPG instances and the backup Jobs only). Failure signal: `BackupCopyJobFailed`, `EtcdSnapshotStale` (36 h), and the
-verifier below. Restore: `docs` of the infra repository (disaster recovery, step 10). Not exercised on a cluster: UNVERIFIED.
+verifier below. Restore: `docs` of the infra repository (disaster recovery, step 10). By hand, lab 19 took a 97.7 MB snapshot with `-e <ip> -n <ip>`, shipped it to both stores, and restored it from the replica store alone into a
+local etcd; the discovery above and `talosctl bootstrap --recover-from` on a throwaway Talos cluster are NOT exercised on a cluster:
+UNVERIFIED.
 
 ## Verification (what proves a backup readable)
 
