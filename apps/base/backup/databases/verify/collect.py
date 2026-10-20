@@ -193,7 +193,15 @@ def build(rows, now, previous):
     """rows: (dataset, store, ok, age|None, msg) with ok in True/False. Returns (text, summary lines)."""
     ds = {}
     for d, s, ok, age, msg in rows:
-        ds.setdefault(d, {})[s] = (ok, age, msg)
+        # Several rows may share a (dataset, store): the cnpg dataset has one per cluster (zitadel-db, grafana-db). The result is
+        # the AND of them, the worst (oldest) age, and every message: assigning would let the last cluster hide a failure of
+        # the others (lab 19: a WAL segment deleted from zitadel-db's archive was reported PASS because grafana-db came last).
+        cur = ds.setdefault(d, {}).get(s)
+        if cur is None:
+            ds[d][s] = (ok, age, msg)
+        else:
+            ages = [a for a in (cur[1], age) if a is not None]
+            ds[d][s] = (cur[0] and ok, max(ages) if ages else None, f"{cur[2]} | {msg}")
     out = []
     def metric(name, help_, lines):
         out.append(f"# HELP {name} {help_}\n# TYPE {name} gauge")
