@@ -12,10 +12,10 @@ been timed on a cluster (the drill below is how it becomes a number).
 
 | Data | Mechanism and schedule | RPO / RTO target | Retention | Destination | Key holder | Restore test | Destruction |
 |---|---|---|---|---|---|---|---|
-| OpenBao (raft: KV, PKI intermediate, policies) | `openbao-snapshot` CronJob, daily 02:17 UTC, restic | 24 h / 4 h (target) | 14 d / 8 w / 12 m | the 2 restic repositories | restic password (OpenBao itself + offline escrow) AND the OpenBao seal key (offline escrow) | monthly `openbao-snapshot-restore-test` (checksums and unpack); a full restore is manual | retention `--prune`; decommission below |
-| CNPG databases (zitadel, grafana): logical dump | `cnpg-dump` CronJob, daily 02:47 UTC, `pg_dump -Fc`, restic | 24 h / 4 h (target) | 14 d / 8 w / 12 m | the 2 restic repositories | restic password | monthly `cnpg-dump-restore-test` (`pg_restore --list` on every dump) | as above |
-| CNPG databases: continuous archive (PITR) | CNPG Barman Cloud plugin (`ObjectStore` objects in `cnpg/objectstores.yaml`), WAL archive plus a `ScheduledBackup` at 03:10 / 03:25 UTC | minutes / 4 h (target) | 30 d | the primary store, copied to the replica store every 15 min (`cnpg-store-replicate`, replica key pair) | S3 credentials; server-side encryption requested, **no client-side encryption** | none automated | bucket lifecycle at the provider |
-| Longhorn volumes | opt-in RecurringJob group (`storage/backup-target`) | per job / not set | per job | the `backupTarget` of the environment | LUKS passphrase | none | at the provider |
+| OpenBao (raft: KV, PKI intermediate, policies) | `openbao-snapshot` CronJob, daily 02:17 UTC, restic | 24 h / 4 h (target) | 14 d / 8 w / 12 m | the 2 restic repositories | restic password (OpenBao itself + offline escrow) AND the OpenBao seal key (offline escrow) | monthly `openbao-snapshot-restore-test` (checksums and unpack), the verifier restores the latest snapshot daily; a full raft restore only in the DR chain (infra `dr-restore-plan`) | retention `--prune`; decommission below |
+| CNPG databases (zitadel, grafana): logical dump | `cnpg-dump` CronJob, daily 02:47 UTC, `pg_dump -Fc`, restic | 24 h / 4 h (target) | 14 d / 8 w / 12 m | the 2 restic repositories | restic password | daily `cnpg-dump-load-restore-test` (each dump loaded into a private PostgreSQL, canary checked); monthly `cnpg-dump-restore-test` (`pg_restore --list`) | as above |
+| CNPG databases: continuous archive (PITR) | CNPG Barman Cloud plugin (`ObjectStore` objects in `cnpg/objectstores.yaml`), WAL archive plus a `ScheduledBackup` at 03:10 / 03:25 UTC | minutes / 4 h (target) | 30 d | the primary store, copied to the replica store every 15 min (`cnpg-store-replicate`, replica key pair) | S3 credentials; server-side encryption requested, **no client-side encryption** | daily `cnpg-recovery-restore-test`, weekly `cnpg-pitr-restore-test` (a scratch Cluster, canary compared) | bucket lifecycle at the provider |
+| Longhorn volumes | opt-in RecurringJob group (`storage/backup-target`) | per job / not set | per job | the `backupTarget` of the environment | LUKS passphrase | none | opt-in component `longhorn-restore-test` (weekly, a canary volume) |
 | Kubernetes resources | none: GitOps (Flux re-applies the repository) | n/a | Git history | Git | n/a | the DAG on a fresh cluster | n/a |
 | tfstate, kubeconfig/talosconfig, etcd snapshots | OpenAether-infra (`task` targets, encrypted with the state passphrase) | see the infra backup policy | see infra | 2 buckets | state passphrase | infra | infra |
 
@@ -111,7 +111,7 @@ The apps-side links of the chain, in the order that works (the infra documents c
 4. CNPG: restore the databases (dump below, or point-in-time recovery).
 5. Zitadel and the rest of the DAG reconcile; check logins.
 
-Targets and a yearly drill are in `OpenAether-infra/docs/disaster-recovery.md`; the drill has not been run on a cluster.
+Targets, the command that runs this chain (`task dr-restore-plan`) and a yearly drill are in `OpenAether-infra/docs/disaster-recovery.md`; the chain has not been run on a cluster.
 
 ## Restore
 
@@ -135,10 +135,41 @@ pg_restore -h zitadel-db-rw -U zitadel -d zitadel --clean --if-exists /tmp/r/bac
 Recommended periodic test: `restic snapshots` + `restic restore latest` to a throwaway volume (the `restic check` of each run
 reads only metadata).
 
-The monthly restore tests (the `*-restore-test` CronJobs) go one step past restic: the CNPG one runs `pg_restore --list` on every
-restored dump (the archive must be readable by a client at least as recent as the server), the OpenBao one unpacks the raft
-snapshot and checks its `SHA256SUMS`. Neither loads the data into a live database or OpenBao: a real restore is still a manual
-exercise (this section, and the OpenBao runbook in `foundation/vault/README.md`).
+The monthly restore tests (`openbao-snapshot-restore-test`, `cnpg-dump-restore-test`) stay as the shallow check: the CNPG one runs
+`pg_restore --list` on every restored dump, the OpenBao one unpacks the raft snapshot and checks its `SHA256SUMS`. The full restores are
+the next section. A raft snapshot is restored into an OpenBao only in the DR chain (`OpenAether-infra`, `task dr-restore-plan`).
+
+## Restore tests (0.4.0)
+
+A backup that cannot be restored is useless, so the platform restores its own backups on a schedule, with no person, compares what
+came back with what it should be, and alerts. The comparison needs data it can recognise: the **canary**, a table `oa_canary` in
+zitadel-db and grafana-db that `cnpg-canary` writes to every 5 minutes (a counter, a time, and a hash chained to the previous row), 14 days
+kept. A restored copy proves itself from it: the counters are contiguous, every hash follows from its predecessor, and the newest row is
+the live one's (same hash) and not older than the lag budget of the store (primary 20 min, replica 50 min: the 15-minute copy plus margin).
+
+| CronJob (`foundation-databases` unless said) | When | What it does | Series (`oa_restore_test_*`) |
+|---|---|---|---|
+| `cnpg-recovery-restore-test` | daily 04:20 UTC | for zitadel-db and grafana-db, from the primary AND the replica store: recover into a one-instance scratch Cluster in `backup-restore-test`, wait healthy, run `snapshot.sql` (tables, row counts, canary), compare with the live snapshot taken just before, delete the Cluster | `ok`, `last_success_timestamp_seconds`, `last_run_timestamp_seconds`, `duration_seconds`, `recovery_seconds` (the data part of the RTO), `data_lag_seconds`, `tables_missing`, labels `kind="cnpg"`, `dataset`, `store`, `mode="latest"` |
+| `cnpg-pitr-restore-test` | weekly, Sunday 06:20 UTC | the same with a recovery target: the time of the newest canary row older than 2 h and after the last base backup; the copy must end at exactly that row, with the live hash | `mode="pitr"` |
+| `cnpg-dump-load-restore-test` | daily 05:40 UTC | restic restore of the latest cnpg snapshot of BOTH repositories, `pg_restore` of each dump into a private throwaway server (no network), canary and tables judged, newest row under 26 h old | `kind="dump"` |
+| `longhorn-restore-test` (`foundation-storage`, opt-in component `longhorn-restore-test`) | weekly, Sunday 07:20 UTC | restore the newest backup of the canary volume (`oa-canary`, 24 files written hourly) into a scratch Longhorn Volume, mount it read-only in `backup-restore-test`, check every file against what its generation number says | `kind="longhorn"`, `mode="volume"` |
+
+How they stay harmless. The scratch Cluster has one instance, local-path storage (deleted with it), the source's image and `max_connections`,
+limits, and **no WAL-archiving plugin and no backup section**: a copy that archived would write into the store it was restored from. Everything
+lives in `backup-restore-test` (restricted, a ResourceQuota of one Cluster, 3 CPU and 3 GiB of limits), whose ObjectStores have no retention
+policy. The ServiceAccount has a Role in that namespace, read on Clusters and Backups and patch of ONE ConfigMap in `foundation-databases`; no
+ClusterRole. The script refuses any object that is not `backup-restore-test/rt-*`; the Kyverno policy `restrict-restore-test-clusters`
+refuses an `rt-` Cluster anywhere else and a scratch Cluster that archives. A Job has `activeDeadlineSeconds`, removes its scratch objects on
+SIGTERM and on failure (finalizer-safe), and the next run removes a leftover older than an hour; `RestoreScratchLeftover` fires after 3 h.
+A failed comparison is a failed Job (so `RestoreTestNotSucceeding` sees it too) and `oa_restore_test_ok 0` (`RestoreTestFailed`, critical);
+no pass for 3 days (10 for the weekly ones) is `RestoreTestNoRecentPass`. The two key pairs are the archive's and the replica copy's: a read-only pair
+is a follow-up. Run one by hand: `kubectl -n foundation-databases create job --from=cronjob/cnpg-recovery-restore-test manual-$(date +%s)`.
+
+Not covered, on purpose: customer data (only the canary is compared exactly; tables and row counts are exported but the live side moves),
+the OpenBao raft snapshot (the verifier restores it daily and checks its sums; the DR chain restores it into an OpenBao), the etcd snapshot (same,
+bolt meta pages), Longhorn volumes other than the canary. `scripts/dev/test-restore-test-*.{py,sh}` prove the logic offline (a kubectl double, a
+real PostgreSQL, a real restic); **no restore test has run on a cluster yet** (UNVERIFIED: the plugin recovery in the scratch namespace, the
+Longhorn Volume fields and the static PV, the per-store lag budgets).
 
 **The CNPG archive on the replica store.** The plugin archives to one store per Cluster. The `cnpg-store-replicate` CronJob
 (every 15 min, `backup/databases`) copies `cnpg/<cluster>/` from the primary bucket to the replica bucket with the replica key pair

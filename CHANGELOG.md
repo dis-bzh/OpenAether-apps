@@ -22,6 +22,23 @@ Bug fixes, documentation corrections and safety nets after 0.3.1, for the next r
 in 9 min 07 s, `cluster-verify` 15 passed, 0 failed, 38 Kustomizations and 16 HelmReleases Ready except `alloy-audit` (suspended by design). It fixes neither #42 nor #375 (infra), **does not
 fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
 
+### Added (0.4.0, milestone M3: restore tests)
+
+- **Scheduled restore tests, no person involved** (`backup/databases/restore`, `cnpg`, README "Restore tests"): `cnpg-canary` writes a hash-chained canary row into zitadel-db and grafana-db every 5 minutes; `cnpg-recovery-restore-test` (daily) recovers each
+  Cluster from the primary AND the replica store into a one-instance scratch Cluster in the new namespace `backup-restore-test`, compares the restored canary chain and tables with the live database and deletes the Cluster; `cnpg-pitr-restore-test` (weekly) recovers to
+  the time of one canary row and must end at exactly that row; `cnpg-dump-load-restore-test` (daily) loads the restic dumps of both repositories into a private PostgreSQL. Series `oa_restore_test_*` (ok, last success, last run, duration, recovery seconds, data lag) through the verifier's
+  exporter, which now merges the verifier's and the restore tests' ConfigMaps (`serve_metrics.py`). A failed comparison fails the Job, so the M1 alert `RestoreTestNotSucceeding` sees it too.
+- **Opt-in component `longhorn-restore-test`**: a 1 GiB canary volume Longhorn backs up with the daily recurring job (24 files, each a function of its generation number), and a weekly Job that restores the newest backup into a scratch Longhorn Volume and checks every file. No cluster-scoped right:
+  a static PV and PVC stay bound to a name; the Job creates and deletes one Longhorn Volume and one pod.
+- **Alerts** (`vmrule-restore-test.yaml`, runbooks, vmalert cases): `RestoreTestFailed`, `RestoreTestNoRecentPass`, `RestoreTestNeverReported`, `RestoreRecoverySlow`, `RestoreScratchLeftover`, `CnpgCanaryNotWriting`, `LonghornRestoreTestNeverReported`, `LonghornCanaryNotWriting`; the new series are
+  catalogued UNVERIFIED.
+- **A restore test never touches a live object**: the scratch namespace (restricted, ResourceQuota: one Cluster, 3 CPU, 3 GiB), a Role there and read-only elsewhere (no ClusterRole), the script's own guard (`backup-restore-test/rt-*` only), and the Kyverno policy `restrict-restore-test-clusters` (Enforce, `failurePolicy: Ignore`: an `rt-`
+  Cluster outside the scratch namespace, or one that archives or has several instances, is refused). `ObjectStores` there carry no retention policy. The namespace joins the ClusterSecretStore conditions for its two S3 key pairs. Scratch objects are removed on failure and on SIGTERM (finalizer-safe); `activeDeadlineSeconds` on every Job.
+- Tests: `test-restore-test-cnpg.py` (the comparison, the guard, the metrics, the whole flow against a kubectl double for each damage, SIGTERM, a stuck finalizer), `test-restore-test-cnpg-sql.sh` (real PostgreSQL: writer, snapshot, each damage, the dump load as user postgres), `test-restore-test-dumps.sh`
+  (real restic, two fake S3 stores), `test-restore-test-longhorn.py`, `test-restore-test-brick.py` (rights, quota, ObjectStores, tokens), the Kyverno CLI guard cases, 8 vmalert cases. Rung: **mocked/real tools, nothing ran on a cluster**.
+- UNVERIFIED until a lab: the plugin recovery into `backup-restore-test` (RBAC the plugin creates, the egress policy, the operator reaching the scratch instance), the lag budgets (primary 20 min, replica 50 min), the Longhorn `Volume` fields and the static PV, the exporter merge, every new series, the quota sizing on 4 vCPU workers.
+  The OpenBao raft snapshot is still only restored as far as its sums (the DR chain in the infra repository restores it into an OpenBao); no `bao operator raft snapshot inspect` check was added.
+
 ### Added (0.4.0, milestone M2: backups complete, replicated, verified)
 
 - **CNPG moves to the Barman Cloud plugin** (#114): both Clusters leave the in-tree `barmanObjectStore` that CNPG 1.31 removes. Plugin v0.15.1 vendored next to the operator (lock, EOL calendar, Renovate), one `ObjectStore` per Cluster
