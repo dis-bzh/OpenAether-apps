@@ -1,0 +1,88 @@
+# yamllint disable rule:line-length
+# Backup freshness and verification SIGNALS (0.4.0 M1), from metrics that exist today (kube-state-metrics CronJob series).
+# BackupCronJobStale watches the last SCHEDULE; these watch the last SUCCESS, which a failing-but-scheduled job never
+# updates. The restic `check` runs inside each backup run, so a success here includes the repository check.
+# The last two alerts are the CONTRACT for the M2 verifier: no producer exists yet (the series are absent), so they stay
+# silent until it ships; they are tested on synthetic series only.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: backup-signal-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  groups:
+    - name: openaether-backup-signals
+      interval: 5m
+      rules:
+        - alert: BackupNotSucceededRecently
+          expr: |
+            (
+              time() - max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"})
+              or
+              (time() - max by (namespace, cronjob) (kube_cronjob_created{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"})
+                unless on (namespace, cronjob) max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"}))
+            ) > 36 * 3600
+          for: 1h
+          labels:
+            severity: critical
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              backupnotsucceededrecently"
+            summary: "No successful backup for > 36 h: {{ $labels.namespace }}/{{ $labels.cronjob }}"
+            description: >-
+              The last successful run (restic push and repository check included) is older than 36 hours, or there
+              has been none since the CronJob was created. A job that runs and fails never updates it.
+
+        - alert: RestoreTestNotSucceeding
+          expr: |
+            (
+              time() - max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace=~"foundation-.*", cronjob=~".*-restore-test"})
+              or
+              (time() - max by (namespace, cronjob) (kube_cronjob_created{namespace=~"foundation-.*", cronjob=~".*-restore-test"})
+                unless on (namespace, cronjob) max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace=~"foundation-.*", cronjob=~".*-restore-test"}))
+            ) > 37 * 86400
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              restoretestnotsucceeding"
+            summary: "No successful restore test for > 37 days: {{ $labels.namespace }}/{{ $labels.cronjob }}"
+            description: >-
+              The monthly restore test has not completed successfully (or never since creation): the last backup
+              is unproven. `pg_restore --list` and snapshot restore are shallow checks; a full restore with data
+              comparison comes with the M2/M3 verifier.
+
+        - alert: BackupVerificationStale
+          expr: |
+            time() - max by (dataset) (oa_backup_verify_last_success_timestamp_seconds) > 36 * 3600
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#backupverificationstale"
+            summary: "The backup of {{ $labels.dataset }} was not verified for > 36 h"
+            description: >-
+              Exported by the backup verifier (apps/base/backup/databases/verify-*.yaml):
+              `oa_backup_verify_last_success_timestamp_seconds{dataset}`. Silent while the verifier has not run.
+
+        - alert: BackupVerificationFailed
+          expr: |
+            min by (dataset) (oa_backup_verify_ok) == 0
+          for: 10m
+          labels:
+            severity: critical
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              backupverificationfailed"
+            summary: "The last verification of the {{ $labels.dataset }} backup failed"
+            description: >-
+              The backup verifier exports `oa_backup_verify_ok{dataset}`: 1 after a passed check on every store, 0 after
+              a failed one. Silent while the verifier has not run.

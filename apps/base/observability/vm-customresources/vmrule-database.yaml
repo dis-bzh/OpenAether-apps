@@ -1,0 +1,70 @@
+# yamllint disable rule:line-length
+# CNPG health beyond backups (0.4.0 M1): replication lag, replica streaming, collector, WAL pile-up. Metrics: the CNPG
+# exporter (default queries) through the cnpg VMPodScrape. Rung: static + synthetic series. UNVERIFIED on a cluster: the
+# names cnpg_pg_replication_*, cnpg_collector_up and cnpg_collector_pg_wal (lab 17 read only pg_stat_archiver ones).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: database-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database
+spec:
+  groups:
+    - name: openaether-database
+      interval: 1m
+      rules:
+        - alert: CnpgReplicationLagHigh
+          expr: |
+            max by (cnpg_io_cluster, pod) (cnpg_pg_replication_lag) > 30
+          for: 10m
+          labels:
+            severity: warning
+            component: database
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgreplicationlaghigh"
+            summary: "CNPG {{ $labels.cnpg_io_cluster }}: replica {{ $labels.pod }} lags {{ $value | humanizeDuration }}"
+            description: >-
+              A failover now would lose that much committed data or wait for replay. The DB write gap target is 30
+              s.
+
+        - alert: CnpgReplicaNotStreaming
+          expr: |
+            min by (cnpg_io_cluster, pod) (cnpg_pg_replication_is_wal_receiver_up) == 0 and on (cnpg_io_cluster, pod) (cnpg_pg_replication_in_recovery == 1)
+          for: 5m
+          labels:
+            severity: warning
+            component: database
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgreplicanotstreaming"
+            summary: "CNPG {{ $labels.cnpg_io_cluster }}: replica {{ $labels.pod }} receives no WAL"
+            description: >-
+              The WAL receiver of a replica is down: no replication, no failover target.
+
+        - alert: CnpgInstanceDown
+          expr: |
+            min by (cnpg_io_cluster, pod) (cnpg_collector_up) == 0
+          for: 5m
+          labels:
+            severity: critical
+            component: database
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpginstancedown"
+            summary: "CNPG {{ $labels.cnpg_io_cluster }}: PostgreSQL does not answer on {{ $labels.pod }}"
+            description: >-
+              The instance manager runs but PostgreSQL does not respond to its queries.
+
+        - alert: CnpgWalFilesPiling
+          expr: |
+            max by (cnpg_io_cluster, pod) (cnpg_collector_pg_wal{value="count"}) > 200
+          for: 15m
+          labels:
+            severity: warning
+            component: database
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgwalfilespiling"
+            summary: "CNPG {{ $labels.cnpg_io_cluster }}: {{ $labels.pod }} holds over 200 WAL files"
+            description: >-
+              WAL accumulates when archiving or a replication slot lags: the volume fills until PostgreSQL stops.
+              Usually seen with CnpgWalArchiveFailing.

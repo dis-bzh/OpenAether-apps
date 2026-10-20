@@ -25,6 +25,7 @@ spec:
           labels:
             severity: critical
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodeunreachable"
             summary: "Node {{ $labels.node }} unreachable (kubelet silent > 5 min)"
             description: >-
               The kubelet no longer reports. The VM may still be ACTIVE on the
@@ -39,6 +40,7 @@ spec:
           labels:
             severity: critical
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodenotready"
             summary: "Node {{ $labels.node }} NotReady for 10 min"
             description: "talosctl -n <node> dmesg, and kubectl describe node {{ $labels.node }}."
 
@@ -50,6 +52,7 @@ spec:
           labels:
             severity: warning
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodeunderpressure"
             summary: "Node {{ $labels.node }}: {{ $labels.condition }} for 15 min"
 
     # Disk and clock of the NODES, read from node-exporter (the timex and filesystem collectors are on by default).
@@ -69,6 +72,7 @@ spec:
             severity: warning
             component: node
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodefilesystemfillingup"
             summary: "Node {{ $labels.instance }}: less than 15% free on /var (EPHEMERAL)"
             description: >-
               Log and metric volumes live here (local-path): kubectl get pv -o wide for the ones on this node.
@@ -86,6 +90,7 @@ spec:
             severity: warning
             component: node
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodefilesystemfullin24h"
             summary: "Node {{ $labels.instance }}: /var (EPHEMERAL) will be full within 24 h at the current pace"
 
         # 6) Clock drift (PA-012 R4: logs are only comparable across nodes if the clocks agree). 0.5 s is far above the
@@ -97,6 +102,7 @@ spec:
             severity: warning
             component: node
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodeclockskew"
             summary: "Node {{ $labels.instance }}: clock offset above 0.5 s"
             description: "talosctl -n <node> time shows the sources; every node should use the same ones."
 
@@ -109,6 +115,8 @@ spec:
             severity: info
             component: node
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              nodeclocknotsynchronised"
             summary: "Node {{ $labels.instance }}: the kernel reports its clock as not synchronised"
 
     - name: openaether-workloads
@@ -123,6 +131,7 @@ spec:
           labels:
             severity: warning
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#podcrashlooping"
             summary: "{{ $labels.namespace }}/{{ $labels.pod }} restarting in a loop"
             description: "kubectl logs -n {{ $labels.namespace }} {{ $labels.pod }} --previous"
 
@@ -137,6 +146,8 @@ spec:
           labels:
             severity: warning
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              persistentvolumefillingup"
             summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} over 90% full"
 
     # ⚠️ These rules are a post-mortem record, not a page: during a real quorum
@@ -156,6 +167,7 @@ spec:
           labels:
             severity: critical
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#etcdnoleader"
             summary: "etcd has no leader on {{ $labels.instance }}"
             description: >-
               Quorum is lost or an election is stuck. talosctl -n <cp> service
@@ -173,6 +185,7 @@ spec:
             severity: critical
             component: etcd
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#etcdquorumlost"
             summary: "etcd has lost quorum — the cluster accepts no writes"
 
         # B) A member that stopped answering. Below quorum this becomes (A), so
@@ -184,6 +197,7 @@ spec:
             severity: critical
             component: etcd
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#etcdmemberdown"
             summary: "etcd member unreachable on {{ $labels.instance }}"
 
         # C) Flapping elections: a cluster that keeps re-electing is usually
@@ -195,6 +209,7 @@ spec:
           labels:
             severity: warning
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#etcdleaderflapping"
             summary: "etcd re-elected a leader more than 3 times in 15 min"
 
     - name: openaether-watchdog
@@ -215,6 +230,7 @@ spec:
             severity: none
             watchdog: "true"
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#watchdog"
             summary: "Alerting is alive end to end"
             description: >-
               Pings the dead-man's-switch service every 5 min. If the pings stop,
@@ -233,6 +249,7 @@ spec:
             severity: critical
             component: monitoring
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#kubestatemetricsabsent"
             summary: "kube-state-metrics no longer reports — node alerting is BLIND"
             description: >-
               Every node, pod and backup rule is built on this metric. While it

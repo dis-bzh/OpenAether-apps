@@ -37,6 +37,7 @@ spec:
             severity: critical
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#backupjobfailed"
             summary: "Backup failed: {{ $labels.namespace }}/{{ $labels.job_name }}"
             description: >-
               The Job failed and was not retried. Common causes: unreadable
@@ -57,6 +58,7 @@ spec:
             severity: critical
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#backupcronjobstale"
             summary: "No backup triggered for > 26 h: {{ $labels.namespace }}/{{ $labels.cronjob }}"
             description: >-
               No Job created for more than 26 h on a daily schedule.
@@ -75,6 +77,7 @@ spec:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#backupcronjobsuspended"
             summary: "Backup suspended for > 6 h: {{ $labels.namespace }}/{{ $labels.cronjob }}"
             description: "kubectl patch cronjob -n {{ $labels.namespace }} {{ $labels.cronjob }} -p '{\"spec\":{\"suspend\":false}}'"  # yamllint disable-line rule:line-length
 
@@ -95,6 +98,7 @@ spec:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#restoreteststale"
             summary: "Restore test not run for > 35 days: {{ $labels.namespace }}/{{ $labels.cronjob }}"
             description: "Suspended? kubectl get cronjob -n {{ $labels.namespace }} {{ $labels.cronjob }}."
 
@@ -113,6 +117,7 @@ spec:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#backupcronjobmissing"
             summary: "Backup CronJob {{ $labels.cronjob }} no longer exists"
             description: "flux get kustomization backup; the other backup CronJobs are still present."
 
@@ -136,6 +141,7 @@ spec:
             severity: critical
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgwalarchivefailing"
             summary: "CNPG {{ $labels.cnpg_io_cluster }}: WAL archiving fails"
             description: >-
               barman cannot write to the object store (credentials, endpoint, egress).
@@ -151,6 +157,7 @@ spec:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgbackupfailed"
             summary: "CNPG {{ $labels.cnpg_io_cluster }}: the last base backup failed"
             description: "kubectl get backup -n foundation-databases; kubectl describe backup <name>."
 
@@ -165,6 +172,7 @@ spec:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgbackupstale"
             summary: "CNPG {{ $labels.cnpg_io_cluster }}: no base backup for 48 h"
             description: "kubectl get scheduledbackup -n foundation-databases; the ScheduledBackup may be suspended."
 
@@ -176,6 +184,7 @@ spec:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgmetricsabsent"
             summary: "No CNPG metrics: WAL archive and base backup alerts are blind"
             description: "The CNPG CiliumNetworkPolicy must accept vmagent on :9187 (cnpg VMPodScrape)."
 

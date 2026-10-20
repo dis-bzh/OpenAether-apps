@@ -1,0 +1,99 @@
+# yamllint disable rule:line-length
+# RED for the customer path: request rate, errors and duration at the public Gateway (0.4.0 M1, SLO 99.9 % decided by the
+# owner 2026-10-19). Metrics: Envoy of the gateway pods, scraped by vmscapes.yaml (istio-gateway); the burn-rate rules
+# follow the multi-window pattern (fast 14.4x over 1 h and 5 min, slow 6x over 6 h and 30 min of a 0.1 % budget).
+# Rung: static + synthetic series. UNVERIFIED on a cluster: that the istio_* series exist on the gateway (reporter label
+# not relied on) and the scrape path through the network policies. A probe from outside (blackbox) is NOT here.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: gateway-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: gateway
+spec:
+  groups:
+    - name: openaether-gateway
+      interval: 1m
+      rules:
+        - alert: GatewayErrorBudgetBurnFast
+          expr: |
+            (
+              sum(rate(istio_requests_total{namespace="services-gateway", response_code=~"5.."}[1h])) / sum(rate(istio_requests_total{namespace="services-gateway"}[1h])) > 14.4 * 0.001
+              and
+              sum(rate(istio_requests_total{namespace="services-gateway", response_code=~"5.."}[5m])) / sum(rate(istio_requests_total{namespace="services-gateway"}[5m])) > 14.4 * 0.001
+            )
+            and on() (sum(rate(istio_requests_total{namespace="services-gateway"}[5m])) > 0.05)
+          for: 2m
+          labels:
+            severity: critical
+            component: gateway
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              gatewayerrorbudgetburnfast"
+            summary: "Gateway 5xx ratio burns the 99.9 % error budget 14x too fast"
+            description: >-
+              More than 1.44 % of requests failed over the last hour and the last 5 minutes: a month of budget
+              would last about two days. The customer path is failing now.
+
+        - alert: GatewayErrorBudgetBurnSlow
+          expr: |
+            (
+              sum(rate(istio_requests_total{namespace="services-gateway", response_code=~"5.."}[6h])) / sum(rate(istio_requests_total{namespace="services-gateway"}[6h])) > 6 * 0.001
+              and
+              sum(rate(istio_requests_total{namespace="services-gateway", response_code=~"5.."}[30m])) / sum(rate(istio_requests_total{namespace="services-gateway"}[30m])) > 6 * 0.001
+            )
+            and on() (sum(rate(istio_requests_total{namespace="services-gateway"}[30m])) > 0.05)
+          for: 15m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              gatewayerrorbudgetburnslow"
+            summary: "Gateway 5xx ratio burns the 99.9 % error budget 6x too fast"
+            description: >-
+              More than 0.6 % of requests failed over 6 hours and 30 minutes: a slow leak that a threshold alert
+              would miss.
+
+        - alert: GatewayLatencyP99High
+          expr: |
+            histogram_quantile(0.99, sum by (le) (rate(istio_request_duration_milliseconds_bucket{namespace="services-gateway"}[5m]))) > 2000
+            and on() (sum(rate(istio_requests_total{namespace="services-gateway"}[5m])) > 0.05)
+          for: 10m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#gatewaylatencyp99high"
+            summary: "Gateway p99 latency above 2 s for 10 min"
+            description: >-
+              The slowest 1 % of requests take over two seconds, measured at the gateway (includes the backend).
+
+        - alert: GatewayReplicasLow
+          expr: |
+            kube_deployment_status_replicas_available{namespace="services-gateway", deployment="openaether-gateway-istio"} < 2
+          for: 5m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#gatewayreplicaslow"
+            summary: "The gateway runs on fewer than 2 replicas: the next node loss is an outage"
+            description: >-
+              The HPA minimum is 2 so a single node loss does not cut the public path (lab 15c). Below it, one
+              replica carries everything.
+
+        - alert: GatewayMetricsAbsent
+          expr: |
+            absent(envoy_server_live{namespace="services-gateway"})
+          for: 30m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#gatewaymetricsabsent"
+            summary: "No gateway Envoy metrics: the RED alerts are blind"
+            description: >-
+              The scrape of the gateway pods returns nothing (port name, network policy, pods gone).

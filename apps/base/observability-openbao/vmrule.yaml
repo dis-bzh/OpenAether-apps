@@ -50,6 +50,8 @@ spec:
             severity: warning
             component: openbao
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              openbaoraftnofailuretolerance"
             summary: "OpenBao can not lose another replica"
             description: >-
               Autopilot reports a failure tolerance of 0: a replica is down or unhealthy and one more loss costs the
@@ -67,6 +69,7 @@ spec:
             severity: warning
             component: openbao
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#openbaoraftapplylag"
             summary: "OpenBao {{ $labels.pod }} applies raft entries late"
             description: "More than 100 committed entries are not applied yet: slow disk or I/O pressure on the node."
 
@@ -78,6 +81,7 @@ spec:
             severity: warning
             component: openbao
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#openbaometricsdown"
             summary: "The OpenBao metrics of {{ $labels.pod }} are not scraped"
             description: >-
               vmagent can not read :8202 (certificate verification against openbao-server-tls, the CiliumNetworkPolicy

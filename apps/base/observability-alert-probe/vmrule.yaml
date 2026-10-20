@@ -1,0 +1,61 @@
+# Scheduled alert-delivery test (docs/alert-delivery.md). Rung: static + synthetic series
+# (scripts/dev/vmrules-unittest.yaml); never fired on a cluster. Alertmanager metric names: UNVERIFIED until a lab.
+#
+# Chain proven when this works: vmalert evaluates -> Alertmanager routes `probe="delivery"` to the chat receiver ->
+# the receiver answers 2xx (Alertmanager counts any other answer as failed) -> the counters below show it.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: alert-delivery-probe
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: alerting
+spec:
+  groups:
+    - name: openaether-alert-delivery
+      interval: 1m
+      rules:
+        # Fires for 10 minutes at 06:00 and 18:00 UTC. Severity none, like Watchdog: it is a test, not a fault.
+        - alert: AlertDeliveryProbe
+          expr: vector(1) and on() (hour() % 12 == 6 and minute() < 10)
+          labels:
+            severity: none
+            component: alerting
+            probe: delivery
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alertdeliveryprobe"
+            summary: "Scheduled alert delivery test"
+            description: "Twice a day. Receiving it in chat proves vmalert, Alertmanager and the receiver."
+        # A notification attempt failed lately (any receiver, the heartbeat included).
+        - alert: AlertDeliveryFailing
+          expr: sum by (integration) (increase(alertmanager_notifications_failed_total[1h])) > 0
+          labels:
+            severity: warning
+            component: alerting
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alertdeliveryfailing"
+            summary: "Alertmanager failed to deliver a notification ({{ $labels.integration }})"
+            description: >-
+              The receiver refused or did not answer. This alert may itself not reach you through that receiver: read
+              it in Alertmanager or Grafana.
+        # The probe fired in the last 14 h but no notification to the chat receiver succeeded in that time.
+        - alert: AlertDeliveryNotAcknowledged
+          expr: |
+            (
+              sum(increase(alertmanager_notifications_total{integration="slack"}[14h]))
+              - (sum(increase(alertmanager_notifications_failed_total{integration="slack"}[14h])) or vector(0))
+              < 0.5
+            )
+            and on() (max_over_time(ALERTS{alertname="AlertDeliveryProbe", alertstate="firing"}[14h]) > 0)
+          for: 20m
+          labels:
+            severity: critical
+            component: alerting
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              alertdeliverynotacknowledged"
+            summary: "The scheduled alert delivery test was not acknowledged by the chat receiver"
+            description: >-
+              While this fires, Alertmanager stops the heartbeat on purpose, so the external dead-man's-switch
+              pages you by its own channel.

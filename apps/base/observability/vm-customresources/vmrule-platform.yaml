@@ -36,6 +36,8 @@ spec:
           labels:
             severity: critical
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              fluxreconciliationstalled"
             summary: "Flux: {{ $labels.kind }}/{{ $labels.name }} has not reconciled for 30 min (HelmRelease: 2.5 h)"
             description: >-
               flux get all -A. If the object is suspended on purpose, that is
@@ -55,6 +57,8 @@ spec:
           labels:
             severity: critical
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              ciliumpolicyimportfailed"
             summary: "Cilium rejected a policy change on {{ $labels.instance }}"
             description: >-
               A NetworkPolicy is present in the API but NOT enforced in the
@@ -68,6 +72,8 @@ spec:
           labels:
             severity: warning
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              ciliumendpointregenerationfailing"
             summary: "Cilium failing to regenerate endpoints on {{ $labels.instance }}"
 
         # 3) An agent not running on a LIVE node: bad rollout, crashloop,
@@ -84,6 +90,7 @@ spec:
           labels:
             severity: critical
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#ciliumagentmissing"
             summary: "Cilium agent missing on at least one node"
             description: >-
               No CNI and no policy enforcement on the affected node.
@@ -103,6 +110,7 @@ spec:
             severity: info
             component: cilium
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#ciliumpolicydeniedburst"
             summary: "Cilium drops more than 5 packets/s by policy on {{ $labels.instance }} ({{ $labels.direction }})"
             description: >-
               A pod is blocked by a CiliumNetworkPolicy, in a loop. A new flow that needs allowing, or something
@@ -120,6 +128,7 @@ spec:
           labels:
             severity: warning
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#certificateexpiringsoon"
             summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in less than 21 days"
 
         # 3) Not renewing. Distinct from the above: a Certificate can be
@@ -132,6 +141,7 @@ spec:
           labels:
             severity: warning
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#certificatenotready"
             summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} not Ready for 1 h"
             description: "kubectl describe certificate -n {{ $labels.namespace }} {{ $labels.name }}"
 

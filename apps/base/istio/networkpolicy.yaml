@@ -228,6 +228,15 @@ spec:
         - ports:
             - port: "15021"
               protocol: TCP
+    # RED metrics: VMAgent scrapes the Envoy stats port (vmscapes.yaml, istio-gateway).
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "15090"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:
