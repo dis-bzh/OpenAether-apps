@@ -83,7 +83,8 @@ spec:
                   IN="${TALOS_GRANT_CONFIG:-/var/run/secrets/talos.dev/config}"
                   OUT="${TALOS_WORK_CONFIG:-/work/config}"
                   [ -s "$IN" ] || { echo "ERROR: the Talos grant config ${IN} is missing or empty (Secret etcd-snapshot-talos)"; exit 1; }
-                  ips="$(kubectl get nodes --request-timeout=30s -l node-role.kubernetes.io/control-plane \
+                  # the timeout is the shell's: kubectl's own request-timeout flag makes kubectl 1.36 ignore the in-cluster config (localhost:8080, lab 20)
+                  ips="$(timeout 30 kubectl get nodes -l node-role.kubernetes.io/control-plane \
                     -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}')" \
                     || { echo "ERROR: cannot list the control-plane nodes through the Kubernetes API"; exit 1; }
                   ips="$(printf '%s\n' "$ips" | grep -v '^$' | shuf || true)"

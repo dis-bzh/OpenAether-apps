@@ -56,6 +56,8 @@ script = pod["containers"][0]["command"][2]
 for need in ("PRIMARY_ENDPOINT", "REPLICA_ENDPOINT", "restic forget", "--keep-daily", "restic check", "--host etcd"):
     if need not in script:
         errs.append(f"push script lacks {need!r}")
+if "--request-timeout" in disc["command"][2]:
+    errs.append("the discovery must not pass --request-timeout: kubectl then ignores the in-cluster config (localhost:8080)")
 if "aws s3 rm" in script or "--force" in script:
     errs.append("push script must not delete outside restic's own retention")
 np = by["CiliumNetworkPolicy"]
