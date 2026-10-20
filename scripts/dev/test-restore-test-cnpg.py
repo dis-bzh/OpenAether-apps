@@ -216,6 +216,19 @@ check("the recovery target of the manifest is that row's time", all(json.loads(l
 rcode, out, *_ = flow("pitr", {n: SRC[:-2] for n in NAMES})
 check("a PITR that replays past its target fails", rcode == 1 and "exactly" in out)
 
+print("=== dump results are published ===")
+w = tempfile.mkdtemp()
+os.makedirs(os.path.join(w, "state")), os.makedirs(os.path.join(w, "results"))
+labs = [rc.labels("dump", c, st, "latest") for st in rc.STORES for c in rc.CLUSTERS]
+res = [{"labels": l, "ok": i != 2, "duration": 3, "recovery": 2, "lag": 100, "missing": None} for i, l in enumerate(labs)]
+json.dump({"results": res, "now": NOW}, open(os.path.join(w, "results", "dump.json"), "w"))
+env = dict(os.environ, KUBECTL=FAKE, FAKE_STATE=os.path.join(w, "state"), RESULTS=os.path.join(w, "results"))
+r = subprocess.run([sys.executable, "-I", os.path.join(D, "restore_cnpg.py"), "--mode", "dump", "--publish"], env=env, capture_output=True, text=True)
+cmv = open(os.path.join(w, "state", "cm", "dump-load")).read()
+check("a failed dump load fails the publishing container (so the Job and kube-state-metrics see it)", r.returncode == 1, r.stdout + r.stderr)
+check("the metrics say kind=dump, ok=0 for exactly the failed store and dataset",
+      cmv.count('kind="dump"') >= 4 and [l for l in cmv.splitlines() if l.startswith("oa_restore_test_ok{") and l.endswith(" 0")] == [f"oa_restore_test_ok{{{labs[2]}}} 0"], cmv)
+
 print("=== exporter ===")
 sp = importlib.util.spec_from_file_location("sm", os.path.join(D, "serve_metrics.py"))
 sm = importlib.util.module_from_spec(sp)

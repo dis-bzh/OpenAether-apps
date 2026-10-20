@@ -6,7 +6,7 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 D="$ROOT/apps/base/backup/databases/restore"
-W="$(mktemp -d)"; trap '[ -n "${KEEP:-}" ] && exit; docker rm -f oa-rt-sql >/dev/null 2>&1; chmod -R u+rwx "$W" 2>/dev/null; rm -rf "$W"' EXIT
+W="$(mktemp -d)"; trap '[ -n "${KEEP:-}" ] && exit; docker exec oa-rt-sql sh -c "rm -rf /restore/* /results/* /work/*" >/dev/null 2>&1; docker rm -f oa-rt-sql >/dev/null 2>&1; chmod -R u+rwx "$W" 2>/dev/null; rm -rf "$W"' EXIT
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); echo "  ok   $*"; }
 bad() { FAIL=$((FAIL+1)); echo "  FAIL $*"; }
@@ -23,7 +23,7 @@ if ! command -v docker >/dev/null || ! { docker image inspect "$IMG" >/dev/null 
   [ "${CI:-}" = true ] && { echo "  FAIL required in CI"; exit 1; }
   exit 0
 fi
-mkdir -p "$W"/{creds/zitadel,creds/grafana,work}; chmod 777 "$W/work"
+mkdir -p "$W"/{creds/zitadel,creds/grafana,work,restore/primary,restore/replica,results}; chmod 777 "$W/work" "$W/results" "$W/restore" "$W/restore/primary" "$W/restore/replica"
 for c in zitadel grafana; do echo "$c" >"$W/creds/$c/username"; echo "pw" >"$W/creds/$c/password"; done
 cat >"$W/up.sh" <<'UP'
 set -eu
@@ -38,7 +38,7 @@ done
 sleep infinity
 UP
 docker run -d --name oa-rt-sql --network host --user 26:26 --tmpfs /tmp:rw,mode=1777,size=512m -v "$W/up.sh:/up.sh:ro" -v "$D:/scripts:ro" \
-  -v "$W/creds:/creds:ro" -v "$W/work:/work" --entrypoint bash "$IMG" /up.sh >/dev/null
+  -v "$W/creds:/creds:ro" -v "$W/work:/work" -v "$W/restore:/restore" -v "$W/results:/results" --entrypoint bash "$IMG" /up.sh >/dev/null
 for _ in $(seq 60); do docker exec oa-rt-sql psql -h 127.0.0.1 -p 5433 -d grafana -qAtc 'select 1' >/dev/null 2>&1 && break; sleep 1; done
 live() { docker exec -i oa-rt-sql psql -X -qAt -h 127.0.0.1 -p 5432 -U postgres -d "$1" "${@:2}"; }
 rest() { docker exec -i oa-rt-sql psql -X -qAt -F "$(printf '\t')" -h 127.0.0.1 -p 5433 -U postgres -d "$1" "${@:2}"; }
@@ -88,6 +88,28 @@ rest grafana -c "drop table oa_canary" >/dev/null
 snap_restored grafana; cmp grafana; r=$?; chk "a restored database without the canary table fails ($(cat "$W/cmp.out"))" "[ $r = 1 ]"
 W2 >/dev/null 2>&1; docker exec -e ZITADEL_DB_HOST=127.0.0.1 -e GRAFANA_DB_HOST=127.0.0.1 oa-rt-sql sh /scripts/source-snapshot.sh >/dev/null 2>&1
 copy zitadel; snap_restored zitadel; cmp zitadel; r=$?; chk "the second database passes too ($(cat "$W/cmp.out"))" "[ $r = 0 ]"
+
+echo "=== dump restore (dump_load.py, as the Job runs it: user postgres, a private server) ==="
+dumpall() { # stage the live databases as the dump job leaves them, in both "repositories"
+  for st in primary replica; do
+    for pair in zitadel-db:zitadel grafana-db:grafana; do
+      docker exec oa-rt-sql sh -c "mkdir -p /restore/$st/backup && pg_dump -h 127.0.0.1 -p 5432 -U postgres -Fc -f /restore/$st/backup/${pair%%:*}.dump ${pair##*:}"
+    done
+  done
+}
+load() { docker exec -e NOW="${NOW:-}" oa-rt-sql python3 -I /scripts/dump_load.py >"$W/load.out" 2>&1; }
+res() { python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1]))["results"]; print(" ".join(sorted(r["labels"].split("store=\"")[1].split("\"")[0]+"/"+r["labels"].split("dataset=\"")[1].split("\"")[0]+"="+str(int(r["ok"])) for r in d)))' "$W/results/dump.json"; }
+W2 >/dev/null 2>&1; dumpall; load
+chk "intact dumps load into a private server, in both repositories ($(res))" "[ \"\$(res)\" = 'primary/grafana-db=1 primary/zitadel-db=1 replica/grafana-db=1 replica/zitadel-db=1' ]"
+chk "the private server is gone afterwards" "! docker exec oa-rt-sql sh -c 'ls /tmp | grep -q pgdata'"
+docker exec oa-rt-sql sh -c 'head -c 3000 /restore/replica/backup/zitadel-db.dump > /tmp/t && cp /tmp/t /restore/replica/backup/zitadel-db.dump'
+load; chk "a truncated dump fails that store and dataset only ($(res))" "[ \"\$(res)\" = 'primary/grafana-db=1 primary/zitadel-db=1 replica/grafana-db=1 replica/zitadel-db=0' ]"
+dumpall; live grafana -c "update oa_canary set sha = repeat('1', 64) where counter = (select min(counter)+3 from oa_canary)" >/dev/null; dumpall; load
+chk "a dump whose canary chain is broken fails ($(res))" "[ \"\$(res)\" = 'primary/grafana-db=0 primary/zitadel-db=1 replica/grafana-db=0 replica/zitadel-db=1' ]"
+dumpall; NOW=$(( $(date +%s) + 30*3600 )) load; unset NOW
+chk "a dump whose newest canary row is over 26 h old fails ($(res))" "[ \"\$(res)\" = 'primary/grafana-db=0 primary/zitadel-db=0 replica/grafana-db=0 replica/zitadel-db=0' ]"
+docker exec oa-rt-sql sh -c 'rm -f /restore/primary/backup/grafana-db.dump; echo "restore failed" > /restore/replica/error'; load
+chk "a missing dump and a failed restic restore are failures ($(res))" "[ \"\$(res)\" = 'primary/grafana-db=0 primary/zitadel-db=1 replica/grafana-db=0 replica/zitadel-db=0' ]"
 
 echo "=== retention ==="
 live grafana -c "insert into oa_canary select g, now(), 'x' from generate_series(1000,5100) g" >/dev/null

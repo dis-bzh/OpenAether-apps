@@ -9,6 +9,7 @@ resources:
   - canary-cronjob.yaml
   - cnpg-recovery-test-cronjob.yaml
   - restore-test-rbac.yaml
+  - dump-load-test-cronjob.yaml
   - verify-rbac.yaml
   - verify-cronjob.yaml
   - verify-exporter.yaml
@@ -30,4 +31,6 @@ configMapGenerator:
       - restore/source-snapshot.sh
       - restore/snapshot.sql
       - restore/restore_cnpg.py
+      - restore/restic-dump.sh
+      - restore/dump_load.py
       - restore/serve_metrics.py

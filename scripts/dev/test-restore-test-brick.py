@@ -107,13 +107,28 @@ check("the two schedules do not overlap (one scratch Cluster at a time)", cj["cn
 check("the canary writer runs at least every 10 minutes and cannot pile up",
       cj["cnpg-canary"]["spec"]["schedule"] == "*/5 * * * *" and cj["cnpg-canary"]["spec"]["concurrencyPolicy"] == "Forbid")
 
+print("=== dump load test ===")
+dj = cj["cnpg-dump-load-restore-test"]
+dp = dj["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+dc = {x["name"]: x for x in dp["containers"] + dp["initContainers"]}
+check("three stages in order: restic, load, publish", [x["name"] for x in dp["initContainers"]] == ["restic", "load"] and [x["name"] for x in dp["containers"]] == ["publish"])
+dm = lambda x: {m["name"] for m in dc[x]["volumeMounts"]}  # noqa: E731
+check("only `publish` holds the token; the database credentials are in no container (the load needs none)",
+      "token" in dm("publish") and "token" not in dm("restic") | dm("load") and not any(v.get("secret", {}).get("secretName", "").endswith(("db-app", "db-credentials")) for v in dp["volumes"]))
+check("`load` runs as postgres (26) with the CNPG image, read-only on the restore, with no network rule of its own", dc["load"]["securityContext"]["runAsUser"] == 26
+      and dc["load"]["image"] == [x for x in cj["cnpg-dump"]["spec"]["jobTemplate"]["spec"]["template"]["spec"]["initContainers"] if x["name"] == "pg-dump"][0]["image"] and "restore" in dm("load") and next(m for m in dc["load"]["volumeMounts"] if m["name"] == "restore")["readOnly"])
+check("its ServiceAccount patches one ConfigMap and nothing else",
+      [r for r in get(bk, "Role", "cnpg-dump-restore-test")][0]["rules"] == [{"apiGroups": [""], "resources": ["configmaps"], "resourceNames": ["oa-restore-test-metrics"], "verbs": ["get", "patch"]}])
+check("it has a network policy", any(p["spec"]["endpointSelector"]["matchLabels"].get("app") == "cnpg-dump-load-restore-test" for p in get(bk, "CiliumNetworkPolicy")))
+check("deadline, no retry, limits", dj["spec"]["jobTemplate"]["spec"]["backoffLimit"] == 0 and dj["spec"]["jobTemplate"]["spec"]["activeDeadlineSeconds"] > 0 and all("limits" in x["resources"] for x in dc.values()))
+
 print("=== exporter and scripts ===")
 dep = get(bk, "Deployment", "backup-verify-exporter")[0]["spec"]["template"]["spec"]
 cm = {v["name"]: v.get("configMap", {}).get("name") for v in dep["volumes"]}
 check("the exporter serves the verifier's and the restore tests' ConfigMaps", {"oa-backup-verify-metrics", "oa-restore-test-metrics"} <= set(cm.values()), cm)
 check("and runs the merging server", "serve_metrics.py" in " ".join(dep["containers"][0]["command"]))
 gen = [d for d in bk if d["kind"] == "ConfigMap" and d["metadata"]["name"].startswith("backup-restore-scripts")][0]
-check("the scripts ConfigMap holds every script the Jobs run", {"canary-write.sh", "source-snapshot.sh", "snapshot.sql", "restore_cnpg.py", "serve_metrics.py"} <= set(gen["data"]), list(gen["data"]))
+check("the scripts ConfigMap holds every script the Jobs run", {"canary-write.sh", "source-snapshot.sh", "snapshot.sql", "restore_cnpg.py", "serve_metrics.py", "restic-dump.sh", "dump_load.py"} <= set(gen["data"]), list(gen["data"]))
 check("the live metrics ConfigMap is never overwritten by Flux", get(bk, "ConfigMap", "oa-restore-test-metrics")[0]["metadata"]["annotations"].get("kustomize.toolkit.fluxcd.io/ssa") == "IfNotPresent")
 dump = [x for x in cj["cnpg-dump"]["spec"]["jobTemplate"]["spec"]["template"]["spec"]["initContainers"] if x["name"] == "pg-dump"][0]["image"]
 rt = cj["cnpg-recovery-restore-test"]["spec"]["jobTemplate"]["spec"]["template"]["spec"]["initContainers"][0]["image"]

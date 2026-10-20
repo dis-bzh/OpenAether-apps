@@ -346,6 +346,9 @@ jobs:
           CI=true ./scripts/dev/test-restore-test-cnpg-sql.sh | tee restore-test-sql.out
           grep -qE '^[0-9]+ passed, 0 failed$' restore-test-sql.out
           ! grep -q 'SKIPPED' restore-test-sql.out
+          CI=true ./scripts/dev/test-restore-test-dumps.sh | tee restore-test-dumps.out
+          grep -qE '^[0-9]+ passed, 0 failed$' restore-test-dumps.out
+          ! grep -q 'SKIPPED' restore-test-dumps.out
 
   loki-render:
     name: Loki chart render

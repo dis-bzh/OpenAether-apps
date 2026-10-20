@@ -148,6 +148,26 @@ def compare(src, res, store, mode, pitr_row=None):
     return not why, why, info
 
 
+DUMP_MAX_AGE = 26 * 3600.0  # the dump job runs daily (RPO 24 h): the newest canary row of the latest dump is at most this old
+
+
+def check_dump(res, now):
+    """A dump loaded into a private server has no live side to compare with (nothing in the job holds a database credential):
+    the canary proves it from the inside. -> (ok, reasons, info)."""
+    why = []
+    info = {"tables": len(res["tables"]), "lag": None}
+    if not res["tables"]:
+        why.append("the loaded dump has no table")
+    if not res["canary"]:
+        why.append("the loaded dump has no canary row")
+        return False, why, info
+    why += [f"canary: {e}" for e in chain_errors(res["canary"])]
+    info["lag"] = now - epoch(res["canary"][-1][1])
+    if info["lag"] > DUMP_MAX_AGE:
+        why.append(f"the newest canary row is {info['lag'] / 3600:.1f} h old: the latest dump is stale (budget {DUMP_MAX_AGE / 3600:.0f} h)")
+    return not why, why, info
+
+
 def scratch_name(cluster, store, mode):
     return f"{PREFIX}{cluster}-{store}-{mode}"
 
@@ -373,30 +393,33 @@ def publish(key, text):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=("latest", "pitr"), required=True)
+    ap.add_argument("--mode", choices=("latest", "pitr", "dump"), required=True,
+                    help="dump: publish the results dump_load.py left in $RESULTS (the previous stage of that Job)")
     ap.add_argument("--work", default=os.environ.get("WORK", "/work"))
     ap.add_argument("--out", default="")
     ap.add_argument("--publish", action="store_true")
     a = ap.parse_args()
-    key = "cnpg-" + a.mode
+    key = "dump-load" if a.mode == "dump" else "cnpg-" + a.mode
 
     def term(*_):
         raise Terminated()
     signal.signal(signal.SIGTERM, term)
-    now = float(os.environ.get("NOW") or time.time())
     previous = {}
     if a.publish:
         r = kube("get", "configmap", CM, "-n", LIVE_NS, "-o", "jsonpath={.data." + key + "}", check=False)
         previous = parse_previous(r.stdout)
     results = []
-    try:
-        sweep_leftovers()
-        for cluster in CLUSTERS:
-            for store in STORES:
-                results.append(run_one(cluster, store, a.mode, a.work))
-    except Terminated:
-        pass
-    text = build_metrics(results, time.time() if not os.environ.get("NOW") else now, previous)
+    if a.mode == "dump":
+        results = json.load(open(os.path.join(os.environ.get("RESULTS", "/results"), "dump.json")))["results"]
+    else:
+        try:
+            sweep_leftovers()
+            for cluster in CLUSTERS:
+                for store in STORES:
+                    results.append(run_one(cluster, store, a.mode, a.work))
+        except Terminated:
+            pass
+    text = build_metrics(results, float(os.environ.get("NOW") or time.time()), previous)
     if a.out:
         open(a.out, "w").write(text)
     rc = 0 if all(r["ok"] is not False for r in results) and len(results) == len(CLUSTERS) * len(STORES) else 1

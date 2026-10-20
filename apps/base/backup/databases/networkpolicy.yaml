@@ -257,3 +257,51 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
+---
+# cnpg-dump-load-restore-test: reads the two restic repositories (S3), loads the dumps in a private server (no network), publishes
+# through the API server.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg-dump-load-restore-test
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "Dump restore test: egress DNS + the provider S3 endpoints (443) + kube-apiserver"
+  endpointSelector:
+    matchLabels:
+      app: cnpg-dump-load-restore-test
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchPattern: "s3.*.scw.cloud"          # Scaleway Object Storage
+        - matchPattern: "s3.*.io.cloud.ovh.net"   # OVH Object Storage (standard class)
+        - matchPattern: "oos.*.outscale.com"      # Outscale OSU
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
