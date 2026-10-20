@@ -548,6 +548,22 @@ tests:
         alertname: NodeIoPressure
         exp_alerts:
           - exp_labels: {instance: n1, severity: warning, component: node}
+  - name: a suspended HelmRelease does not raise FluxReconciliationStalled, a stuck live one does
+    interval: 10m
+    input_series:
+      - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="alloy-audit", namespace="obs-audit"}'
+        values: '5x40'
+      - series: 'gotk_resource_info{customresource_kind="HelmRelease", name="alloy-audit", exported_namespace="obs-audit", namespace="obs", suspended="true"}'
+        values: '1x40'
+      - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="stuck", namespace="x"}'
+        values: '5x40'
+      - series: 'gotk_resource_info{customresource_kind="HelmRelease", name="stuck", exported_namespace="x", namespace="obs", suspended="false"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: FluxReconciliationStalled
+        exp_alerts:
+          - exp_labels: {kind: HelmRelease, name: stuck, namespace: x, severity: critical}
   - name: Longhorn degraded for 30 minutes
     # The real shape (Longhorn 1.12.1, lab 19): one series per state, 1 for the current state.
     interval: 1m

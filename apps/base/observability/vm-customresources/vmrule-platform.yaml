@@ -29,9 +29,16 @@ spec:
         #    per-object Ready condition (OpenAether-infra CHANGELOG, Known limits).
         - alert: FluxReconciliationStalled
           expr: |
-            increase(gotk_reconcile_duration_seconds_count{kind=~"Kustomization|GitRepository"}[30m]) == 0
-            or
-            increase(gotk_reconcile_duration_seconds_count{kind="HelmRelease"}[150m]) == 0
+            (
+              increase(gotk_reconcile_duration_seconds_count{kind=~"Kustomization|GitRepository"}[30m]) == 0
+              or
+              increase(gotk_reconcile_duration_seconds_count{kind="HelmRelease"}[150m]) == 0
+            )
+            # A suspended object does not reconcile on purpose (alloy-audit is suspended in every default install: lab 19 saw this
+            # critical alert fire 2.5 h after install). FluxObjectSuspended owns that case.
+            unless on (kind, name, namespace)
+            label_replace(label_replace(gotk_resource_info{suspended="true"}, "kind", "$1", "customresource_kind", "(.*)"),
+              "namespace", "$1", "exported_namespace", "(.*)")
           for: 10m
           labels:
             severity: critical
