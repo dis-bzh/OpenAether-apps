@@ -131,6 +131,7 @@ spec:
         - alert: PodPendingTooLong
           expr: |
             max by (namespace, pod) (kube_pod_status_phase{phase="Pending"}) == 1
+            unless on (namespace, pod) max by (namespace, pod) (kube_pod_init_container_status_running == 1)
           for: 15m
           labels:
             severity: warning
@@ -139,7 +140,8 @@ spec:
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#podpendingtoolong"
             summary: "{{ $labels.namespace }}/{{ $labels.pod }} has been Pending for 15 min"
             description: >-
-              Not scheduled (capacity, affinity, volume) or stuck pulling its image.
+              Not scheduled (capacity, affinity, volume) or stuck pulling its image. A Pod is `Pending` while its init containers run
+              (the backup and verifier Jobs): those are left out, a long init step is the Job's own deadline to catch.
 
         - alert: PdbBlocksDisruption
           expr: |
@@ -158,7 +160,7 @@ spec:
 
         - alert: ClusterCpuRequestsHigh
           expr: |
-            sum(kube_pod_container_resource_requests{resource="cpu"})
+            sum(kube_pod_container_resource_requests{resource="cpu"} and on (namespace, pod) (kube_pod_status_phase{phase="Running"} == 1))
             / sum(kube_node_status_allocatable{resource="cpu"}) > 0.9
           for: 30m
           labels:
@@ -169,11 +171,12 @@ spec:
             summary: "CPU requests reach {{ $value | humanizePercentage }} of what the nodes offer"
             description: >-
               Little room to reschedule after a node loss (a shipped example once ran at 172 % on two workers).
-              Requests of finished pods are counted: approximate.
+              Requests of Running pods only: a Pending pod that fits nowhere (lab 19: one 64-CPU pod gave a ratio of 3.1) and finished
+              pods are left out. PodPendingTooLong owns the pods that cannot be placed.
 
         - alert: ClusterMemoryRequestsHigh
           expr: |
-            sum(kube_pod_container_resource_requests{resource="memory"})
+            sum(kube_pod_container_resource_requests{resource="memory"} and on (namespace, pod) (kube_pod_status_phase{phase="Running"} == 1))
             / sum(kube_node_status_allocatable{resource="memory"}) > 0.9
           for: 30m
           labels:

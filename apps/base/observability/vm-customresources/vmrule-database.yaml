@@ -55,6 +55,29 @@ spec:
             description: >-
               The instance manager runs but PostgreSQL does not respond to its queries.
 
+        # A pod that is gone (deleted, Pending, on a lost node) exports nothing, so the three rules above evaluate empty and stay
+        # quiet (lab 19: a force-killed replica raised nothing). No metric says how many instances the Cluster wants, so this
+        # compares with what reported during the last day: fewer than the maximum of the day, or none left of a cluster that had
+        # some, for 10 min. A deliberate scale-down looks the same for up to a day: silence it or wait.
+        - alert: CnpgInstanceMissing
+          expr: |
+            (
+              count by (cnpg_io_cluster) (cnpg_collector_up) < max_over_time((count by (cnpg_io_cluster) (cnpg_collector_up))[1d:5m])
+            ) or (
+              max_over_time((count by (cnpg_io_cluster) (cnpg_collector_up))[1d:5m])
+              unless on (cnpg_io_cluster) count by (cnpg_io_cluster) (cnpg_collector_up)
+            )
+          for: 10m
+          labels:
+            severity: warning
+            component: database
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpginstancemissing"
+            summary: "CNPG {{ $labels.cnpg_io_cluster }}: an instance that reported during the last day reports no more"
+            description: >-
+              A replica or the primary is gone, Pending or unscheduled, and its series disappeared with it, so the replication and
+              collector rules cannot see it. Compare `kubectl cnpg status` with the number of instances wanted.
+
         - alert: CnpgWalFilesPiling
           expr: |
             max by (cnpg_io_cluster, pod) (cnpg_collector_pg_wal{value="count"}) > 200

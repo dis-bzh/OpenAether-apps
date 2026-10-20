@@ -140,6 +140,9 @@ kube_pod_container_status_last_terminated_reason:
 kube_pod_container_status_restarts_total:
   source: kube-state-metrics
   status: existing
+kube_pod_init_container_status_running:
+  source: kube-state-metrics
+  status: UNVERIFIED
 kube_pod_owner:
   source: kube-state-metrics
   status: existing

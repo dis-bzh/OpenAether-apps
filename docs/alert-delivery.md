@@ -15,7 +15,7 @@ Alertmanager, rule evaluation errors, alert state not persisted, Alertmanager co
 
 ## Heartbeat (dead-man's-switch)
 
-`Watchdog` fires forever. Alertmanager sends it every 5 minutes to the URL in `secret/observability/alertmanager-deadmansswitch`
+`Watchdog` fires forever. Alertmanager sends it about every 4 minutes (route `repeat_interval` 3m + `group_interval` 1m: a ping goes out at the first tick of the group interval after the repeat interval, so the gap is at most 4 min; with 5m it was measured at 360 s in lab 19) to the URL in `secret/observability/alertmanager-deadmansswitch`
 (`OA_DEADMANSSWITCH_URL` of the seed script). The **service** pages you when the pings stop, which covers the cluster, the
 node, vmalert or Alertmanager dying, and the egress being cut: the only signal that does not need the cluster. Set its grace
 period above 5 minutes (15 is a floor). One URL, any ping-on-absence service. The egress policy allows `hc-ping.com` and
@@ -28,7 +28,7 @@ Component `apps/flux/components/alert-delivery-probe`, off in every profile, for
 
 - `AlertDeliveryProbe` fires 10 minutes at 06:00 and 18:00 UTC and is routed (`probe="delivery"`) to a quiet chat receiver
   (one message, no "resolved").
-- `AlertDeliveryFailing`: Alertmanager counted a failed notification in the last hour (chat or heartbeat).
+- `AlertDeliveryFailing`: Alertmanager counted a failed notification attempt in the last 15 minutes (chat or heartbeat; it was one hour until lab 19 showed the alert lingering long after delivery was restored).
 - `AlertDeliveryNotAcknowledged` (critical): the probe fired in the last 14 hours and no notification to the chat receiver
   succeeded in that time. "Acknowledged" means the receiver answered 2xx, which is what Alertmanager counts; a muted or
   unread channel behind a working webhook is not detected.

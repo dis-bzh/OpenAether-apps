@@ -127,7 +127,8 @@ belong to. What follows has no skill of its own yet.
   queries and `/metrics` on 8481. Check `up == 0` after touching an observability
   CNP. And **a `VMRule` with no `VMAlert` is inert.**
 - **`repeat_interval` must be strictly greater than `group_interval`.** With both at
-  5m, Alertmanager sent one webhook in eleven minutes.
+  5m, Alertmanager sent one webhook in eleven minutes. And the real gap between pings is `repeat_interval` rounded UP to the next
+  `group_interval` tick: 5m with 1m measured 360 s (lab 19), hence 3m, about 4 min.
 
 ## Pod security (Kyverno `require-security-context`)
 

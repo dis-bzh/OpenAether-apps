@@ -32,7 +32,7 @@ spec:
             description: "Twice a day. Receiving it in chat proves vmalert, Alertmanager and the receiver."
         # A notification attempt failed lately (any receiver, the heartbeat included).
         - alert: AlertDeliveryFailing
-          expr: sum by (integration) (increase(alertmanager_notification_requests_failed_total[1h])) > 0
+          expr: sum by (integration) (increase(alertmanager_notification_requests_failed_total[15m])) > 0
           labels:
             severity: warning
             component: alerting

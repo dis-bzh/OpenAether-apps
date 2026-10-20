@@ -42,7 +42,8 @@ availability, and one heartbeat service plus one chat receiver as the only out-o
 
 ## UNVERIFIED: series and paths no cluster has shown (after lab 19)
 
-`longhorn_backup_state` (the other 41 were read on a cluster in lab 19, see below).
+`longhorn_backup_state` (the other 41 were read on a cluster in lab 19, see below) and `kube_pod_init_container_status_running`
+(added after lab 19 for `PodPendingTooLong`: a Pod with an init container running is left out; read it while a backup Job runs).
 
 Read in lab 19 (Scaleway, Longhorn 1.12.1, Talos 1.14.2): all the other series above exist (`task check-alerts`-style query of each name),
 the scrapes `istio-gateway` (15090) and `longhorn-manager` (9500) are up, the PSI series exist on all six nodes (Talos exposes them),
@@ -59,8 +60,8 @@ Run on one cloud, throwaway objects in their own namespace, never on a node that
    deployed, `oa_backup_verify_*` has series too (criterion 12). Each UNVERIFIED metric above found: flip it to `existing` in `alert-metrics.yaml`; not found: fix or drop the rule.
 2. **Scrapes.** `up == 1` for every gateway pod (`istio-gateway`) and every Longhorn manager; the PSI series exist on all nodes (else record that Talos lacks PSI).
 3. **Runbooks.** After merge, the `runbook_url` of three fired alerts opens the right heading.
-4. **Alerting chain.** Scale the Alertmanager to 0: `AlertmanagerAbsent` firing in vmalert after about 10 min and the heartbeat service flags the missed pings within its grace; restore, both clear.
-5. **Heartbeat.** The service shows a ping at least every 5 min for an hour.
+4. **Alerting chain.** Scale the Alertmanager to 0 (`spec.replicaCount: 0` of the `VMAlertmanager` is ignored by the operator, it stays at 1: set `spec.paused: true`, then `kubectl scale statefulset vmalertmanager-<name> --replicas=0`; lab 19): `AlertmanagerAbsent` firing in vmalert after about 10 min and the heartbeat service flags the missed pings within its grace; restore, both clear.
+5. **Heartbeat.** The service shows a ping at least every 5 min for an hour (route `repeat_interval` 3m + `group_interval` 1m, expected gap about 4 min; the first lab measured 360 s with 5m + 1m).
 6. **Delivery test** (component on, real endpoints). A throwaway VMRule with `probe="delivery"` firing now reaches the chat in under 2 min as one "[PROBE]" message with no "resolved"; `alertmanager_notification_requests_total{integration="slack"}` rises, `..._failed_total` does not. At the first real window (06:00 or 18:00 UTC) the same, unprovoked.
 7. **Delivery broken on purpose.** Replace the webhook secret by an invalid URL: `AlertDeliveryFailing` fires within one window, `AlertDeliveryNotAcknowledged` within the window plus 20 min, the Watchdog stops, and the heartbeat service pages by its own channel. Restore: all four clear and pings resume. Record each time.
 8. **Gateway RED.** One request produces `istio_requests_total` with `response_code`; a route to a missing backend produces 503s and the burn ratio query returns the expected value; with a throwaway copy of the rule using 5 min and 1 min windows, it fires within 5 min and clears after the fault.

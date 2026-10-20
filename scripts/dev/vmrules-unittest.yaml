@@ -699,6 +699,94 @@ tests:
         alertname: CnpgReplicaNotStreaming
         exp_alerts:
           - exp_labels: {cnpg_io_cluster: db, pod: db-2, severity: warning, component: database}
+  - name: CNPG instance that left the exporters (apps #152, lab 19)
+    interval: 1m
+    input_series:
+      - series: 'cnpg_collector_up{cnpg_io_cluster="db", pod="db-1"}'
+        values: '1x180'
+      - series: 'cnpg_collector_up{cnpg_io_cluster="db", pod="db-2"}'
+        values: '1x180'
+      - series: 'cnpg_collector_up{cnpg_io_cluster="db", pod="db-3"}'
+        values: '1x60 _x120'     # killed at 60 min, never back
+      - series: 'cnpg_collector_up{cnpg_io_cluster="gone", pod="gone-1"}'
+        values: '1x60 _x120'     # the whole cluster leaves
+      - series: 'cnpg_collector_up{cnpg_io_cluster="blip", pod="blip-1"}'
+        values: '1x180'
+      - series: 'cnpg_collector_up{cnpg_io_cluster="blip", pod="blip-2"}'
+        values: '1x60 _x4 1x116'  # back within 5 min: nothing
+    alert_rule_test:
+      - {eval_time: 50m, alertname: CnpgInstanceMissing, exp_alerts: []}
+      - eval_time: 100m
+        alertname: CnpgInstanceMissing
+        exp_alerts:
+          - exp_labels: {cnpg_io_cluster: db, severity: warning, component: database}
+          - exp_labels: {cnpg_io_cluster: gone, severity: warning, component: database}
+  - name: a Pod busy in its init containers is not Pending too long (apps #152, lab 19)
+    interval: 1m
+    input_series:
+      - series: 'kube_pod_status_phase{namespace="foundation-databases", pod="backup-verify-1", phase="Pending"}'
+        values: '1x60'
+      - series: 'kube_pod_init_container_status_running{namespace="foundation-databases", pod="backup-verify-1", container="restic-stage"}'
+        values: '1x60'
+      - series: 'kube_pod_status_phase{namespace="apps", pod="stuck", phase="Pending"}'
+        values: '1x60'
+      - series: 'kube_pod_init_container_status_running{namespace="apps", pod="stuck", container="init"}'
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: PodPendingTooLong
+        exp_alerts:
+          - exp_labels: {namespace: apps, pod: stuck, severity: warning, component: workload}
+  - name: a Pending pod that fits nowhere does not inflate the CPU requests ratio (apps #152, lab 19)
+    interval: 1m
+    input_series:
+      - series: 'kube_node_status_allocatable{resource="cpu", node="n1"}'
+        values: '4x120'
+      - series: 'kube_pod_container_resource_requests{resource="cpu", namespace="a", pod="run", container="c", node="n1"}'
+        values: '1x120'
+      - series: 'kube_pod_status_phase{namespace="a", pod="run", phase="Running"}'
+        values: '1x120'
+      - series: 'kube_pod_container_resource_requests{resource="cpu", namespace="a", pod="huge", container="c", node=""}'
+        values: '64x120'
+      - series: 'kube_pod_status_phase{namespace="a", pod="huge", phase="Running"}'
+        values: '0x120'
+      - series: 'kube_pod_status_phase{namespace="a", pod="huge", phase="Pending"}'
+        values: '1x120'
+    alert_rule_test:
+      - {eval_time: 90m, alertname: ClusterCpuRequestsHigh, exp_alerts: []}
+  - name: the CPU requests ratio still fires on Running pods
+    interval: 1m
+    input_series:
+      - series: 'kube_node_status_allocatable{resource="cpu", node="n1"}'
+        values: '4x120'
+      - series: 'kube_pod_container_resource_requests{resource="cpu", namespace="a", pod="run", container="c", node="n1"}'
+        values: '3.8x120'
+      - series: 'kube_pod_status_phase{namespace="a", pod="run", phase="Running"}'
+        values: '1x120'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: ClusterCpuRequestsHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, component: capacity}
+            exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#clustercpurequestshigh"
+              summary: "CPU requests reach 95% of what the nodes offer"
+              description: "Little room to reschedule after a node loss (a shipped example once ran at 172 % on two workers). Requests of Running pods only: a Pending pod that fits nowhere (lab 19: one 64-CPU pod gave a ratio of 3.1) and finished pods are left out. PodPendingTooLong owns the pods that cannot be placed."
+  - name: AlertDeliveryFailing clears 15 min after the last failed attempt, not one hour (apps #152, lab 19)
+    interval: 1m
+    input_series:
+      - series: 'alertmanager_notification_requests_failed_total{integration="slack"}'
+        values: '0+1x10 10x80'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: AlertDeliveryFailing
+        exp_alerts:
+          - exp_labels: {integration: slack, severity: warning, component: alerting}
+            exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alertdeliveryfailing"
+              summary: "Alertmanager failed to deliver a notification (slack)"
+              description: "The receiver refused or did not answer. This alert may itself not reach you through that receiver: read it in Alertmanager or Grafana."
+      - {eval_time: 40m, alertname: AlertDeliveryFailing, exp_alerts: []}
   - name: Loki compactor stopped applying retention
     interval: 10m
     input_series:

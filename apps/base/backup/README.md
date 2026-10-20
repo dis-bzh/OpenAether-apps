@@ -91,8 +91,12 @@ policy cannot narrow. Run in lab 12 (Scaleway): with `ObjectStorageBucketsRead` 
 project-wide, so the bucket policies carry the isolation, and a bucket WITHOUT a policy is open to the pair**: with policies
 only on the backups and logs buckets the pairs listed the tfstate and management buckets (`s3-isolation-check.sh`: 4 of 8
 assertions failed); with an operator-only policy on each of the other buckets, 10 of 10 held, the delete of a real object
-version included (`OA_ISOLATION_REAL_VERSION=1`). OVH and Outscale: not verified; the AWS rule (HeadBucket needs `s3:ListBucket`) is the
-expectation.
+version included (`OA_ISOLATION_REAL_VERSION=1`). Lab 19 (Scaleway primary pair: 10 of 10 held, the real delete-version denied) and an OVH replica store: **OVH Object Storage has no
+bucket policies through the S3 API, so a replica pair on OVH CANNOT be isolated per bucket**: with `s3-isolation-check.sh` 2 of 9
+assertions failed (the state and management twin buckets of the same OVH project were readable by the pair) and
+`DeleteObjectVersion` was allowed on the replica, so a stolen replica key can delete versions there. Use a separate OVH project (or
+another provider) for the replica when that matters (OpenAether-infra #379). Outscale: not verified; the AWS rule (HeadBucket
+needs `s3:ListBucket`) is the expectation.
 
 ## Order of a full recovery
 

@@ -323,6 +323,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `kubectl -n services-observability get vmalertmanager,pods`; the secrets `alertmanager-slack` and `alertmanager-deadmansswitch` (the pod does not start without them).
 - Do: seed the two secrets in OpenBao or fix the pod; read the Alertmanager init container log.
+- To stop Alertmanager on purpose (a test, a lab): `spec.replicaCount: 0` of the `VMAlertmanager` is ignored by the operator (it stays at 1). Set `spec.paused: true` first, then `kubectl scale statefulset vmalertmanager-<name> --replicas=0`; undo both. Measured: the alert fires 11 min after the scale-down and clears about 2 min after the restore.
 
 ### AlertDeliveryProbe
 
@@ -479,12 +480,12 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ### BackupVerificationFailed
 
-- Check: The verifier's logs (`backup-verify`, `-c collect`): which object or checksum failed.
-- Do: Treat the backup as corrupt: run a fresh backup and verify it.
+- Check: The verifier's logs (`backup-verify`, `-c collect`): which object or checksum failed. A `MISSING` message means a store has no repository or archive while the other store passed: that store was wiped or its prefix deleted (check the bucket, its lifecycle rules and the key pair).
+- Do: Treat the backup as corrupt: run a fresh backup and verify it. For a wiped primary, re-seed it from the replica or from a fresh backup (CNPG: `pg_switch_wal`, a Backup, `pg_switch_wal`, then verify), and keep the replica untouched until then.
 
 ### BackupCopyJobFailed
 
-- Check: `kubectl -n <ns> logs job/<job>`; the Job is one of `cnpg-store-replicate`, `etcd-snapshot`, `backup-verify`.
+- Check: `kubectl -n <ns> logs job/<job>`; the Job is one of `cnpg-store-replicate`, `etcd-snapshot`, `backup-verify`. `cnpg-store-replicate` prints `the primary lists no object while the replica holds N` when the primary store was wiped (nothing is pruned on the replica then). `etcd-snapshot` prints which stage failed: `discover-controlplane` (`kubectl logs <pod> -c discover-controlplane`: the Kubernetes API listing, or "no control plane answers on port 50000"), then `talos-snapshot`, then `restic-push`.
 - Do: Fix what the log names (a store or its key pair, the Talos grant `os:etcd:backup`, restic), then `kubectl -n <ns> create job --from=cronjob/<cronjob> manual-$(date +%s)`. A failed CHECK of the verifier is a metric, not a failed Job.
 
 ### CnpgStoreReplicationStale
@@ -523,6 +524,11 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `kubectl -n foundation-databases logs <pod> -c postgres`.
 - Do: Restart the pod if it is a replica; for a primary prefer a switchover to a healthy replica first.
+
+### CnpgInstanceMissing
+
+- Check: `kubectl cnpg status <cluster> -n foundation-databases`; `kubectl -n foundation-databases get pods -l cnpg.io/cluster=<cluster> -o wide`; Events of a Pending pod (capacity, volume node affinity).
+- Do: Free capacity or fix the volume or node so the instance comes back. If the number of instances was lowered on purpose, the alert clears by itself once the day-long reference no longer holds the old count (up to 24 h); silence it meanwhile.
 
 ### CnpgWalFilesPiling
 

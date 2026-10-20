@@ -233,7 +233,7 @@ spec:
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#watchdog"
             summary: "Alerting is alive end to end"
             description: >-
-              Pings the dead-man's-switch service every 5 min. If the pings stop,
+              Pings the dead-man's-switch service about every 4 min (never above 5). If the pings stop,
               the cluster, its alerting or its egress is gone.
 
     - name: openaether-monitoring-itself

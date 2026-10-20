@@ -48,6 +48,10 @@ def problems(am, cfg, rules, egress_fqdns):
         gi, ri = (int(str(w[k]).rstrip("ms")) for k in ("group_interval", "repeat_interval"))
         if ri <= gi:
             out.append("Watchdog repeat_interval must be strictly greater than group_interval (one ping, never again)")
+        # Lab 19: repeat 5m + group 1m gave a ping every 360 s, not the documented 5 min. A ping is sent at the first group_interval
+        # tick at or after repeat_interval, so the gap is at most repeat_interval + group_interval: keep that within 5 min.
+        if ri + gi > 5:   # both values are in minutes ("3m", "1m")
+            out.append(f"Watchdog repeat_interval + group_interval is {ri + gi} min: the heartbeat cadence would exceed the documented 5 min (lab 19 measured 360 s with 5m + 1m)")
     for r in routes + [cfg["route"]]:
         if r["receiver"] not in receivers:
             out.append(f"route sends to the unknown receiver {r['receiver']}")
@@ -123,6 +127,7 @@ def main():
         cases = {
             "watchdog not first": lambda a, c, r: c["route"]["routes"].reverse(),
             "repeat not greater": lambda a, c, r: c["route"]["routes"][0].update(repeat_interval="1m"),
+            "heartbeat slower than 5 min": lambda a, c, r: c["route"]["routes"][0].update(repeat_interval="5m"),
             "unknown receiver": lambda a, c, r: c["route"]["routes"][1].update(receiver="nope"),
             "secret not mounted": lambda a, c, r: a["spec"].update(secrets=["alertmanager-slack"]),
             "probe label drift": lambda a, c, r: r["AlertDeliveryProbe"]["labels"].update(probe="other"),

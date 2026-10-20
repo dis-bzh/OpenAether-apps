@@ -117,7 +117,7 @@ spec:
         # noticing a daily message stopped is not a monitoring system. The
         # service alarms when the ping stops — which is the only arrangement
         # that survives this cluster dying.
-        # Every 5 min, because a DMS grace period is usually 15-60 min.
+        # A ping at least every 5 min, because a DMS grace period is usually 15-60 min.
         - matchers:
             - alertname="Watchdog"
           receiver: deadmansswitch
@@ -127,8 +127,11 @@ spec:
           # (verified: 1 notification in 11 min), which would trip the
           # dead-man's switch on a perfectly healthy cluster — the exact false
           # alarm this is meant to avoid.
+          # And a ping goes out at the first group_interval tick at or after repeat_interval: repeat_interval 5m with
+          # group_interval 1m measured 360 s between pings (lab 19), not 5 min. 3m gives about 4 min (at most
+          # repeat_interval + group_interval, which test-alert-delivery.py keeps within 5 min).
           group_interval: 1m
-          repeat_interval: 5m
+          repeat_interval: 3m
         # The scheduled delivery test (opt-in component alert-delivery-probe, docs/alert-delivery.md): one chat message
         # per window, never a "resolved" one. Without the component nothing carries this label.
         - matchers:
