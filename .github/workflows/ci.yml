@@ -335,6 +335,15 @@ jobs:
           grep -qE '^[0-9]+ passed, 0 failed$' verify.out
           ! grep -q 'SKIPPED' verify.out
 
+      - name: "The CNPG restore test compares, fails on each damage and cleans up (kubectl double, then real PostgreSQL)"
+        run: |
+          set -euo pipefail
+          python3 -I scripts/dev/test-restore-test-cnpg.py | tee restore-test.out
+          grep -qE '^[0-9]+ passed, 0 failed$' restore-test.out
+          CI=true ./scripts/dev/test-restore-test-cnpg-sql.sh | tee restore-test-sql.out
+          grep -qE '^[0-9]+ passed, 0 failed$' restore-test-sql.out
+          ! grep -q 'SKIPPED' restore-test-sql.out
+
   loki-render:
     name: Loki chart render
     runs-on: ubuntu-latest

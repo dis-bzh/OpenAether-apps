@@ -171,3 +171,40 @@ spec:
         - ports:
             - port: "9101"
               protocol: TCP
+---
+# cnpg-canary: writes one row into the two databases and talks to nothing else.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg-canary
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "CNPG canary writer: egress DNS + Postgres 5432 of the two clusters"
+  endpointSelector:
+    matchLabels:
+      app: cnpg-canary
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEndpoints:
+        - matchExpressions:
+            - key: "cnpg.io/cluster"
+              operator: Exists
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP

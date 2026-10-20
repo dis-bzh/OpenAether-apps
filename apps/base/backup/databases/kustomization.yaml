@@ -6,6 +6,7 @@ resources:
   - cronjob.yaml
   - restore-test-cronjob.yaml
   - cnpg-store-replicate-cronjob.yaml
+  - canary-cronjob.yaml
   - verify-rbac.yaml
   - verify-cronjob.yaml
   - verify-exporter.yaml
@@ -19,3 +20,12 @@ configMapGenerator:
       - verify/restic-stage.sh
       - verify/barman_check.py
       - verify/collect.py
+# The restore tests' scripts (0.4.0 M3): the canary writer, the two stages of the CNPG restore test, and the exporter.
+  - name: backup-restore-scripts
+    namespace: foundation-databases
+    files:
+      - restore/canary-write.sh
+      - restore/source-snapshot.sh
+      - restore/snapshot.sql
+      - restore/restore_cnpg.py
+      - restore/serve_metrics.py
