@@ -1,0 +1,29 @@
+# yamllint disable rule:line-length
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# OPT-IN (component longhorn-restore-test): a canary volume that Longhorn backs up daily, and the weekly test that restores its
+# newest backup into a scratch volume and checks the files. Only useful when Longhorn volume backups are on (BACKUP_TARGET_URL).
+resources:
+  - storageclass.yaml
+  - canary.yaml
+  - restore.yaml
+  - scratch.yaml
+
+# The script lives in two namespaces: the writer and the restore Job (foundation-storage) and the verify pod (scratch).
+configMapGenerator:
+  - name: longhorn-restore-scripts
+    namespace: foundation-storage
+    files:
+      - scripts/canary_volume.py
+      - scripts/restore_longhorn.py
+    options:
+      disableNameSuffixHash: true
+      labels: { openaether.io/managed: "true", openaether.io/component: storage }
+  - name: longhorn-restore-scripts
+    namespace: backup-restore-test
+    files:
+      - scripts/canary_volume.py
+    options:
+      disableNameSuffixHash: true
+      labels: { openaether.io/managed: "true", openaether.io/component: storage }

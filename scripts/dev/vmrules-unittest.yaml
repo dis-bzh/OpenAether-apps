@@ -887,3 +887,28 @@ tests:
         alertname: CnpgCanaryNotWriting
         exp_alerts:
           - exp_labels: {severity: warning, component: backup}
+  - name: the Longhorn restore test never reported while its CronJob is older than ten days, and its canary writer stopped
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-storage", cronjob="longhorn-restore-test"}'
+        values: '945820800+0x30'
+      - series: 'kube_cronjob_status_last_successful_time{namespace="foundation-storage", cronjob="longhorn-canary"}'
+        values: '946684800+0x100'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: LonghornRestoreTestNeverReported
+        exp_alerts:
+          - exp_labels: {kind: longhorn, severity: warning, component: backup}
+      - {eval_time: 20m, alertname: LonghornCanaryNotWriting, exp_alerts: []}
+      - eval_time: 6h
+        alertname: LonghornCanaryNotWriting
+        exp_alerts:
+          - exp_labels: {severity: warning, component: backup}
+  - name: without the Longhorn component the Longhorn alerts are silent
+    interval: 10m
+    input_series:
+      - series: 'up{job="x"}'
+        values: '1x30'
+    alert_rule_test:
+      - {eval_time: 3h, alertname: LonghornRestoreTestNeverReported, exp_alerts: []}
+      - {eval_time: 3h, alertname: LonghornCanaryNotWriting, exp_alerts: []}

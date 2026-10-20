@@ -101,3 +101,34 @@ spec:
             description: >-
               The restore tests compare a restored copy with the canary rows the live databases receive every 5 minutes.
               Without fresh rows the comparison skips (it cannot judge the copy), so the tests stop proving anything.
+
+        # The Longhorn pair is an opt-in component (components/longhorn-restore-test): silent without it, because both CronJob
+        # series are absent. A Job that skips (no backup target) never reports, which is what the first alert says.
+        - alert: LonghornRestoreTestNeverReported
+          expr: |
+            (absent(oa_restore_test_last_run_timestamp_seconds{kind="longhorn"}) == 1)
+            and on ()
+            (time() - max(kube_cronjob_created{namespace="foundation-storage", cronjob="longhorn-restore-test"}) > 10 * 86400)
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#longhornrestoretestneverreported"
+            summary: "The Longhorn restore test has never reported a result"
+            description: >-
+              The component is installed since more than 10 days and the exporter has no Longhorn restore series: the Job skips
+              (no backup target, or the canary volume has no backup), or it never completes.
+
+        - alert: LonghornCanaryNotWriting
+          expr: time() - max(kube_cronjob_status_last_successful_time{namespace="foundation-storage", cronjob="longhorn-canary"}) > 4 * 3600
+          for: 30m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#longhorncanarynotwriting"
+            summary: "The Longhorn canary writer has not succeeded for 4 hours"
+            description: >-
+              The restore test checks that the newest file generation is at most 3 hours older than the backup it restores. With a stopped
+              writer every restore test fails.

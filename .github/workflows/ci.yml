@@ -156,6 +156,9 @@ jobs:
       - name: "The restore tests stay scratch: RBAC, quota, ObjectStores, Jobs, exporter (0.4.0 M3)"
         run: python3 -I scripts/dev/test-restore-test-brick.py
 
+      - name: "The Longhorn restore test: canary files, flow against a double, rights (0.4.0 M3, opt-in component)"
+        run: python3 -I scripts/dev/test-restore-test-longhorn.py
+
       - name: CNPG clusters roll the primary by switchover, not by an in-place restart (lab 15c)
         run: python3 -I scripts/dev/test-cnpg-primary-update.py
 

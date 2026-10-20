@@ -8,7 +8,7 @@ ky="${KYVERNO:-$(command -v kyverno || true)}"
 [[ -x "$ky" ]] || { echo "kyverno CLI not found (PATH or \$KYVERNO)" >&2; exit 2; }
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
 rc=0
-for d in backup/databases backup/etcd backup/openbao cnpg; do
+for d in backup/databases backup/etcd backup/openbao cnpg storage-restore-test; do
   kubectl kustomize "apps/base/$d" | python3 -I -c '
 import sys, yaml
 docs = [d for d in yaml.safe_load_all(sys.stdin) if d and d["kind"] in ("Deployment", "CronJob", "Job", "Pod")]

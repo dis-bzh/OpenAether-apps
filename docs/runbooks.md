@@ -57,6 +57,16 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: `kubectl -n foundation-databases get cronjob cnpg-canary` and the log of its last Job (`canary write to ... failed` names the database).
 - Do: Fix the cause (database down, credentials Secret, NetworkPolicy). Without fresh canary rows the restore tests skip the comparison.
 
+### LonghornRestoreTestNeverReported
+
+- Check: `kubectl -n foundation-storage get cronjob longhorn-restore-test`, its last Job's log (`SKIP longhorn: ...` says why), `kubectl get backuptarget default -n longhorn-system -o jsonpath='{.spec.backupTargetURL}'`, `kubectl -n longhorn-system get backupvolumes.longhorn.io`.
+- Do: Set BACKUP_TARGET_URL (cluster-identity) so that Longhorn backs up, wait for the 03:37 UTC recurring job, run the test once by hand (`kubectl -n foundation-storage create job --from=cronjob/longhorn-restore-test manual-$(date +%s)`); or remove the component.
+
+### LonghornCanaryNotWriting
+
+- Check: `kubectl -n foundation-storage get pvc oa-canary` and the log of the last `longhorn-canary` Job.
+- Do: Fix the volume (attach, Longhorn health) or the Job; the restore test fails while the writer is stopped.
+
 ### BackupCronJobMissing
 
 - Check: `kubectl get cronjob -A | grep -E 'openbao-snapshot|cnpg-dump'`.
