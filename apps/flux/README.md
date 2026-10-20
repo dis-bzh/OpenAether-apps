@@ -64,6 +64,7 @@ the `apps/flux/management` render (37 Kustomizations) these 13 have no health ga
 - foundation-vault
 - identity
 - kyverno-policies-eso
+- kyverno-policies-cnpg
 - observability
 - observability-openbao
 - services-gateway

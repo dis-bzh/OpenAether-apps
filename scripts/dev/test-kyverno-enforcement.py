@@ -41,6 +41,17 @@ r = subprocess.run(["kubectl", "kustomize", str(REPO / "apps/base/kyverno-polici
 if r.returncode:
     sys.exit(f"kubectl kustomize failed: {r.stderr}")
 pol = {d["metadata"]["name"]: d for d in yaml.safe_load_all(r.stdout) if d}
+# The Cluster guard lives in its own brick: Kyverno compiles a policy against the kinds it resolves when the policy is created,
+# so it must be created after the CNPG CRDs exist (lab 20: created earlier it admitted an rt-x Cluster until it was touched).
+r2 = subprocess.run(["kubectl", "kustomize", str(REPO / "apps/base/kyverno-policies-cnpg")], capture_output=True, text=True)
+if r2.returncode:
+    sys.exit(f"kubectl kustomize failed: {r2.stderr}")
+guard = {d["metadata"]["name"]: d for d in yaml.safe_load_all(r2.stdout) if d}
+check("the Cluster guard is NOT in the brick that Kyverno loads before the CNPG CRDs exist", not (CLUSTER_GUARD & set(pol)), sorted(pol))
+pol.update(guard)
+ks = {d["metadata"]["name"]: d for d in yaml.safe_load_all((REPO / "apps/flux/base/40-kyverno.yaml").read_text()) if d}
+check("its Kustomization waits for cnpg and for kyverno-policies",
+      {x["name"] for x in ks["kyverno-policies-cnpg"]["spec"]["dependsOn"]} == {"cnpg", "kyverno-policies"})
 
 for name in FLIPPABLE:
     spec = pol[name]["spec"]

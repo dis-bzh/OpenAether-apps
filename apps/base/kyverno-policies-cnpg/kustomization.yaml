@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The Kyverno policy on CNPG Clusters. Its own Kustomization because Kyverno compiles a policy against the kinds it can resolve WHEN
+# THE POLICY IS CREATED: created before the CNPG CRDs, it sat in the cache without its kind and let an rt-x Cluster into
+# foundation-databases until it was touched (lab 20). Same shape as kyverno-policies-eso.
+resources:
+  - restrict-restore-test-clusters.yaml
