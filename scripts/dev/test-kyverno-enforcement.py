@@ -25,6 +25,8 @@ FLIPPABLE = ["restrict-privileged", "restrict-capabilities", "restrict-capabilit
 LABEL_OF = {"restrict-capabilities-ephemeral": "restrict-capabilities", "restrict-privileged-ephemeral": "restrict-privileged"}
 ALREADY_ENFORCE = {"disallow-root-user", "disallow-default-namespace"}
 ALWAYS_AUDIT = {"require-ro-rootfs"}
+# Matches CNPG Clusters, not Pods; Enforce with failurePolicy Ignore (a Kyverno outage must not block the live Clusters).
+CLUSTER_GUARD = {"restrict-restore-test-clusters"}
 PASS = FAIL = 0
 
 
@@ -91,7 +93,11 @@ check("the two policies that already enforce are untouched",
 MUTATIONS = {"spread-gateway-pods"}
 check("the mutation policies have no validate rule",
       all("validate" not in r and "mutate" in r for n in MUTATIONS for r in pol[n]["spec"]["rules"]))
-check("no other policy exists unlisted", set(pol) - MUTATIONS == set(FLIPPABLE) | ALREADY_ENFORCE | ALWAYS_AUDIT, sorted(pol))
+check("the Cluster guard enforces, ignores a Kyverno outage, and matches Clusters only",
+      all(pol[n]["spec"]["validationFailureAction"] == "Enforce" and pol[n]["spec"].get("failurePolicy") == "Ignore"
+          and all(k == "postgresql.cnpg.io/v1/Cluster" for r in pol[n]["spec"]["rules"] for b in r["match"]["any"] for k in b["resources"]["kinds"])
+          for n in CLUSTER_GUARD))
+check("no other policy exists unlisted", set(pol) - MUTATIONS == set(FLIPPABLE) | ALREADY_ENFORCE | ALWAYS_AUDIT | CLUSTER_GUARD, sorted(pol))
 
 # Default off: nothing shipped labels a namespace for Enforce (policies and docs excluded: they spell the label).
 hits = [str(p.relative_to(REPO)) for p in (REPO / "apps").rglob("*.yaml")

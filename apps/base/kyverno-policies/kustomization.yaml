@@ -15,4 +15,5 @@ resources:
   - restrict-privileged-ephemeral.yaml
   - require-ro-rootfs.yaml
   - require-limits.yaml
+  - restrict-restore-test-clusters.yaml  # the scratch Clusters of the restore tests stay scratch (a Cluster, not a Pod)
   - spread-gateway-pods.yaml  # a mutation, not a validation: the Istio Gateway pods spread over the nodes

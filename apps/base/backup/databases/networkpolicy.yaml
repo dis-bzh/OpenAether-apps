@@ -1,3 +1,4 @@
+# yamllint disable rule:line-length
 # Egress of the CNPG dump pod (default-deny posture).
 # DB ingress :5432 is already covered by the intra-namespace rule of
 # cnpg/networkpolicy-db-restricted.yaml (selector namespace-only).
@@ -207,4 +208,52 @@ spec:
       toPorts:
         - ports:
             - port: "5432"
+              protocol: TCP
+---
+# cnpg-restore-test: reads the live databases (stage 1), then talks to the API server only (it creates, inspects, execs into
+# and deletes the scratch Cluster there). The scratch instances reach the S3 stores themselves (apps/base/cnpg/restore-scratch.yaml).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg-restore-test
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "CNPG restore test: egress DNS + Postgres 5432 of the live clusters + kube-apiserver"
+  endpointSelector:
+    matchLabels:
+      app: cnpg-restore-test
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEndpoints:
+        - matchExpressions:
+            - key: "cnpg.io/cluster"
+              operator: Exists
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP

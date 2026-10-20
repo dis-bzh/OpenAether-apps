@@ -1,0 +1,64 @@
+# Expected results of the restore-test guard on resources.yaml (Kyverno CLI 1.19.1 test schema).
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: kyverno-restore-guard
+policies:
+- ../../../../apps/base/kyverno-policies/restrict-restore-test-clusters.yaml
+resources:
+- resources.yaml
+results:
+- policy: restrict-restore-test-clusters
+  rule: scratch-clusters-recover-and-never-archive
+  resources:
+  - rt-good
+  kind: Cluster
+  result: pass
+- policy: restrict-restore-test-clusters
+  rule: scratch-clusters-recover-and-never-archive
+  resources:
+  - rt-archives
+  kind: Cluster
+  result: fail
+- policy: restrict-restore-test-clusters
+  rule: scratch-clusters-recover-and-never-archive
+  resources:
+  - rt-initdb
+  kind: Cluster
+  result: fail
+- policy: restrict-restore-test-clusters
+  rule: scratch-clusters-recover-and-never-archive
+  resources:
+  - rt-three
+  kind: Cluster
+  result: fail
+- policy: restrict-restore-test-clusters
+  rule: scratch-clusters-recover-and-never-archive
+  resources:
+  - rt-backup
+  kind: Cluster
+  result: fail
+- policy: restrict-restore-test-clusters
+  rule: scratch-clusters-recover-and-never-archive
+  resources:
+  - not-rt
+  kind: Cluster
+  result: fail
+- policy: restrict-restore-test-clusters
+  rule: scratch-clusters-only-in-the-scratch-namespace
+  resources:
+  - rt-on-live
+  kind: Cluster
+  result: fail
+- policy: restrict-restore-test-clusters
+  rule: scratch-clusters-only-in-the-scratch-namespace
+  resources:
+  - rt-named-on-live
+  kind: Cluster
+  result: fail
+- policy: restrict-restore-test-clusters
+  rule: scratch-clusters-only-in-the-scratch-namespace
+  resources:
+  - zitadel-db
+  kind: Cluster
+  result: skip

@@ -153,6 +153,9 @@ jobs:
       - name: "CNPG ObjectStores send checksums only when required (barman-cloud on Outscale OOS, #132)"
         run: python3 -I scripts/dev/test-cnpg-s3-checksum-env.py
 
+      - name: "The restore tests stay scratch: RBAC, quota, ObjectStores, Jobs, exporter (0.4.0 M3)"
+        run: python3 -I scripts/dev/test-restore-test-brick.py
+
       - name: CNPG clusters roll the primary by switchover, not by an in-place restart (lab 15c)
         run: python3 -I scripts/dev/test-cnpg-primary-update.py
 
@@ -335,7 +338,7 @@ jobs:
           grep -qE '^[0-9]+ passed, 0 failed$' verify.out
           ! grep -q 'SKIPPED' verify.out
 
-      - name: "The CNPG restore test compares, fails on each damage and cleans up (kubectl double, then real PostgreSQL)"
+      - name: "The CNPG restore test: each damage found, the scratch Cluster removed (double, real PostgreSQL)"
         run: |
           set -euo pipefail
           python3 -I scripts/dev/test-restore-test-cnpg.py | tee restore-test.out

@@ -216,5 +216,20 @@ check("the recovery target of the manifest is that row's time", all(json.loads(l
 rcode, out, *_ = flow("pitr", {n: SRC[:-2] for n in NAMES})
 check("a PITR that replays past its target fails", rcode == 1 and "exactly" in out)
 
+print("=== exporter ===")
+sp = importlib.util.spec_from_file_location("sm", os.path.join(D, "serve_metrics.py"))
+sm = importlib.util.module_from_spec(sp)
+sp.loader.exec_module(sm)
+with tempfile.TemporaryDirectory() as t:
+    a, b = os.path.join(t, "a"), os.path.join(t, "b")
+    os.makedirs(a), os.makedirs(b)
+    open(os.path.join(a, "metrics"), "w").write("# HELP oa_x one\n# TYPE oa_x gauge\noa_x{d=\"1\"} 1\n# HELP oa_y y\n# TYPE oa_y gauge\noa_y 2\n")
+    open(os.path.join(b, "k1"), "w").write("# HELP oa_x one\n# TYPE oa_x gauge\noa_x{d=\"2\"} 3\n")
+    open(os.path.join(b, "k2"), "w").write("# no result yet\n")
+    m = sm.merge([a, b, os.path.join(t, "absent")])
+    check("the exporter merges the files: HELP and TYPE once, the samples of a metric together",
+          m.count("# HELP oa_x") == 1 and m.count("# TYPE oa_x") == 1 and m.index('oa_x{d="2"}') < m.index("# HELP oa_y"), m)
+    check("a comment-only file adds nothing", "no result yet" not in m)
+
 print(f"{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

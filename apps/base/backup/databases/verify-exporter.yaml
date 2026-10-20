@@ -1,6 +1,7 @@
-# The metrics endpoint of the backup verifier: the Python standard library's file server (from the alpine/k8s image the
-# verifier already pulls) serving the file that backup-verify patches into a ConfigMap. No code to maintain, no
-# Pushgateway, and nothing to scrape that is not alive between runs. The ConfigMap is created once and never overwritten
+# yamllint disable rule:line-length
+# The metrics endpoint of the backup verifier and of the restore tests: serve_metrics.py (Python standard library, from the
+# alpine/k8s image the verifier already pulls) merges the file that backup-verify patches into a ConfigMap with the files
+# the restore tests patch into theirs (one key per test). No Pushgateway, and nothing to scrape that is not alive between runs. The ConfigMap is created once and never overwritten
 # by Flux (IfNotPresent): its content is the verifier's, the series appear after its first run. vmagent scrapes the
 # Service (observability brick, VMServiceScrape backup-verify); the kubelet refreshes the mounted file within about a
 # minute of a patch.
@@ -48,10 +49,15 @@ spec:
         - name: www
           configMap:
             name: oa-backup-verify-metrics
+        - name: www-restore
+          configMap:
+            name: oa-restore-test-metrics
+        - name: scripts
+          configMap: { name: backup-restore-scripts, defaultMode: 0555 }
       containers:
         - name: httpd
           image: docker.io/alpine/k8s:1.36.5
-          command: ["python3", "-m", "http.server", "9101", "--directory", "/www"]
+          command: ["python3", "/scripts/serve_metrics.py", "9101", "/www", "/www-restore"]
           env:
             - { name: PYTHONDONTWRITEBYTECODE, value: "1" }
           ports:
@@ -68,6 +74,8 @@ spec:
             seccompProfile: { type: RuntimeDefault }
           volumeMounts:
             - { name: www, mountPath: /www, readOnly: true }
+            - { name: www-restore, mountPath: /www-restore, readOnly: true }
+            - { name: scripts, mountPath: /scripts, readOnly: true }
           resources:
             requests: { cpu: 5m, memory: 24Mi }
             limits: { cpu: 100m, memory: 64Mi }

@@ -22,6 +22,7 @@ resources:
   - backup-externalsecret.yaml
   - objectstores.yaml
   - scheduledbackups.yaml
+  - restore-scratch.yaml  # the scratch namespace of the restore tests (backup/databases)
 
 # The vendored operator sets runAsNonRoot on the pod only; Kyverno require-security-context reads the container (#47).
 patches:

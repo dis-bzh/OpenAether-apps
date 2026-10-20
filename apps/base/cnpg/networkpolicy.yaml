@@ -72,6 +72,17 @@ spec:
               protocol: TCP
             - port: "5432"
               protocol: TCP
+    # The scratch instances of the restore tests (restore-scratch.yaml): same two ports.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: backup-restore-test
+            cnpg.io/podRole: instance
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+            - port: "5432"
+              protocol: TCP
 ---
 # Barman Cloud plugin (cnpg-system): the operator calls it on 9090 (mTLS from cert-manager certificates); it reads the
 # ObjectStore objects and the Cluster through the API server. It never talks to the store: the sidecar in each

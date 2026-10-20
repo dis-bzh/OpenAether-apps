@@ -1,0 +1,234 @@
+# yamllint disable rule:line-length
+# The scratch namespace of the restore tests (0.4.0 M3): the CronJobs of backup/databases recover the archive of each Cluster
+# from each store into a throwaway one-instance Cluster HERE, compare it with the live database, and delete it. Nothing
+# permanent runs in this namespace. What bounds it: the ResourceQuota (it cannot starve the platform), the Kyverno policy
+# restrict-restore-test-clusters (only recovering, non-archiving rt-* Clusters), the ServiceAccount's RBAC (this namespace
+# only) and the script's own guard.
+#
+# The ObjectStores are the read side of the stores (same paths as objectstores.yaml) WITHOUT a retention policy: the plugin
+# never deletes anything through them. The key pairs are the ones of the archive (primary) and of the replica copy; a
+# read-only pair is a follow-up (apps/base/backup/README.md, S3 rights).
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backup-restore-test
+  labels:
+    # Out of the mesh, like foundation-databases (ambient breaks the instance-manager probes).
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+    openaether.io/managed: "true"
+    openaether.io/component: "restore-test"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: restore-test
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: restore-test
+spec:
+  hard:
+    # One Cluster at a time: an instance (1 CPU / 768Mi limit) with the plugin's sidecar (500m / 512Mi), plus the recovery Job pod.
+    pods: "4"
+    requests.cpu: "1"
+    requests.memory: 1536Mi
+    limits.cpu: "3"
+    limits.memory: 3Gi
+    persistentvolumeclaims: "2"
+    requests.storage: 10Gi
+    count/clusters.postgresql.cnpg.io: "1"
+---
+# The key pairs of the two stores, from OpenBao (the namespace is in the store's conditions and in the Kyverno audit exclusion).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: cnpg-backup-s3
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: restore-test
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { kind: ClusterSecretStore, name: openbao }
+  target: { name: cnpg-backup-s3, creationPolicy: Owner }
+  data:
+    - { secretKey: ACCESS_KEY_ID, remoteRef: { key: backup/s3-primary, property: access_key } }
+    - { secretKey: ACCESS_SECRET_KEY, remoteRef: { key: backup/s3-primary, property: secret_key } }
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: cnpg-backup-s3-replica
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: restore-test
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { kind: ClusterSecretStore, name: openbao }
+  target: { name: cnpg-backup-s3-replica, creationPolicy: Owner }
+  data:
+    - { secretKey: ACCESS_KEY_ID, remoteRef: { key: backup/s3-replica, property: access_key } }
+    - { secretKey: ACCESS_SECRET_KEY, remoteRef: { key: backup/s3-replica, property: secret_key } }
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: zitadel-db-primary
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: restore-test
+spec:
+  configuration:
+    destinationPath: "s3://${BACKUP_S3_BUCKET:=}/cnpg/zitadel-db"
+    endpointURL: "${BACKUP_S3_ENDPOINT:=}"
+    s3Credentials:
+      accessKeyId: { name: cnpg-backup-s3, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: cnpg-backup-s3, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip, encryption: AES256 }
+    data: { compression: gzip, encryption: AES256 }
+  instanceSidecarConfiguration:
+    env:
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: when_required }
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: when_required }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: zitadel-db-replica
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: restore-test
+spec:
+  configuration:
+    destinationPath: "s3://${BACKUP_REPLICA_S3_BUCKET:=}/cnpg/zitadel-db"
+    endpointURL: "${BACKUP_REPLICA_S3_ENDPOINT:=}"
+    s3Credentials:
+      accessKeyId: { name: cnpg-backup-s3-replica, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: cnpg-backup-s3-replica, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip, encryption: AES256 }
+    data: { compression: gzip, encryption: AES256 }
+  instanceSidecarConfiguration:
+    env:
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: when_required }
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: when_required }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: grafana-db-primary
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: restore-test
+spec:
+  configuration:
+    destinationPath: "s3://${BACKUP_S3_BUCKET:=}/cnpg/grafana-db"
+    endpointURL: "${BACKUP_S3_ENDPOINT:=}"
+    s3Credentials:
+      accessKeyId: { name: cnpg-backup-s3, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: cnpg-backup-s3, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip, encryption: AES256 }
+    data: { compression: gzip, encryption: AES256 }
+  instanceSidecarConfiguration:
+    env:
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: when_required }
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: when_required }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: grafana-db-replica
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: restore-test
+spec:
+  configuration:
+    destinationPath: "s3://${BACKUP_REPLICA_S3_BUCKET:=}/cnpg/grafana-db"
+    endpointURL: "${BACKUP_REPLICA_S3_ENDPOINT:=}"
+    s3Credentials:
+      accessKeyId: { name: cnpg-backup-s3-replica, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: cnpg-backup-s3-replica, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip, encryption: AES256 }
+    data: { compression: gzip, encryption: AES256 }
+  instanceSidecarConfiguration:
+    env:
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: when_required }
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: when_required }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+---
+# The scratch instance: DNS, the API server, the provider S3 endpoints, and the CNPG operator in (status on :8000, SQL).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: restore-test-cluster
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: restore-test
+spec:
+  description: "Restore-test scratch Cluster: operator ingress, egress DNS + kube-api + provider S3 (443)"
+  endpointSelector:
+    matchExpressions:
+      - key: "cnpg.io/cluster"
+        operator: Exists
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": cnpg-system
+            "app.kubernetes.io/name": cloudnative-pg
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toFQDNs:
+        - matchPattern: "s3.*.scw.cloud"          # Scaleway Object Storage
+        - matchPattern: "s3.*.io.cloud.ovh.net"   # OVH Object Storage (standard class)
+        - matchPattern: "oos.*.outscale.com"      # Outscale OSU
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

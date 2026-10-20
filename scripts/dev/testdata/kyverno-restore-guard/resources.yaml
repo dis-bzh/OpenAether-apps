@@ -1,0 +1,68 @@
+# yamllint disable rule:line-length
+# Cluster fixtures of the restore-test guard. Names are unique (Kyverno CLI 1.19 results carry no namespace).
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata: { name: rt-good, namespace: backup-restore-test, labels: { openaether.io/restore-test: "true" } }
+spec:
+  instances: 1
+  bootstrap: { recovery: { source: origin } }
+  externalClusters: [{ name: origin, plugin: { name: barman-cloud.cloudnative-pg.io, parameters: { barmanObjectName: x, serverName: y } } }]
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata: { name: rt-on-live, namespace: foundation-databases, labels: { openaether.io/restore-test: "true" } }
+spec:
+  instances: 1
+  bootstrap: { recovery: { source: origin } }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata: { name: rt-named-on-live, namespace: foundation-databases }
+spec:
+  instances: 1
+  bootstrap: { recovery: { source: origin } }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata: { name: zitadel-db, namespace: foundation-databases }
+spec:
+  instances: 3
+  bootstrap: { initdb: { database: zitadel } }
+  plugins: [{ name: barman-cloud.cloudnative-pg.io, isWALArchiver: true, parameters: { barmanObjectName: zitadel-db-primary } }]
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata: { name: rt-archives, namespace: backup-restore-test }
+spec:
+  instances: 1
+  bootstrap: { recovery: { source: origin } }
+  plugins: [{ name: barman-cloud.cloudnative-pg.io, isWALArchiver: true, parameters: { barmanObjectName: zitadel-db-primary } }]
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata: { name: rt-initdb, namespace: backup-restore-test }
+spec:
+  instances: 1
+  bootstrap: { initdb: { database: app } }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata: { name: rt-three, namespace: backup-restore-test }
+spec:
+  instances: 3
+  bootstrap: { recovery: { source: origin } }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata: { name: rt-backup, namespace: backup-restore-test }
+spec:
+  instances: 1
+  bootstrap: { recovery: { source: origin } }
+  backup: { barmanObjectStore: { destinationPath: "s3://x" } }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata: { name: not-rt, namespace: backup-restore-test }
+spec:
+  instances: 1
+  bootstrap: { recovery: { source: origin } }
