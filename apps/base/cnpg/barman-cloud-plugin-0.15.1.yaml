@@ -1080,6 +1080,8 @@ spec:
     group: cert-manager.io
     kind: Issuer
     name: selfsigned-issuer
+  privateKey:
+    rotationPolicy: Always
   renewBefore: 360h
   secretName: barman-cloud-client-tls
   usages:
@@ -1100,6 +1102,8 @@ spec:
     group: cert-manager.io
     kind: Issuer
     name: selfsigned-issuer
+  privateKey:
+    rotationPolicy: Always
   renewBefore: 360h
   secretName: barman-cloud-server-tls
   usages:
