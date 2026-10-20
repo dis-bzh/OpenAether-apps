@@ -16,6 +16,8 @@ B = REPO / "apps/base"
 CASES = [  # (scrape, namespace of the target, CNP name, port)
     ("istio-gateway", "services-gateway", "openaether-gateway", "15090"),
     ("longhorn-manager", "longhorn-system", "longhorn", "9500"),
+    # the M2 verifier's exporter (a VMServiceScrape, not a pod scrape): lab 19 found vmagent's egress closed on 9101
+    ("backup-verify", "foundation-databases", "backup-verify-exporter", "9101"),
 ]
 
 
@@ -40,7 +42,7 @@ def problems(scrapes, netpols):
         pol = next((d for d in netpols if d["metadata"]["name"] == cnp and d["metadata"]["namespace"] == ns), None)
         ok = pol and any(
             port in ports(r) and any(
-                e.get("matchLabels", {}).get("io.kubernetes.pod.namespace") == "services-observability"
+                (e.get("matchLabels", {}).get("io.kubernetes.pod.namespace") or e.get("matchLabels", {}).get("k8s:io.kubernetes.pod.namespace")) == "services-observability"
                 and e["matchLabels"].get("app.kubernetes.io/name") == "vmagent" for e in r.get("fromEndpoints", []))
             for r in pol["spec"].get("ingress", []))
         if not ok:
@@ -48,8 +50,9 @@ def problems(scrapes, netpols):
     return out
 
 
-scrapes = [d for d in docs("observability/vm-customresources/vmscapes.yaml") if d["kind"] == "VMPodScrape"]
-netpols = [d for p in ("observability/networkpolicy.yaml", "istio/networkpolicy.yaml", "storage/networkpolicy.yaml")
+scrapes = [d for d in docs("observability/vm-customresources/vmscapes.yaml") + docs("observability/vm-customresources/vmscrapes-pipeline.yaml")
+           if d["kind"] in ("VMPodScrape", "VMServiceScrape")]
+netpols = [d for p in ("observability/networkpolicy.yaml", "istio/networkpolicy.yaml", "storage/networkpolicy.yaml", "backup/databases/networkpolicy.yaml")
            for d in docs(p) if d["kind"] == "CiliumNetworkPolicy"]
 bad = problems(scrapes, netpols)
 for b in bad:
