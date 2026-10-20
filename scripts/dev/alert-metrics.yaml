@@ -260,6 +260,18 @@ oa_backup_verify_ok:
 oa_backup_verify_store_ok:
   source: backup-verify
   status: existing
+oa_restore_test_last_run_timestamp_seconds:
+  source: backup-verify
+  status: UNVERIFIED
+oa_restore_test_last_success_timestamp_seconds:
+  source: backup-verify
+  status: UNVERIFIED
+oa_restore_test_ok:
+  source: backup-verify
+  status: UNVERIFIED
+oa_restore_test_recovery_seconds:
+  source: backup-verify
+  status: UNVERIFIED
 up:
   source: scrape
   status: existing

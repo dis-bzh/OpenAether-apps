@@ -27,6 +27,36 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: `kubectl -n <ns> get cronjob,job | grep restore-test`.
 - Do: Run the restore test once by hand from its CronJob; if it fails, treat the last backup as unproven.
 
+### RestoreTestFailed
+
+- Check: `kubectl -n foundation-databases logs job/<newest cnpg-*-restore-test job> -c restore`; the line `FAIL <cluster>/<store>/<mode>` says which check failed (canary chain, copy too old, empty tables, not healthy in time). `kubectl get cluster -n backup-restore-test` shows a scratch Cluster still there.
+- Do: One store failing and the other passing means that store's copy is damaged or lagging: for the replica, look at `BackupCopyJobFailed` and `kubectl -n foundation-databases logs job/<cnpg-store-replicate job>`. Both failing means the archive itself: look at `CnpgWalArchiveFailing`, take a base backup now (`kubectl cnpg backup`), then run the test again with `kubectl -n foundation-databases create job --from=cronjob/cnpg-recovery-restore-test manual-$(date +%s)`. Until it passes, the dataset is NOT proven restorable: keep the restic dump (`cnpg-dump`) as the recovery path.
+
+### RestoreTestNoRecentPass
+
+- Check: `kubectl -n foundation-databases get cronjob,job | grep restore-test`, then the last Job's log and `kube_cronjob_status_last_successful_time`.
+- Do: Find why no Job completes (suspended, a Job killed at its deadline, the scratch namespace out of quota: `kubectl describe quota -n backup-restore-test`), fix it, run one by hand as above. If it fails, treat the last backup as unproven.
+
+### RestoreTestNeverReported
+
+- Check: `kubectl -n foundation-databases get cronjob cnpg-recovery-restore-test`, the Jobs it created, `kubectl -n foundation-databases get externalsecret` (S3 keys not seeded stops the backup CronJobs too), and the exporter: `kubectl -n foundation-databases get deploy backup-verify-exporter`.
+- Do: Seed the missing keys or fix the failing step in the Job log; the series appear after the first complete run.
+
+### RestoreRecoverySlow
+
+- Check: `oa_restore_test_recovery_seconds` per store and dataset in Grafana, and the node load during 04:20 UTC.
+- Do: Compare with the lab figures (54 s to 72 s). A slow replica store means a slow provider endpoint; a slow primary one means a large archive: shorten the base-backup interval or add a base backup. Record the figure: it is the data part of the recovery time.
+
+### RestoreScratchLeftover
+
+- Check: `kubectl get cluster,pod,pvc -n backup-restore-test`.
+- Do: Delete the Cluster (`kubectl delete cluster -n backup-restore-test <name>`); if it hangs, remove its finalizers. Check that no restore-test Job is still running. The next daily run also removes a leftover older than an hour.
+
+### CnpgCanaryNotWriting
+
+- Check: `kubectl -n foundation-databases get cronjob cnpg-canary` and the log of its last Job (`canary write to ... failed` names the database).
+- Do: Fix the cause (database down, credentials Secret, NetworkPolicy). Without fresh canary rows the restore tests skip the comparison.
+
 ### BackupCronJobMissing
 
 - Check: `kubectl get cronjob -A | grep -E 'openbao-snapshot|cnpg-dump'`.

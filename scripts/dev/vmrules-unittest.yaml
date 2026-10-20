@@ -801,3 +801,89 @@ tests:
         alertname: LokiRetentionNotSwept
         exp_alerts:
           - exp_labels: {severity: warning, component: logging}
+
+  # --- restore tests (0.4.0 M3). Synthetic series; the labels are those of restore_cnpg.py. Timestamps are written as offsets
+  # from the clock's start so that a 10-day-old pass needs a 3-hour timeline. ---
+  - name: a failed restore test of one store alerts, a passing one does not, a recovery that took 20 minutes is slow
+    interval: 10m
+    input_series:
+      - series: 'oa_restore_test_ok{kind="cnpg",dataset="zitadel-db",store="replica",mode="latest"}'
+        values: '1x6 0x30'
+      - series: 'oa_restore_test_ok{kind="cnpg",dataset="zitadel-db",store="primary",mode="latest"}'
+        values: '1x40'
+      - series: 'oa_restore_test_recovery_seconds{kind="cnpg",dataset="zitadel-db",store="replica",mode="latest"}'
+        values: '1200x40'
+      - series: 'oa_restore_test_recovery_seconds{kind="cnpg",dataset="zitadel-db",store="primary",mode="latest"}'
+        values: '60x40'
+    alert_rule_test:
+      - {eval_time: 50m, alertname: RestoreTestFailed, exp_alerts: []}
+      - eval_time: 2h
+        alertname: RestoreTestFailed
+        exp_alerts:
+          - exp_labels: {kind: cnpg, dataset: zitadel-db, store: replica, mode: latest, severity: critical, component: backup}
+      - eval_time: 3h
+        alertname: RestoreRecoverySlow
+        exp_alerts:
+          - exp_labels: {kind: cnpg, dataset: zitadel-db, store: replica, mode: latest, severity: warning, component: backup}
+  - name: a daily restore test with no pass for 3 days and a weekly one with none for 10 days are stale
+    interval: 10m
+    input_series:
+      # daily: passed 2 days ago (fine), 3.5 days ago (stale); weekly: passed 8 days ago (fine), 10.4 days ago (stale)
+      - series: 'oa_restore_test_last_success_timestamp_seconds{kind="cnpg",dataset="zitadel-db",store="primary",mode="latest"}'
+        values: '946512000+0x30'
+      - series: 'oa_restore_test_last_success_timestamp_seconds{kind="cnpg",dataset="grafana-db",store="replica",mode="latest"}'
+        values: '946382400+0x30'
+      - series: 'oa_restore_test_last_success_timestamp_seconds{kind="cnpg",dataset="zitadel-db",store="replica",mode="pitr"}'
+        values: '945993600+0x30'
+      - series: 'oa_restore_test_last_success_timestamp_seconds{kind="cnpg",dataset="grafana-db",store="replica",mode="pitr"}'
+        values: '945784800+0x30'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: RestoreTestNoRecentPass
+        exp_alerts:
+          - exp_labels: {kind: cnpg, dataset: grafana-db, store: replica, mode: latest, severity: warning, component: backup}
+          - exp_labels: {kind: cnpg, dataset: grafana-db, store: replica, mode: pitr, severity: warning, component: backup}
+  - name: a CronJob older than three days that never reported alerts
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}'
+        values: '946384800+0x30'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: RestoreTestNeverReported
+        exp_alerts:
+          - exp_labels: {kind: cnpg, severity: warning, component: backup}
+  - name: a reporting restore test is not a never-reported one
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}'
+        values: '946384800+0x30'
+      - series: 'oa_restore_test_last_run_timestamp_seconds{kind="cnpg",dataset="grafana-db",store="primary",mode="latest"}'
+        values: '946684800+0x30'
+    alert_rule_test:
+      - {eval_time: 3h, alertname: RestoreTestNeverReported, exp_alerts: []}
+  - name: a young CronJob without result is quiet
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}'
+        values: '946681200+0x30'
+    alert_rule_test:
+      - {eval_time: 3h, alertname: RestoreTestNeverReported, exp_alerts: []}
+  - name: a scratch pod that stays 3 hours and a canary writer that stopped
+    interval: 10m
+    input_series:
+      - series: 'kube_pod_status_phase{namespace="backup-restore-test", pod="rt-x-1", phase="Running"}'
+        values: '1x60'
+      - series: 'kube_cronjob_status_last_successful_time{namespace="foundation-databases", cronjob="cnpg-canary"}'
+        values: '946684800+0x100'
+    alert_rule_test:
+      - {eval_time: 2h, alertname: RestoreScratchLeftover, exp_alerts: []}
+      - eval_time: 4h
+        alertname: RestoreScratchLeftover
+        exp_alerts:
+          - exp_labels: {severity: warning, component: backup}
+      - {eval_time: 20m, alertname: CnpgCanaryNotWriting, exp_alerts: []}
+      - eval_time: 2h
+        alertname: CnpgCanaryNotWriting
+        exp_alerts:
+          - exp_labels: {severity: warning, component: backup}

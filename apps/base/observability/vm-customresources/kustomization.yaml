@@ -23,6 +23,7 @@ resources:
   - vmrule-bootstrap.yaml
   - vmrule-alerting.yaml
   - vmrule-backup-signals.yaml
+  - vmrule-restore-test.yaml
   - vmrule-database.yaml
   - vmrule-cluster.yaml
   - vmrule-gateway.yaml

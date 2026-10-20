@@ -54,9 +54,9 @@ spec:
               restoretestnotsucceeding"
             summary: "No successful restore test for > 37 days: {{ $labels.namespace }}/{{ $labels.cronjob }}"
             description: >-
-              The monthly restore test has not completed successfully (or never since creation): the last backup
-              is unproven. `pg_restore --list` and snapshot restore are shallow checks; a full restore with data
-              comparison comes with the M2/M3 verifier.
+              A restore-test CronJob (`*-restore-test`) has not completed successfully (or never since creation) for 37 days:
+              the last backup is unproven. This is the outer net for the monthly shallow tests; the daily and weekly full
+              restores with data comparison have their own alerts (vmrule-restore-test.yaml).
 
         - alert: BackupVerificationStale
           expr: |

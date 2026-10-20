@@ -52,6 +52,9 @@ count per integration and per attempt. Two shapes differed from the assumption a
 `state`, not 1/2/3), and the verifier's exporter could not be scraped until vmagent's egress allowed 9101. Still UNVERIFIED: the Longhorn
 backup series (`longhorn_backup_state`: no backup target in the lab).
 
+The restore tests (M3) add `oa_restore_test_ok`, `oa_restore_test_last_success_timestamp_seconds`, `oa_restore_test_last_run_timestamp_seconds`
+and `oa_restore_test_recovery_seconds` (same exporter and scrape as the verifier): UNVERIFIED until a lab has run the CronJobs once.
+
 ## What a short lab must observe (pass criteria)
 
 Run on one cloud, throwaway objects in their own namespace, never on a node that carries etcd. Record time to each event.
