@@ -20,10 +20,10 @@ spec:
         - alert: BackupNotSucceededRecently
           expr: |
             (
-              time() - max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"})
+              time() - max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump|etcd-snapshot"})
               or
-              (time() - max by (namespace, cronjob) (kube_cronjob_created{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"})
-                unless on (namespace, cronjob) max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"}))
+              (time() - max by (namespace, cronjob) (kube_cronjob_created{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump|etcd-snapshot"})
+                unless on (namespace, cronjob) max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump|etcd-snapshot"}))
             ) > 36 * 3600
           for: 1h
           labels:

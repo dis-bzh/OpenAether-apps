@@ -30,7 +30,7 @@ spec:
         - alert: BackupJobFailed
           expr: |
             max by (namespace, job_name) (
-              kube_job_status_failed{namespace=~"foundation-.*", job_name=~"(openbao-snapshot|cnpg-dump)-.*"}
+              kube_job_status_failed{namespace=~"foundation-.*", job_name=~"(openbao-snapshot|cnpg-dump|etcd-snapshot)-.*"}
             ) > 0
           for: 15m
           labels:
@@ -51,7 +51,7 @@ spec:
         - alert: BackupCronJobStale
           expr: |
             time() - max by (namespace, cronjob) (
-              kube_cronjob_status_last_schedule_time{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"}
+              kube_cronjob_status_last_schedule_time{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump|etcd-snapshot"}
             ) > 26 * 3600
           for: 1h
           labels:
@@ -70,7 +70,7 @@ spec:
         - alert: BackupCronJobSuspended
           expr: |
             max by (namespace, cronjob) (
-              kube_cronjob_spec_suspend{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"}
+              kube_cronjob_spec_suspend{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump|etcd-snapshot"}
             ) > 0
           for: 6h
           labels:
@@ -111,7 +111,7 @@ spec:
               or absent(kube_cronjob_info{namespace="foundation-vault", cronjob="openbao-snapshot-restore-test"})
               or absent(kube_cronjob_info{namespace="foundation-databases", cronjob="cnpg-dump"})
               or absent(kube_cronjob_info{namespace="foundation-databases", cronjob="cnpg-dump-restore-test"})
-            ) and on() (count(kube_cronjob_info{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"}) > 0)
+            ) and on() (count(kube_cronjob_info{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump|etcd-snapshot"}) > 0)
           for: 30m
           labels:
             severity: warning
