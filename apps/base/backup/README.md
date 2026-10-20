@@ -165,7 +165,7 @@ A failed comparison is a failed Job (so `RestoreTestNotSucceeding` sees it too) 
 no pass for 3 days (10 for the weekly ones) is `RestoreTestNoRecentPass`. The two key pairs are the archive's and the replica copy's: a read-only pair
 is a follow-up. Run one by hand: `kubectl -n foundation-databases create job --from=cronjob/cnpg-recovery-restore-test manual-$(date +%s)`.
 
-Lab pass criteria (M3; none has been observed yet). On a cluster with both stores seeded: (1) after the first night `oa_restore_test_ok` is 1 for the four
+Lab pass criteria (M3; observed in lab 20, results below). On a cluster with both stores seeded: (1) after the first night `oa_restore_test_ok` is 1 for the four
 `kind="cnpg"` label sets (2 clusters x 2 stores, `mode="latest"`), the four `kind="dump"` ones and, after the first Sunday, the four `mode="pitr"` ones,
 `recovery_seconds` is at most 120 for every one (labs 15c and 19 saw 54 to 72 s; the alert is at 900), the daily CNPG Job takes under 30 minutes, `data_lag_seconds`
 is at most 1200 on the primary store and 3000 on the replica store; (2) the point in time run ends at exactly the chosen canary row; (3) corrupt the
@@ -173,15 +173,29 @@ replica store (delete a WAL segment or the base backup of one cluster in a versi
 (`oa_restore_test_ok{store="replica"} 0`, the Job Failed, `RestoreTestFailed` firing within about 20 minutes), the primary runs still pass, the scratch Cluster is gone, and
 repairing it turns the alert off at the next run; delete the largest restic pack of `cnpg` on the replica: `cnpg-dump-load-restore-test` fails for that store; (4) kill a running
 restore Job (delete its pod): the scratch Cluster is gone within 6 minutes; (5) a Cluster named `rt-x` in `foundation-databases` is refused by Kyverno, and
-`kubectl auth can-i create clusters.postgresql.cnpg.io -n foundation-databases --as system:serviceaccount:foundation-databases:cnpg-restore-test` says no; (6) suspend `cnpg-canary`:
+`kubectl auth can-i create clusters.postgresql.cnpg.io -n foundation-databases --as system:serviceaccount:foundation-databases:cnpg-restore-test` says no; (6) suspend `cnpg-canary` (and suspend the Kustomizations `openaether-platform` and `backup-databases` first: the root Kustomization re-applies its children from Git every 10 minutes and a suspended brick is resumed, lab 20):
 `CnpgCanaryNotWriting` fires in about 45 minutes; (7) with `BACKUP_TARGET_URL` set and the component on, the canary volume has a daily backup and
 `longhorn-restore-test` passes in under 5 minutes (82 s for three volumes in lab 15c); (8) nothing else suffers: no new `CpuRequestsHigh`, no Pending pod outside the scratch namespace, quota usage under its limits.
 
 Not covered, on purpose: customer data (only the canary is compared exactly; tables and row counts are exported but the live side moves),
 the OpenBao raft snapshot (the verifier restores it daily and checks its sums; the DR chain restores it into an OpenBao), the etcd snapshot (same,
 bolt meta pages), Longhorn volumes other than the canary. `scripts/dev/test-restore-test-*.{py,sh}` prove the logic offline (a kubectl double, a
-real PostgreSQL, a real restic); **no restore test has run on a cluster yet** (UNVERIFIED: the plugin recovery in the scratch namespace, the
-Longhorn Volume fields and the static PV, the per-store lag budgets).
+real PostgreSQL, a real restic); lab 20 ran every one of them on a cluster (below), and found four defects that the doubles could not show.
+
+**Observed in lab 20** (Scaleway, 3 + 3 POP2-4C-16G, OVH replica store, 2026-10-20; Jobs started by hand with `--from=cronjob`): the daily CNPG Job takes
+5 min 36 s to 6 min 25 s for the four combinations; `recovery_seconds` 77 to 101 for the latest copy and 61 to 72 for the point in time; the lag of a copy
+from the primary store is 0 s and from the replica store 0 to 900 s (the 15-minute copy); the dump-load test takes 16 s; the Longhorn restore test 47 s
+(37 s to restore and verify). The point in time runs ended on the chosen canary row. A damaged replica store (a WAL segment deleted) failed exactly
+`zitadel-db` on the replica (`trails the live database by 4800 s`), the three other combinations passed, the scratch Cluster was gone, `RestoreTestFailed`
+fired about 17 to 20 minutes after the start of the run, and repairing the store turned it off at the next run; a deleted restic pack failed the
+replica side of the dump-load test and not the primary. Deleting the Job's pod removed the scratch Cluster in 4 seconds. `kubectl auth can-i` says no
+for creating and deleting Clusters in `foundation-databases`. What the doubles had hidden: the etcd discovery used a kubectl flag that makes kubectl
+ignore the in-cluster config; the Longhorn restore test looked the BackupVolume up by the volume's name (Longhorn adds a suffix) and verified `/data`
+instead of `/data/canary`; the canary volume was never backed up because Longhorn skips detached volumes in recurring jobs; the Kyverno guard on
+`rt-` Clusters did not enforce because it was created before the CNPG CRDs (it has its own brick now); a good primary copy failed when the canary wrote
+a row during the 80-second recovery. A killed run publishes nothing for its combinations until the next run (the `ok` series is absent, not 0).
+
+The two stores hold INDEPENDENT restic repositories (each has its own keys and master key): never copy the files of one over the other to "restore" a wiped store, that corrupts it (lab 20: `ciphertext verification failed` until the copied files were removed). Restore from a store into a new cluster; the wiped store gets a new repository at the next push. The archive of the CNPG plugin, in contrast, is the same bytes in both stores (the copy job). A pod killed during `restic forget --prune` leaves an exclusive lock that blocks every later push until `restic unlock` (the push scripts do it now).
 
 **The CNPG archive on the replica store.** The plugin archives to one store per Cluster. The `cnpg-store-replicate` CronJob
 (every 15 min, `backup/databases`) copies `cnpg/<cluster>/` from the primary bucket to the replica bucket with the replica key pair
