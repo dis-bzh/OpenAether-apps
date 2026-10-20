@@ -143,7 +143,7 @@ spec:
 
         - alert: PdbBlocksDisruption
           expr: |
-            kube_poddisruptionbudget_status_pod_disruptions_allowed == 0
+            kube_poddisruptionbudget_status_pod_disruptions_allowed{poddisruptionbudget!~".+-primary|instance-manager-.+"} == 0
           for: 1h
           labels:
             severity: warning
@@ -152,7 +152,9 @@ spec:
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#pdbblocksdisruption"
             summary: "PodDisruptionBudget {{ $labels.namespace }}/{{ $labels.poddisruptionbudget }} allows no disruption"
             description: >-
-              A node drain (an upgrade roll) would hang on this workload.
+              A node drain (an upgrade roll) would hang on this workload. Not watched, because they allow no disruption by design on a
+              healthy cluster (lab 19 saw them fire after 1 h): the CNPG `<cluster>-primary` budgets (one primary, minAvailable 1) and the
+              Longhorn `instance-manager-*` budgets (while a volume is attached).
 
         - alert: ClusterCpuRequestsHigh
           expr: |

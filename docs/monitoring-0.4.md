@@ -40,13 +40,16 @@ availability, and one heartbeat service plus one chat receiver as the only out-o
 - **Etcd, certificates, Flux, Cilium, OpenBao rules** were already there; M1 only adds their runbooks.
 - Thresholds are starting values to tune during the first week of a soak.
 
-## UNVERIFIED: series and paths no cluster has shown
+## UNVERIFIED: series and paths no cluster has shown (after lab 19)
 
-`ALERTS` `alertmanager_build_info` `alertmanager_config_last_reload_successful` `alertmanager_notifications_failed_total` `alertmanager_notifications_total` `cnpg_collector_pg_wal` `cnpg_pg_replication_in_recovery` `cnpg_pg_replication_is_wal_receiver_up` `cnpg_pg_replication_lag` `container_cpu_cfs_periods_total` `container_cpu_cfs_throttled_periods_total` `envoy_server_live` `istio_request_duration_milliseconds_bucket` `istio_requests_total` `kube_node_status_allocatable` `kube_pod_container_resource_requests` `kube_pod_container_status_last_terminated_reason` `kube_poddisruptionbudget_status_pod_disruptions_allowed` `kube_storageclass_info` `loki_compactor_apply_retention_last_successful_run_timestamp_seconds` `longhorn_backup_state` `longhorn_disk_capacity_bytes` `longhorn_disk_usage_bytes` `longhorn_node_status` `longhorn_volume_robustness` `node_disk_io_time_seconds_total` `node_disk_read_time_seconds_total` `node_disk_reads_completed_total` `node_disk_write_time_seconds_total` `node_disk_writes_completed_total` `node_memory_MemAvailable_bytes` `node_memory_MemTotal_bytes` `node_network_receive_errs_total` `node_network_transmit_errs_total` `node_pressure_io_stalled_seconds_total` `node_pressure_memory_stalled_seconds_total` `oa_backup_verify_last_success_timestamp_seconds` `oa_backup_verify_ok` `oa_backup_verify_store_ok` `vmalert_alerts_send_errors_total` `vmalert_execution_errors_total` `vmalert_remotewrite_errors_total`
+`longhorn_backup_state` (the other 41 were read on a cluster in lab 19, see below).
 
-Also UNVERIFIED: the scrape paths (port names `http-envoy-prom` and `manager`, `/stats/prometheus`), whether Talos exposes
-PSI, whether the gateway reports `istio_*` (the reporter label is not relied on), the `alertmanager_notifications_*` counting
-rules, and the Cilium path from vmagent to the gateway and Longhorn pods (`test-scrape-paths.py` checks the YAML, not Cilium).
+Read in lab 19 (Scaleway, Longhorn 1.12.1, Talos 1.14.2): all the other series above exist (`task check-alerts`-style query of each name),
+the scrapes `istio-gateway` (15090) and `longhorn-manager` (9500) are up, the PSI series exist on all six nodes (Talos exposes them),
+`istio_requests_total` carries `response_code` and `reporter` (`source` only, on the gateway), the `alertmanager_notifications_*` counters
+count per integration. Two shapes differed from the assumption and were corrected: `longhorn_volume_robustness` is one-hot (a series per
+`state`, not 1/2/3), and the verifier's exporter could not be scraped until vmagent's egress allowed 9101. Still UNVERIFIED: the Longhorn
+backup series (`longhorn_backup_state`: no backup target in the lab).
 
 ## What a short lab must observe (pass criteria)
 
@@ -62,7 +65,7 @@ Run on one cloud, throwaway objects in their own namespace, never on a node that
 7. **Delivery broken on purpose.** Replace the webhook secret by an invalid URL: `AlertDeliveryFailing` fires within one window, `AlertDeliveryNotAcknowledged` within the window plus 20 min, the Watchdog stops, and the heartbeat service pages by its own channel. Restore: all four clear and pings resume. Record each time.
 8. **Gateway RED.** One request produces `istio_requests_total` with `response_code`; a route to a missing backend produces 503s and the burn ratio query returns the expected value; with a throwaway copy of the rule using 5 min and 1 min windows, it fires within 5 min and clears after the fault.
 9. **USE.** A pod over its memory limit: `ContainerOOMKilled`. A pod burning its CPU limit: throttle ratio above 0.5 (rule `for` shortened in a throwaway copy). A pod requesting more than any node has: `PodPendingTooLong` at 15 min. An I/O load (fio) on a scratch volume of a non-etcd worker: `node_pressure_io_stalled_seconds_total` and `node_disk_io_time_seconds_total` rise; `NodeIoPressure` or `NodeDiskBusy` pending, with the thresholds noted for tuning.
-10. **Longhorn.** A scratch volume with a replica deleted shows `longhorn_volume_robustness` 2 then 1 after the rebuild; disk usage and node status series match the Longhorn objects.
+10. **Longhorn.** A scratch volume with a replica deleted shows `longhorn_volume_robustness{state="degraded"}` 1 then `{state="healthy"}` 1 after the rebuild (the metric trails the Longhorn object by up to 3 minutes); disk usage and node status series match the Longhorn objects.
 11. **CNPG.** Replica lag series exists and is near 0; stopping the replication of one replica (pod kill) makes `CnpgReplicaNotStreaming` or `CnpgInstanceDown` pending in a throwaway copy with short `for`.
 12. **Backups.** `time() - kube_cronjob_status_last_successful_time` is a few hours for each backup CronJob; no `BackupNotSucceededRecently`; with the M2 verifier deployed, `oa_backup_verify_ok` is 1 and `oa_backup_verify_last_success_timestamp_seconds` is recent for every dataset, `oa_backup_verify_store_ok` is 1 per store, and `BackupVerificationStale` and `BackupVerificationFailed` are inactive (then break a copy in a throwaway: `BackupVerificationFailed` fires). Without the verifier the series are absent and the alerts inactive.
 13. **Loki retention (#127).** With a throwaway overlay (retention 3 h, delete delay 10 min): the compactor metric exists and advances, the object count of the logs bucket falls after the delay with the dedicated key pair's documented rights, a query for the expired window returns nothing, `LokiRetentionNotSwept` stays inactive.

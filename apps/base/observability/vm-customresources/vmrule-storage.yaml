@@ -1,6 +1,6 @@
 # yamllint disable rule:line-length
 # Longhorn health (0.4.0 M1). Metrics: the longhorn-manager /metrics endpoint (vmscapes.yaml, longhorn-manager).
-# Rung: static + synthetic series. UNVERIFIED on a cluster: every longhorn_* name below, the port name `manager`, and the
+# Rung: static + synthetic series. Lab 19 (Longhorn 1.12.1): longhorn_volume_robustness is ONE-HOT, a series per state label (state="healthy|degraded|faulted|unknown", 1 for the current one), not 1/2/3. UNVERIFIED on a cluster: longhorn_backup_state (no backup target in the lab), the port name `manager`, and the
 # state encodings (robustness 0 unknown, 1 healthy, 2 degraded, 3 faulted; backup state 4 = Error). A lab must read them.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
@@ -17,7 +17,7 @@ spec:
       rules:
         - alert: LonghornVolumeDegraded
           expr: |
-            max by (volume) (longhorn_volume_robustness) == 2
+            max by (volume) (longhorn_volume_robustness{state="degraded"}) == 1
           for: 30m
           labels:
             severity: warning
@@ -30,7 +30,7 @@ spec:
 
         - alert: LonghornVolumeFaulted
           expr: |
-            max by (volume) (longhorn_volume_robustness) == 3
+            max by (volume) (longhorn_volume_robustness{state="faulted"}) == 1
           for: 5m
           labels:
             severity: critical

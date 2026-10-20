@@ -2,23 +2,23 @@
 #   status existing   : read by a rule that predates 0.4.0 M1 (`task check-alerts` of the labs found series for all of
 #                       them but kube_job_failed and kubelet_volume_stats_*, quiet by design: docs/detection.md), or
 #                       exported by code shipped in the repo (oa_backup_verify_*, the M2 verifier: no lab read them).
-#   status UNVERIFIED : added by M1, never read on a cluster; the next lab runs `task check-alerts` and flips it.
+#   status UNVERIFIED : added by M1, never read on a cluster. Lab 19 (Scaleway, 2026-10-20) read all of them but longhorn_backup_state (no Longhorn backup target there).
 #   source            : the scrape that must exist (SCRAPES in the test), or `scrape` for `up`.
 ALERTS:
   source: vmalert
-  status: UNVERIFIED
+  status: existing
 alertmanager_build_info:
   source: alertmanager
-  status: UNVERIFIED
+  status: existing
 alertmanager_config_last_reload_successful:
   source: alertmanager
-  status: UNVERIFIED
+  status: existing
 alertmanager_notifications_failed_total:
   source: alertmanager
-  status: UNVERIFIED
+  status: existing
 alertmanager_notifications_total:
   source: alertmanager
-  status: UNVERIFIED
+  status: existing
 certmanager_certificate_expiration_timestamp_seconds:
   source: cert-manager
   status: existing
@@ -42,19 +42,19 @@ cnpg_collector_last_failed_backup_timestamp:
   status: existing
 cnpg_collector_pg_wal:
   source: cnpg
-  status: UNVERIFIED
+  status: existing
 cnpg_collector_up:
   source: cnpg
   status: existing
 cnpg_pg_replication_in_recovery:
   source: cnpg
-  status: UNVERIFIED
+  status: existing
 cnpg_pg_replication_is_wal_receiver_up:
   source: cnpg
-  status: UNVERIFIED
+  status: existing
 cnpg_pg_replication_lag:
   source: cnpg
-  status: UNVERIFIED
+  status: existing
 cnpg_pg_stat_archiver_archived_count:
   source: cnpg
   status: existing
@@ -63,13 +63,13 @@ cnpg_pg_stat_archiver_failed_count:
   status: existing
 container_cpu_cfs_periods_total:
   source: cadvisor
-  status: UNVERIFIED
+  status: existing
 container_cpu_cfs_throttled_periods_total:
   source: cadvisor
-  status: UNVERIFIED
+  status: existing
 envoy_server_live:
   source: istio-gateway
-  status: UNVERIFIED
+  status: existing
 etcd_server_has_leader:
   source: etcd
   status: existing
@@ -87,10 +87,10 @@ grafana_http_request_duration_seconds_count:
   status: existing
 istio_request_duration_milliseconds_bucket:
   source: istio-gateway
-  status: UNVERIFIED
+  status: existing
 istio_requests_total:
   source: istio-gateway
-  status: UNVERIFIED
+  status: existing
 kube_cronjob_created:
   source: kube-state-metrics
   status: existing
@@ -126,16 +126,16 @@ kube_job_status_failed:
   status: existing
 kube_node_status_allocatable:
   source: kube-state-metrics
-  status: UNVERIFIED
+  status: existing
 kube_node_status_condition:
   source: kube-state-metrics
   status: existing
 kube_pod_container_resource_requests:
   source: kube-state-metrics
-  status: UNVERIFIED
+  status: existing
 kube_pod_container_status_last_terminated_reason:
   source: kube-state-metrics
-  status: UNVERIFIED
+  status: existing
 kube_pod_container_status_restarts_total:
   source: kube-state-metrics
   status: existing
@@ -147,7 +147,7 @@ kube_pod_status_phase:
   status: existing
 kube_poddisruptionbudget_status_pod_disruptions_allowed:
   source: kube-state-metrics
-  status: UNVERIFIED
+  status: existing
 kube_statefulset_replicas:
   source: kube-state-metrics
   status: existing
@@ -156,7 +156,7 @@ kube_statefulset_status_replicas_ready:
   status: existing
 kube_storageclass_info:
   source: kube-state-metrics
-  status: UNVERIFIED
+  status: existing
 kubelet_volume_stats_available_bytes:
   source: kubelet
   status: existing
@@ -168,7 +168,7 @@ kyverno_policy_results_total:
   status: existing
 loki_compactor_apply_retention_last_successful_run_timestamp_seconds:
   source: loki
-  status: UNVERIFIED
+  status: existing
 loki_discarded_samples_total:
   source: loki
   status: existing
@@ -192,31 +192,31 @@ longhorn_backup_state:
   status: UNVERIFIED
 longhorn_disk_capacity_bytes:
   source: longhorn
-  status: UNVERIFIED
+  status: existing
 longhorn_disk_usage_bytes:
   source: longhorn
-  status: UNVERIFIED
+  status: existing
 longhorn_node_status:
   source: longhorn
-  status: UNVERIFIED
+  status: existing
 longhorn_volume_robustness:
   source: longhorn
-  status: UNVERIFIED
+  status: existing
 node_disk_io_time_seconds_total:
   source: node-exporter
-  status: UNVERIFIED
+  status: existing
 node_disk_read_time_seconds_total:
   source: node-exporter
-  status: UNVERIFIED
+  status: existing
 node_disk_reads_completed_total:
   source: node-exporter
-  status: UNVERIFIED
+  status: existing
 node_disk_write_time_seconds_total:
   source: node-exporter
-  status: UNVERIFIED
+  status: existing
 node_disk_writes_completed_total:
   source: node-exporter
-  status: UNVERIFIED
+  status: existing
 node_filesystem_avail_bytes:
   source: node-exporter
   status: existing
@@ -225,22 +225,22 @@ node_filesystem_size_bytes:
   status: existing
 node_memory_MemAvailable_bytes:
   source: node-exporter
-  status: UNVERIFIED
+  status: existing
 node_memory_MemTotal_bytes:
   source: node-exporter
-  status: UNVERIFIED
+  status: existing
 node_network_receive_errs_total:
   source: node-exporter
-  status: UNVERIFIED
+  status: existing
 node_network_transmit_errs_total:
   source: node-exporter
-  status: UNVERIFIED
+  status: existing
 node_pressure_io_stalled_seconds_total:
   source: node-exporter
-  status: UNVERIFIED
+  status: existing
 node_pressure_memory_stalled_seconds_total:
   source: node-exporter
-  status: UNVERIFIED
+  status: existing
 node_timex_offset_seconds:
   source: node-exporter
   status: existing
@@ -276,10 +276,10 @@ vault_raft_storage_stats_commit_index:
   status: existing
 vmalert_alerts_send_errors_total:
   source: vmalert
-  status: UNVERIFIED
+  status: existing
 vmalert_execution_errors_total:
   source: vmalert
-  status: UNVERIFIED
+  status: existing
 vmalert_remotewrite_errors_total:
   source: vmalert
-  status: UNVERIFIED
+  status: existing

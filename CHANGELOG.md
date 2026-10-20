@@ -34,6 +34,14 @@ fix #134** and does not make the Zitadel recovery automatic: a person still runs
 - Policy and hardening: the image registry policy (Audit) admits `ghcr.io/siderolabs/talosctl` alone for the etcd Job; the plugin's two mTLS Certificates name `rotationPolicy: Always`; `test-backup-kyverno.sh` runs the Kyverno CLI on the rendered workloads of the backup and CNPG bricks.
 - Tests: `test-cnpg-barman-plugin.py` (render, CRD shape, Kyverno CLI), `test-cnpg-store-replicate.sh`, `test-backup-verify.sh` (real restic, a real Barman archive from a throwaway PostgreSQL, a real etcd snapshot, damage injected), `test-etcd-snapshot.sh`, `test-backup-independent-stores.sh`; `scripts/dev/testdata/fake_s3_server.py` is the store they share.
 
+### Fixed (found by lab 19, Scaleway + OVH replica store, 2026-10-20)
+
+- `backup-databases` never became Ready: the generated verifier ConfigMap had no namespace (`test-backup-namespaces.sh`).
+- vmagent could not scrape `backup-verify-exporter` (egress 9101 closed): no `oa_backup_verify_*` series until fixed (`test-scrape-paths.py`).
+- The verifier reported a locked restic repository as a skip, and let the last CNPG cluster hide a failure of the other (a WAL gap in `zitadel-db` was invisible); both now fail loudly (`test-backup-verify-listing.sh`, `test-backup-verify-aggregate.py`).
+- `LonghornVolumeDegraded` / `LonghornVolumeFaulted` read `longhorn_volume_robustness` as 1/2/3; Longhorn 1.12.1 exports a series per `state` (one-hot), so they could never fire. `PdbBlocksDisruption` fired after 1 h on every healthy cluster (CNPG `*-primary`, Longhorn `instance-manager-*` budgets): excluded.
+- The 41 metrics marked UNVERIFIED were read on a cluster and are now `existing` (only `longhorn_backup_state` stays UNVERIFIED).
+
 ### Fixed (backups)
 
 - **A failing destination no longer keeps the other from receiving its copy**: in `openbao-snapshot` and `cnpg-dump` the first failing store ended the Job before the replica was written; failures are now recorded and fail the Job last.

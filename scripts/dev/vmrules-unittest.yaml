@@ -549,18 +549,43 @@ tests:
         exp_alerts:
           - exp_labels: {instance: n1, severity: warning, component: node}
   - name: Longhorn degraded for 30 minutes
+    # The real shape (Longhorn 1.12.1, lab 19): one series per state, 1 for the current state.
     interval: 1m
     input_series:
-      - series: 'longhorn_volume_robustness{volume="v1", node="n1"}'
-        values: '1x10 2x80'
-      - series: 'longhorn_volume_robustness{volume="v2", node="n1"}'
-        values: '1x90'
+      - {series: 'longhorn_volume_robustness{volume="v1", node="n1", state="healthy"}', values: '1x10 0x80'}
+      - {series: 'longhorn_volume_robustness{volume="v1", node="n1", state="degraded"}', values: '0x10 1x80'}
+      - {series: 'longhorn_volume_robustness{volume="v1", node="n1", state="faulted"}', values: '0x90'}
+      - {series: 'longhorn_volume_robustness{volume="v2", node="n1", state="healthy"}', values: '1x90'}
+      - {series: 'longhorn_volume_robustness{volume="v2", node="n1", state="degraded"}', values: '0x90'}
+      - {series: 'longhorn_volume_robustness{volume="v2", node="n1", state="faulted"}', values: '0x90'}
     alert_rule_test:
       - {eval_time: 25m, alertname: LonghornVolumeDegraded, exp_alerts: []}
       - eval_time: 60m
         alertname: LonghornVolumeDegraded
         exp_alerts:
           - exp_labels: {volume: v1, severity: warning, component: storage}
+      - {eval_time: 60m, alertname: LonghornVolumeFaulted, exp_alerts: []}
+  - name: Longhorn faulted for 5 minutes
+    interval: 1m
+    input_series:
+      - {series: 'longhorn_volume_robustness{volume="v3", node="n1", state="healthy"}', values: '1x5 0x50'}
+      - {series: 'longhorn_volume_robustness{volume="v3", node="n1", state="faulted"}', values: '0x5 1x50'}
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: LonghornVolumeFaulted
+        exp_alerts:
+          - exp_labels: {volume: v3, severity: critical, component: storage}
+  - name: a PDB that allows no disruption by design is not reported
+    interval: 1m
+    input_series:
+      - {series: 'kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="foundation-databases", poddisruptionbudget="zitadel-db-primary"}', values: '0x90'}
+      - {series: 'kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="longhorn-system", poddisruptionbudget="instance-manager-abc"}', values: '0x90'}
+      - {series: 'kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="a", poddisruptionbudget="web"}', values: '0x90'}
+    alert_rule_test:
+      - eval_time: 80m
+        alertname: PdbBlocksDisruption
+        exp_alerts:
+          - exp_labels: {namespace: a, poddisruptionbudget: web, severity: warning, component: workload}
   - name: Longhorn blind rule only where Longhorn is installed
     interval: 1m
     input_series:
