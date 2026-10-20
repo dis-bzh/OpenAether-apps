@@ -130,6 +130,8 @@ spec:
                     # ⚠️ restic does NOT create the bucket (it MUST pre-exist —
                     # ensure-buckets on the infra side, the minio chart locally)
                     # and retries a NoSuchBucket for ~15 min silently → bounded probe.
+                    # a stale lock (a pod killed during forget --prune) makes `cat config` fail and would pass for a foreign repository: unlock removes stale locks only
+                    restic unlock >/dev/null 2>&1 || true
                     if ! timeout 60 restic cat config >/dev/null 2>&1; then
                       # Two very different failures hide here:
                       #  • repository MISSING     → a legitimate init;

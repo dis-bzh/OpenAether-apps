@@ -160,6 +160,8 @@ spec:
                     ep="$1"; bucket="$2"; label="$3"
                     export RESTIC_REPOSITORY="s3:${ep}/${bucket}/${CLUSTER_NAME}/etcd"
                     echo "── repository ${label}"
+                    # a stale lock (a pod killed during forget --prune) makes `cat config` fail and would pass for a foreign repository: unlock removes stale locks only
+                    restic unlock >/dev/null 2>&1 || true
                     if ! timeout 60 restic cat config >/dev/null 2>&1; then
                       restic init >/dev/null 2>/tmp/init.err || { echo "ERROR: cannot init repository ${label}: $(tail -1 /tmp/init.err)"; fail=1; return; }
                     fi

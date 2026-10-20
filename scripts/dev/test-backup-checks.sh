@@ -177,5 +177,16 @@ for spec in "openbao/cronjob.yaml openbao" "databases/cronjob.yaml cnpg"; do
   [ "$(grep -c '^backup' "$W/calls-$N")" = 2 ] && ok "$N push: ... but only after the replica got its snapshot" || bad "$N push: calls: $(cat "$W/calls-$N")"
 done
 
+# A stale exclusive lock (a pod killed during forget --prune) makes `restic cat config` fail, and the push scripts read that as a
+# repository of another cluster: each one must remove stale locks BEFORE it looks at the repository (lab 20).
+for f in apps/base/backup/openbao/cronjob.yaml apps/base/backup/etcd/cronjob.yaml apps/base/backup/databases/cronjob.yaml; do
+  if python3 -I - "$ROOT/$f" <<'PY'
+import sys
+s = open(sys.argv[1]).read()
+sys.exit(0 if 0 <= s.find("restic unlock") < s.find("restic cat config") else 1)
+PY
+  then ok "$f: stale locks are removed before the repository is read"; else bad "$f: restic unlock must come before restic cat config"; fi
+done
+
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$PASS" -gt 0 ] && [ "$FAIL" -eq 0 ]
