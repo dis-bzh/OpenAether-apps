@@ -70,8 +70,10 @@ def latest_backup(now):
     vol = r.stdout.strip()
     if r.returncode != 0 or not vol:
         raise Skip(f"PVC {SRC_NS}/{SRC_PVC} is not bound (the canary volume does not exist yet)")
-    bv = kube("get", "backupvolumes.longhorn.io", vol, "-n", LH_NS, "-o", "json", check=False)
-    last = json.loads(bv.stdout or "{}").get("status", {}).get("lastBackupName", "") if bv.returncode == 0 else ""
+    # The BackupVolume is NOT named after the volume (lab 20: "<volume>-<8 hex>"); its label backup-volume is.
+    bv = kube("get", "backupvolumes.longhorn.io", "-n", LH_NS, "-l", f"backup-volume={vol}", "-o", "json", check=False)
+    items = json.loads(bv.stdout or "{}").get("items", []) if bv.returncode == 0 else []
+    last = sorted(items, key=lambda i: i.get("status", {}).get("lastBackupAt", ""))[-1].get("status", {}).get("lastBackupName", "") if items else ""
     if not last:
         raise Skip(f"volume {vol} has no backup yet (no backup target, or the first backup has not run)")
     b = kj("get", "backups.longhorn.io", last, "-n", LH_NS)

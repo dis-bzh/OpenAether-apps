@@ -47,9 +47,13 @@ if verb == "get" and what == "pvc":
         fail('Error from server (NotFound): persistentvolumeclaims "oa-canary" not found')
     say(os.environ["FAKE_PVC"])
 elif verb == "get" and what == "backupvolumes.longhorn.io":
+    # like Longhorn: named "<volume>-<suffix>", found by the label backup-volume=<volume>, never by the bare volume name
+    if len(a) > 2 and not a[2].startswith("-"):
+        fail('Error from server (NotFound): backupvolumes.longhorn.io "%s" not found' % a[2])
     if not os.environ.get("FAKE_LAST"):
-        say({"status": {}})
-    say({"status": {"lastBackupName": os.environ["FAKE_LAST"]}})
+        say({"items": []})
+    say({"items": [{"metadata": {"name": "vol-6a055fab", "labels": {"backup-volume": "vol"}},
+                    "status": {"lastBackupName": os.environ["FAKE_LAST"], "lastBackupAt": "2026-10-20T01:00:00Z"}}]})
 elif verb == "get" and what == "backups.longhorn.io":
     say({"status": json.load(open(os.environ["FAKE_BACKUP"]))})
 elif verb == "get" and what in ("volumes.longhorn.io", "pod"):
