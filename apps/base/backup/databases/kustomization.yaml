@@ -13,6 +13,7 @@ resources:
 # The verifier's scripts are files (tested as such), mounted read-only; the hash suffix rolls the next run on a change.
 configMapGenerator:
   - name: backup-verify-scripts
+    namespace: foundation-databases   # the Flux Kustomization has no targetNamespace: without this the apply fails (lab 19)
     files:
       - verify/restic-stage.sh
       - verify/barman_check.py
