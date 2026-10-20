@@ -165,6 +165,18 @@ A failed comparison is a failed Job (so `RestoreTestNotSucceeding` sees it too) 
 no pass for 3 days (10 for the weekly ones) is `RestoreTestNoRecentPass`. The two key pairs are the archive's and the replica copy's: a read-only pair
 is a follow-up. Run one by hand: `kubectl -n foundation-databases create job --from=cronjob/cnpg-recovery-restore-test manual-$(date +%s)`.
 
+Lab pass criteria (M3; none has been observed yet). On a cluster with both stores seeded: (1) after the first night `oa_restore_test_ok` is 1 for the four
+`kind="cnpg"` label sets (2 clusters x 2 stores, `mode="latest"`), the four `kind="dump"` ones and, after the first Sunday, the four `mode="pitr"` ones,
+`recovery_seconds` is at most 120 for every one (labs 15c and 19 saw 54 to 72 s; the alert is at 900), the daily CNPG Job takes under 30 minutes, `data_lag_seconds`
+is at most 1200 on the primary store and 3000 on the replica store; (2) the point in time run ends at exactly the chosen canary row; (3) corrupt the
+replica store (delete a WAL segment or the base backup of one cluster in a versioned bucket): the next run fails for that store and cluster only
+(`oa_restore_test_ok{store="replica"} 0`, the Job Failed, `RestoreTestFailed` firing within about 20 minutes), the primary runs still pass, the scratch Cluster is gone, and
+repairing it turns the alert off at the next run; delete the largest restic pack of `cnpg` on the replica: `cnpg-dump-load-restore-test` fails for that store; (4) kill a running
+restore Job (delete its pod): the scratch Cluster is gone within 6 minutes; (5) a Cluster named `rt-x` in `foundation-databases` is refused by Kyverno, and
+`kubectl auth can-i create clusters.postgresql.cnpg.io -n foundation-databases --as system:serviceaccount:foundation-databases:cnpg-restore-test` says no; (6) suspend `cnpg-canary`:
+`CnpgCanaryNotWriting` fires in about 45 minutes; (7) with `BACKUP_TARGET_URL` set and the component on, the canary volume has a daily backup and
+`longhorn-restore-test` passes in under 5 minutes (82 s for three volumes in lab 15c); (8) nothing else suffers: no new `CpuRequestsHigh`, no Pending pod outside the scratch namespace, quota usage under its limits.
+
 Not covered, on purpose: customer data (only the canary is compared exactly; tables and row counts are exported but the live side moves),
 the OpenBao raft snapshot (the verifier restores it daily and checks its sums; the DR chain restores it into an OpenBao), the etcd snapshot (same,
 bolt meta pages), Longhorn volumes other than the canary. `scripts/dev/test-restore-test-*.{py,sh}` prove the logic offline (a kubectl double, a

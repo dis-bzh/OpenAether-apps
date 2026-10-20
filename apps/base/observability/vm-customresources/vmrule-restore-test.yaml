@@ -100,7 +100,7 @@ spec:
             summary: "The CNPG canary writer has not succeeded for 30 minutes"
             description: >-
               The restore tests compare a restored copy with the canary rows the live databases receive every 5 minutes.
-              Without fresh rows the comparison skips (it cannot judge the copy), so the tests stop proving anything.
+              Without fresh rows a stale copy looks as new as the live database, so the tests can no longer tell them apart.
 
         # The Longhorn pair is an opt-in component (components/longhorn-restore-test): silent without it, because both CronJob
         # series are absent. A Job that skips (no backup target) never reports, which is what the first alert says.

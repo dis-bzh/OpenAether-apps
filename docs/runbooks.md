@@ -55,7 +55,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 ### CnpgCanaryNotWriting
 
 - Check: `kubectl -n foundation-databases get cronjob cnpg-canary` and the log of its last Job (`canary write to ... failed` names the database).
-- Do: Fix the cause (database down, credentials Secret, NetworkPolicy). Without fresh canary rows the restore tests skip the comparison.
+- Do: Fix the cause (database down, credentials Secret, NetworkPolicy). Without fresh canary rows a stale restored copy looks as new as the live database: the restore tests can no longer tell them apart.
 
 ### LonghornRestoreTestNeverReported
 
