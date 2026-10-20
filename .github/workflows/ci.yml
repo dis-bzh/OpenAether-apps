@@ -345,7 +345,7 @@ jobs:
           grep -qE '^[0-9]+ passed, 0 failed$' restore-test.out
           CI=true ./scripts/dev/test-restore-test-cnpg-sql.sh | tee restore-test-sql.out
           grep -qE '^[0-9]+ passed, 0 failed$' restore-test-sql.out
-          ! grep -q 'SKIPPED' restore-test-sql.out
+          if grep -q 'SKIPPED' restore-test-sql.out; then exit 1; fi
           CI=true ./scripts/dev/test-restore-test-dumps.sh | tee restore-test-dumps.out
           grep -qE '^[0-9]+ passed, 0 failed$' restore-test-dumps.out
           ! grep -q 'SKIPPED' restore-test-dumps.out
