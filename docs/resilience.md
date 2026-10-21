@@ -46,7 +46,7 @@ toleration, or for `task cluster-replace-node` in OpenAether-infra, which delete
 
 ## The alerts (`vmrule-loss.yaml`, `docs/runbooks.md`)
 
-`ControlPlaneMemberMissing`, `FailureDomainLost` (needs the zone label that OpenAether-infra now sets on every node and the kube-state-metrics allowlist added here), `WorkloadReplicasBelowDesired`,
+`ControlPlaneMemberMissing`, `FailureDomainLost` (built on the kubelet scrape and the zone label that OpenAether-infra sets on every node, not on kube-state-metrics: lab 21 found that single pod blind when it sat in the lost zone), `NodeScrapeDown` (the lost-node page that does not need kube-state-metrics either), `WorkloadReplicasBelowDesired`,
 `ClusterCannotLoseWorker`, `OpenBaoReplicasMissing`, `AlertmanagerClusterDegraded`, and the two existing node alerts re-timed (`NodeUnreachable` 3 min: lab 15c reboots are 85-115 s; `NodeNotReady` 5 min). Each
 description and runbook heading names the task to run (`cluster-node-state`, `cluster-node-recover`, `cluster-replace-node`, `failure-domain-check`, `dr-restore-plan` as the last resort) and what not to do.
 The Longhorn "fewer than two healthy replicas" case is `LonghornVolumeDegraded` (Longhorn exports no replica count). New series no cluster has shown are listed in `docs/monitoring-0.4.md`.

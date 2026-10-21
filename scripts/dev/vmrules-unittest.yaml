@@ -1000,26 +1000,23 @@ tests:
         values: '1x30'
     alert_rule_test:
       - {eval_time: 20m, alertname: ControlPlaneMemberMissing, exp_alerts: []}
-  - name: a zone whose nodes are all NotReady is lost, a zone with one Ready node is not
+  - name: a zone none of whose kubelets answers is lost, a zone with one answering kubelet is not
     interval: 1m
     input_series:
-      - series: 'kube_node_labels{node="w1", label_topology_kubernetes_io_zone="zone-a"}'
+      - series: 'up{job="services-observability/kubelet", node="w1", topology_kubernetes_io_zone="zone-a"}'
+        values: '1x4 0x26'
+      - series: 'up{job="services-observability/kubelet", node="w2", topology_kubernetes_io_zone="zone-b"}'
+        values: '1x4 0x26'
+      - series: 'up{job="services-observability/kubelet", node="w3", topology_kubernetes_io_zone="zone-b"}'
         values: '1x30'
-      - series: 'kube_node_labels{node="w2", label_topology_kubernetes_io_zone="zone-b"}'
-        values: '1x30'
-      - series: 'kube_node_labels{node="w3", label_topology_kubernetes_io_zone="zone-b"}'
-        values: '1x30'
-      - series: 'kube_node_status_condition{node="w1", condition="Ready", status="true"}'
-        values: '0x30'
-      - series: 'kube_node_status_condition{node="w2", condition="Ready", status="true"}'
-        values: '0x30'
-      - series: 'kube_node_status_condition{node="w3", condition="Ready", status="true"}'
-        values: '1x30'
+      - series: 'up{job="services-observability/kubelet", node="w4", topology_kubernetes_io_zone="zone-c"}'
+        values: '1 1 1 0 0 1x25'   # a reboot
     alert_rule_test:
-      - eval_time: 10m
+      - {eval_time: 3m, alertname: FailureDomainLost, exp_alerts: []}
+      - eval_time: 20m
         alertname: FailureDomainLost
         exp_alerts:
-          - exp_labels: {label_topology_kubernetes_io_zone: zone-a, severity: critical, component: failure-domain}
+          - exp_labels: {topology_kubernetes_io_zone: zone-a, severity: critical, component: failure-domain}
   - name: a Deployment short of replicas for longer than a reschedule is reported
     interval: 1m
     input_series:

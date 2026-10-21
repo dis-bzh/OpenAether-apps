@@ -42,10 +42,7 @@ availability, and one heartbeat service plus one chat receiver as the only out-o
 
 ## UNVERIFIED: series and paths no cluster has shown (after lab 20)
 
-M4 (loss of capacity, `vmrule-loss.yaml`) adds four series no cluster has shown: `kube_node_role` (the control-plane nodes, kube-state-metrics),
-`kube_node_labels` with the `label_topology_kubernetes_io_zone` label (needs the allowlist added to the kube-state-metrics values AND the
-zone label set on the nodes by the Talos machine config, OpenAether-infra), `alertmanager_cluster_members` (two replicas gossiping on 9094,
-`vmalertmanager` network policy). Each must be read in the loss drill of docs/resilience.md before its alert is trusted.
+M4 (loss of capacity, `vmrule-loss.yaml`) added series no cluster had shown. Lab 21 (Scaleway, 2026-10-21) read them: `kube_node_role` (3 control-plane nodes, kube-state-metrics), `kube_node_labels` with the `label_topology_kubernetes_io_zone` label (fr-par-1/2/3; no alert reads it any more: `FailureDomainLost` moved to the kubelet scrape because kube-state-metrics is one pod and was blind when it sat on the lost node), and `alertmanager_cluster_members` (2 on both pods: the gossip on 9094 works through the network policy).
 
 Before M4, none was left among the catalogued metrics. Lab 19 read 41 of them; lab 20 (Scaleway + OVH replica store, 2026-10-20) read the last ones:
 `longhorn_backup_state` (one series per backup, value 3 for a completed one, with a backup target and the opt-in restore-test component),

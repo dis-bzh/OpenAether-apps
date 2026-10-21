@@ -58,23 +58,24 @@ spec:
               PROVIDER=<provider> NODE={{ $labels.node }} (OpenAether-infra), then task cluster-node-recover or
               task cluster-replace-node. Do not roll or upgrade meanwhile.
 
-        # A failure domain (zone) without a Ready node. The zone label is set by the Talos machine config.
+        # A failure domain (zone) none of whose kubelets answers the scrape. Built on the kubelet scrape (the zone label is
+        # copied from the Node by the VMNodeScrape) and NOT on kube-state-metrics: lab 21 showed kube-state-metrics, one pod,
+        # blind while it sat in the lost zone, and a Ready condition that is seen 80 s after the loss plus the scrape lag,
+        # which did not fit the 3 minutes the drill asks for.
         - alert: FailureDomainLost
           expr: |
-            count by (label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=""})
-              unless on (label_topology_kubernetes_io_zone)
-            count by (label_topology_kubernetes_io_zone) (
-              kube_node_labels{label_topology_kubernetes_io_zone!=""}
-                and on (node) (kube_node_status_condition{condition="Ready",status="true"} == 1))
-          for: 2m
+            count by (topology_kubernetes_io_zone) (up{job="services-observability/kubelet", topology_kubernetes_io_zone!=""})
+              unless on (topology_kubernetes_io_zone)
+            count by (topology_kubernetes_io_zone) (up{job="services-observability/kubelet", topology_kubernetes_io_zone!=""} == 1)
+          for: 1m
           labels:
             severity: critical
             component: failure-domain
           annotations:
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#failuredomainlost"
-            summary: "Zone {{ $labels.label_topology_kubernetes_io_zone }} has no Ready node"
+            summary: "Zone {{ $labels.topology_kubernetes_io_zone }}: no kubelet answers"
             description: >-
-              Every node of the zone is NotReady or unreachable: a provider incident in that zone, or a power-off.
+              No node of the zone answers the kubelet scrape: a provider incident in that zone, or a power-off.
               Check the provider status first, then task failure-domain-check PROVIDER=<provider> from the
               OpenAether-infra checkout. Do not replace the nodes of a zone that the provider says is down.
 
