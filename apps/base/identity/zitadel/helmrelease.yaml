@@ -92,6 +92,20 @@ spec:
 
     # The login UI had no limit at all (the `resources:` below are the server's). Measured 191 Mi on a lab cluster.
     login:
+      # Two login pages on two workers: with one, a lost worker took the login down until the 5 minute toleration ran
+      # out (0.4.0 M4, scripts/check-ha.py). Costs 50m of CPU requests.
+      replicaCount: 2
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: zitadel-login
+              app.kubernetes.io/instance: zitadel
+      pdb:
+        enabled: true
+        minAvailable: 1
       resources:
         requests:
           cpu: 50m

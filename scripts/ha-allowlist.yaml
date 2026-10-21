@@ -98,6 +98,3 @@ known_gaps:
   - workload: VMAlertmanager/services-observability/alertmanager#vmalertmanager
     reason: >-
       single replica: a node loss silences every alert
-  - workload: Deployment/services-identity/zitadel-login
-    reason: >-
-      single replica: a node loss takes the login page down
