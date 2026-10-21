@@ -67,7 +67,8 @@ spec:
             count by (topology_kubernetes_io_zone) (up{job="services-observability/kubelet", topology_kubernetes_io_zone!=""})
               unless on (topology_kubernetes_io_zone)
             count by (topology_kubernetes_io_zone) (up{job="services-observability/kubelet", topology_kubernetes_io_zone!=""} == 1)
-          for: 1m
+          # No `for`: the condition is "no kubelet of the zone answers", which a blip does not produce, and the first
+          # drill measured 3 min 11 s from power-off to firing with `for: 1m` (the 3 minutes of the criterion).
           labels:
             severity: critical
             component: failure-domain
