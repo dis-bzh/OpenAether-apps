@@ -110,6 +110,13 @@
       labels: ["dependencies", "vendored-manifest"],
       prBodyNotes: ["⚠️ This only bumps the tracking comment/label. Re-download the upstream manifest and replace the file per the kustomization.yaml's own 'To upgrade:' / 'Regenerate:' note before merging."],
     },
+    {
+      // Held on purpose (apps #57, closed 2026-10-21): the Gateway API CRDs stay at v1.2.1 until the Istio upgrade
+      // (Istio 1.31.x needs a newer CRD set, verified then). Remove this rule with that upgrade.
+      description: "Gateway API CRDs are held at 1.2.1 until the Istio upgrade (apps #57).",
+      matchPackageNames: ["kubernetes-sigs/gateway-api"],
+      enabled: false,
+    },
   ],
 
   customManagers: [
