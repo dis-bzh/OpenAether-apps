@@ -37,6 +37,14 @@ broke the yamllint line length (commits 577a0b3, 5747fd8, e7f04b5, 2eb74d6) are 
   `AlertmanagerClusterDegraded`; `NodeUnreachable` after 3 min and `NodeNotReady` after 5; runbook section "Loss of capacity" (which task, and what not to do); vmalert unit cases. `kube_node_role`, the zone label
   and `alertmanager_cluster_members` are UNVERIFIED series (`docs/monitoring-0.4.md`).
 
+### Fixed (lab 21 follow-up, offline: apps #154, #155, #156; to be proven by the next lab)
+
+Rung: **mocked/static**. Not a compliance claim; the lab pass criteria are in `docs/resilience.md` (last section).
+
+- **CNPG primary eviction** (#154): both Clusters tolerate `unreachable` and `not-ready` for 30 s instead of 300 s, so a primary on a lost node is replaced after about 60 s, not 328-333 s; 30 s equals the liveness window of the instance manager (an isolated primary stops itself first). `test-cnpg-eviction.py` in CI. The 30 s write gap of a power loss is NOT reachable this way (28-33 s are detection and promotion); the other stateful workloads and a Kyverno mutation were evaluated and left alone, with the reasons.
+- **kube-state-metrics at two replicas** (#156): zone and hostname spread, the existing budget, the scrape drops `pod` and `instance`, vmstorage and vmselect deduplicate (`-dedup.minScrapeInterval=30s`), `KubeStateMetricsDuplicated` (with vmalert cases) says if the merge breaks. CPU requests of the audited workloads 3005 m -> 3015 m. The loss rule group is evaluated every 30 s.
+- **Zone spread** (#155): a `ScheduleAnyway` zone term next to the hostname one for cert-manager, ESO, istiod, metrics-server, Kyverno admission, Zitadel, Grafana, OpenBao, Loki, VMCluster, vmagent, vmalert, Alertmanager and the Gateway pods; `check-ha.py` prints a warning list and a coverage line.
+
 ### Fixed (found by lab 21, Scaleway, loss drills, 2026-10-21)
 
 Rung: **observed on Scaleway** for the drills and the fixes below (3 control planes, 4 then 5 workers, three zones; results in OpenAether-infra `docs/resilience.md` and the lab results). Not a compliance claim.

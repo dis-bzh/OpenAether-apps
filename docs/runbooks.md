@@ -101,7 +101,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ### NodeScrapeDown
 
-- Check: this is NodeUnreachable seen from the kubelet scrape, sooner and without kube-state-metrics (one pod, which may sit on the lost node: lab 21); both fire for one loss, this one first: `task cluster-node-state PROVIDER=<provider> NODE=<node>` (OpenAether-infra checkout, read-only).
+- Check: this is NodeUnreachable seen from the kubelet scrape, sooner and without kube-state-metrics (one pod in lab 21, which sat on the lost node; two now); both fire for one loss, this one first: `task cluster-node-state PROVIDER=<provider> NODE=<node>` (OpenAether-infra checkout, read-only).
 - Do: Same as NodeUnreachable (`cluster-node-recover` when the provider says running, `cluster-replace-node` when the machine is stopped or gone). Do not roll or upgrade meanwhile.
 
 ### NodeNotReady
@@ -148,6 +148,11 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `kubectl -n services-observability get pods -l app.kubernetes.io/name=kube-state-metrics`.
 - Do: Restore kube-state-metrics: every `kube_*` alert is blind until then.
+
+### KubeStateMetricsDuplicated
+
+- Check: `kubectl -n services-observability get pods -l app.kubernetes.io/name=kube-state-metrics` (two pods), then the query `count by (node) (kube_node_info)` and compare the labels of two series of one node: a label that differs (`pod`, `instance`) is the leak.
+- Do: the scrape (`vmscapes.yaml`, kube-state-metrics) must drop the target label `pod` and the scraped label `instance`, and vmstorage and vmselect must run `-dedup.minScrapeInterval=30s` (`vmcluster.yaml`). Until fixed, do not trust counts of `kube_*` series.
 
 ### Watchdog
 
