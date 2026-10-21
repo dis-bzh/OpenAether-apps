@@ -36,6 +36,38 @@ The two ephemeral-container policies flip with two rules (an Audit rule that exc
 override at all: Kyverno 1.19.1 admitted a privileged `kubectl debug` with a warning in a labelled namespace when an override was used (lab 12), while a
 `namespaceSelector` in `match` plus the rule-level `failureAction` denies it (the subresource does not honour `failureActionOverrides` either).
 
+## Why the default is Audit, and how to switch one namespace
+
+Decision (maintainer, 2026-10-21, issue #37): the Pod policies stay in **Audit by default** and Enforce is switched on **per namespace** with a label.
+Reasons:
+
+- A wrong Enforce is an outage, and it shows late. PSA and Kyverno judge a pod when it is created, so a pod admitted long ago is judged again only when
+  it is rescheduled (a node reboot, a Talos upgrade). The `disallow-root-user` incident and the External Secrets failure of 2026-08 both appeared on the
+  second scheduling, not the first.
+- The report must be clean first. At the time of the decision a real cluster showed 82 results for `require-security-context` (container-level
+  `securityContext` missing in chart pods), 5 for `restrict-privileged` (ztunnel `hostPath`, exemption since fixed) and 0 for `restrict-image-registries`.
+  On a live cluster whose policies were upgraded in place, results for pods that are now exempt stayed in the report for at least 40 minutes (a fresh
+  cluster did not list them), so "zero" has to be read on a fresh or refreshed report.
+- The webhook of a Pod policy is `failurePolicy: Fail` and the vendored install runs one admission replica (see "A Kyverno outage" below).
+
+What the labs proved: the label mechanism denies on real clusters. Lab 15A (OVH): a hostNetwork pod was admitted with a warning under the old spec-level
+spelling and denied once the rule-level spelling was applied. Lab 16 (Scaleway and OVH, fresh install): the five Enforce policies and the
+ephemeral-container denials behaved as written, the shipped default untouched. Lab 21 (Scaleway) recorded no per-policy violation count, and neither did
+lab 16, so the only counts quoted here are the ones above. Not proven: an Enforce label kept through a node roll on a cluster (the gate below).
+
+Steps to switch a namespace, policy by policy (order in the next section):
+
+1. Check the namespace is not on the never-label list (section "When to flip") and that the PolicyReports for this (policy, namespace) pair show zero
+   `fail` after one release and one node reboot (the `kubectl get polr` command below).
+2. Label: `kubectl label ns <namespace> kyverno.openaether.io/enforce-<policy>=true` (the label names are in the table above). In git, put the label on
+   the Namespace manifest.
+3. Watch the Events of the namespace and `kyverno_policy_results_total{rule_result="fail"}`, then reschedule one pod of each workload
+   (`kubectl rollout restart`) and, on a lab, reboot a node.
+4. Roll back at once with `kubectl label ns <namespace> kyverno.openaether.io/enforce-<policy>-` (or revert the commit).
+
+The Audit noise that remains (what a flip would still hit) is tracked in apps #47: the next lab lists the remaining violations per policy and
+namespace on an idle cluster, then fixes or exempts them.
+
 ## What Audit reported on a fresh cluster (lab 11, Scaleway, after an install and two worker reboots)
 
 `require-limits` 46 fails, `require-ro-rootfs` 29, `require-security-context` (`check-run-as-non-root`) 3, nothing for the other
