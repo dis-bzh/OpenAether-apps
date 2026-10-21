@@ -83,9 +83,6 @@ pdb_exception:
       A drain that takes two at once rejects pushes (replication factor 2) until one returns; Alloy
       retries (lab 15c: 301 of 301 lines kept over a 240 s outage).
 known_gaps:
-  - workload: Deployment/kyverno/kyverno-admission-controller
-    reason: >-
-      single replica: its loss blocks pod creation (apps #82)
   - workload: Deployment/cnpg-system/cnpg-controller-manager
     reason: >-
       single replica: a database failover waits for the operator

@@ -1,0 +1,16 @@
+# One admission controller can be disturbed at a time (0.4.0 M4, scripts/check-ha.py).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kyverno-admission-controller
+  namespace: kyverno
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: kyverno
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: admission-controller
+      app.kubernetes.io/instance: kyverno
+      app.kubernetes.io/part-of: kyverno

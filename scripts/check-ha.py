@@ -47,6 +47,20 @@ def subset(sel, labels):
     return all(labels.get(k) == v for k, v in (sel or {}).items())
 
 
+def selects(selector, labels):
+    """A full label selector (matchLabels and matchExpressions) against pod labels; an empty one selects nothing here."""
+    if not selector or not (selector.get("matchLabels") or selector.get("matchExpressions")):
+        return False
+    if not subset(selector.get("matchLabels"), labels):
+        return False
+    for e in selector.get("matchExpressions") or []:
+        has, val, op = e["key"] in labels, labels.get(e["key"]), e["operator"]
+        if (op == "In" and val not in e.get("values", [])) or (op == "NotIn" and has and val in e.get("values", [])) \
+                or (op == "Exists" and not has) or (op == "DoesNotExist" and has):
+            return False
+    return True
+
+
 def pod_labels(d):
     return d["spec"]["template"]["metadata"].get("labels", {}) or {}
 
@@ -107,7 +121,7 @@ def cpu_m(c):
 
 def pdbs_for(w, docs):
     return [p for p in docs if p.get("kind") == "PodDisruptionBudget" and p["metadata"].get("namespace", "") == w["ns"]
-            and (p["spec"].get("selector") or {}).get("matchLabels") and subset(p["spec"]["selector"]["matchLabels"], w["labels"])]
+            and selects(p["spec"].get("selector"), w["labels"])]
 
 
 def allowed(spec, r):
@@ -126,14 +140,12 @@ def allowed(spec, r):
 
 def spreads(w):
     for c in w["spread"]:
-        if c.get("topologyKey") == HOST and subset((c.get("labelSelector") or {}).get("matchLabels"), w["labels"]) \
-                and (c.get("labelSelector") or {}).get("matchLabels"):
+        if c.get("topologyKey") == HOST and selects(c.get("labelSelector"), w["labels"]):
             return True
     pa = w["affinity"].get("podAntiAffinity", {})
     terms = [t for t in pa.get("requiredDuringSchedulingIgnoredDuringExecution", [])] + \
             [t["podAffinityTerm"] for t in pa.get("preferredDuringSchedulingIgnoredDuringExecution", [])]
-    return any(t.get("topologyKey") == HOST and (t.get("labelSelector") or {}).get("matchLabels")
-               and subset(t["labelSelector"]["matchLabels"], w["labels"]) for t in terms)
+    return any(t.get("topologyKey") == HOST and selects(t.get("labelSelector"), w["labels"]) for t in terms)
 
 
 def audit(docs, allow):

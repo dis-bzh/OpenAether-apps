@@ -1,0 +1,11 @@
+# Two admission controllers (0.4.0 M4, apps #82, scripts/check-ha.py). The admission webhook is on the path of every pod
+# creation outside the excluded namespaces: with one replica a lost worker blocked pod creation for the 5 minute
+# toleration. The vendored file already carries a preferred hostname anti-affinity, so the two land on two workers when
+# they can. The other three controllers stay single (scripts/ha-allowlist.yaml): none of them is on a request path.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kyverno-admission-controller
+  namespace: kyverno
+spec:
+  replicas: 2

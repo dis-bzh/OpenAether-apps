@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - networkpolicy.yaml
+  - pdb.yaml
   # VENDORED install.yaml of Kyverno v1.19.1, unmodified (the dump is replaced whole on re-vendoring, every local
   # change is a patch below):
   #   https://github.com/kyverno/kyverno/releases/download/v1.19.1/install.yaml
@@ -21,6 +22,7 @@ patches:
   # NOT measured on a cluster: 1 CPU for the admission webhook (a throttled webhook times out the API server's
   # requests), 500m for the others. Tighten from `kubectl top pod -n kyverno` (LAB-CHECKLIST B21).
   - path: patch-cpu-limits.yaml
+  - path: patch-ha.yaml
   # The kyverno Namespace is ALREADY declared by install.yaml (vendored file).
   # Redeclaring it under resources: causes "may not add resource with an
   # already registered id: Namespace/kyverno". Our labels (Istio ambient + PSS
