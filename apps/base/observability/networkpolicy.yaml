@@ -476,15 +476,6 @@ spec:
               protocol: TCP
             - port: "8435"   # config-reloader sidecar (VM operator 0.68 scrape)
               protocol: TCP
-    # Flux events (#139): the notification controller posts to /api/v2/alerts.
-    - fromEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: flux-system
-            app: notification-controller
-      toPorts:
-        - ports:
-            - port: "9093"
-              protocol: TCP
     # The cluster gossip of the two replicas (0.4.0 M4): they share silences and the notification log, so an alert
     # reaching either one is sent once.
     - fromEndpoints:
@@ -497,6 +488,15 @@ spec:
               protocol: TCP
             - port: "9094"
               protocol: UDP
+    # Flux events (#139): the notification controller posts to /api/v2/alerts.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: flux-system
+            app: notification-controller
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:
