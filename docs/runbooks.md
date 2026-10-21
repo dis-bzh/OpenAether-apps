@@ -101,7 +101,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ### NodeScrapeDown
 
-- Check: this is NodeUnreachable seen without kube-state-metrics (the single kube-state-metrics pod was on the lost node, lab 21): `task cluster-node-state PROVIDER=<provider> NODE=<node>` (OpenAether-infra checkout, read-only).
+- Check: this is NodeUnreachable seen from the kubelet scrape, sooner and without kube-state-metrics (one pod, which may sit on the lost node: lab 21); both fire for one loss, this one first: `task cluster-node-state PROVIDER=<provider> NODE=<node>` (OpenAether-infra checkout, read-only).
 - Do: Same as NodeUnreachable (`cluster-node-recover` when the provider says running, `cluster-replace-node` when the machine is stopped or gone). Do not roll or upgrade meanwhile.
 
 ### NodeNotReady

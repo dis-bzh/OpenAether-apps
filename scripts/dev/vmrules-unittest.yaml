@@ -953,7 +953,7 @@ tests:
         alertname: NodeUnreachable
         exp_alerts:
           - exp_labels: {node: w1, condition: Ready, status: unknown, severity: critical}
-  - name: a node whose kubelet is not scraped is reported when kube-state-metrics is blind, and once when it is not
+  - name: a node whose kubelet is not scraped is reported whether or not kube-state-metrics sees it, and a reboot is not
     interval: 1m
     input_series:
       - series: 'up{job="services-observability/kubelet", node="w1"}'
@@ -970,6 +970,7 @@ tests:
         alertname: NodeScrapeDown
         exp_alerts:
           - exp_labels: {node: w1, job: services-observability/kubelet, severity: critical, component: node}
+          - exp_labels: {node: w2, job: services-observability/kubelet, severity: critical, component: node}
   - name: a control plane missing from etcd is reported, and a one-node control plane is not
     interval: 1m
     input_series:
