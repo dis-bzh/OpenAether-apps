@@ -91,8 +91,6 @@ known_gaps:
   - workload: Deployment/kube-system/metrics-server
     reason: >-
       single replica: its loss stops the HorizontalPodAutoscaler of the Gateway
-  - workload: Deployment/foundation-service-mesh/istiod
-    reason: two replicas without spread
   - workload: StatefulSet/services-observability/loki
     reason: PodDisruptionBudget allows two of three replicas down
   - workload: Deployment/longhorn-system/longhorn-ui
