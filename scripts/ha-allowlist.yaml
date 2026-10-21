@@ -1,0 +1,105 @@
+# Workloads of the platform bricks that are NOT highly available, and why (scripts/check-ha.py reads this).
+# single_replica : one replica on purpose. `reason` says why it is acceptable, `loss` what its loss means for a
+#                  customer and for the operator. A pod on a node that dies is rescheduled only after the 5 minute
+#                  not-ready/unreachable toleration of Kubernetes (docs/resilience.md), so "loss" counts that time.
+# strict_spread  : a required hostname anti-affinity or hard spread with more than 2 replicas, on purpose.
+# known_gaps     : NOT fixed yet. Each entry is a bug to close; the list must be empty at release.
+# Not audited here, because the pods do not exist in the rendered manifests: the Gateway pods (an Istio Deployment made
+# from the Gateway object, checked by scripts/dev/test-gateway-ha.py) and the Longhorn CSI sidecars (made by
+# longhorn-driver-deployer).
+single_replica:
+  - workload: Deployment/foundation-databases/backup-verify-exporter
+    reason: >-
+      a stateless exporter of the backup verification results; a second copy would export every series
+      twice
+    loss: >-
+      the oa_backup_verify_* series stop; BackupVerifierStale fires after its window; backups and
+      databases are untouched
+  - workload: Deployment/cnpg-system/barman-cloud
+    reason: >-
+      the Barman Cloud plugin is a gRPC server that only the CNPG instances call, and PostgreSQL buffers
+      WAL while it is away
+    loss: >-
+      WAL archiving and base backups pause until it is rescheduled (CnpgWalArchiveFailing); the databases
+      keep serving
+  - workload: Deployment/orc-system/orc-controller-manager
+    reason: >-
+      the OpenStack resource controller of the optional CAPI brick, idle unless a child cluster on
+      OpenStack changes
+    loss: >-
+      no change to the OpenStack resources of a child cluster until it is back; the child clusters keep
+      running
+  - workload: Deployment/capi-operator-system/capi-operator-cluster-api-operator
+    reason: the operator of the optional CAPI brick; the providers it installs run on their own
+    loss: no install or upgrade of CAPI providers until it is back; existing child clusters keep running
+  - workload: Deployment/local-path-storage/local-path-provisioner
+    reason: it only creates and deletes the host directories of local-path volumes
+    loss: a NEW local-path PVC stays Pending until it is back; existing volumes and their pods are untouched
+  - workload: Deployment/services-observability/kube-state-metrics
+    reason: >-
+      a second copy exports every kube_* series twice unless sharded; it has a PodDisruptionBudget so a
+      drain is not blocked
+    loss: >-
+      the kube_* series have a gap and the alerts built on them are blind until it is back
+      (KubeStateMetricsAbsent)
+  - workload: Deployment/services-observability/victoria-metrics-operator
+    reason: the operator works through a leader lease, a second replica would only wait for it
+    loss: >-
+      changes to VM custom resources are not reconciled until it is back; the running VictoriaMetrics pods
+      are untouched
+  - workload: Deployment/longhorn-system/longhorn-driver-deployer
+    reason: it deploys the CSI sidecars once and then idles
+    loss: nothing while the CSI sidecars run; they are restarted only at a Longhorn upgrade
+  - workload: Deployment/foundation-pki-management/external-secrets-cert-controller
+    reason: it rotates the webhook serving certificate, which stays valid for months
+    loss: no rotation of the ESO webhook certificate while it is away; secrets keep syncing
+  - workload: Deployment/kyverno/kyverno-background-controller
+    reason: background scans and mutate-existing; none of them is on a request path
+    loss: >-
+      background policy reports and mutate-existing are delayed; admission is served by the admission
+      controller
+  - workload: Deployment/kyverno/kyverno-cleanup-controller
+    reason: it runs the cleanup policies on a schedule
+    loss: scheduled cleanups are delayed
+  - workload: Deployment/kyverno/kyverno-reports-controller
+    reason: it builds the policy reports from the results
+    loss: policy reports are stale until it is back; no admission decision depends on them
+strict_spread:
+  - workload: StatefulSet/foundation-vault/openbao
+    reason: >-
+      raft members must sit on three different workers, each with its own local-path volume; test-openbao-
+      spread.py proves the rest
+known_gaps:
+  - workload: Deployment/foundation-pki-management/external-secrets
+    reason: >-
+      single replica: a node loss stops secret sync for 5+ minutes
+  - workload: Deployment/foundation-pki-management/external-secrets-webhook
+    reason: >-
+      single replica: its loss blocks the creation of every ExternalSecret
+  - workload: Deployment/kyverno/kyverno-admission-controller
+    reason: >-
+      single replica: its loss blocks pod creation (apps #82)
+  - workload: Deployment/cnpg-system/cnpg-controller-manager
+    reason: >-
+      single replica: a database failover waits for the operator
+  - workload: VMAlertmanager/services-observability/alertmanager#vmalertmanager
+    reason: >-
+      single replica: a node loss silences every alert
+  - workload: Deployment/services-identity/zitadel-login
+    reason: >-
+      single replica: a node loss takes the login page down
+  - workload: Deployment/kube-system/metrics-server
+    reason: >-
+      single replica: its loss stops the HorizontalPodAutoscaler of the Gateway
+  - workload: Deployment/cert-manager/cert-manager
+    reason: two replicas without spread or PodDisruptionBudget
+  - workload: Deployment/cert-manager/cert-manager-cainjector
+    reason: two replicas without spread or PodDisruptionBudget
+  - workload: Deployment/cert-manager/cert-manager-webhook
+    reason: two replicas without spread or PodDisruptionBudget
+  - workload: Deployment/foundation-service-mesh/istiod
+    reason: two replicas without spread
+  - workload: StatefulSet/services-observability/loki
+    reason: PodDisruptionBudget allows two of three replicas down
+  - workload: Deployment/longhorn-system/longhorn-ui
+    reason: two replicas without spread or PodDisruptionBudget

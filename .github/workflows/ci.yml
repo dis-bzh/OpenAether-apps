@@ -179,6 +179,9 @@ jobs:
           python3 -I scripts/dev/test-openbao-spread.py --selftest | tee spread.out
           ! grep -q "NOT detected" spread.out
 
+      - name: The HA audit rules catch what they exist for (0.4.0 M4)
+        run: python3 -I scripts/dev/test-check-ha.py
+
       - name: Flux errors reach Alertmanager (#139)
         run: |
           python3 -I scripts/dev/test-flux-notifications.py
@@ -405,6 +408,11 @@ jobs:
       # Alloy, cert-manager, Zitadel login and Grafana read resources under their own key: render, require limits.
       - name: Charts that read resources under their own key have memory limits (rendered)
         run: python3 -I scripts/dev/test-chart-limits.py
+
+      # Every Deployment and StatefulSet the bricks make, charts included, is spread, budgeted and has two replicas,
+      # or is listed in scripts/ha-allowlist.yaml with what its loss means. Needs helm and the charts (network).
+      - name: Every platform workload survives the loss of a worker, or says why not (rendered)
+        run: python3 scripts/check-ha.py
 
   vmrules:
     name: VMRules (vmalert dry run)
