@@ -167,6 +167,11 @@ jobs:
       - name: CNPG clusters and operator prefer different zones, not only different hosts (lab 21)
         run: python3 -I scripts/dev/test-cnpg-zone-spread.py
 
+      - name: "CNPG primaries are evicted after 30 s on a lost node, not 300 s (apps #154, lab 21)"
+        run: |
+          python3 -I scripts/dev/test-cnpg-eviction.py
+          python3 -I scripts/dev/test-cnpg-eviction.py --selftest
+
       - name: "Longhorn values are keys the pinned chart reads, and its remediation stays off (#115, #134)"
         run: python3 -I scripts/dev/test-longhorn-values.py
 

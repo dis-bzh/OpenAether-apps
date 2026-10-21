@@ -83,6 +83,19 @@ spec:
             labelSelector:
               matchLabels:
                 cnpg.io/cluster: zitadel-db
+    # Lab 21: a primary on a lost node was failed over only when the TaintManager evicted its pod, after the default
+    # 300 s toleration (write gaps of 328 and 333 s, target 30 s, apps #154). 30 s is the liveness probe of the instance
+    # manager (period 10 s x 3 failures): an isolated-but-alive primary shuts itself down by then, so the evicted pod
+    # and the promoted replica do not both take writes. Docs: docs/resilience.md.
+    tolerations:
+      - key: node.kubernetes.io/unreachable
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
 
   # ── PITR (Point-In-Time Recovery) ───────────────────────────────────────────
   # The Barman Cloud plugin archives WAL continuously (an RPO of minutes) and takes the base backups
