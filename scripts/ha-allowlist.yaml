@@ -101,6 +101,3 @@ known_gaps:
   - workload: Deployment/services-identity/zitadel-login
     reason: >-
       single replica: a node loss takes the login page down
-  - workload: Deployment/kube-system/metrics-server
-    reason: >-
-      single replica: its loss stops the HorizontalPodAutoscaler of the Gateway
