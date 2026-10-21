@@ -37,6 +37,19 @@ broke the yamllint line length (commits 577a0b3, 5747fd8, e7f04b5, 2eb74d6) are 
   `AlertmanagerClusterDegraded`; `NodeUnreachable` after 3 min and `NodeNotReady` after 5; runbook section "Loss of capacity" (which task, and what not to do); vmalert unit cases. `kube_node_role`, the zone label
   and `alertmanager_cluster_members` are UNVERIFIED series (`docs/monitoring-0.4.md`).
 
+### Fixed (found by lab 21, Scaleway, loss drills, 2026-10-21)
+
+Rung: **observed on Scaleway** for the drills and the fixes below (3 control planes, 4 then 5 workers, three zones; results in OpenAether-infra `docs/resilience.md` and the lab results). Not a compliance claim.
+Style: the loss alerts are checked by vmalert-tool cases and the runbook anchors by `test-vmrules.sh`.
+
+- **`NodeScrapeDown`** (new, `vmrule-loss.yaml`): a node whose kubelet is not scraped for 3 minutes. kube-state-metrics is ONE pod, and every kube_* loss rule is blind while it sits on the lost node (no node alert at all during a 5 minute loss); `up{job=kubelet} == 0` is seen at 1 min 51 s. First version suppressed itself when kube-state-metrics said the node was unknown, which restarted its `for`: neither alert fired in a 5 minute loss. Now without the suppression (a loss pages twice, this one first, 4 min 44 s - 4 min 53 s measured).
+- **`FailureDomainLost` reads the kubelet scrape** (the zone label comes from the Node through the VMNodeScrape), not kube-state-metrics, and has no `for`: 3 min 11 s from the power-off of a zone with `for: 1m` through kube-state-metrics, 1 min 42 s - 2 min 2 s now.
+- **`AlertmanagerClusterDegraded` could never fire for a lost replica**: `alertmanager_cluster_members` stayed at 2 on the survivor (the dead peer stays counted) and `alertmanager_cluster_failed_peers` keeps a ghost for hours. It also fires when fewer Alertmanager pods answer the scrape than replicas.
+- **Zone spread of the databases and the CNPG operator**: both grafana-db instances and both operator replicas had landed in one zone (hostname spread only; `failure-domain-check` red). A preferred zone anti-affinity term on both CNPG Clusters and a ScheduleAnyway zone spread on the operator; `test-cnpg-zone-spread.py` in CI. Placement of pods that already exist does not move: delete the replica's pod and PVC (clone under a minute). After it, losing the zone that held grafana-db no longer takes the database (drill 4c).
+- Catalogue: `kube_node_role` and `alertmanager_cluster_members` are existing (read in lab 21); `kube_node_labels` left it (no alert reads it any more).
+- Documentation: `resilience.md` (the 4 x 4 vCPU examples), runbook for NodeScrapeDown, the Alertmanager metric.
+- **Not fixed, with issues**: both CoreDNS replicas on one worker (cluster DNS outage, owned by Talos), a database primary on a lost node failed over after about 5 minutes (328-333 s write gap, target 30 s), zone-level spread of the other two-replica workloads, kube-state-metrics as a single point for the remaining loss alerts and their 4-7 minute latency.
+
 ### Fixed (0.4.0, lab 20 finding #153)
 
 - **A cluster rebuilt by the DR chain archives under a new `serverName`, and everything that reads the archive follows it.** The Clusters' plugin parameter is `serverName: <cluster>${CNPG_ARCHIVE_SUFFIX:=}`; Flux fills the suffix from the optional ConfigMap `cnpg-archive-generation` (flux-system) that the infra `dr-restore-plan` writes. No ConfigMap means no suffix:
