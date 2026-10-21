@@ -17,7 +17,7 @@ VMAlert, VMAlertmanager or CNPG Cluster) asserts:
 
 The allow-list cannot rot: an entry for a workload that is no longer single-replica, or that no longer exists, fails the
 check, and so does an entry without a reason. `known_gaps` lists what is not fixed yet and must shrink to nothing.
-It also prints the CPU requests of what it renders (the shipped 3 x 4 vCPU example must stay roll-able: infra capacity gate).
+It also prints the CPU requests of what it renders (the shipped 4 x 4 vCPU examples must stay roll-able, 3 x 4 passes with ~0.45 vCPU of margin: infra capacity gate).
 
 Static: it proves the manifests, not the scheduler. Needs kubectl, helm (network for the charts) and PyYAML.
 Usage: python3 scripts/check-ha.py [--dump FILE | --load FILE] [--cpu]
@@ -243,7 +243,7 @@ def main():
     print("%d workloads audited, %d single-replica listed, CPU requests of the rendered Deployments/StatefulSets %d m (budget %d m)"
           % (len(ws), len(allow.get("single_replica", [])), cpu, CPU_BUDGET_M))
     if cpu > CPU_BUDGET_M:
-        errs.append("CPU requests %d m exceed the budget %d m: the shipped 3 x 4 vCPU example must stay roll-able "
+        errs.append("CPU requests %d m exceed the budget %d m: the shipped 4 x 4 vCPU examples must stay roll-able "
                     "(infra capacity gate, docs/capacity.md); raise CPU_BUDGET_M only with that arithmetic" % (cpu, CPU_BUDGET_M))
     for e in errs:
         print("FAIL " + e)

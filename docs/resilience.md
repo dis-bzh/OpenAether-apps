@@ -16,7 +16,7 @@ operator makes from a VMCluster, VMAgent, VMAlert, VMAlertmanager or CNPG Cluste
 3. exactly one PodDisruptionBudget on the pods, allowing exactly one disruption (zero blocks every drain, two or more takes the quorum down at once); `pdb_exception` lists the deliberate ones (Loki);
 4. nothing that can strand a pod on three workers: no required `podAffinity`, no required hostname anti-affinity or hard spread for more than two replicas (`strict_spread` lists OpenBao, with its reason),
    no `nodeSelector` but the OS one;
-5. the CPU requests of what it renders stay under a bound, so that the shipped 3 x 4 vCPU example stays roll-able (infra `docs/capacity.md`).
+5. the CPU requests of what it renders stay under a bound, so that the shipped 4 x 4 vCPU examples stay roll-able (3 x 4 passes with about 0.45 vCPU of margin; infra `docs/capacity.md`).
 
 The allow-list cannot rot: an entry for a workload that no longer exists, one that now has two replicas, or one without a reason fails the check; so does a workload that is compliant but still listed
 under `known_gaps` (which must be empty at release). Not audited because the pods do not exist in the rendered manifests: the Gateway pods (HPA minimum 2, budget and spread policy, checked by
