@@ -22,6 +22,14 @@ Bug fixes, documentation corrections and safety nets after 0.3.1, for the next r
 in 9 min 07 s, `cluster-verify` 15 passed, 0 failed, 38 Kustomizations and 16 HelmReleases Ready except `alloy-audit` (suspended by design). It fixes neither #42 nor #375 (infra), **does not
 fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
 
+### Fixed (0.4.0, lab 20 finding #153)
+
+- **A cluster rebuilt by the DR chain archives under a new `serverName`, and everything that reads the archive follows it.** The Clusters' plugin parameter is `serverName: <cluster>${CNPG_ARCHIVE_SUFFIX:=}`; Flux fills the suffix from the optional ConfigMap `cnpg-archive-generation` (flux-system) that the infra `dr-restore-plan` writes. No ConfigMap means no suffix:
+  installs, the lab 19/20 paths and the ObjectStore `destinationPath` do not move. `backup-verify` (`barman_check.py`) reads `cnpg/<cluster>/<cluster><suffix>/` through `cluster-identity`, the CNPG restore tests take the serverName of the live Cluster, `cnpg-store-replicate` already copies the whole
+  `cnpg/<cluster>/` prefix (both generations; now covered by a test). The previous generation stays in both stores as the recovery source (README "Archive generation", `docs/traps.md`). Tests: `test-cnpg-archive-generation.py` (render with and without the suffix, the Flux wiring, the verifier against an
+  in-memory store holding an old and a new archive, the restore manifest), `test-cnpg-store-replicate.sh` (a `-g2` path). No alert changed. Rung: **mocked**; UNVERIFIED on a cluster (that CNPG applies a changed `serverName` to an existing Cluster, Flux's optional `substituteFrom`, the plugin's Backup); pass criteria in the
+  infra `docs/disaster-recovery.md`.
+
 ### Added (0.4.0, milestone M3: restore tests)
 
 - **Scheduled restore tests, no person involved** (`backup/databases/restore`, `cnpg`, README "Restore tests"): `cnpg-canary` writes a hash-chained canary row into zitadel-db and grafana-db every 5 minutes; `cnpg-recovery-restore-test` (daily) recovers each

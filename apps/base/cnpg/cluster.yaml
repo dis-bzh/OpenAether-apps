@@ -77,9 +77,13 @@ spec:
   # The Barman Cloud plugin archives WAL continuously (an RPO of minutes) and takes the base backups
   # (scheduledbackups.yaml). Where and how is the ObjectStore `zitadel-db-primary` (objectstores.yaml); the second copy
   # on the replica store is shipped by the backup brick (backup/databases, cnpg-store-replicate).
-  # The WAL archive name is the Cluster name (serverName), as it was with the in-tree object store.
+  # The WAL archive name (serverName) is the Cluster name plus the archive generation suffix: empty on an install, and
+  # "-g2", "-g3"... on a cluster REBUILT from a store (task dr-restore-plan writes the ConfigMap cnpg-archive-generation in
+  # flux-system, Flux substitutes it here). A rebuilt cluster must not archive into the dead one's path: barman refuses a
+  # non-empty archive ("Expected empty archive", issue #153). Never edit this by hand on a running cluster; docs/traps.md.
   plugins:
     - name: barman-cloud.cloudnative-pg.io
       isWALArchiver: true
       parameters:
         barmanObjectName: zitadel-db-primary
+        serverName: "zitadel-db${CNPG_ARCHIVE_SUFFIX:=}"

@@ -79,8 +79,9 @@ belong to. What follows has no skill of its own yet.
   `barman-cloud-check-wal-archive` refuses a non-empty archive for a new cluster ("WAL archive check failed for server ...:
   Expected empty archive"), the `ContinuousArchiving` condition stays `False` with `ContinuousArchivingFailing`, and no WAL
   leaves the cluster. It happens when a lab or a rebuild reuses the bucket (and the `cnpg/<cluster>` path) of an earlier cluster.
-  Either bootstrap the new cluster from that archive (recovery), or, once you are sure you do not need it, remove that path
-  from the bucket. Seen on a Scaleway lab that reused its bucket (105 objects under `cnpg/`).
+  Either bootstrap the new cluster from that archive (recovery), or give it a NEW `serverName`: the DR chain does it (generation suffix `-g2`,
+  `cnpg-archive-generation`, apps #153, README of the backup brick; fixed offline, UNVERIFIED on a cluster), or, once you are sure you do not need it, remove that path
+  from the bucket. Do not change `serverName` of a running cluster by hand: the history before the change stays in the old path. Seen on a Scaleway lab that reused its bucket (105 objects under `cnpg/`).
 
 - **With the Barman Cloud plugin, the S3 settings live in the ObjectStore, not in the Cluster** (offline findings, not yet seen on a
   cluster). The boto3 process is the plugin's sidecar, so the Outscale checksum variables belong to the ObjectStore's

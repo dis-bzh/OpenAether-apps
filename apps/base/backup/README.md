@@ -235,7 +235,7 @@ spec:
         name: barman-cloud.cloudnative-pg.io
         parameters:
           barmanObjectName: zitadel-db-primary   # the ObjectStore of cnpg/objectstores.yaml
-          serverName: zitadel-db                  # the archive lives under <destinationPath>/<serverName>
+          serverName: zitadel-db                  # the archive lives under <destinationPath>/<serverName> (zitadel-db-g2... after a rebuild, see Archive generation)
 ```
 
 Check with `kubectl cnpg status zitadel-db-restore` and a `SELECT` on the data, then delete the scratch Cluster (its PVC is
@@ -251,6 +251,23 @@ transport is TLS. NOT encrypted by us: the WAL and base backup bytes before the 
 uploaded with the same SSE-S3 request (read back on the OVH objects in lab 19), also without client-side encryption. Client-side
 encrypted, with the restic password: the `openbao`, `cnpg-dump` and `etcd` datasets only (apps #149 stays open). The provider-independent, client-side encrypted copy is the daily restic
 `pg_dump` (RPO 24 h).
+
+## Archive generation: the serverName of a rebuilt cluster (#153)
+
+The WAL archive of a Cluster lives under `<destinationPath>/<serverName>` (`cnpg/<cluster>/<serverName>/` in each store). `serverName` is the plugin parameter of the Cluster (`cnpg/cluster.yaml`, `grafana-db-cluster.yaml`), set to `<cluster>${CNPG_ARCHIVE_SUFFIX:=}`:
+the suffix is **empty on every install** (the historical path) and `-g2`, `-g3`… on a cluster rebuilt from a store, because barman refuses to start an archive in a non-empty path ("Expected empty archive", lab 20) and a rebuilt cluster must not write into the dead one's. The value comes from the
+optional ConfigMap `cnpg-archive-generation` in `flux-system` that the infra `dr-restore-plan` writes (step `generation`); Flux substitutes it in the `cnpg` brick (the Clusters) and in `backup-databases-identity` (the copy of `cluster-identity` in `foundation-databases`: `CNPG_ARCHIVE_SUFFIX`). Never set it by hand on a running cluster.
+
+| Reader | Follows |
+|---|---|
+| WAL archive and base backups | the Cluster's `serverName` (new path) |
+| `backup-verify` (`barman_check.py`) | `CNPG_ARCHIVE_SUFFIX`: verifies the newest generation only; the message ends with `[archive <name>]` when the suffix is not empty |
+| CNPG restore tests (daily, PITR) | the live Cluster's archiving `serverName` (`archive_server`): they test the archive that is being written |
+| `cnpg-store-replicate` | the whole `cnpg/<cluster>/` prefix: every generation is copied, the old one stays on the replica |
+| DR chain `--db-source pitr` | the PREVIOUS generation (the dead cluster's path) |
+
+A recovery by hand of a point in time before a rebuild names the old path in `externalClusters` (`serverName: zitadel-db`, or `zitadel-db-g2` after a second rebuild); one after it, the new one. The old path is never written again and is not retained or pruned by the new
+server name's 30-day policy: delete it yourself once the recovery window has passed. UNVERIFIED on a cluster (offline tests: `test-cnpg-archive-generation.py`, `test-cnpg-store-replicate.sh`); the pass criteria of the next drill are in the infra `docs/disaster-recovery.md`.
 
 ## Scheduled etcd snapshot
 

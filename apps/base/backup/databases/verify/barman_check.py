@@ -2,7 +2,9 @@
 """Verify the CNPG Barman archive on each store: the latest base backup is complete and readable, the WAL is contiguous.
 
 Runs in the PostgreSQL image (python3 and boto3 are there; so is barman-cloud, whose layout this reads:
-<bucket>/cnpg/<cluster>/<cluster>/{base/<id>/{backup.info,data.tar*},wals/<16 hex>/<24 hex>[.ext]}).
+<bucket>/cnpg/<cluster>/<serverName>/{base/<id>/{backup.info,data.tar*},wals/<16 hex>/<24 hex>[.ext]}). serverName is the cluster name plus CNPG_ARCHIVE_SUFFIX ("" on an install, "-g2"... on a
+cluster rebuilt by the DR chain, issue #153): the verifier reads the archive the clusters write NOW; the older generations stay in the
+stores as the recovery source and are not verified here.
 Per cluster and store it checks:
   * the newest base backup whose backup.info says DONE exists (a failed or running newer one is skipped);
   * its data file(s) are non-empty and read to the end as a tar (the gzip CRC and the tar structure are verified);
@@ -102,9 +104,9 @@ def read_tar(body, name):
     return drain(raw)   # the end-of-archive padding and the compressed stream's trailer
 
 
-def check_cluster(st, base, server, now, sample=None):
+def check_cluster(st, base, server, now, sample=None, archive=None):
     """Returns (status, age_seconds_of_newest_backup, message); status is 1, 0 or 'skip'."""
-    root = f"{base}/{server}/{server}/"
+    root = f"{base}/{server}/{archive or server}/"
     _, ids = st.list(root + "base/", "/")
     ids = sorted(p.rstrip("/").rsplit("/", 1)[-1] for p in ids)
     good = None
@@ -216,17 +218,18 @@ def main():
             stores[tag.lower()] = Store(client(e[f"{tag}_ENDPOINT"], e[f"{tag}_ACCESS_KEY"], e[f"{tag}_SECRET_KEY"],
                                                e.get(f"{tag}_REGION", "us-east-1")), e[f"{tag}_BUCKET"])
     grace = int(e.get("REPLICA_LAG_GRACE_S", str(2 * 3600)))
+    suffix = e.get("CNPG_ARCHIVE_SUFFIX", "").strip()
     for server in e.get("CLUSTERS", "zitadel-db grafana-db").split():
         for name, st in stores.items():
             try:
-                status, age, msg = check_cluster(st, "cnpg", server, now)
+                status, age, msg = check_cluster(st, "cnpg", server, now, archive=server + suffix)
                 if name == "replica" and status == 1 and "primary" in stores:
                     gap = replica_gap(stores["primary"], st, f"cnpg/{server}/", now, grace)
                     if gap:
                         status, msg = 0, f"{len(gap)} object(s) older than {grace // 60} min on the primary are missing from the replica (first: {gap[0]})"
             except Exception as ex:  # noqa: BLE001 - an unreachable store is a failed verification, not a crash
                 status, age, msg = 0, 0, f"store unreachable or unreadable ({type(ex).__name__}: {str(ex)[:150]})"
-            print("\t".join(["cnpg", name, str(status), str(age), f"{server}: {msg}".replace("\t", " ").replace("\n", " ")]))
+            print("\t".join(["cnpg", name, str(status), str(age), f"{server}: {msg}{' [archive ' + server + suffix + ']' if suffix else ''}".replace("\t", " ").replace("\n", " ")]))
     return 0   # a failed check is a result, not an error of the stage
 
 

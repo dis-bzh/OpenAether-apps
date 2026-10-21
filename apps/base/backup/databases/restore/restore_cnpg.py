@@ -188,6 +188,17 @@ def guard(ns, name):
         raise RuntimeError(f"refusing to touch {ns}/{name}: restore tests only act on {SCRATCH_NS}/{PREFIX}*")
 
 
+def archive_server(source, cluster):
+    """The serverName the live Cluster archives under NOW: its barman plugin entry's `serverName`, else the Cluster name. A cluster
+    rebuilt by the DR chain archives under a new generation (`zitadel-db-g2`, issue #153) and the older path is a recovery source only."""
+    for p in (source.get("spec") or {}).get("plugins") or []:
+        if p.get("name") == "barman-cloud.cloudnative-pg.io" and p.get("isWALArchiver"):
+            name = (p.get("parameters") or {}).get("serverName")
+            if name:
+                return name
+    return cluster
+
+
 def recovery_manifest(cluster, store, mode, source, target=None):
     """The scratch Cluster. No `plugins` entry with isWALArchiver: the copy never writes to a store."""
     name = scratch_name(cluster, store, mode)
@@ -212,7 +223,7 @@ def recovery_manifest(cluster, store, mode, source, target=None):
             "bootstrap": {"recovery": rec},
             "externalClusters": [{"name": "origin", "plugin": {
                 "name": "barman-cloud.cloudnative-pg.io",
-                "parameters": {"barmanObjectName": f"{cluster}-{store}", "serverName": cluster}}}],
+                "parameters": {"barmanObjectName": f"{cluster}-{store}", "serverName": archive_server(source, cluster)}}}],
         },
     }
 

@@ -95,6 +95,7 @@ spec:
                 - { name: HOME, value: /tmp }
               envFrom:
                 - secretRef: { name: backup-restic-env }
+                - configMapRef: { name: cluster-identity }   # CNPG_ARCHIVE_SUFFIX: the archive the clusters write now
               securityContext:
                 capabilities: { drop: ["ALL"] }
                 allowPrivilegeEscalation: false

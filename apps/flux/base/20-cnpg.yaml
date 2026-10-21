@@ -31,6 +31,11 @@ spec:
     substituteFrom:
       - kind: ConfigMap
         name: cluster-identity
+      # Written by task dr-restore-plan on a rebuilt cluster (archive generation, #153); absent on a fresh install = the
+      # historical archive name, nothing moves.
+      - kind: ConfigMap
+        name: cnpg-archive-generation
+        optional: true
   wait: true
   dependsOn:
     - name: external-secrets

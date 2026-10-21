@@ -152,6 +152,8 @@ jobs:
         run: python3 -I scripts/dev/test-cnpg-barman-plugin.py
       - name: "CNPG ObjectStores send checksums only when required (barman-cloud on Outscale OOS, #132)"
         run: python3 -I scripts/dev/test-cnpg-s3-checksum-env.py
+      - name: "A cluster rebuilt by the DR chain archives under a new serverName and the verifier and restore tests follow it (#153)"
+        run: python3 -I scripts/dev/test-cnpg-archive-generation.py
 
       - name: "The restore tests stay scratch: RBAC, quota, ObjectStores, Jobs, exporter (0.4.0 M3)"
         run: python3 -I scripts/dev/test-restore-test-brick.py

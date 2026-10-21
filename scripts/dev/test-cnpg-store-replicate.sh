@@ -50,6 +50,17 @@ chk "backup.info is written after the data of its base backup" "[ -n '$d' ] && [
 : >"$W/R.log"
 run; rc=$?
 chk "a second run copies nothing" "[ $rc = 0 ] && ! grep -q '^PUT' '$W/R.log' && grep -q 'copied 0' '$W/out'"
+# A cluster rebuilt by the DR chain archives under a NEW serverName next to the dead one's (apps #153): the copy follows both.
+for c in zitadel-db grafana-db; do
+  put cnpg/$c/$c-g2/base/20261022T031000/backup.info 300
+  put cnpg/$c/$c-g2/base/20261022T031000/data.tar.gz 4000
+  put cnpg/$c/$c-g2/wals/0000000100000000/000000010000000000000009.gz 800
+done
+: >"$W/R.log"
+run; rc=$?
+chk "a new archive generation (cnpg/<c>/<c>-g2) is copied to the replica, byte for byte" "[ $rc = 0 ] && same && [ -f '$W/R/br/cnpg/zitadel-db/zitadel-db-g2/base/20261022T031000/data.tar.gz' ]"
+chk "the OLD generation is still on the replica (it is the recovery source of the rebuilt cluster)" "[ -f '$W/R/br/cnpg/zitadel-db/zitadel-db/base/20261001T031000/backup.info' ] && [ -f '$W/R/br/cnpg/grafana-db/grafana-db/wals/0000000100000000/000000010000000000000003.gz' ]"
+chk "the new generation's backup.info is written after its data" "d=\$(grep -n 'PUT /br/cnpg/zitadel-db/zitadel-db-g2/base/.*/data.tar.gz' '$W/R.log' | head -1 | cut -d: -f1); i=\$(grep -n 'PUT /br/cnpg/zitadel-db/zitadel-db-g2/base/.*/backup.info' '$W/R.log' | head -1 | cut -d: -f1); [ -n \"\$d\" ] && [ -n \"\$i\" ] && [ \"\$d\" -lt \"\$i\" ]"
 head -c 100 /dev/urandom >"$W/R/br/cnpg/grafana-db/grafana-db/base/20261001T031000/data.tar.gz"
 run; rc=$?
 chk "an object of another size is copied again" "[ $rc = 0 ] && same"
