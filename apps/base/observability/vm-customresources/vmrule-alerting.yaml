@@ -66,11 +66,18 @@ spec:
               The routes and receivers in force are not the ones in git. Read the config-reloader and alertmanager logs.
         # The two replicas must see each other: alone, each would notify on its own and a lost one could not be told
         # from a gossip that the network policy blocks. kube_statefulset_replicas is the number asked for.
+        # alertmanager_cluster_members does NOT drop when a replica is lost (lab 21: 2 on the survivor for the whole 5 minute
+        # loss, the dead peer stays counted) and alertmanager_cluster_failed_peers keeps a ghost for hours after a pod was
+        # replaced, so a lost replica is read from the scrape: fewer answering pods than replicas.
         - alert: AlertmanagerClusterDegraded
           expr: |
-            min(alertmanager_cluster_members)
+            (min(alertmanager_cluster_members)
               < scalar(kube_statefulset_replicas{namespace="services-observability",
-                statefulset="vmalertmanager-alertmanager"})
+                statefulset="vmalertmanager-alertmanager"}))
+            or
+            (count(count by (pod) (up{job="vmalertmanager-alertmanager"} == 1))
+              < scalar(kube_statefulset_replicas{namespace="services-observability",
+                statefulset="vmalertmanager-alertmanager"}))
           for: 10m
           labels:
             severity: warning

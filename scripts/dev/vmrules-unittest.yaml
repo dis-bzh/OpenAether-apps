@@ -1074,6 +1074,23 @@ tests:
         alertname: AlertmanagerClusterDegraded
         exp_alerts:
           - exp_labels: {severity: warning, component: alerting}
+  - name: a lost Alertmanager replica is reported although the survivor still counts two members
+    interval: 1m
+    input_series:
+      - series: 'alertmanager_cluster_members{pod="vmalertmanager-alertmanager-1"}'
+        values: '2x50'
+      - series: 'up{job="vmalertmanager-alertmanager", pod="vmalertmanager-alertmanager-1"}'
+        values: '1x50'
+      - series: 'up{job="vmalertmanager-alertmanager", pod="vmalertmanager-alertmanager-0"}'
+        values: '1x10 _x40'
+      - series: 'kube_statefulset_replicas{namespace="services-observability", statefulset="vmalertmanager-alertmanager"}'
+        values: '2x50'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: AlertmanagerClusterDegraded, exp_alerts: []}
+      - eval_time: 40m
+        alertname: AlertmanagerClusterDegraded
+        exp_alerts:
+          - exp_labels: {severity: warning, component: alerting}
   - name: OpenBao with two unsealed replicas of three is reported, with three it is not
     interval: 1m
     input_series:

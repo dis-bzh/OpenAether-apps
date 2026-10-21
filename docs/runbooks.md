@@ -372,7 +372,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ### AlertmanagerClusterDegraded
 
-- Check: `kubectl -n services-observability get pods -l app.kubernetes.io/name=vmalertmanager -o wide`; Cilium drops on port 9094 between the two pods; `alertmanager_cluster_members` on each.
+- Check: `kubectl -n services-observability get pods -l app.kubernetes.io/name=vmalertmanager -o wide`; Cilium drops on port 9094 between the two pods; `alertmanager_cluster_members` on each (it stays at 2 on the survivor when a replica is lost; read the pods and `up`).
 - Do: A lost replica: the other keeps sending every alert; replace the node if it is dead (Loss of capacity). Both up but not members of one cluster: the gossip is blocked, fix the `vmalertmanager` network policy (ingress and egress 9094 TCP and UDP between the two).
 
 ### AlertmanagerAbsent
