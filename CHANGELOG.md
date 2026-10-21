@@ -22,6 +22,15 @@ Bug fixes, documentation corrections and safety nets after 0.3.1, for the next r
 in 9 min 07 s, `cluster-verify` 15 passed, 0 failed, 38 Kustomizations and 16 HelmReleases Ready except `alloy-audit` (suspended by design). It fixes neither #42 nor #375 (infra), **does not
 fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
 
+### Added (0.4.0, owner decisions of 2026-10-21)
+
+- **Kyverno: why Audit is the default and how to switch a namespace** (#37): `docs/kyverno-enforcement.md` records the decision, the label steps, the rollback and what the labs proved; the remaining noise stays in #47.
+- **Repo-settings check: informational checks** (#141): `.github/informational-checks.txt` declares the checks that run on purpose without being required (Commit messages, Pipeline audit, OpenBao bootstrap, Zitadel and Grafana authentication);
+  `check-required-checks.sh` accepts them, and flags a stale declaration (required, or no longer reported). The check turns green once the owner binds the five required checks to the GitHub Actions app and adds Backup brick checks,
+  Loki chart render, Observability RBAC, VMRules and Manifest scan as required (**owner action in the ruleset**). Self-tested.
+- **Renovate holds `kubernetes-sigs/gateway-api`** until the Istio upgrade (the CRDs stay at 1.2.1, #57).
+- **Named identities** (#87): `apps/base/platform/rbac/README.md` states that 0.4.0 uses short-lived client certificates, that there is no individual revocation, what deleting a binding does, and the 1.0.0 plan for an optional user-supplied external OIDC issuer (not built).
+
 ### Added (0.4.0, milestone M4: loss of a node or a pod without interruption)
 
 Rung: **mocked/static**; nothing observed on a cluster (drills and pass criteria: OpenAether-infra `docs/resilience.md`, and `docs/resilience.md` here). Not a compliance claim. Style: six files that
