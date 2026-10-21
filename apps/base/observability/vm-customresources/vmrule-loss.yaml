@@ -37,6 +37,27 @@ spec:
               checkout: task cluster-node-state PROVIDER=<provider> NODE=<node>, then task cluster-node-recover or
               task cluster-replace-node. Do not roll or upgrade meanwhile.
 
+        # The same loss seen WITHOUT kube-state-metrics. NodeUnreachable and every other kube_* rule are blind while
+        # the single kube-state-metrics pod sits on the lost node (lab 21: a worker powered off for 5 minutes, no node
+        # alert until the pod was re-created). The kubelet scrape does not depend on it: up == 0 for 3 minutes, and
+        # only while kube-state-metrics does not report the node unreachable (so a healthy chain pages once).
+        - alert: NodeScrapeDown
+          expr: |
+            up{job="services-observability/kubelet"} == 0
+              unless on (node) (kube_node_status_condition{condition="Ready",status="unknown"} == 1)
+          for: 3m
+          labels:
+            severity: critical
+            component: node
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodescrapedown"
+            summary: "Node {{ $labels.node }}: its kubelet is not scraped for 3 min (kube-state-metrics may be blind)"
+            description: >-
+              The kubelet of {{ $labels.node }} does not answer the scrape, and kube-state-metrics does not say so
+              (it is probably the pod on the lost node). Same procedure as NodeUnreachable: task cluster-node-state
+              PROVIDER=<provider> NODE={{ $labels.node }} (OpenAether-infra), then task cluster-node-recover or
+              task cluster-replace-node. Do not roll or upgrade meanwhile.
+
         # A failure domain (zone) without a Ready node. The zone label is set by the Talos machine config.
         - alert: FailureDomainLost
           expr: |

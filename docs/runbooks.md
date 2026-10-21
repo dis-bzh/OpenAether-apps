@@ -99,6 +99,11 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: `task cluster-node-state PROVIDER=<provider> NODE=<node>` (OpenAether-infra checkout, read-only): provider state, kubelet, Talos port, etcd membership.
 - Do: Provider says running but the node is silent: `task cluster-node-recover PROVIDER=<provider> NODE=<node>` (hard reboot through the provider API, bounded wait; never destroys anything). Machine stopped, in error or gone: `task cluster-replace-node PROVIDER=<provider> NODE=<node>`. The full procedure and what not to do: "Loss of capacity" below.
 
+### NodeScrapeDown
+
+- Check: this is NodeUnreachable seen without kube-state-metrics (the single kube-state-metrics pod was on the lost node, lab 21): `task cluster-node-state PROVIDER=<provider> NODE=<node>` (OpenAether-infra checkout, read-only).
+- Do: Same as NodeUnreachable (`cluster-node-recover` when the provider says running, `cluster-replace-node` when the machine is stopped or gone). Do not roll or upgrade meanwhile.
+
 ### NodeNotReady
 
 - Check: `kubectl describe node <node>`; kubelet and containerd state; `task cluster-node-state`.
