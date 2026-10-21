@@ -91,12 +91,6 @@ known_gaps:
   - workload: Deployment/kube-system/metrics-server
     reason: >-
       single replica: its loss stops the HorizontalPodAutoscaler of the Gateway
-  - workload: Deployment/cert-manager/cert-manager
-    reason: two replicas without spread or PodDisruptionBudget
-  - workload: Deployment/cert-manager/cert-manager-cainjector
-    reason: two replicas without spread or PodDisruptionBudget
-  - workload: Deployment/cert-manager/cert-manager-webhook
-    reason: two replicas without spread or PodDisruptionBudget
   - workload: Deployment/foundation-service-mesh/istiod
     reason: two replicas without spread
   - workload: StatefulSet/services-observability/loki
