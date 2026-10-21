@@ -18,3 +18,11 @@ spec:
           labelSelector:
             matchLabels:
               app.kubernetes.io/name: cloudnative-pg
+        # A second preference, per zone (lab 21: both operators sat in one zone, so losing it left no one to fail a
+        # database over). ScheduleAnyway: with fewer zones than replicas it still schedules.
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudnative-pg

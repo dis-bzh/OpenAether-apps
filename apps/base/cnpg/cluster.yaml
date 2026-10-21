@@ -72,6 +72,17 @@ spec:
   affinity:
     podAntiAffinityType: preferred
     topologyKey: kubernetes.io/hostname
+    # Lab 21: both grafana-db instances and both CNPG operators landed in ONE zone (hostname spread only), so losing
+    # that zone took the whole database. A second, zone-level preference keeps the instances in different zones when
+    # the cluster has them; it never blocks scheduling (a lost zone leaves fewer zones than instances).
+    additionalPodAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: topology.kubernetes.io/zone
+            labelSelector:
+              matchLabels:
+                cnpg.io/cluster: zitadel-db
 
   # ── PITR (Point-In-Time Recovery) ───────────────────────────────────────────
   # The Barman Cloud plugin archives WAL continuously (an RPO of minutes) and takes the base backups

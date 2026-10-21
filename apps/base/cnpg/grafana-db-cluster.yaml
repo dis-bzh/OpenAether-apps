@@ -54,6 +54,17 @@ spec:
     # CNPG AffinityConfiguration (not the standard K8s type)
     podAntiAffinityType: preferred
     topologyKey: kubernetes.io/hostname
+    # Lab 21: both grafana-db instances and both CNPG operators landed in ONE zone (hostname spread only), so losing
+    # that zone took the whole database. A second, zone-level preference keeps the instances in different zones when
+    # the cluster has them; it never blocks scheduling (a lost zone leaves fewer zones than instances).
+    additionalPodAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: topology.kubernetes.io/zone
+            labelSelector:
+              matchLabels:
+                cnpg.io/cluster: grafana-db
   monitoring:
     enablePodMonitor: false
 
