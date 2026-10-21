@@ -1,0 +1,14 @@
+# One CNPG operator can be disturbed at a time (0.4.0 M4, scripts/check-ha.py).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cnpg-controller-manager
+  namespace: cnpg-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg

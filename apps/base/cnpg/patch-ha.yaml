@@ -1,0 +1,20 @@
+# Two CNPG operator replicas (0.4.0 M4, scripts/check-ha.py). The operator decides a database failover: with one
+# replica, a lost worker that hosted the operator AND a primary delayed the promotion by the 5 minute toleration,
+# far over the 30 s write-gap objective. The vendored args already carry --leader-elect, so the second replica waits
+# for the lease. Running two operators is UNVERIFIED on a cluster until the worker-loss drill (docs/resilience.md).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cnpg-controller-manager
+  namespace: cnpg-system
+spec:
+  replicas: 2
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudnative-pg

@@ -14,6 +14,7 @@ resources:
   - cnpg-1.30.1.yaml  # vendored from v1.30.1 — avoids a remote fetch (DNS/IPv6)
   - barman-cloud-plugin-0.15.1.yaml  # vendored from v0.15.1, installs into cnpg-system next to the operator
   - networkpolicy.yaml
+  - pdb.yaml
   - networkpolicy-db-restricted.yaml
   - cluster.yaml
   - secret.yaml
@@ -26,6 +27,7 @@ resources:
 
 # The vendored operator sets runAsNonRoot on the pod only; Kyverno require-security-context reads the container (#47).
 patches:
+  - path: patch-ha.yaml
   - target:
       kind: Deployment
       name: cnpg-controller-manager
