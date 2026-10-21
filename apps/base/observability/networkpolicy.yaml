@@ -485,7 +485,29 @@ spec:
         - ports:
             - port: "9093"
               protocol: TCP
+    # The cluster gossip of the two replicas (0.4.0 M4): they share silences and the notification log, so an alert
+    # reaching either one is sent once.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmalertmanager
+      toPorts:
+        - ports:
+            - port: "9094"
+              protocol: TCP
+            - port: "9094"
+              protocol: UDP
   egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmalertmanager
+      toPorts:
+        - ports:
+            - port: "9094"
+              protocol: TCP
+            - port: "9094"
+              protocol: UDP
     # ⚠️ `rules.dns` is what makes toFQDNs work at all: without the DNS proxy
     # observing the lookup, Cilium never learns the IP behind hooks.slack.com
     # and the rule below matches nothing. Same trap as the CAPI policies.

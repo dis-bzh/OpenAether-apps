@@ -96,13 +96,13 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ### NodeUnreachable
 
-- Check: `kubectl get nodes`; provider console for the machine state.
-- Do: Reboot at the provider if the VM is up but silent; replace the node otherwise (`docs/disaster-recovery.md` in OpenAether-infra).
+- Check: `task cluster-node-state PROVIDER=<provider> NODE=<node>` (OpenAether-infra checkout, read-only): provider state, kubelet, Talos port, etcd membership.
+- Do: Provider says running but the node is silent: `task cluster-node-recover PROVIDER=<provider> NODE=<node>` (hard reboot through the provider API, bounded wait; never destroys anything). Machine stopped, in error or gone: `task cluster-replace-node PROVIDER=<provider> NODE=<node>`. The full procedure and what not to do: "Loss of capacity" below.
 
 ### NodeNotReady
 
-- Check: `kubectl describe node <node>`; kubelet and containerd state.
-- Do: Same as NodeUnreachable; drain first if the node still answers.
+- Check: `kubectl describe node <node>`; kubelet and containerd state; `task cluster-node-state`.
+- Do: Same as NodeUnreachable; drain first if the node still answers. Do not start `task cluster-roll` while a node is NotReady: it refuses.
 
 ### NodeUnderPressure
 
@@ -159,12 +159,12 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 ### EtcdQuorumLost
 
 - Check: `talosctl etcd members`; how many control planes are up.
-- Do: Bring members back; only if two of three are lost for good, follow the etcd disaster-recovery procedure of OpenAether-infra.
+- Do: Bring members back; only if two of three are lost for good, `task dr-restore-plan` (last resort, `docs/disaster-recovery.md` of OpenAether-infra). Do not restart the survivors.
 
 ### EtcdMemberDown
 
-- Check: `talosctl -n <node> service etcd`.
-- Do: Reboot the node; if the member stays out, remove and re-add it.
+- Check: `talosctl -n <node> service etcd`; `task cluster-node-state PROVIDER=<provider> NODE=<node>`.
+- Do: `task cluster-node-recover` or `task cluster-replace-node` (the replace removes the stale etcd member first). Same as ControlPlaneMemberMissing.
 
 ### EtcdLeaderFlapping
 
@@ -322,6 +322,12 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ## Security (OpenBao)
 
+### OpenBaoReplicasMissing
+
+- Check: `kubectl -n foundation-vault get pods -o wide`; `bao operator raft list-peers` from a pod that answers.
+- Do: A pod Pending on a dead worker holds a local-path volume that does not move: `task cluster-replace-node PROVIDER=<provider> NODE=<node>`; the new member resyncs from its raft peers. A sealed pod unseals itself from the seal-key Secret: see OpenBaoWorkloadSealed.
+- Do not: delete the PVC of a pod whose node is only unreachable (the data is on that node); restore a raft snapshot while two replicas are up.
+
 ### OpenBaoRaftNoFailureTolerance
 
 - Check: `bao operator raft list-peers`.
@@ -359,11 +365,16 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: `kubectl -n services-observability logs vmalertmanager-alertmanager-0 -c config-reloader`.
 - Do: fix the `configRawYaml` of `vmalert.yaml` in git (`docs/alert-delivery.md`, Routing); the old config stays in force.
 
+### AlertmanagerClusterDegraded
+
+- Check: `kubectl -n services-observability get pods -l app.kubernetes.io/name=vmalertmanager -o wide`; Cilium drops on port 9094 between the two pods; `alertmanager_cluster_members` on each.
+- Do: A lost replica: the other keeps sending every alert; replace the node if it is dead (Loss of capacity). Both up but not members of one cluster: the gossip is blocked, fix the `vmalertmanager` network policy (ingress and egress 9094 TCP and UDP between the two).
+
 ### AlertmanagerAbsent
 
 - Check: `kubectl -n services-observability get vmalertmanager,pods`; the secrets `alertmanager-slack` and `alertmanager-deadmansswitch` (the pod does not start without them).
 - Do: seed the two secrets in OpenBao or fix the pod; read the Alertmanager init container log.
-- To stop Alertmanager on purpose (a test, a lab): `spec.replicaCount: 0` of the `VMAlertmanager` is ignored by the operator (it stays at 1). Set `spec.paused: true` first, then `kubectl scale statefulset vmalertmanager-<name> --replicas=0`; undo both. Measured: the alert fires 11 min after the scale-down and clears about 2 min after the restore.
+- To stop Alertmanager on purpose (a test, a lab): `spec.replicaCount: 0` of the `VMAlertmanager` is ignored by the operator (it stays at its minimum, one). Set `spec.paused: true` first, then `kubectl scale statefulset vmalertmanager-<name> --replicas=0`; undo both. Measured: the alert fires 11 min after the scale-down and clears about 2 min after the restore.
 
 ### AlertDeliveryProbe
 
@@ -474,7 +485,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 ### LonghornVolumeDegraded
 
 - Check: `kubectl -n longhorn-system get volumes.longhorn.io,replicas.longhorn.io`; the Longhorn UI is not exposed by default.
-- Do: Wait for a running rebuild; if none, check the node and disk of the missing replica (LonghornNodeNotReady).
+- Do: Wait for a running rebuild (Longhorn starts it 10 minutes after a node is lost); if none, check the node and disk of the missing replica (LonghornNodeNotReady) and replace a dead node with `task cluster-replace-node`. Degraded means fewer healthy replicas than wanted: with two wanted, one is left and one more loss faults the volume. Do not reboot or replace a second node meanwhile.
 
 ### LonghornVolumeFaulted
 
@@ -484,7 +495,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 ### LonghornNodeNotReady
 
 - Check: `kubectl -n longhorn-system get nodes.longhorn.io`; the manager pod on that node.
-- Do: Fix the node (NodeNotReady) or the manager pod.
+- Do: Fix the node (NodeNotReady: `task cluster-node-state`, then `task cluster-node-recover` or `task cluster-replace-node`) or the manager pod.
 
 ### LonghornDiskFilling
 
@@ -581,3 +592,45 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `kubectl -n services-observability logs sts/loki | grep -i 'compactor\|retention'`; the compactor ring (only one replica runs it).
 - Do: Fix the compactor error named in the log (bucket rights: DeleteObject on objects only, working directory space).
+
+## Loss of capacity
+
+The management cluster does not heal its nodes: OpenTofu built them, OpenTofu rebuilds them, and what Cluster API manages stays Cluster API's. A lost worker or control plane costs no customer interruption (spread, budgets, replicas: `scripts/check-ha.py`), and these alerts tell you that a person has to act. The commands run from the OpenAether-infra checkout, with the provider credentials of the cluster.
+
+Procedure, in this order:
+
+1. `task cluster-node-state PROVIDER=<provider> NODE=<node>` is read-only: what the provider says about the machine, whether the kubelet and the Talos port answer, the etcd membership.
+2. The provider says the machine runs but nothing answers (OVH shows it ACTIVE while dead, infra #371): `task cluster-node-recover PROVIDER=<provider> NODE=<node>`, a hard reboot through the provider API with a bounded wait. Read the serial console first if you want the cause: a hard reboot erases it.
+3. The machine is stopped, in error, absent, or the reboot did not bring it back: `task cluster-replace-node PROVIDER=<provider> NODE=<node>`. One node at a time, a capacity gate before anything is touched, the etcd member removed first for a control plane, the Node object deleted, the instance replaced through the same OpenTofu path as `task cluster-roll`, then wait for Ready, uncordon and verify.
+4. A whole zone is down: `task failure-domain-check PROVIDER=<provider>` says what the loss costs. If the provider reports the zone down, wait; replacing nodes in a zone that is not coming back only helps once the provider is back.
+5. Quorum is gone for good (two of three control planes) or the data is lost: `task dr-restore-plan PROVIDER=<provider>`, the last resort (`docs/disaster-recovery.md`).
+
+Do not, whatever the alert:
+
+- start `task cluster-roll` or an upgrade while a node is down (the gates refuse; do not bypass them);
+- run `tofu destroy` or `tofu apply -replace` by hand on more than one node, or on a control plane before its etcd member is removed;
+- delete a control-plane Node object before its etcd member is removed;
+- delete the PVC of a pod whose node is only unreachable: local-path data (OpenBao, VictoriaMetrics, Loki) lives on that node;
+- restore a backup to repair a lost replica: the replicas resync on their own.
+
+### ControlPlaneMemberMissing
+
+- Check: `talosctl etcd members` through a healthy control plane; `task cluster-node-state PROVIDER=<provider> NODE=<node>`.
+- Do: steps 1 to 3 above. The cluster has quorum with two of three: one more loss stops the API, so do not touch another control plane, roll or upgrade.
+- Do not: `task dr-restore-plan` while two members are up.
+
+### FailureDomainLost
+
+- Check: the provider status page and API for the zone; `kubectl get nodes -L topology.kubernetes.io/zone`; `task failure-domain-check PROVIDER=<provider>`.
+- Do: step 4 above. The pods of the zone are rescheduled after 5 minutes onto the other zones; `WorkloadReplicasBelowDesired` shows what did not fit (`ClusterCannotLoseWorker` says it will not).
+- Do not: replace the nodes of a zone the provider reports down; run `task cluster-roll`.
+
+### WorkloadReplicasBelowDesired
+
+- Check: `kubectl -n <namespace> get pods -o wide`; `kubectl describe` the Pending one (capacity, or a volume pinned to a dead node).
+- Do: a dead node: steps 1 to 3 above. Capacity: see ClusterCannotLoseWorker. A rollout that stalls: `kubectl -n <namespace> rollout status`.
+
+### ClusterCannotLoseWorker
+
+- Check: `kubectl top nodes`; the CPU requests per node (`kubectl describe nodes | grep -A8 Allocated`).
+- Do: add a worker (the grow-nodes path of OpenAether-infra, `docs/capacity.md`) or lower requests. `task cluster-roll` refuses to start with the same arithmetic.

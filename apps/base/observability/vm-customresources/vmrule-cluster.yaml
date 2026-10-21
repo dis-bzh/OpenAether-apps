@@ -21,28 +21,32 @@ spec:
         #    ACTIVE: nothing in OpenTofu or the provider console says a word.
         - alert: NodeUnreachable
           expr: kube_node_status_condition{condition="Ready",status="unknown"} == 1
-          for: 5m
+          for: 3m
           labels:
             severity: critical
           annotations:
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodeunreachable"
-            summary: "Node {{ $labels.node }} unreachable (kubelet silent > 5 min)"
+            summary: "Node {{ $labels.node }} unreachable (kubelet silent > 3 min)"
             description: >-
-              The kubelet no longer reports. The VM may still be ACTIVE on the
-              hypervisor. Check the serial console BEFORE recovering, that trace
-              is the only way to learn why it died; recovery is a HARD reboot
-              through the provider API.
+              The kubelet no longer reports, for longer than any reboot measured (85-115 s). The VM may still be
+              ACTIVE on the hypervisor. Run task cluster-node-state PROVIDER=<provider> NODE={{ $labels.node }}
+              (OpenAether-infra), read the serial console BEFORE recovering, then task cluster-node-recover (hard
+              reboot through the provider API) or, if the machine is gone, task cluster-replace-node. Pods of a dead
+              node are evicted only after 5 minutes.
 
         # 2) Node Ready=false — reported, but unhealthy (disk, runtime, CNI).
         - alert: NodeNotReady
           expr: kube_node_status_condition{condition="Ready",status="true"} == 0
-          for: 10m
+          for: 5m
           labels:
             severity: critical
           annotations:
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodenotready"
-            summary: "Node {{ $labels.node }} NotReady for 10 min"
-            description: "talosctl -n <node> dmesg, and kubectl describe node {{ $labels.node }}."
+            summary: "Node {{ $labels.node }} NotReady for 5 min"
+            description: >-
+              kubectl describe node {{ $labels.node }}, talosctl -n <node> dmesg. If the node does not come back:
+              task cluster-node-state, then task cluster-replace-node (OpenAether-infra). Do not run task cluster-roll
+              while a node is NotReady: it refuses to start.
 
         # 3) Pressure: still Ready, already evicting. Precedes the DEV1-M OOM
         #    cascade that took down two workers at once.

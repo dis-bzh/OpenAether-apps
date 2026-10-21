@@ -58,6 +58,10 @@ spec:
     # ClusterRole lists Secrets cluster-wide, which returns their data, and no rule, scrape or dashboard reads
     # kube_secret_* or kube_configmap_*. A list REPLACES the default: a collector added upstream later must be
     # added here.
+    # The node labels the loss alerts read: the failure domain of each node (topology.kubernetes.io/zone, set by the
+    # Talos machine config) for FailureDomainLost. Only this key: other labels can carry free text.
+    metricLabelsAllowlist:
+      - nodes=[topology.kubernetes.io/zone]
     collectors:
       - certificatesigningrequests
       - cronjobs

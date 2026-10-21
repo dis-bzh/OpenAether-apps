@@ -66,8 +66,9 @@ spec:
   podDisruptionBudget:
     minAvailable: 1
 ---
-# Single replica: an HA Alertmanager needs gossip between peers, which buys
-# nothing while there is no receiver to deduplicate towards.
+# Two replicas on two workers (0.4.0 M4): a lost worker must not silence the alerts that announce it. The peers gossip
+# on :9094 (networkpolicy.yaml) so a notification is sent once; VMAlert's notifier is the headless Service, which lists
+# the Ready replicas only. Whether both replicas see each other is checked by AlertmanagerClusterDegraded.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMAlertmanager
 metadata:
@@ -80,7 +81,18 @@ spec:
   # Pinned (apps #117): the operator's default moves with every operator bump (0.68.1 defaults to v0.31.0).
   image:
     tag: v0.31.0
-  replicaCount: 1
+  replicaCount: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: vmalertmanager
+            topologyKey: kubernetes.io/hostname
+  podDisruptionBudget:
+    minAvailable: 1
   # Kyverno reads the container level (#47). The operator copies this flat block onto every container
   # (pod and container fields share it: spec.securityContext, not containerSecurityContext).
   # runAsUser is explicit because these images run as root and runAsNonRoot alone makes the container fail to start.

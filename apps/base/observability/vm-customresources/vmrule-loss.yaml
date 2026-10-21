@@ -1,0 +1,102 @@
+# Loss of capacity: a node, a control plane, a zone or a replica is gone (0.4.0 M4).
+#
+# The management cluster does not heal its nodes (OpenTofu built them, OpenTofu rebuilds them): these alerts say that
+# a human has to act, and each runbook names the command (docs/runbooks.md, "Loss of capacity"). Thresholds come from
+# lab 15c: a worker reboot is Ready again in 85 s, a control plane in 92-115 s, a powered-off worker 41 s after power
+# on; Kubernetes evicts the pods of a dead node only after 5 minutes. So 3 minutes is longer than any reboot and
+# 15 minutes is longer than a reschedule. kube_node_role and the zone label of kube_node_labels have not been read on
+# a cluster (scripts/dev/alert-metrics.yaml).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: loss-of-capacity-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: loss-of-capacity
+spec:
+  groups:
+    - name: openaether-loss
+      interval: 1m
+      rules:
+        # One control plane gone: the API and etcd still work with two of three, but one more loss stops the cluster.
+        - alert: ControlPlaneMemberMissing
+          expr: |
+            ((count(up{job=~".*etcd.*"} == 1) or vector(0)) < on() count(kube_node_role{role="control-plane"}))
+              and on() (count(kube_node_role{role="control-plane"}) >= 3)
+          for: 3m
+          labels:
+            severity: critical
+            component: control-plane
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              controlplanemembermissing"
+            summary: "A control plane is missing: etcd answers on fewer members than there are control-plane nodes"
+            description: >-
+              The cluster still has quorum with two of three, one more loss stops it. Run, from the OpenAether-infra
+              checkout: task cluster-node-state PROVIDER=<provider> NODE=<node>, then task cluster-node-recover or
+              task cluster-replace-node. Do not roll or upgrade meanwhile.
+
+        # A failure domain (zone) without a Ready node. The zone label is set by the Talos machine config.
+        - alert: FailureDomainLost
+          expr: |
+            count by (label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=""})
+              unless on (label_topology_kubernetes_io_zone)
+            count by (label_topology_kubernetes_io_zone) (
+              kube_node_labels{label_topology_kubernetes_io_zone!=""}
+                and on (node) (kube_node_status_condition{condition="Ready",status="true"} == 1))
+          for: 2m
+          labels:
+            severity: critical
+            component: failure-domain
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#failuredomainlost"
+            summary: "Zone {{ $labels.label_topology_kubernetes_io_zone }} has no Ready node"
+            description: >-
+              Every node of the zone is NotReady or unreachable: a provider incident in that zone, or a power-off.
+              Check the provider status first, then task failure-domain-check PROVIDER=<provider> from the
+              OpenAether-infra checkout. Do not replace the nodes of a zone that the provider says is down.
+
+        # Pods missing against what their Deployment or StatefulSet asks for: a reschedule that does not happen.
+        - alert: WorkloadReplicasBelowDesired
+          expr: |
+            (kube_deployment_spec_replicas{namespace=~"(foundation|services)-.*|kube-system|kyverno|cnpg-system|cert-manager"}
+              - kube_deployment_status_replicas_available > 0)
+            or
+            (kube_statefulset_replicas{namespace=~"(foundation|services)-.*|kube-system|kyverno|cnpg-system|cert-manager"}
+              - kube_statefulset_status_replicas_ready > 0)
+          for: 15m
+          labels:
+            severity: warning
+            component: workload
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              workloadreplicasbelowdesired"
+            summary: >-
+              {{ $labels.namespace }}/{{ $labels.deployment }}{{ $labels.statefulset }}: {{ $value }} replica(s) short
+            description: >-
+              Longer than the 5 minute eviction toleration plus a reschedule: the pod is Pending (capacity, a volume
+              pinned to a dead node) or its node is gone. kubectl -n {{ $labels.namespace }} get pods -o wide, then
+              kubectl describe the Pending one. If a node is dead: task cluster-replace-node.
+
+        # The cluster could not absorb the loss of its biggest worker: the next loss is an outage and the roll gate
+        # refuses.
+        - alert: ClusterCannotLoseWorker
+          expr: |
+            sum(kube_pod_container_resource_requests{resource="cpu"}
+                  unless on (node) kube_node_role{role="control-plane"}
+                  and on (namespace, pod) (kube_pod_status_phase{phase="Running"} == 1))
+              > (sum(kube_node_status_allocatable{resource="cpu"}
+                    unless on (node) kube_node_role{role="control-plane"})
+                  - max(kube_node_status_allocatable{resource="cpu"}
+                    unless on (node) kube_node_role{role="control-plane"}))
+          for: 30m
+          labels:
+            severity: warning
+            component: capacity
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#clustercannotloseworker"
+            summary: "The CPU requests of the workers do not fit on the workers left after losing the biggest one"
+            description: >-
+              A worker loss would leave pods Pending, and task cluster-roll refuses to start (its capacity gate). Add a
+              worker (grow-nodes in OpenAether-infra) or lower requests. Sizing: docs/capacity.md in OpenAether-infra.

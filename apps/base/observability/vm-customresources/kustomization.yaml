@@ -26,6 +26,7 @@ resources:
   - vmrule-restore-test.yaml
   - vmrule-database.yaml
   - vmrule-cluster.yaml
+  - vmrule-loss.yaml
   - vmrule-gateway.yaml
   - vmrule-resources.yaml
   - vmrule-storage.yaml

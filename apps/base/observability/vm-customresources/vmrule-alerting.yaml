@@ -64,6 +64,24 @@ spec:
             summary: "Alertmanager runs an old configuration: the last reload failed"
             description: >-
               The routes and receivers in force are not the ones in git. Read the config-reloader and alertmanager logs.
+        # The two replicas must see each other: alone, each would notify on its own and a lost one could not be told
+        # from a gossip that the network policy blocks. kube_statefulset_replicas is the number asked for.
+        - alert: AlertmanagerClusterDegraded
+          expr: |
+            min(alertmanager_cluster_members)
+              < scalar(kube_statefulset_replicas{namespace="services-observability",
+                statefulset="vmalertmanager-alertmanager"})
+          for: 10m
+          labels:
+            severity: warning
+            component: alerting
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              alertmanagerclusterdegraded"
+            summary: "Alertmanager sees fewer peers than replicas: one is down or the gossip is blocked"
+            description: >-
+              While one replica is down the other still sends every alert. Read kubectl -n services-observability
+              get pods -l app.kubernetes.io/name=vmalertmanager and the Cilium drops on port 9094.
         - alert: AlertmanagerAbsent
           expr: absent(alertmanager_build_info)
           for: 10m

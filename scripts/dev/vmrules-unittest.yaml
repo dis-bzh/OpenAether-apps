@@ -937,3 +937,143 @@ tests:
     alert_rule_test:
       - {eval_time: 3h, alertname: LonghornRestoreTestNeverReported, exp_alerts: []}
       - {eval_time: 3h, alertname: LonghornCanaryNotWriting, exp_alerts: []}
+  # --- 0.4.0 M4: loss of capacity. Synthetic series; the thresholds come from lab 15c (docs/resilience.md).
+  - name: a node whose kubelet is silent for longer than a reboot is unreachable, a short silence is not
+    interval: 1m
+    input_series:
+      - series: 'kube_node_status_condition{node="w1", condition="Ready", status="unknown"}'
+        values: '1x30'
+      - series: 'kube_node_status_condition{node="w2", condition="Ready", status="unknown"}'
+        values: '1 1 1 0x27'   # a reboot: silent for two minutes
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: NodeUnreachable
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: NodeUnreachable
+        exp_alerts:
+          - exp_labels: {node: w1, condition: Ready, status: unknown, severity: critical}
+  - name: a control plane missing from etcd is reported, and a one-node control plane is not
+    interval: 1m
+    input_series:
+      - series: 'up{job="etcd", instance="cp-0"}'
+        values: '1x30'
+      - series: 'up{job="etcd", instance="cp-1"}'
+        values: '1x30'
+      - series: 'up{job="etcd", instance="cp-2"}'
+        values: '0x30'
+      - series: 'kube_node_role{node="cp-0", role="control-plane"}'
+        values: '1x30'
+      - series: 'kube_node_role{node="cp-1", role="control-plane"}'
+        values: '1x30'
+      - series: 'kube_node_role{node="cp-2", role="control-plane"}'
+        values: '1x30'
+    alert_rule_test:
+      - {eval_time: 2m, alertname: ControlPlaneMemberMissing, exp_alerts: []}
+      - eval_time: 10m
+        alertname: ControlPlaneMemberMissing
+        exp_alerts:
+          - exp_labels: {severity: critical, component: control-plane}
+  - name: a single control plane that is up is not a member missing
+    interval: 1m
+    input_series:
+      - series: 'up{job="etcd", instance="cp-0"}'
+        values: '1x30'
+      - series: 'kube_node_role{node="cp-0", role="control-plane"}'
+        values: '1x30'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: ControlPlaneMemberMissing, exp_alerts: []}
+  - name: a zone whose nodes are all NotReady is lost, a zone with one Ready node is not
+    interval: 1m
+    input_series:
+      - series: 'kube_node_labels{node="w1", label_topology_kubernetes_io_zone="zone-a"}'
+        values: '1x30'
+      - series: 'kube_node_labels{node="w2", label_topology_kubernetes_io_zone="zone-b"}'
+        values: '1x30'
+      - series: 'kube_node_labels{node="w3", label_topology_kubernetes_io_zone="zone-b"}'
+        values: '1x30'
+      - series: 'kube_node_status_condition{node="w1", condition="Ready", status="true"}'
+        values: '0x30'
+      - series: 'kube_node_status_condition{node="w2", condition="Ready", status="true"}'
+        values: '0x30'
+      - series: 'kube_node_status_condition{node="w3", condition="Ready", status="true"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FailureDomainLost
+        exp_alerts:
+          - exp_labels: {label_topology_kubernetes_io_zone: zone-a, severity: critical, component: failure-domain}
+  - name: a Deployment short of replicas for longer than a reschedule is reported
+    interval: 1m
+    input_series:
+      - series: 'kube_deployment_spec_replicas{namespace="services-identity", deployment="zitadel"}'
+        values: '2x40'
+      - series: 'kube_deployment_status_replicas_available{namespace="services-identity", deployment="zitadel"}'
+        values: '1x40'
+      - series: 'kube_deployment_spec_replicas{namespace="services-identity", deployment="zitadel-login"}'
+        values: '2x40'
+      - series: 'kube_deployment_status_replicas_available{namespace="services-identity", deployment="zitadel-login"}'
+        values: '1 1 1 2x37'   # back within the toleration
+    alert_rule_test:
+      - {eval_time: 5m, alertname: WorkloadReplicasBelowDesired, exp_alerts: []}
+      - eval_time: 30m
+        alertname: WorkloadReplicasBelowDesired
+        exp_alerts:
+          - exp_labels: {namespace: services-identity, deployment: zitadel, severity: warning, component: workload}
+  - name: the workers cannot absorb the loss of the biggest one when their requests exceed the rest
+    interval: 1m
+    input_series:
+      - series: 'kube_node_role{node="cp-0", role="control-plane"}'
+        values: '1x60'
+      - series: 'kube_node_status_allocatable{node="cp-0", resource="cpu"}'
+        values: '4x60'
+      - series: 'kube_node_status_allocatable{node="w1", resource="cpu"}'
+        values: '4x60'
+      - series: 'kube_node_status_allocatable{node="w2", resource="cpu"}'
+        values: '4x60'
+      - series: 'kube_node_status_allocatable{node="w3", resource="cpu"}'
+        values: '4x60'
+      - series: 'kube_pod_container_resource_requests{node="w1", namespace="a", pod="p1", resource="cpu"}'
+        values: '5x60'
+      - series: 'kube_pod_container_resource_requests{node="w2", namespace="a", pod="p2", resource="cpu"}'
+        values: '4x60'
+      - series: 'kube_pod_status_phase{namespace="a", pod="p1", phase="Running"}'
+        values: '1x60'
+      - series: 'kube_pod_status_phase{namespace="a", pod="p2", phase="Running"}'
+        values: '1x60'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: ClusterCannotLoseWorker, exp_alerts: []}
+      - eval_time: 45m
+        alertname: ClusterCannotLoseWorker
+        exp_alerts:
+          - exp_labels: {severity: warning, component: capacity}
+  - name: Alertmanager replicas that see fewer peers than there are replicas
+    interval: 1m
+    input_series:
+      - series: 'alertmanager_cluster_members{pod="vmalertmanager-alertmanager-0"}'
+        values: '2x10 1x40'
+      - series: 'kube_statefulset_replicas{namespace="services-observability", statefulset="vmalertmanager-alertmanager"}'
+        values: '2x50'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: AlertmanagerClusterDegraded, exp_alerts: []}
+      - eval_time: 40m
+        alertname: AlertmanagerClusterDegraded
+        exp_alerts:
+          - exp_labels: {severity: warning, component: alerting}
+  - name: OpenBao with two unsealed replicas of three is reported, with three it is not
+    interval: 1m
+    input_series:
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-0"}'
+        values: '1x30'
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-1"}'
+        values: '1x30'
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-2"}'
+        values: '1x5 0x25'
+      - series: 'kube_statefulset_replicas{namespace="foundation-vault", statefulset="openbao"}'
+        values: '3x30'
+    alert_rule_test:
+      - {eval_time: 4m, alertname: OpenBaoReplicasMissing, exp_alerts: []}
+      - eval_time: 20m
+        alertname: OpenBaoReplicasMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, component: openbao}

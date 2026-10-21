@@ -15,6 +15,9 @@ alertmanager_build_info:
 alertmanager_config_last_reload_successful:
   source: alertmanager
   status: existing
+alertmanager_cluster_members:
+  source: alertmanager
+  status: UNVERIFIED
 alertmanager_notification_requests_failed_total:
   source: alertmanager
   status: existing
@@ -126,6 +129,12 @@ kube_job_failed:
 kube_job_status_failed:
   source: kube-state-metrics
   status: existing
+kube_node_labels:
+  source: kube-state-metrics
+  status: UNVERIFIED
+kube_node_role:
+  source: kube-state-metrics
+  status: UNVERIFIED
 kube_node_status_allocatable:
   source: kube-state-metrics
   status: existing

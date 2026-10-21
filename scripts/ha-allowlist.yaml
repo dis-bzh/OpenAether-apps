@@ -82,7 +82,4 @@ pdb_exception:
       is only preferred, so a drain of a node holding two of them would wait forever under minAvailable 2.
       A drain that takes two at once rejects pushes (replication factor 2) until one returns; Alloy
       retries (lab 15c: 301 of 301 lines kept over a 240 s outage).
-known_gaps:
-  - workload: VMAlertmanager/services-observability/alertmanager#vmalertmanager
-    reason: >-
-      single replica: a node loss silences every alert
+known_gaps: []
