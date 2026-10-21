@@ -89,13 +89,26 @@ spec:
       - storageclasses
       - validatingwebhookconfigurations
       - volumeattachments
-    # ⚠️ ONE replica, deliberately. `replicaCount: 2` used to sit here and this
-    # chart's key is `replicas` — Helm ignored the value in silence and the
-    # Deployment ran at 1 for as long as anyone had been reading it as HA.
-    # Two is also the wrong answer: without sharding, both pods export the same
-    # series under different `pod` labels, so every `sum()` in the alert rules
-    # would double. A brief gap while a node drains is the cheaper failure.
-    replicas: 1
+    # TWO replicas (apps #156, lab 21): with one pod, a worker loss that took it left every kube_* alert blind. The
+    # chart key is `replicas` (`replicaCount` is ignored in silence). Both pods export the SAME series, so the scrape
+    # (vmscapes.yaml) removes the labels that tell the pods apart and VMCluster deduplicates (vmcluster.yaml): no sum()
+    # or count() in the rules doubles. Not autosharding: a shard holds only a part of the objects, so losing one
+    # blinds that part and nothing is gained. KubeStateMetricsDuplicated (vmrule-cluster.yaml) fires if the dedup
+    # breaks.
+    replicas: 2
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: kube-state-metrics
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: kube-state-metrics
     resources:
       requests:
         cpu: 10m

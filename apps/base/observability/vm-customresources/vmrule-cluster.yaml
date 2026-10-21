@@ -259,3 +259,20 @@ spec:
               Every node, pod and backup rule is built on this metric. While it
               is missing they evaluate to nothing, which is indistinguishable
               from "nothing wrong".
+
+        # Two kube-state-metrics pods export the same series and the platform keeps one of each (scrape relabel,
+        # VMCluster dedup, apps #156). If that breaks, every sum() and count() on a kube_* metric doubles: one node
+        # then has two kube_node_info series.
+        - alert: KubeStateMetricsDuplicated
+          expr: max(count by (node) (kube_node_info)) > 1
+          for: 15m
+          labels:
+            severity: warning
+            component: monitoring
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              kubestatemetricsduplicated"
+            summary: "kube-state-metrics series are counted twice: a node has more than one kube_node_info series"
+            description: >-
+              The two kube-state-metrics pods are no longer merged into one series, so alerts that count or sum
+              kube_* metrics are wrong (replicas, nodes, requests). See the runbook.

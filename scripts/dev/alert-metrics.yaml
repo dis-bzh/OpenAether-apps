@@ -129,6 +129,9 @@ kube_job_failed:
 kube_job_status_failed:
   source: kube-state-metrics
   status: existing
+kube_node_info:
+  source: kube-state-metrics
+  status: existing
 kube_node_role:
   source: kube-state-metrics
   status: existing

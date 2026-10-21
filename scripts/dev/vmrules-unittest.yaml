@@ -1109,3 +1109,27 @@ tests:
         alertname: OpenBaoReplicasMissing
         exp_alerts:
           - exp_labels: {severity: warning, component: openbao}
+  - name: a node counted twice by kube-state-metrics is reported, one series per node is not
+    interval: 1m
+    input_series:
+      - series: 'kube_node_info{node="w1", pod="ksm-a"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="w1", pod="ksm-b"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="w2"}'
+        values: '1x40'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: KubeStateMetricsDuplicated, exp_alerts: []}
+      - eval_time: 30m
+        alertname: KubeStateMetricsDuplicated
+        exp_alerts:
+          - exp_labels: {severity: warning, component: monitoring}
+  - name: one series per node, from two merged kube-state-metrics pods, is not reported
+    interval: 1m
+    input_series:
+      - series: 'kube_node_info{node="w1"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="w2"}'
+        values: '1x40'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: KubeStateMetricsDuplicated, exp_alerts: []}

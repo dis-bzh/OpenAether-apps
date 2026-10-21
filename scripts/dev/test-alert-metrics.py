@@ -72,12 +72,13 @@ def main():
     for b in bad:
         print("FAIL", b)
     if "--selftest" in sys.argv:
-        some = next(m for m, v in catalogue.items() if v["status"] == "UNVERIFIED")
+        some = next((m for m, v in catalogue.items() if v["status"] == "UNVERIFIED"), "made_up_unverified")  # none left is the goal
         cases = {
             "metric not catalogued": lambda r, c, s, d: c.pop("kube_pod_status_phase"),
             "stale catalogue entry": lambda r, c, s, d: c.update({"made_up_metric": {"source": "cnpg", "status": "existing"}}) or r,
             "scrape deleted": lambda r, c, s, d: s.discard(("VMPodScrape", "istio-gateway")),
-            "unverified not documented": lambda r, c, s, d: d.replace(some, ""),
+            "unverified not documented": lambda r, c, s, d: (
+                c.setdefault(some, {"source": "cnpg", "status": "UNVERIFIED"}), r.add(some), d.replace(some, ""))[-1],
             "bad status": lambda r, c, s, d: c["up"].update(status="maybe"),
         }
         for name, f in cases.items():

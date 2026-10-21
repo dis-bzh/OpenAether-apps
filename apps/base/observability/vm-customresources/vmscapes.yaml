@@ -79,6 +79,17 @@ spec:
       # (verified locally 2026-07-29: this is why BackupJobFailed, which selects
       # namespace=~"foundation-.*", could never have fired).
       honorLabels: true
+      # Two kube-state-metrics pods export the SAME series (apps #156). What tells them apart is dropped so that
+      # VMCluster deduplicates them (-dedup.minScrapeInterval, vmcluster.yaml) and no sum() or count() doubles:
+      # the target label `pod` (a series that names a pod keeps its own, honorLabels) and, on the scraped series
+      # only, `instance`. `up` is not touched by metricRelabelConfigs, so each pod keeps its own `up` series.
+      relabelConfigs:
+        - action: replace
+          targetLabel: pod
+          replacement: ""
+      metricRelabelConfigs:
+        - action: labeldrop
+          regex: instance
 
 # ── node-exporter ──────────────────────────────────────────────────
 ---

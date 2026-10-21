@@ -36,13 +36,6 @@ single_replica:
   - workload: Deployment/local-path-storage/local-path-provisioner
     reason: it only creates and deletes the host directories of local-path volumes
     loss: a NEW local-path PVC stays Pending until it is back; existing volumes and their pods are untouched
-  - workload: Deployment/services-observability/kube-state-metrics
-    reason: >-
-      a second copy exports every kube_* series twice unless sharded; it has a PodDisruptionBudget so a
-      drain is not blocked
-    loss: >-
-      the kube_* series have a gap and the alerts built on them are blind until it is back
-      (KubeStateMetricsAbsent)
   - workload: Deployment/services-observability/victoria-metrics-operator
     reason: the operator works through a leader lease, a second replica would only wait for it
     loss: >-

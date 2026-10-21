@@ -16,8 +16,10 @@ metadata:
     openaether.io/component: loss-of-capacity
 spec:
   groups:
+    # 30 s, not 1 m: the evaluation lag is part of the 4-7 minutes the first page took in lab 21 (apps #156); the `for`
+    # windows stay (a CP reboot is 92-115 s, the up == 0 span of a rebooting node is about as long).
     - name: openaether-loss
-      interval: 1m
+      interval: 30s
       rules:
         # One control plane gone: the API and etcd still work with two of three, but one more loss stops the cluster.
         - alert: ControlPlaneMemberMissing
@@ -37,10 +39,10 @@ spec:
               checkout: task cluster-node-state PROVIDER=<provider> NODE=<node>, then task cluster-node-recover or
               task cluster-replace-node. Do not roll or upgrade meanwhile.
 
-        # The same loss seen WITHOUT kube-state-metrics, and sooner. NodeUnreachable and every other kube_* rule are blind
-        # while the single kube-state-metrics pod sits on the lost node (lab 21: a worker powered off for 5 minutes, no node
-        # alert until the pod was re-created), and even with it alive the Ready condition is seen about 80 s after the loss
-        # (up == 0 is seen at 1 min 51 s, NodeUnreachable only pending at 3 min 43 s). So this one fires on the kubelet
+        # The same loss seen WITHOUT kube-state-metrics, and sooner. Lab 21 (kube-state-metrics was ONE pod then): a
+        # worker powered off for 5 minutes with the pod on it gave no node alert until the pod was re-created, and even
+        # with it alive the Ready condition is seen about 80 s after the loss (up == 0 is seen at 1 min 51 s,
+        # NodeUnreachable only pending at 3 min 43 s). Two pods now (apps #156), but this one still fires on the kubelet
         # scrape alone, up == 0 for 3 minutes, and a node loss is paged twice: this alert first, NodeUnreachable later.
         - alert: NodeScrapeDown
           expr: |
@@ -53,20 +55,22 @@ spec:
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodescrapedown"
             summary: "Node {{ $labels.node }}: its kubelet is not scraped for 3 min (kube-state-metrics may be blind)"
             description: >-
-              The kubelet of {{ $labels.node }} does not answer the scrape (kube-state-metrics is one pod and may sit on
-              the lost node, so NodeUnreachable can be late or silent). Same procedure as NodeUnreachable: task cluster-node-state
-              PROVIDER=<provider> NODE={{ $labels.node }} (OpenAether-infra), then task cluster-node-recover or
-              task cluster-replace-node. Do not roll or upgrade meanwhile.
+              The kubelet of {{ $labels.node }} does not answer the scrape (NodeUnreachable comes later, from the Ready
+              condition). Same procedure as NodeUnreachable: task cluster-node-state PROVIDER=<provider>
+              NODE={{ $labels.node }} (OpenAether-infra), then task cluster-node-recover or task cluster-replace-node.
+              Do not roll or upgrade meanwhile.
 
-        # A failure domain (zone) none of whose kubelets answers the scrape. Built on the kubelet scrape (the zone label is
-        # copied from the Node by the VMNodeScrape) and NOT on kube-state-metrics: lab 21 showed kube-state-metrics, one pod,
-        # blind while it sat in the lost zone, and a Ready condition that is seen 80 s after the loss plus the scrape lag,
-        # which did not fit the 3 minutes the drill asks for.
+        # A failure domain (zone) none of whose kubelets answers the scrape. Built on the kubelet scrape (the zone label
+        # is copied from the Node by the VMNodeScrape) and NOT on kube-state-metrics: lab 21 showed kube-state-metrics,
+        # then one pod, blind while it sat in the lost zone, and a Ready condition that is seen 80 s after the loss
+        # plus the scrape lag, which did not fit the 3 minutes the drill asks for.
         - alert: FailureDomainLost
           expr: |
-            count by (topology_kubernetes_io_zone) (up{job="services-observability/kubelet", topology_kubernetes_io_zone!=""})
+            count by (topology_kubernetes_io_zone)
+              (up{job="services-observability/kubelet", topology_kubernetes_io_zone!=""})
               unless on (topology_kubernetes_io_zone)
-            count by (topology_kubernetes_io_zone) (up{job="services-observability/kubelet", topology_kubernetes_io_zone!=""} == 1)
+            count by (topology_kubernetes_io_zone)
+              (up{job="services-observability/kubelet", topology_kubernetes_io_zone!=""} == 1)
           # No `for`: the condition is "no kubelet of the zone answers", which a blip does not produce, and the first
           # drill measured 3 min 11 s from power-off to firing with `for: 1m` (the 3 minutes of the criterion).
           labels:

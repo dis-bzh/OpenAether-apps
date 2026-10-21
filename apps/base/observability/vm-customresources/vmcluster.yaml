@@ -78,6 +78,10 @@ spec:
     image:
       tag: v1.136.0-cluster
     replicaCount: 2
+    extraArgs:
+      # Keeps one sample per series per 30 s (the scrape interval): the two vmagent replicas and the two
+      # kube-state-metrics pods write the same series (apps #156). Never above the shortest scrape interval.
+      dedup.minScrapeInterval: 30s
     securityContext:
       runAsUser: 65534
       runAsGroup: 65534
@@ -131,6 +135,10 @@ spec:
     image:
       tag: v1.136.0-cluster
     replicaCount: 2
+    extraArgs:
+      # Keeps one sample per series per 30 s (the scrape interval): the two vmagent replicas and the two
+      # kube-state-metrics pods write the same series (apps #156). Never above the shortest scrape interval.
+      dedup.minScrapeInterval: 30s
     securityContext:
       runAsUser: 65534
       runAsGroup: 65534
