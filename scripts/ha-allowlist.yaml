@@ -83,12 +83,6 @@ pdb_exception:
       A drain that takes two at once rejects pushes (replication factor 2) until one returns; Alloy
       retries (lab 15c: 301 of 301 lines kept over a 240 s outage).
 known_gaps:
-  - workload: Deployment/foundation-pki-management/external-secrets
-    reason: >-
-      single replica: a node loss stops secret sync for 5+ minutes
-  - workload: Deployment/foundation-pki-management/external-secrets-webhook
-    reason: >-
-      single replica: its loss blocks the creation of every ExternalSecret
   - workload: Deployment/kyverno/kyverno-admission-controller
     reason: >-
       single replica: its loss blocks pod creation (apps #82)
