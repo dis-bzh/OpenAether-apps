@@ -34,8 +34,8 @@ spec:
       # alternative is a mesh control plane that pins a node forever.
       replicaCount: 2
       autoscaleEnabled: false
-      # Two istiod on two different workers (0.4.0 M4, scripts/check-ha.py). ScheduleAnyway: with one worker left the second
-      # replica still starts. The budget (pdb) is in this brick.
+      # Two istiod on two different workers (0.4.0 M4, scripts/check-ha.py). ScheduleAnyway: with one worker left the
+      # second replica still starts. The budget (pdb) is in this brick.
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname

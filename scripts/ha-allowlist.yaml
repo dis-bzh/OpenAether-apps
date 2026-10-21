@@ -51,6 +51,11 @@ single_replica:
   - workload: Deployment/longhorn-system/longhorn-driver-deployer
     reason: it deploys the CSI sidecars once and then idles
     loss: nothing while the CSI sidecars run; they are restarted only at a Longhorn upgrade
+  - workload: Deployment/longhorn-system/longhorn-ui
+    reason: only the web UI; volumes, replicas and the CSI sidecars do not depend on it
+    loss: >-
+      the Longhorn web UI is unavailable until it is rescheduled; kubectl and the Longhorn CRDs keep
+      working
   - workload: Deployment/foundation-pki-management/external-secrets-cert-controller
     reason: it rotates the webhook serving certificate, which stays valid for months
     loss: no rotation of the ESO webhook certificate while it is away; secrets keep syncing
@@ -99,5 +104,3 @@ known_gaps:
   - workload: Deployment/kube-system/metrics-server
     reason: >-
       single replica: its loss stops the HorizontalPodAutoscaler of the Gateway
-  - workload: Deployment/longhorn-system/longhorn-ui
-    reason: two replicas without spread or PodDisruptionBudget
