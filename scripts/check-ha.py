@@ -15,6 +15,9 @@ VMAlert, VMAlertmanager or CNPG Cluster) asserts:
   5. nothing can strand a pod on a 3-worker cluster: no required podAffinity, no required hostname anti-affinity or hard
      (DoNotSchedule) hostname spread for more replicas than 2 unless listed under `strict_spread`, no nodeSelector but the OS one.
 
+  6. (warning only) when replicas >= 2: a zone term (topology.kubernetes.io/zone) next to the hostname one; the list of workloads
+     without one is printed as `warn:` lines and a coverage line (apps #155, lab 21: both replicas can sit in one zone).
+
 The allow-list cannot rot: an entry for a workload that is no longer single-replica, or that no longer exists, fails the
 check, and so does an entry without a reason. `known_gaps` lists what is not fixed yet and must shrink to nothing.
 It also prints the CPU requests of what it renders (the shipped 4 x 4 vCPU examples must stay roll-able, 3 x 4 passes with ~0.45 vCPU of margin: infra capacity gate).
@@ -33,6 +36,7 @@ import yaml
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 HOST = "kubernetes.io/hostname"
+ZONE = "topology.kubernetes.io/zone"
 ALLOWLIST = REPO / "scripts/ha-allowlist.yaml"
 WORKLOADS = ("Deployment", "StatefulSet")
 CPU_BUDGET_M = 3300  # rendered Deployment/StatefulSet CPU requests, in millicores; raising it is a capacity decision
@@ -138,14 +142,35 @@ def allowed(spec, r):
     return r  # neither set: the API default is minAvailable 1 only for pdbs created by controllers; treat as unbounded
 
 
-def spreads(w):
+def spreads(w, key=HOST):
+    """Does the workload spread its own pods over this topology key (a spread constraint or an anti-affinity term)?"""
     for c in w["spread"]:
-        if c.get("topologyKey") == HOST and selects(c.get("labelSelector"), w["labels"]):
+        if c.get("topologyKey") == key and selects(c.get("labelSelector"), w["labels"]):
             return True
     pa = w["affinity"].get("podAntiAffinity", {})
     terms = [t for t in pa.get("requiredDuringSchedulingIgnoredDuringExecution", [])] + \
             [t["podAffinityTerm"] for t in pa.get("preferredDuringSchedulingIgnoredDuringExecution", [])]
-    return any(t.get("topologyKey") == HOST and selects(t.get("labelSelector"), w["labels"]) for t in terms)
+    return any(t.get("topologyKey") == key and selects(t.get("labelSelector"), w["labels"]) for t in terms)
+
+
+def zone_gaps(docs):
+    """Workloads with two or more replicas that name no zone key: both replicas can land in one zone (apps #155, lab 21).
+    A warning list, not an error: a zone term is a preference, and the pods of a CNPG Cluster are modelled by the hostname only."""
+    out = []
+    for w in normalise(docs):
+        if w["replicas"] >= 2 and not spreads(w, ZONE) and not (w["id"].startswith("Cluster/") and spreads_zone_cnpg(docs, w)):
+            out.append(w["id"])
+    return sorted(out)
+
+
+def spreads_zone_cnpg(docs, w):
+    """A CNPG Cluster keeps its zone term in affinity.additionalPodAntiAffinity, which normalise() does not model."""
+    for d in docs:
+        if d.get("kind") == "Cluster" and d["metadata"]["name"] == w["name"] and d["metadata"].get("namespace", "") == w["ns"]:
+            terms = ((d["spec"].get("affinity") or {}).get("additionalPodAntiAffinity") or {}).get(
+                "preferredDuringSchedulingIgnoredDuringExecution", [])
+            return any(t["podAffinityTerm"].get("topologyKey") == ZONE for t in terms)
+    return False
 
 
 def audit(docs, allow):
@@ -240,6 +265,11 @@ def main():
     cpu = sum(w["cpu"] * w["replicas"] for w in ws if w["pdb"] == "external")
     for n in notes:
         print("note: " + n)
+    gaps_z = zone_gaps(docs)
+    for g in gaps_z:
+        print("warn: %s has 2 or more replicas and no zone spread: both can sit in one zone" % g)
+    print("zone coverage: %d of %d workloads with 2 or more replicas name a zone (warnings, not errors)"
+          % (sum(1 for w in ws if w["replicas"] >= 2) - len(gaps_z), sum(1 for w in ws if w["replicas"] >= 2)))
     print("%d workloads audited, %d single-replica listed, CPU requests of the rendered Deployments/StatefulSets %d m (budget %d m)"
           % (len(ws), len(allow.get("single_replica", [])), cpu, CPU_BUDGET_M))
     if cpu > CPU_BUDGET_M:

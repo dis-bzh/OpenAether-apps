@@ -60,6 +60,12 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: grafana
               topologyKey: kubernetes.io/hostname
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: grafana
+              topologyKey: topology.kubernetes.io/zone
     # Admin credentials from the grafana-admin ExternalSecret.
     admin:
       existingSecret: grafana-admin

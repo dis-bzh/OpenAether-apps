@@ -103,6 +103,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: zitadel-login
               app.kubernetes.io/instance: zitadel
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: zitadel-login
+              app.kubernetes.io/instance: zitadel
       pdb:
         enabled: true
         minAvailable: 1
@@ -143,6 +150,12 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: zitadel
               topologyKey: kubernetes.io/hostname
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: zitadel
+              topologyKey: topology.kubernetes.io/zone
 
     zitadel:
       # Masterkey (32 bytes) from the ESO Secret — never in cleartext in the chart.

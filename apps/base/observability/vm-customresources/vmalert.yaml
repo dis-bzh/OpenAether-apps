@@ -63,6 +63,12 @@ spec:
               matchLabels:
                 app.kubernetes.io/name: vmalert
             topologyKey: kubernetes.io/hostname
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: vmalert
+            topologyKey: topology.kubernetes.io/zone
   podDisruptionBudget:
     minAvailable: 1
 ---
@@ -91,6 +97,12 @@ spec:
               matchLabels:
                 app.kubernetes.io/name: vmalertmanager
             topologyKey: kubernetes.io/hostname
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: vmalertmanager
+            topologyKey: topology.kubernetes.io/zone
   podDisruptionBudget:
     minAvailable: 1
   # Kyverno reads the container level (#47). The operator copies this flat block onto every container

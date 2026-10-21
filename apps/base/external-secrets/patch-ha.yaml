@@ -20,6 +20,13 @@ spec:
             matchLabels:
               app.kubernetes.io/name: external-secrets
               app.kubernetes.io/instance: external-secrets
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: external-secrets
+              app.kubernetes.io/instance: external-secrets
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -33,6 +40,13 @@ spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: external-secrets-webhook
+              app.kubernetes.io/instance: external-secrets
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:

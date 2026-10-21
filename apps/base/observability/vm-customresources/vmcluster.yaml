@@ -64,6 +64,12 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: vminsert
               topologyKey: kubernetes.io/hostname
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: vminsert
+              topologyKey: topology.kubernetes.io/zone
     podDisruptionBudget:
       minAvailable: 1
   vmstorage:
@@ -111,6 +117,12 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: vmstorage
               topologyKey: kubernetes.io/hostname
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: vmstorage
+              topologyKey: topology.kubernetes.io/zone
     podDisruptionBudget:
       minAvailable: 1
   vmselect:
@@ -156,5 +168,11 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: vmselect
               topologyKey: kubernetes.io/hostname
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: vmselect
+              topologyKey: topology.kubernetes.io/zone
     podDisruptionBudget:
       minAvailable: 1

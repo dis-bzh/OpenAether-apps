@@ -111,6 +111,15 @@ cn2 = copy.deepcopy(cn); cn2["spec"]["enablePDB"] = False
 check(errs([cn2]) != [], "a CNPG Cluster with enablePDB false is caught")
 cn3 = copy.deepcopy(cn); cn3["spec"]["affinity"] = {"enablePodAntiAffinity": False}
 check(errs([cn3]) != [], "a CNPG Cluster without anti-affinity is caught")
+# zone coverage (apps #155): a warning list, never an error
+zsp = {"maxSkew": 1, "topologyKey": ha.ZONE, "whenUnsatisfiable": "ScheduleAnyway", "labelSelector": {"matchLabels": L}}
+check(ha.zone_gaps([dep()]) == ["Deployment/ns/web"], "a two-replica workload with a hostname spread only is a zone gap")
+check(ha.zone_gaps([dep(topologySpreadConstraints=[dict(zsp, topologyKey=ha.HOST), zsp])]) == [], "a zone spread constraint covers the zones")
+check(ha.zone_gaps([dep(1)]) == [], "a single replica has no zone gap")
+check(errs([dep(), pdb(maxUnavailable=1)]) == [], "a zone gap is not an audit error")
+cz = copy.deepcopy(cn); cz["spec"]["affinity"]["additionalPodAntiAffinity"] = {"preferredDuringSchedulingIgnoredDuringExecution": [
+    {"weight": 100, "podAffinityTerm": {"topologyKey": ha.ZONE, "labelSelector": {"matchLabels": {"cnpg.io/cluster": "db"}}}}]}
+check(ha.zone_gaps([cn]) == ["Cluster/ns/db"] and ha.zone_gaps([cz]) == [], "a CNPG Cluster is covered by its zone anti-affinity term")
 # the real allow-list
 real = yaml.safe_load((REPO / "scripts/ha-allowlist.yaml").read_text())
 check(all(str(e.get("reason", "")).strip() for k in ("single_replica", "strict_spread", "known_gaps") for e in real.get(k) or []),

@@ -16,6 +16,12 @@ spec:
       labelSelector:
         matchLabels:
           gateway.networking.k8s.io/gateway-name: openaether-gateway
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: openaether-gateway
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
