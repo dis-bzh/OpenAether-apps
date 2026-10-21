@@ -2,9 +2,9 @@
 #   status existing   : read by a rule that predates 0.4.0 M1 (`task check-alerts` of the labs found series for all of
 #                       them but kube_job_failed and kubelet_volume_stats_*, quiet by design: docs/detection.md), or
 #                       exported by code shipped in the repo (oa_backup_verify_*, the M2 verifier: no lab read them).
-#   status UNVERIFIED : added by M1/M3, never read on a cluster. Lab 19 (2026-10-20) read the M1 ones but longhorn_backup_state;
-#                       lab 20 (Scaleway + OVH replica store, 2026-10-20) read that one, kube_pod_init_container_status_running
-#                       and the four oa_restore_test_* series. None is left.
+#   status UNVERIFIED : added by M1/M3, never read on a cluster. Lab 19 (2026-10-20) read the M1 ones but
+#                       longhorn_backup_state; lab 20 (Scaleway + OVH replica store, 2026-10-20) read that one,
+#                       kube_pod_init_container_status_running and the four oa_restore_test_* series. None is left.
 #   source            : the scrape that must exist (SCRAPES in the test), or `scrape` for `up`.
 ALERTS:
   source: vmalert

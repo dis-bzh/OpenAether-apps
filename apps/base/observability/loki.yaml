@@ -76,9 +76,9 @@ spec:
   # needs more than 5 minutes, and a rollback across a chart major only repeats the same roll. So: a
   # 15 minute budget, no automatic rollback, and the recovery is the documented forward step
   # (docs/patching.md, "Loki chart hop"). Chart 18 also sets -memberlist.advertise-addr to the pod IP.
-  # The first start of three replicas on a cold cluster takes more than 5 minutes (lab 20: the pods exit after ten failed
-  # memberlist joins until one of them is Ready; Ready at +12 min, while Flux gave up after 4 x 5 min and left the release
-  # Stalled, RetriesExceeded, with the pods Running for hours). The install gets the upgrade's budget.
+  # The first start of three replicas on a cold cluster takes more than 5 minutes (lab 20: the pods exit after ten
+  # failed memberlist joins until one of them is Ready; Ready at +12 min, while Flux gave up after 4 x 5 min and left
+  # the release Stalled, RetriesExceeded, with the pods Running for hours). The install gets the upgrade's budget.
   install:
     timeout: 15m
     remediation:

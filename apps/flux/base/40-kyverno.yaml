@@ -58,8 +58,9 @@ spec:
     - name: kyverno-policies
     - name: external-secrets
 ---
-# The guard on the scratch Clusters of the restore tests (a Cluster, not a Pod). It needs the CNPG CRDs to EXIST when the policy
-# is created (a policy created earlier does not enforce its kind until it is updated: lab 20), hence its own Kustomization.
+# The guard on the scratch Clusters of the restore tests (a Cluster, not a Pod). It needs the CNPG CRDs to EXIST when
+# the policy is created (a policy created earlier does not enforce its kind until it is updated: lab 20), hence its own
+# Kustomization.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
