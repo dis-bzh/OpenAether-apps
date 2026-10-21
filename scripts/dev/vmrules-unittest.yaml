@@ -239,7 +239,7 @@ tests:
     interval: 1m
     input_series:
       # yamllint disable-line rule:line-length
-      - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability", name="alloy-audit", ready="True", suspended="true"}'
+      - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability-audit", name="alloy-audit", ready="True", suspended="true"}'
         values: '1+0x1600'
       # yamllint disable-line rule:line-length
       - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability", name="grafana", ready="True", suspended="true"}'
