@@ -22,6 +22,21 @@ Bug fixes, documentation corrections and safety nets after 0.3.1, for the next r
 in 9 min 07 s, `cluster-verify` 15 passed, 0 failed, 38 Kustomizations and 16 HelmReleases Ready except `alloy-audit` (suspended by design). It fixes neither #42 nor #375 (infra), **does not
 fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
 
+### Added (0.4.0, milestone M4: loss of a node or a pod without interruption)
+
+Rung: **mocked/static**; nothing observed on a cluster (drills and pass criteria: OpenAether-infra `docs/resilience.md`, and `docs/resilience.md` here). Not a compliance claim. Style: six files that
+broke the yamllint line length (commits 577a0b3, 5747fd8, e7f04b5, 2eb74d6) are rewrapped.
+
+- **HA audit in CI** (`scripts/check-ha.py`, `scripts/ha-allowlist.yaml`, `test-check-ha.py`): every Deployment and StatefulSet of the bricks (charts rendered), and the VM and CNPG pods, has two replicas or a
+  reasoned allow-list entry saying what its loss means, a hostname spread, exactly one PodDisruptionBudget allowing exactly one disruption, nothing that strands a pod on three workers; the CPU requests are bounded.
+  35 workloads audited, 13 single-replica listed with reasons, 1 deliberate budget exception (Loki), 1 strict spread (OpenBao).
+- **Fixes the audit found**: cert-manager and istiod spread, budgets; ESO controller (leader election) and webhook, Kyverno admission (apps #82, first point), the CNPG operator, metrics-server and the Zitadel
+  login at two replicas with spread and budgets; Alertmanager at two replicas with gossip allowed in the network policy; Longhorn UI at one, listed. About 345 m of CPU requests added (derived). Two operators of CNPG,
+  ESO leader election and the Alertmanager gossip are UNVERIFIED on a cluster.
+- **Alerts that name the command** (`vmrule-loss.yaml`): `ControlPlaneMemberMissing`, `FailureDomainLost`, `WorkloadReplicasBelowDesired`, `ClusterCannotLoseWorker`, `OpenBaoReplicasMissing`,
+  `AlertmanagerClusterDegraded`; `NodeUnreachable` after 3 min and `NodeNotReady` after 5; runbook section "Loss of capacity" (which task, and what not to do); vmalert unit cases. `kube_node_role`, the zone label
+  and `alertmanager_cluster_members` are UNVERIFIED series (`docs/monitoring-0.4.md`).
+
 ### Fixed (0.4.0, lab 20 finding #153)
 
 - **A cluster rebuilt by the DR chain archives under a new `serverName`, and everything that reads the archive follows it.** The Clusters' plugin parameter is `serverName: <cluster>${CNPG_ARCHIVE_SUFFIX:=}`; Flux fills the suffix from the optional ConfigMap `cnpg-archive-generation` (flux-system) that the infra `dr-restore-plan` writes. No ConfigMap means no suffix:
