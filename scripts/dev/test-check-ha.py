@@ -83,6 +83,9 @@ check(errs([dep(nodeSelector={"kubernetes.io/os": "linux"}), pdb(maxUnavailable=
 hpa = {"kind": "HorizontalPodAutoscaler", "metadata": {"name": "web", "namespace": "ns"},
        "spec": {"scaleTargetRef": {"kind": "Deployment", "name": "web"}, "minReplicas": 2}}
 check(errs([dep(1), hpa, pdb(maxUnavailable=1)]) == [], "an HPA minReplicas of 2 counts as two replicas")
+px = {"pdb_exception": [{"workload": "Deployment/ns/web", "reason": "r"}]}
+check(errs([dep(3), pdb(minAvailable=1)], **px) == [], "a budget that allows two is tolerated when listed under pdb_exception")
+check(any("pdb_exception" in e for e in errs([dep(3), pdb(minAvailable=2)], **px)), "...and the entry goes stale once the budget is right")
 # known gaps: tolerated while listed, an error once fixed
 gap = {"known_gaps": [{"workload": "Deployment/ns/web", "reason": "r"}]}
 check(errs([dep(topologySpreadConstraints=[]), pdb(maxUnavailable=1)], **gap) == [], "a listed gap is tolerated")

@@ -11,7 +11,8 @@ VMAlert, VMAlertmanager or CNPG Cluster) asserts:
      kubernetes.io/hostname whose selector selects the workload's own pods);
   3. when replicas >= 2: exactly ONE PodDisruptionBudget selects the pods and it allows exactly one disruption (zero blocks
      every drain, two or more takes the quorum or the service down at once);
-  4. nothing can strand a pod on a 3-worker cluster: no required podAffinity, no required hostname anti-affinity or hard
+  4. (pdb_exception lists the workloads whose budget deliberately allows more, with the reason.)
+  5. nothing can strand a pod on a 3-worker cluster: no required podAffinity, no required hostname anti-affinity or hard
      (DoNotSchedule) hostname spread for more replicas than 2 unless listed under `strict_spread`, no nodeSelector but the OS one.
 
 The allow-list cannot rot: an entry for a workload that is no longer single-replica, or that no longer exists, fails the
@@ -141,9 +142,10 @@ def audit(docs, allow):
     singles = {e["workload"]: e for e in allow.get("single_replica", [])}
     stricts = {e["workload"]: e for e in allow.get("strict_spread", [])}
     gaps = {e["workload"]: e for e in allow.get("known_gaps", [])}
+    pdbx = {e["workload"]: e for e in allow.get("pdb_exception", [])}
     ws = normalise(docs)
     ids = {w["id"] for w in ws}
-    for lst, label in ((singles, "single_replica"), (stricts, "strict_spread"), (gaps, "known_gaps")):
+    for lst, label in ((singles, "single_replica"), (stricts, "strict_spread"), (gaps, "known_gaps"), (pdbx, "pdb_exception")):
         for k, e in lst.items():
             if not str(e.get("reason", "")).strip():
                 errs.append("allow-list %s %s has no reason" % (label, k))
@@ -165,7 +167,12 @@ def audit(docs, allow):
             errs.append("%s has %s replicas but is still listed under single_replica (stale entry)" % (wid, r))
         if not spreads(w):
             probs.append("no topologySpreadConstraint or podAntiAffinity on %s that selects its own pods" % HOST)
-        if w["pdb"] == "external":
+        if wid in pdbx:
+            ps = pdbs_for(w, docs)
+            if len(ps) != 1 or allowed(ps[0]["spec"], r) == 1:
+                errs.append("%s is listed under pdb_exception but has %d budget(s) %s: delete the entry" % (
+                    wid, len(ps), "allowing exactly one disruption" if ps else ""))
+        elif w["pdb"] == "external":
             ps = pdbs_for(w, docs)
             if len(ps) != 1:
                 probs.append("%d PodDisruptionBudgets select its pods, exactly one is needed" % len(ps))

@@ -3,6 +3,7 @@
 #                  customer and for the operator. A pod on a node that dies is rescheduled only after the 5 minute
 #                  not-ready/unreachable toleration of Kubernetes (docs/resilience.md), so "loss" counts that time.
 # strict_spread  : a required hostname anti-affinity or hard spread with more than 2 replicas, on purpose.
+# pdb_exception  : a budget that deliberately allows other than one disruption, with the reason.
 # known_gaps     : NOT fixed yet. Each entry is a bug to close; the list must be empty at release.
 # Not audited here, because the pods do not exist in the rendered manifests: the Gateway pods (an Istio Deployment made
 # from the Gateway object, checked by scripts/dev/test-gateway-ha.py) and the Longhorn CSI sidecars (made by
@@ -69,6 +70,13 @@ strict_spread:
     reason: >-
       raft members must sit on three different workers, each with its own local-path volume; test-openbao-
       spread.py proves the rest
+pdb_exception:
+  - workload: StatefulSet/services-observability/loki
+    reason: >-
+      minAvailable 1 on purpose (loki.yaml): the three replicas sit on local-path volumes and the spread
+      is only preferred, so a drain of a node holding two of them would wait forever under minAvailable 2.
+      A drain that takes two at once rejects pushes (replication factor 2) until one returns; Alloy
+      retries (lab 15c: 301 of 301 lines kept over a 240 s outage).
 known_gaps:
   - workload: Deployment/foundation-pki-management/external-secrets
     reason: >-
@@ -91,7 +99,5 @@ known_gaps:
   - workload: Deployment/kube-system/metrics-server
     reason: >-
       single replica: its loss stops the HorizontalPodAutoscaler of the Gateway
-  - workload: StatefulSet/services-observability/loki
-    reason: PodDisruptionBudget allows two of three replicas down
   - workload: Deployment/longhorn-system/longhorn-ui
     reason: two replicas without spread or PodDisruptionBudget
