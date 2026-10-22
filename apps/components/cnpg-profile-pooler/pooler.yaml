@@ -56,7 +56,7 @@ spec:
       securityContext:
         runAsNonRoot: true
         seccompProfile: {type: RuntimeDefault}
-      # policy require-limits reported every pooler pod (lab 23). Naming it here sets them.
+      # The operator adds an init container `bootstrap-controller` (it copies its binary) with NO resources: the platform
       # policy require-limits reported every pooler pod (lab 23). Naming it here sets them.
       initContainers:
         - name: bootstrap-controller
