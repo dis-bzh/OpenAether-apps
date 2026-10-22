@@ -25,5 +25,6 @@ configMapGenerator:
       - clientNamespace=shop
       - clientApp=shop-api
       - archiveServerName=shop-db
+      - profile=standard
 generatorOptions:
   disableNameSuffixHash: true

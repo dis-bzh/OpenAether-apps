@@ -375,6 +375,14 @@ jobs:
           grep -qE '^[0-9]+ passed, 0 failed$' restore-test-dumps.out
           ! grep -q 'SKIPPED' restore-test-dumps.out
 
+      - name: "DB benchmark and zero-loss writer: percentiles, a lost id caught, a crash survived (real PostgreSQL)"
+        run: |
+          set -euo pipefail
+          python3 -I scripts/dev/test-db-bench-parse.py
+          CI=true ./scripts/dev/test-db-bench.sh | tee db-bench.out
+          grep -qE '^[0-9]+ passed, 0 failed$' db-bench.out
+          ! grep -q 'SKIPPED' db-bench.out
+
   loki-render:
     name: Loki chart render
     runs-on: ubuntu-latest

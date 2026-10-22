@@ -230,6 +230,38 @@ def main():
     check({"cnpg.io/poolerName": "shop-db-pooler-rw"} in [r["fromEndpoints"][0]["matchLabels"] for r in dn["spec"]["ingress"]],
           "pooler: the database policy admits the pooler pods")
 
+
+    # 3b. the opt-in benchmark and zero-loss Jobs: suspended, restricted, admitted by the database policy, scripts identical to the files
+    bench, err = render(COMP / "cnpg-profile-examples/ha-bench")
+    check(bench is not None, "bench: the ha example with the Jobs renders " + err)
+    if bench:
+        jobs = {d["metadata"]["labels"]["openaether.io/bench-role"]: d for d in by_kind(bench, "Job")}
+        check(set(jobs) == {"bench", "writer", "checker"}, "bench: a benchmark, a writer and a checker Job")
+        check(all(j["spec"]["suspend"] is True and j["spec"]["backoffLimit"] == 0 for j in jobs.values()), "bench: every Job is suspended (nothing runs when applied)")
+        btext = yaml.safe_dump_all(bench)
+        check(not re.search(r"\b(?:NAME|CLIENT_APP|PROFILE|STORAGE_CLASS)\b", btext), "bench: no placeholder is left")
+        check(all(j["metadata"]["namespace"] == "shop" and j["spec"]["template"]["metadata"]["labels"]["app.kubernetes.io/name"] == "shop-api"
+                  for j in jobs.values()), "bench: the Jobs run as the application's pod (the database policy admits them)")
+        for r, j in jobs.items():
+            pod = j["spec"]["template"]["spec"]
+            c = pod["containers"][0]
+            check(pod["securityContext"]["runAsNonRoot"] and c["securityContext"]["readOnlyRootFilesystem"] and c["securityContext"]["capabilities"] == {"drop": ["ALL"]}
+                  and c["resources"]["limits"]["memory"] and c["image"] == ch["imageName"],
+                  "bench: the %s Job is restricted, bounded and uses the engine image of the Cluster" % r)
+            envs = {e["name"]: e for e in c["env"]}
+            check(envs["PGSSLMODE"]["value"] == "verify-full" and "password" not in str(c.get("args", "")) and "value" not in envs["PGPASSWORD"],
+                  "bench: the %s Job verifies the server certificate and takes the password from the Secret, not an argument" % r)
+        check(jobs["bench"]["spec"]["template"]["spec"]["containers"][0]["args"][1] == "ha" and any(
+            e["name"] == "POOLER_HOST" and e["value"] == "shop-db-pooler-rw" for e in jobs["bench"]["spec"]["template"]["spec"]["containers"][0]["env"]),
+            "bench: the benchmark names the profile and both endpoints")
+        cm = next(d for d in by_kind(bench, "ConfigMap") if d["metadata"]["name"] == "shop-db-bench-scripts")
+        for f in ("db-bench.sh", "db-bench-parse.py", "db-zeroloss.sh"):
+            check(cm["data"][f] == (COMP / "cnpg-profile-bench" / f).read_text() and (REPO / "scripts/ops" / f).resolve() == (COMP / "cnpg-profile-bench" / f).resolve(),
+                  "bench: %s in the ConfigMap is the file, and scripts/ops/%s is the same file" % (f, f))
+        check({v["persistentVolumeClaim"]["claimName"] for j in (jobs["writer"], jobs["checker"]) for v in j["spec"]["template"]["spec"]["volumes"] if "persistentVolumeClaim" in v}
+              == {"shop-db-zeroloss-log"} and by_kind(bench, "PersistentVolumeClaim")[0]["spec"]["storageClassName"] == "local-path-retain",
+              "bench: the acknowledged ids live on a volume of their own, shared by the writer and the checker")
+
     # 4. the values mechanism: other values reach every field, nothing of the example's stays
     tmp = Path(tempfile.mkdtemp())
     try:
@@ -279,6 +311,8 @@ def main():
                                       "initContainers": [{"name": "bootstrap-controller", "image": "ghcr.io/cloudnative-pg/cloudnative-pg:1.30.1",
                                                           "resources": spec["resources"], "securityContext": sec}],
                                       "containers": cons}})
+            for j in jobs.values():
+                pods.append({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": j["metadata"]["name"], "namespace": "shop"}, "spec": j["spec"]["template"]["spec"]})
             t = ps["template"]["spec"]
             pods.append({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "pooler", "namespace": "shop"},
                          "spec": dict(t, containers=[dict(t["containers"][0], image=ps["pgbouncer"]["image"])])})
@@ -287,8 +321,8 @@ def main():
             r = subprocess.run([ky, "apply", str(REPO / "apps/base/kyverno-policies"), "--resource", str(res)], capture_output=True, text=True)
             m = re.search(r"pass: (\d+), fail: (\d+), warn: (\d+), error: (\d+)", r.stdout)
             check(bool(m) and m.group(2) == "0" and m.group(4) == "0" and int(m.group(1)) > 0,
-                  "kyverno: the instance pods (built from each Cluster) and the pooler pod pass every platform policy (%s)" % (m.group(0) if m else r.stderr[-200:]))
-            bad = copy.deepcopy(pods[-1])
+                  "kyverno: the instance pods (built from each Cluster), the pooler pod and the bench Job pods pass every platform policy (%s)" % (m.group(0) if m else r.stderr[-200:]))
+            bad = copy.deepcopy(pods[-1])  # the pooler
             bad["spec"]["containers"][0].pop("resources")
             res.write_text(yaml.safe_dump(bad))
             r = subprocess.run([ky, "apply", str(REPO / "apps/base/kyverno-policies"), "--resource", str(res)], capture_output=True, text=True)
