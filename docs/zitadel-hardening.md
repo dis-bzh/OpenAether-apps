@@ -1,7 +1,7 @@
 # Zitadel and Grafana authentication: what is set, where it applies, what an existing cluster needs
 
 > Addresses ANSSI PA-079 (R10, R12, R21, R23, R29), PG-078 and PA-012 R27 in part. Rung: the Zitadel settings were run
-> through a real Zitadel (the chart's appVersion, v4.19.2) against PostgreSQL by `scripts/dev/test-zitadel-config.sh`, and
+> through a real Zitadel (v4.19.5, the image tag the HelmRelease sets; the chart's own appVersion is v4.19.2) against PostgreSQL by `scripts/dev/test-zitadel-config.sh`, and
 > Grafana's through a real Grafana 11.3.1 (the chart now ships 13.2.4, which was started with the shipped settings and dashboards;
 > the login behaviours below were not re-run on it); nothing was run on a cluster, with OpenBao, External Secrets or Istio.
 
@@ -101,6 +101,26 @@ To turn it on (`apps/base/observability-sso-only`):
 
 With Zitadel's self-registration off (new clusters, or step 3 of the previous section), the Viewer fallback is much less open
 than it was; it is still every account of the instance.
+
+## Zitadel v4.19.5 (0.3.2): what changed for an operator
+
+v4.19.5 fixes three HIGH advisories that allow account takeover (GHSA-mchc-246r-6m76 header injection, GHSA-84fg-x5h4-w8xv
+forgeable email verification proof in the Login V2, GHSA-qj3q-235g-qr6w device code). Affected: 4.0.0 to 4.19.4. The
+HelmRelease overrides `image.tag` and `login.image.tag` (tag and digest) because the chart 10.4.0 still carries v4.19.2.
+
+- **Session cookie secret.** The login UI signs its session cookie with `ZITADEL_SESSION_COOKIE_SECRET`; v4.19.5 asks that it
+  is random and not an example value. `login.sessionCookieSecretName` now points at the ExternalSecret
+  `zitadel-login-session-cookie`, fed by `secret/zitadel/session-cookie` (48 random characters, created by `configure.sh`,
+  create only). Effect on a running cluster: the login signs with a new key, so open login sessions end once and users sign in
+  again. To rotate, set the OpenBao value to `new,old` (the first entry signs, all verify), then drop `old` later.
+  Until the key exists in OpenBao the new login pods stay in `CreateContainerConfigError` and the old ones keep serving.
+- **List endpoints enforce query limits.** Nothing in this repository lists objects: `scripts/zitadel-apply-policies.py` reads
+  and writes single policies, Grafana only uses the OIDC endpoints, and the setup Job is the chart's. A script of yours that
+  pages through `_search` or `/v2/.../list` calls must send an explicit `limit`.
+- **The device authorization flow has a consent screen.** A user who starts a device login now confirms it. No client of this
+  platform uses the device flow; if you register one, tell your users to expect the screen.
+- **Not covered by this bump:** the login's `next` is 16.3.6, which newer advisories flag again (fixed in 16.4.1); they are
+  waived with an expiry in `.vex/openaether-apps.openvex.json` until Zitadel ships a newer `next`.
 
 ## What this does not do
 

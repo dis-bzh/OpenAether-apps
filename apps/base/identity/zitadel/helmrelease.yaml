@@ -63,7 +63,7 @@ spec:
     # which DOES NOT EXIST on ghcr.io → 403 Forbidden → the setupJob (machinekey/pat)
     # goes ImagePullBackOff → the Helm install hangs. The chart defaults pull:
     #   ghcr.io/zitadel/zitadel(-login)  (OK), docker.io/alpine/k8s (helper kubectl),
-    #   docker.io/wait4x/wait4x:3.6      (initContainer wait-for-zitadel).
+    #   docker.io/wait4x/wait4x          (initContainer wait-for-zitadel).
     # Kyverno restrict-image-registries is in Audit (non-blocking). alpine/* and the tagged image
     # wait4x/wait4x are on its allow-list (an untagged or digest reference would be reported again,
     # see kyverno-policies/restrict-image-registries.yaml): when the chart changes either image,
@@ -75,6 +75,14 @@ spec:
     # alpine/k8s had only published up to 1.36.2, so the setup Job's kubectl
     # helper went ImagePullBackOff on a tag that doesn't exist yet upstream.
     # Pinned explicitly instead of auto-derived.
+    #
+    # Server and login are pinned HERE, ahead of the chart (10.4.0, appVersion v4.19.2; 11.0.0 is still beta): v4.19.5
+    # fixes three HIGH account-takeover advisories (GHSA-mchc-246r-6m76, GHSA-84fg-x5h4-w8xv, GHSA-qj3q-235g-qr6w).
+    # tag@digest: the tag stays readable, the digest makes a re-pushed tag fail instead of reaching the cluster.
+    # Drop the two overrides when a stable chart ships a patched appVersion.
+    image:
+      # renovate: datasource=docker depName=ghcr.io/zitadel/zitadel
+      tag: "v4.19.5@sha256:a586456a208e0db4c633db0ba43c427c24b37846138b8b13ff16ad8e003a18d3"
     tools:
       kubectl:
         image:
@@ -92,6 +100,13 @@ spec:
 
     # The login UI had no limit at all (the `resources:` below are the server's). Measured 191 Mi on a lab cluster.
     login:
+      image:
+        # renovate: datasource=docker depName=ghcr.io/zitadel/zitadel-login
+        tag: "v4.19.5@sha256:2f8e57672fcd4f9a285d99355fae9f85fd7495768c090c07c3bbc2d84fc06617"
+      # The key that signs the login's session cookie: a generated secret from OpenBao (secret/zitadel/session-cookie).
+      # Without it the login derives the key from its service key (deprecated fallback), and v4.19.5 asks for a
+      # random value that is not an example one.
+      sessionCookieSecretName: zitadel-login-session-cookie
       resources:
         requests:
           cpu: 50m

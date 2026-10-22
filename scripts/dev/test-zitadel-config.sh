@@ -44,7 +44,9 @@ PY
 read -r CHART VERSION < <(head -1 "$W/chart"); REPO="$(cat "$W/repo")"
 helm template zitadel "$CHART" --repo "$REPO" --version "$VERSION" -n services-identity -f "$W/values.yaml" > "$W/rendered.yaml" \
   && ok "the chart $CHART $VERSION renders with the shipped values" || { bad "helm template failed"; exit 1; }
-APPVER="$(helm show chart "$CHART" --repo "$REPO" --version "$VERSION" | sed -n 's/^appVersion: *//p')"
+# The image the HelmRelease sets (image.tag, `tag@digest` is cut to the tag) wins over the chart's appVersion.
+APPVER="$(python3 -I -c 'import sys, yaml; print(((yaml.safe_load(open(sys.argv[1])).get("image") or {}).get("tag") or "").split("@")[0])' "$W/values.yaml")"
+[ -n "$APPVER" ] || APPVER="$(helm show chart "$CHART" --repo "$REPO" --version "$VERSION" | sed -n 's/^appVersion: *//p')"
 IMAGE="ghcr.io/zitadel/zitadel:$APPVER"
 GOOD_PW='Xk3pQ9vLm2Rt7WnB5cDf8GhJ4sAa1!'   # the shape configure.sh generates, a fixed value for the test
 python3 -I - "$W" "$GOOD_PW" <<'PY'

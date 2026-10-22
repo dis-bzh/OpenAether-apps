@@ -230,10 +230,10 @@
     },
     {
       customType: "regex",
-      description: "zitadel helmrelease.yaml: tools.kubectl.image.tag pinned explicitly (chart default auto-derives from the cluster's Kubernetes version, which broke live when running ahead of what alpine/k8s has published — see the comment in the file).",
+      description: "zitadel helmrelease.yaml: the image tags set explicitly: tools.kubectl (the chart default auto-derives from the cluster's Kubernetes version, which broke live when running ahead of what alpine/k8s has published), server, login and wait4x (ahead of the chart's appVersion, as tag@digest). See the comments in the file.",
       fileMatch: ["^apps/base/identity/zitadel/helmrelease\\.yaml$"],
       matchStrings: [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s*\\n\\s*tag:\\s*\"(?<currentValue>[^\"]+)\"",
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s*\\n\\s*tag:\\s*\"(?<currentValue>[^\"@]+)(?:@(?<currentDigest>sha256:[0-9a-f]{64}))?\"",
       ],
     },
   ],
