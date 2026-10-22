@@ -758,6 +758,16 @@ tests:
         values: '1x80'                # one replica is enough (number 1)
       - series: 'cnpg_pg_replication_in_recovery{cnpg_io_cluster="ok", pod="ok-1"}'
         values: '0x80'
+      - series: 'cnpg_collector_sync_replicas{cnpg_io_cluster="db", pod="db-1", value="expected"}'
+        values: '1x80'                # db asks for one synchronous replica
+      - series: 'cnpg_collector_sync_replicas{cnpg_io_cluster="ok", pod="ok-1", value="expected"}'
+        values: '1x80'
+      - series: 'cnpg_pg_replication_streaming_replicas{cnpg_io_cluster="light", pod="light-1"}'
+        values: '0x80'                # a single instance with nothing to replicate to (profile light): never an alert
+      - series: 'cnpg_pg_replication_in_recovery{cnpg_io_cluster="light", pod="light-1"}'
+        values: '0x80'
+      - series: 'cnpg_collector_sync_replicas{cnpg_io_cluster="light", pod="light-1", value="expected"}'
+        values: '0x80'
     alert_rule_test:
       - {eval_time: 10m, alertname: CnpgSyncReplicaMissing, exp_alerts: []}
       - eval_time: 40m

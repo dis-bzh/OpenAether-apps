@@ -84,7 +84,15 @@ spec:
         # UNVERIFIED on a cluster: cnpg_pg_replication_streaming_replicas (a column of the CNPG default pg_replication query).
         - alert: CnpgSyncReplicaMissing
           expr: |
-            max by (cnpg_io_cluster) (cnpg_pg_replication_streaming_replicas and on (cnpg_io_cluster, pod) (cnpg_pg_replication_in_recovery == 0)) < 1
+            (
+              max by (cnpg_io_cluster) (cnpg_pg_replication_streaming_replicas and on (cnpg_io_cluster, pod) (cnpg_pg_replication_in_recovery == 0)) < 1
+            )
+            and on (cnpg_io_cluster)
+            (
+              max by (cnpg_io_cluster) (cnpg_collector_sync_replicas{value="expected"}) >= 1
+            )
+          # Only a Cluster that asks for synchronous replicas can block on a missing one: a `light` profile (one instance, nothing
+          # replicated) raised this critical alert for good in lab 23 once its metrics were scraped.
           for: 3m
           labels:
             severity: critical
