@@ -584,6 +584,10 @@ jobs:
       - name: The rules still catch what they claim
         run: ./scripts/dev/check-gitleaks-rules.sh
 
+      # .gitleaksignore silences one known false positive (an image name in an upstream Secret) and nothing else.
+      - name: The ignore file is as narrow as it says
+        run: ./scripts/dev/test-gitleaksignore.sh
+
       - name: Scan what this PR adds
         run: |
           gitleaks git -c .gitleaks-envdata.toml \
