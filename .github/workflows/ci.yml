@@ -431,6 +431,9 @@ jobs:
       - name: Every platform workload survives the loss of a worker, or says why not (rendered)
         run: python3 scripts/check-ha.py
 
+      - name: The database profile examples pass the same audit, within their CPU budgets (apps #157)
+        run: python3 scripts/check-ha.py --profiles
+
   vmrules:
     name: VMRules (vmalert dry run)
     runs-on: ubuntu-latest

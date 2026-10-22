@@ -128,6 +128,21 @@ st = {"apiVersion": "barmancloud.cnpg.io/v1", "kind": "ObjectStore", "metadata":
       "spec": {"instanceSidecarConfiguration": {"resources": {"requests": {"cpu": "50m"}}}}}
 check(ha.cnpg_cpu([cs, st])[0] == 300, "CNPG instance CPU counts the sidecar of the ObjectStore: 3 x (50 + 50) m")
 check(ha.cnpg_cpu([cs])[0] == 150, "a Cluster without its ObjectStore counts the instance only")
+# the database profiles (apps #157): the shipped examples pass the audit, and the audit sees a Pooler
+pl = {"apiVersion": "postgresql.cnpg.io/v1", "kind": "Pooler", "metadata": {"name": "db-pooler-rw", "namespace": "ns"},
+      "spec": {"instances": 2, "cluster": {"name": "db"}, "template": {"spec": {
+          "containers": [{"name": "pgbouncer", "resources": {"requests": {"cpu": "100m"}}}],
+          "topologySpreadConstraints": [{"maxSkew": 1, "topologyKey": ha.HOST, "whenUnsatisfiable": "ScheduleAnyway",
+                                         "labelSelector": {"matchLabels": {"cnpg.io/poolerName": "db-pooler-rw"}}}]}}}}
+ppdb = {"apiVersion": "policy/v1", "kind": "PodDisruptionBudget", "metadata": {"name": "db-pooler-rw", "namespace": "ns"},
+        "spec": {"maxUnavailable": 1, "selector": {"matchLabels": {"cnpg.io/poolerName": "db-pooler-rw"}}}}
+check(errs([pl, ppdb]) == [], "a two-pod Pooler with a spread and a one-disruption budget passes")
+check(errs([pl]) != [], "a Pooler without a budget is caught")
+pl2 = copy.deepcopy(pl); pl2["spec"]["template"]["spec"]["topologySpreadConstraints"] = []
+check(errs([pl2, ppdb]) != [], "a Pooler without a spread is caught")
+check(ha.profile_cpu([pl, ppdb]) == 200, "profile CPU counts the pooler pods: 2 x 100 m")
+pe, plines = ha.audit_profiles(__import__("ha_render").kustomize)
+check(pe == [] and len(plines) == 3, "the shipped light, standard and ha examples pass the HA audit within their CPU budgets %s" % pe)
 # the real allow-list
 real = yaml.safe_load((REPO / "scripts/ha-allowlist.yaml").read_text())
 check(all(str(e.get("reason", "")).strip() for k in ("single_replica", "strict_spread", "known_gaps") for e in real.get(k) or []),

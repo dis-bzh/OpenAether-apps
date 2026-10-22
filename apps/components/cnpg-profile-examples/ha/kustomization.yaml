@@ -19,7 +19,7 @@ configMapGenerator:
       - owner=shop
       - storageClass=local-path-retain
       - size=20Gi
-      - cpuRequest=500m
+      - cpuRequest=250m
       - cpuLimit=2
       - memory=2Gi
       - clientNamespace=shop

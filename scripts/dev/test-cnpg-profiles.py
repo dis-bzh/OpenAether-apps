@@ -237,7 +237,7 @@ def main():
         k = tmp / "components/cnpg-profile-examples/ha/kustomization.yaml"
         s = k.read_text()
         for a, b in (("shop-db", "billing-db"), ("shop-api", "billing-web"), ("=shop", "=billing"), ("name: shop", "name: billing"), ("namespace: shop", "namespace: billing"), ("20Gi", "50Gi"),
-                     ("local-path-retain", "longhorn-x1-rwo"), ("500m", "750m"), ("2Gi", "4Gi")):
+                     ("local-path-retain", "longhorn-x1-rwo"), ("250m", "750m"), ("2Gi", "4Gi")):
             s = s.replace(a, b)
         k.write_text(s)
         ns = k.parent / "namespace.yaml"

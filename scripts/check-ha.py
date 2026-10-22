@@ -23,7 +23,7 @@ check, and so does an entry without a reason. `known_gaps` lists what is not fix
 It also prints the CPU requests of what it renders (the shipped 4 x 4 vCPU examples must stay roll-able, 3 x 4 passes with ~0.45 vCPU of margin: infra capacity gate).
 
 Static: it proves the manifests, not the scheduler. Needs kubectl, helm (network for the charts) and PyYAML.
-Usage: python3 scripts/check-ha.py [--dump FILE | --load FILE] [--cpu]
+Usage: python3 scripts/check-ha.py [--dump FILE | --load FILE] [--cpu] | --profiles (the database profile examples, apps #157)
   --dump saves the rendered stream, --load audits a saved one without rendering (the unit tests do not need the network).
 """
 import math
@@ -105,6 +105,13 @@ def normalise(docs):
                             affinity={"podAntiAffinity": {"preferredDuringSchedulingIgnoredDuringExecution": [
                                 {"podAffinityTerm": {"topologyKey": HOST, "labelSelector": {"matchLabels": sel}}}]}} if anti else {},
                             nodeSelector={}, pdb=pdb, cpu=0))
+        elif k == "Pooler" and d.get("apiVersion", "").startswith("postgresql.cnpg.io"):
+            # a CNPG Pooler is a Deployment the operator makes from spec.template: spread and containers are in the template
+            tpl = (d["spec"].get("template") or {}).get("spec") or {}
+            out.append(dict(id=ident(d), ns=ns, name=name, replicas=d["spec"].get("instances", 1),
+                            labels={"cnpg.io/poolerName": name}, spread=tpl.get("topologySpreadConstraints", []) or [],
+                            affinity=tpl.get("affinity", {}) or {}, nodeSelector=tpl.get("nodeSelector", {}) or {}, pdb="external",
+                            cpu=sum(cpu_m(c) for c in tpl.get("containers", []))))
         elif k in ("VMAgent", "VMAlert", "VMAlertmanager"):
             out.append(cr_workload(d, k.lower(), d["spec"], "app.kubernetes.io/name", k.lower()))
     return out
@@ -127,6 +134,43 @@ def cnpg_cpu(docs):
         total += per * n
         parts.append("%s %d x %d m" % (d["metadata"]["name"], n, per))
     return total, parts
+
+
+PROFILES = ("light", "standard", "ha")
+PROFILE_DIR = "apps/components/cnpg-profile-examples"
+# CPU requests (m) of the pods of ONE instance of each database profile at the shipped example values (instances x (instance + Barman
+# sidecar) + pooler pods). A customer's database is not part of the platform figure above: this is what it adds to a cluster.
+PROFILE_CPU_BUDGET_M = {"light": 100, "standard": 600, "ha": 1100}
+LIGHT_SINGLE = {"reason": "profile light is ONE instance by design (docs/database-profiles.md)",
+                "loss": "a node loss, a drain or an upgrade restart is downtime of the database, and with node-local storage its data is "
+                        "unreachable until the node returns"}
+
+
+def profile_cpu(docs):
+    """Millicores a profile instance adds: its Cluster pods (cnpg_cpu) plus its Pooler pods."""
+    total, _ = cnpg_cpu(docs)
+    return total + sum(cpu_m(c) * d["spec"].get("instances", 1) for d in docs if d.get("kind") == "Pooler"
+                       for c in d["spec"]["template"]["spec"]["containers"])
+
+
+def audit_profiles(render_one):
+    """The HA audit applied to the shipped examples of the database profiles: every profile instance passes the same rules as the
+    platform bricks (light is listed as single-replica on purpose), has a zone term, and stays inside its CPU budget."""
+    errs, lines = [], []
+    for p in PROFILES:
+        docs = render_one(REPO / PROFILE_DIR / p)
+        allow = {}
+        if p == "light":
+            allow = {"single_replica": [dict(LIGHT_SINGLE, workload=ident(d)) for d in docs if d.get("kind") == "Cluster"]}
+        e, _ = audit(docs, allow)
+        errs += ["profile %s: %s" % (p, x) for x in e]
+        errs += ["profile %s: %s has 2 or more replicas and no zone spread" % (p, g) for g in zone_gaps(docs)]
+        cpu = profile_cpu(docs)
+        lines.append("profile %s: %d m of CPU requests (budget %d m)" % (p, cpu, PROFILE_CPU_BUDGET_M[p]))
+        if cpu > PROFILE_CPU_BUDGET_M[p]:
+            errs.append("profile %s: CPU requests %d m exceed its budget %d m (raise it only with the arithmetic of docs/database-profiles.md)"
+                        % (p, cpu, PROFILE_CPU_BUDGET_M[p]))
+    return errs, lines
 
 
 def cr_workload(d, comp, c, lkey, lval):
@@ -275,6 +319,14 @@ def render():
 
 def main():
     args = sys.argv[1:]
+    if "--profiles" in args:
+        from ha_render import kustomize
+        errs, lines = audit_profiles(kustomize)
+        print("\n".join(lines))
+        for e in errs:
+            print("FAIL " + e)
+        print("%d failed" % len(errs))
+        sys.exit(1 if errs else 0)
     if "--load" in args:
         docs = [d for d in yaml.safe_load_all(Path(args[args.index("--load") + 1]).read_text()) if isinstance(d, dict)]
     else:
