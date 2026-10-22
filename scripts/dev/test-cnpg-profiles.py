@@ -202,6 +202,13 @@ def main():
     check(not by_kind(S, "ObjectStore") or {d["metadata"]["labels"]["openaether.io/db-store"] for d in by_kind(S, "ObjectStore")} == {"primary"},
           "standard: one store")
     check(not any("scw.cloud" in yaml.safe_dump(d) for d in by_kind(L, "CiliumNetworkPolicy")), "light: no S3 egress (no backup)")
+    # lab 23: the platform's own scrape names foundation-databases only, so every profile brings the scrape of its metrics
+    for pname, docs in (("light", L), ("standard", S), ("ha", H)):
+        ps_ = by_kind(docs, "VMPodScrape")
+        check(len(ps_) == 1 and ps_[0]["metadata"]["name"] == "shop-db" and ps_[0]["metadata"]["namespace"] == "shop"
+              and ps_[0]["spec"]["selector"]["matchLabels"] == {"cnpg.io/cluster": "shop-db", "cnpg.io/podRole": "instance"}
+              and ps_[0]["spec"]["podTargetLabels"] == ["cnpg.io/cluster"] and ps_[0]["spec"]["podMetricsEndpoints"][0]["port"] == "metrics",
+              "%s: its metrics are scraped (VMPodScrape of this Cluster, label cnpg_io_cluster), or the database alerts never fire for it" % pname)
 
     # 3. the Pooler of ha
     po = by_kind(H, "Pooler")[0]

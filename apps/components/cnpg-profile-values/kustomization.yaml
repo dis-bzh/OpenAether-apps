@@ -30,6 +30,11 @@ replacements:
         fieldPaths:
           - spec.affinity.additionalPodAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution.0.podAffinityTerm.labelSelector.matchLabels.[cnpg.io/cluster]
         options: {delimiter: "-", index: 0}
+      - select: {kind: VMPodScrape}
+        fieldPaths:
+          - metadata.name
+          - spec.selector.matchLabels.[cnpg.io/cluster]
+        options: {delimiter: "-", index: 0}
       - select: {kind: ExternalSecret}
         fieldPaths:
           - metadata.name
