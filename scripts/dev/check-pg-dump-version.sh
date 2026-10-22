@@ -8,7 +8,7 @@ set -euo pipefail
 ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 major() { sed -E 's/.*postgresql:([0-9]+).*/\1/'; }
 
-servers="$(grep -rhE '^[[:space:]]*imageName:[[:space:]]*[^[:space:]]*postgresql:[0-9]+' "$ROOT/apps/base/cnpg" "$ROOT/apps/components" --include='*.yaml' | major | sort -un)"
+servers="$(grep -rhE '^[[:space:]]*imageName:[[:space:]]*[^[:space:]]*postgresql:[0-9]+' "$ROOT/apps/base/cnpg" $([ -d "$ROOT/apps/components" ] && echo "$ROOT/apps/components") --include='*.yaml' | major | sort -un)"
 clients="$(grep -rhE '^[[:space:]]*image:[[:space:]]*[^[:space:]]*postgresql:[0-9]+' "$ROOT/apps/base/backup" --include='*.yaml' | major | sort -un)"
 # A vacuous pass would hide a renamed field or a moved brick.
 [ -n "$servers" ] || { echo "ERROR: no Cluster imageName found under apps/base/cnpg or apps/components" >&2; exit 1; }

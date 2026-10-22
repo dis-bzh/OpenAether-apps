@@ -43,6 +43,9 @@ mk; sed -i 's#postgresql:18\.[0-9]*#postgresql:16.3#' "$W/t/apps/base/backup/dat
 expect "restore-test image below the highest Cluster major fails" fail "$CHK" "$W/t"
 mk; sed -i 's#imageName: \(.*\)postgresql:16\.[0-9]*#imageName: \1postgresql:19.0#' "$W/t/apps/base/cnpg/grafana-db-cluster.yaml"
 expect "a Cluster bumped above the dump image fails" fail "$CHK" "$W/t"
+mk; mkdir -p "$W/t/apps/components"; cp -r "$ROOT/apps/components/cnpg-profile-ha" "$W/t/apps/components/"
+sed -i 's#postgresql:18\.[0-9]*#postgresql:19.0#' "$W/t/apps/components/cnpg-profile-ha/cluster.yaml"
+expect "a database profile Cluster above the dump image fails (apps #157)" fail "$CHK" "$W/t"
 mk; rm -rf "$W/t/apps/base/backup"; mkdir "$W/t/apps/base/backup"
 expect "no client image found fails instead of passing vacuously" fail "$CHK" "$W/t"
 
