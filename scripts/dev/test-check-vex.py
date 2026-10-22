@@ -48,6 +48,12 @@ check("two expiries fail", any("exactly one" in e for e in run(lambda s: s.updat
 check("an expiry over 90 days out fails", any("within 90 days" in e for e in run(lambda s: s.update(status_notes="Expires: 2027-03-01"))))
 check("no product fails", any("product" in e for e in run(lambda s: s.update(products=[]))))
 check("an unknown status fails", any("status" in e for e in run(lambda s: s.update(status="maybe"))))
+IG = {"vulnerabilities": [{"id": "X-1", "purls": ["pkg:rpm/x"], "expired_at": dt.date(2026, 11, 20), "statement": "why"}]}
+check("an ignore entry with a statement and a date passes", vex.check_ignore(IG, TODAY) == [])
+check("an expired ignore entry fails", any("EXPIRED" in e for e in vex.check_ignore(IG, dt.date(2026, 11, 21))))
+check("an ignore entry with no date fails", any("expired_at" in e for e in vex.check_ignore({"vulnerabilities": [{"id": "X", "statement": "s"}]}, TODAY)))
+check("an ignore entry with no statement fails", any("statement" in e for e in vex.check_ignore({"vulnerabilities": [{"id": "X", "expired_at": dt.date(2026, 11, 1)}]}, TODAY)))
+check("an ignore entry months away fails", any("days away" in e for e in vex.check_ignore({"vulnerabilities": [{"id": "X", "statement": "s", "expired_at": dt.date(2027, 6, 1)}]}, TODAY)))
 real = json.loads((HERE.parent.parent / ".vex/openaether-apps.openvex.json").read_text())
 check("the shipped file passes on the day it was written", vex.check(real, dt.date(2026, 10, 22)) == [])
 check("every shipped statement is not_affected with a justification", all(s.get("justification") for s in real["statements"]))

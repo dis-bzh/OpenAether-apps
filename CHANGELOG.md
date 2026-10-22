@@ -29,7 +29,7 @@ It fixes neither #42 nor #375 (infra), **does not fix #134** and does not make t
 - **Zitadel server and login v4.19.2 -> v4.19.5**: three HIGH advisories, published 2026-10-15, fixed in v4.19.5 (affected 4.0.0 to 4.19.4): GHSA-mchc-246r-6m76 (account takeover through
   header injection), GHSA-84fg-x5h4-w8xv (Login V2: forgeable email verification proof), GHSA-qj3q-235g-qr6w (one-click account takeover through the device code). Zitadel is the one brick
   routed on the public Gateway. The chart stays 10.4.0 (11.0.0 is beta); `image.tag` and `login.image.tag` are set in the HelmRelease as `tag@digest`, digests re-read from the registry.
-  The login now ships next 16.3.6, which clears the three CRITICAL next findings of the 0.3.1 scan.
+  The login ships next 16.3.6: the image scan of the v4.19.5 login (by digest) reports no CRITICAL finding with a fix, where v4.19.2 had three on next.
 - **The login's session cookie secret is a generated secret**: `login.sessionCookieSecretName` reads `zitadel-login-session-cookie`, an ExternalSecret over `secret/zitadel/session-cookie`
   (48 random characters, created by `configure.sh`, create only). Before, the chart set nothing and the login derived the key from its service key (deprecated fallback). **Effect on a running
   cluster:** open login sessions end once at the rollout. Until the OpenBao key exists the new login pods wait (`CreateContainerConfigError`) and the old ones keep serving.
@@ -45,15 +45,21 @@ The weekly scan (`sbom.yml`) had been red since the 0.3.0 release (3 runs) and n
 - a failing scan opens or comments on ONE issue per image, titled `[vuln] <image>`, and closes it when the scan passes (`scripts/ops/vuln-issue.sh`, `issues: write` on that job only; a
   `workflow_dispatch` on a branch opens none). The failing criterion is unchanged: CRITICAL with a fix upstream. HIGH findings stay invisible to this scan.
 - `.vex/openaether-apps.openvex.json` now records the findings accepted with a reason, each with ONE expiry date: restic 0.19.1 openssh (CVE-2026-60002), the Go stdlib in the `alpine/k8s`
-  kustomize (CVE-2025-68121) and PyJWT in the CloudNativePG PostgreSQL images (CVE-2026-102268) until 2026-11-20; the Longhorn 1.12.1 libexpat (SUSE-SU-2026:4619-1) until 2026-11-20 or
-  Longhorn v1.12.2; the Istio 1.24.2 grpc (CVE-2026-33186) and stdlib (CVE-2025-68121) until 2026-12-14. `scripts/check-vex.py` (CI step, and a job of the scan workflow that opens
-  `[vuln] VEX statements`) fails on a statement without justification or expiry, or past its date. Trivy does not read the dates; the check does.
+  kustomize (CVE-2025-68121), the `alpine/k8s` certifi (GHSA-6q48-6c7w-9gw2, published 2026-10-20) and PyJWT in the CloudNativePG PostgreSQL images (CVE-2026-102268) until 2026-11-20; the
+  Istio 1.24.2 grpc and stdlib findings (CVE-2026-33186, CVE-2025-68121) until 2026-12-14, the date of the end-of-support waiver. The Longhorn 1.12.1 libexpat (SUSE-SU-2026:4619-1) is in
+  `.github/trivy-ignore.yaml` (Trivy's own format, `expired_at` 2026-11-20) because Trivy 0.69 does not match the product of the Longhorn UI and manager images in a VEX file. The products
+  use Trivy's `index.docker.io` repository URL for Docker Hub images. Checked against Trivy 0.69.3 on the real images: the statements suppress exactly these findings.
+  `scripts/check-vex.py` (CI step, and a job of the scan workflow that opens `[vuln] VEX statements`) fails on a statement without justification or expiry, or past its date. Trivy does not
+  read the dates of a VEX file; the check does.
 
 ### What this patch does NOT fix
 
 - **Istio 1.24.2 stays**: its grpc finding is waived (above), and Istio's HIGH advisories of 2026-10-16 and 2026-03 (fixed in 1.29.x and later) remain open until the Istio 1.31 upgrade (apps #96).
   The line has been out of support since 2025-06; the waiver in `docs/eol-calendar.yaml` ends 2026-12-14.
-- The Longhorn, restic, `alpine/k8s` and CloudNativePG findings are **waived, not fixed**: no patched image exists yet. The VEX reasons are analyses of reachability, not proofs.
+- The Longhorn, restic, `alpine/k8s` and CloudNativePG findings above are **waived, not fixed**: no patched image exists yet. The reasons are analyses of reachability, not proofs.
+- **certifi in the CloudNativePG PostgreSQL images 18.6 and 16.15 (GHSA-6q48-6c7w-9gw2, CRITICAL, fixed in certifi 2026.10.19) is NOT waived**: barman-cloud uses it for TLS to the S3 endpoint, so
+  the code is on the execution path (the attack needs a leaked emSign intermediate key and an on-path position). The scan of these two images stays red and the new issue mechanism reports it.
+  The `-standard-trixie` variants of both tags scan with no CRITICAL finding with a fix; they were not adopted here because the base moves from Debian 11 to 13 (glibc, collations), which needs its own analysis.
 - The next advisories newer than the login's next 16.3.6 (fixed in 16.4.1) are not fixed by Zitadel yet; see the VEX file for what was waived.
 - HIGH findings and application-level advisories (like the three above) are not seen by Trivy.
 

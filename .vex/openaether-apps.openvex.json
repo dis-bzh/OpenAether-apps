@@ -12,7 +12,7 @@
       "timestamp": "2026-10-22T00:00:00Z",
       "products": [
         {
-          "@id": "pkg:oci/restic?repository_url=docker.io/restic/restic",
+          "@id": "pkg:oci/restic?repository_url=index.docker.io/restic/restic",
           "subcomponents": [
             {
               "@id": "pkg:apk/alpine/openssh-client-common@10.3_p1-r0"
@@ -39,7 +39,7 @@
       "timestamp": "2026-10-22T00:00:00Z",
       "products": [
         {
-          "@id": "pkg:oci/k8s?repository_url=docker.io/alpine/k8s",
+          "@id": "pkg:oci/k8s?repository_url=index.docker.io/alpine/k8s",
           "subcomponents": [
             {
               "@id": "pkg:golang/stdlib@v1.24.0"
@@ -76,39 +76,23 @@
     },
     {
       "vulnerability": {
-        "name": "SUSE-SU-2026:4619-1"
+        "name": "GHSA-6q48-6c7w-9gw2"
       },
       "timestamp": "2026-10-22T00:00:00Z",
       "products": [
         {
-          "@id": "pkg:oci/longhorn-ui?repository_url=docker.io/longhornio/longhorn-ui",
+          "@id": "pkg:oci/k8s?repository_url=index.docker.io/alpine/k8s",
           "subcomponents": [
             {
-              "@id": "pkg:rpm/suse/libexpat1@2.7.1-150700.3.12.1"
-            }
-          ]
-        },
-        {
-          "@id": "pkg:oci/longhorn-manager?repository_url=docker.io/longhornio/longhorn-manager",
-          "subcomponents": [
-            {
-              "@id": "pkg:rpm/suse/libexpat1@2.7.1-150700.3.12.1"
-            }
-          ]
-        },
-        {
-          "@id": "pkg:oci/longhorn-share-manager?repository_url=docker.io/longhornio/longhorn-share-manager",
-          "subcomponents": [
-            {
-              "@id": "pkg:rpm/suse/libexpat1@2.7.1-150700.3.12.1"
+              "@id": "pkg:pypi/certifi@2026.6.17"
             }
           ]
         }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "libexpat in the SLES base image of the Longhorn UI, manager and share-manager. None of the three parses XML from an outside source.",
-      "action_statement": "Wait for Longhorn v1.12.2 (milestone due 2026-10-28) and rescan; no jump to 1.13.0 for this (docs/patching.md).",
+      "impact_statement": "certifi bundles emSign roots whose intermediate CA keys leaked (fixed in certifi 2026.10.19). It is a dependency of Python tools in the toolbox image; our Jobs run kubectl, jq and curl, which use the system CA store, and never start Python.",
+      "action_statement": "Re-check on the next alpine/k8s tag (none carries certifi 2026.10.19 yet).",
       "status_notes": "Expires: 2026-11-20"
     },
     {
@@ -118,7 +102,7 @@
       "timestamp": "2026-10-22T00:00:00Z",
       "products": [
         {
-          "@id": "pkg:oci/pilot?repository_url=docker.io/istio/pilot",
+          "@id": "pkg:oci/pilot?repository_url=index.docker.io/istio/pilot",
           "subcomponents": [
             {
               "@id": "pkg:golang/google.golang.org/grpc@v1.67.1"
@@ -126,7 +110,7 @@
           ]
         },
         {
-          "@id": "pkg:oci/install-cni?repository_url=docker.io/istio/install-cni",
+          "@id": "pkg:oci/install-cni?repository_url=index.docker.io/istio/install-cni",
           "subcomponents": [
             {
               "@id": "pkg:golang/google.golang.org/grpc@v1.67.1"
@@ -147,7 +131,7 @@
       "timestamp": "2026-10-22T00:00:00Z",
       "products": [
         {
-          "@id": "pkg:oci/pilot?repository_url=docker.io/istio/pilot",
+          "@id": "pkg:oci/pilot?repository_url=index.docker.io/istio/pilot",
           "subcomponents": [
             {
               "@id": "pkg:golang/stdlib@v1.23.2"
@@ -155,7 +139,7 @@
           ]
         },
         {
-          "@id": "pkg:oci/install-cni?repository_url=docker.io/istio/install-cni",
+          "@id": "pkg:oci/install-cni?repository_url=index.docker.io/istio/install-cni",
           "subcomponents": [
             {
               "@id": "pkg:golang/stdlib@v1.23.2"

@@ -9,7 +9,10 @@ written as a 30-day waiver would hide a finding forever. So each statement must 
   - at least one product.
 It fails on a statement whose date is before today (UTC). Renew by re-reading the finding, not by moving the date.
 
-Usage: python3 scripts/check-vex.py [--file PATH] [--today YYYY-MM-DD]
+The Trivy ignore file .github/trivy-ignore.yaml (accepted findings the VEX matching misses) is held to the same rule:
+every entry needs a `statement` and an `expired_at` within 90 days from today. Trivy enforces that date itself.
+
+Usage: python3 scripts/check-vex.py [--file PATH] [--ignore-file PATH] [--today YYYY-MM-DD]
 Exit: 0 ok, 1 a statement is wrong or expired, 2 the file cannot be read.
 """
 import argparse
@@ -66,9 +69,28 @@ def check(doc, today):
     return errors
 
 
+def check_ignore(doc, today):
+    """Entries of a Trivy ignore file: a statement and an expiry that is not past and not too far."""
+    errors = []
+    for kind, entries in (doc or {}).items():
+        for e in entries or []:
+            who = f"ignore entry {kind}:{e.get('id', '?')}"
+            if not str(e.get("statement", "")).strip():
+                errors.append(f"{who}: no statement (why it is accepted)")
+            exp = e.get("expired_at")
+            if not isinstance(exp, dt.date):
+                errors.append(f"{who}: no expired_at date")
+            elif exp < today:
+                errors.append(f"{who}: EXPIRED on {exp} - Trivy no longer ignores it; fix the image or re-read the finding")
+            elif (exp - today).days > MAX_DAYS:
+                errors.append(f"{who}: expired_at {exp} is more than {MAX_DAYS} days away")
+    return errors
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--file", default=str(ROOT / ".vex/openaether-apps.openvex.json"))
+    ap.add_argument("--ignore-file", default=str(ROOT / ".github/trivy-ignore.yaml"))
     ap.add_argument("--today", default=None)
     a = ap.parse_args()
     try:
@@ -78,13 +100,21 @@ def main():
         print(f"cannot read: {e}", file=sys.stderr)
         return 2
     errors = check(doc, today)
+    ig = Path(a.ignore_file)
+    if ig.exists():
+        try:
+            import yaml
+            errors += check_ignore(yaml.safe_load(ig.read_text()), today)
+        except (ImportError, ValueError, yaml.YAMLError) as e:  # PyYAML is in scripts/ci-requirements.txt
+            print(f"cannot read {ig}: {e}", file=sys.stderr)
+            return 2
     for e in errors:
         print(f"ERROR {e}")
     n = len(doc.get("statements") or [])
     if errors:
         return 1
     soonest = min((EXPIRES.search(str(s.get("status_notes", ""))).group(1) for s in doc["statements"]), default="-")
-    print(f"OK - {n} VEX statement(s), soonest expiry {soonest}")
+    print(f"OK - {n} VEX statement(s), soonest expiry {soonest}" + (f"; {ig.name} checked" if ig.exists() else ""))
     return 0
 
 

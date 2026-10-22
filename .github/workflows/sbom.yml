@@ -102,6 +102,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install PyYAML
+        run: pip install -r scripts/ci-requirements.txt
+
       - name: Every statement has a reason and a date that is not past
         id: check
         run: |
