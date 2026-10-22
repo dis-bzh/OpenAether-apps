@@ -50,7 +50,7 @@ spec:
               - istio-system
             names:
               - "ztunnel-*"
-        # The audit-sink shipper (opt-in component audit-log-sink) reads the apiserver's 0600 audit file: root by design, by name.
+        # The audit-sink shipper (opt-in component audit-log-sink): root by design (the 0600 audit file), by name.
         - resources:
             namespaces:
               - services-observability-audit-sink
