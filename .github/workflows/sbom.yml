@@ -2,7 +2,10 @@
 # scripts/dev/gen-sbom.py: Helm charts and every image, including the ones the charts render) and a Trivy scan of
 # those images (ANSSI SBOM25-1/-2/-3, SSDLC CICD-AIP-01b, CONT-REC05).
 # The inventory is attached to the release as openaether-apps-<tag>.cdx.json. A CRITICAL finding with a fix
-# upstream fails the scan job; an accepted one is recorded in .vex/openaether-apps.openvex.json (docs/supply-chain.md).
+# upstream fails the scan job; an accepted one is recorded in .vex/openaether-apps.openvex.json (docs/supply-chain.md),
+# with a reason and an expiry date that scripts/check-vex.py enforces (Trivy itself ignores dates).
+# A failing scan opens (or comments on) ONE issue per image, `[vuln] <image>`, and closes it when the scan passes: a red
+# run alone went unseen for days. Not from a workflow_dispatch on a branch: a test run opens no issue.
 # Never on a pull request, so it joins no required check; no cloud credential, only anonymous registry reads.
 name: SBOM
 
@@ -77,6 +80,47 @@ jobs:
           [ "$(jq length <<<"$list")" -gt 10 ] || { echo "::error::too few images: the extractor is broken"; exit 1; }
           echo "images=${list}" >>"$GITHUB_OUTPUT"
 
+  # Trivy cannot tell that a waiver has run out. Same issue mechanism as the scans, key `VEX statements`.
+  vex:
+    name: VEX statements
+    if: github.repository == 'dis-bzh/OpenAether-apps'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write  # open, comment on or close the one `[vuln] VEX statements` issue
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # false for a workflow_dispatch on a branch other than the default
+      REPORT_ISSUES: >-
+        ${{ github.event_name != 'workflow_dispatch' ||
+        github.ref_name == github.event.repository.default_branch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Every statement has a reason and a date that is not past
+        id: check
+        run: |
+          set +e
+          python3 -I scripts/check-vex.py | tee vex-report.txt
+          echo "rc=${PIPESTATUS[0]}" >>"$GITHUB_OUTPUT"
+
+      - name: Open or update the issue when a statement is wrong or expired
+        if: steps.check.outputs.rc != '0' && env.REPORT_ISSUES == 'true'
+        run: scripts/ops/vuln-issue.sh open "VEX statements" vex-report.txt "$RUN_URL"
+
+      - name: Close the issue when all statements are valid
+        if: steps.check.outputs.rc == '0' && env.REPORT_ISSUES == 'true'
+        run: scripts/ops/vuln-issue.sh close "VEX statements" "$RUN_URL"
+
+      - name: Fail the run when a statement is wrong or expired
+        if: steps.check.outputs.rc != '0'
+        run: exit 1
+
   release-asset:
     name: Attach to the release
     needs: inventory
@@ -105,6 +149,17 @@ jobs:
     needs: inventory
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write  # open, comment on or close the `[vuln] <image>` issue, nothing else
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # false for a workflow_dispatch on a branch other than the default
+      REPORT_ISSUES: >-
+        ${{ github.event_name != 'workflow_dispatch' ||
+        github.ref_name == github.event.repository.default_branch }}
     strategy:
       fail-fast: false
       matrix:
@@ -125,6 +180,7 @@ jobs:
           fi
 
       - name: Trivy image scan (CRITICAL with a fix upstream)
+        id: trivy
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # 0.35.0
         with:
           scan-type: image
@@ -134,3 +190,20 @@ jobs:
           exit-code: 1
           format: table
           trivy-config: ${{ steps.vex.outputs.config }}
+          output: trivy-report.txt
+
+      - name: Show the report
+        if: always()
+        run: cat trivy-report.txt 2>/dev/null || echo "no report (the scan did not start)"
+
+      - name: Open or update the issue for this image
+        if: failure() && steps.trivy.outcome == 'failure' && env.REPORT_ISSUES == 'true'
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: scripts/ops/vuln-issue.sh open "$IMAGE" trivy-report.txt "$RUN_URL"
+
+      - name: Close the issue of this image when the scan passes
+        if: steps.trivy.outcome == 'success' && env.REPORT_ISSUES == 'true'
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: scripts/ops/vuln-issue.sh close "$IMAGE" "$RUN_URL"

@@ -17,10 +17,45 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
-Bug fixes, documentation corrections and safety nets after 0.3.1, for the next release (a 0.3.2 patch was prepared and abandoned: there is no 0.3.2 tag). No new scope. Rungs: **mocked**
-(static checks, a real Zitadel and PostgreSQL in containers for #133) for every line, plus one short lab (lab 18, Scaleway, infra 7e367d9 / apps 75e464f, on branches): nominal `cluster-up`
-in 9 min 07 s, `cluster-verify` 15 passed, 0 failed, 38 Kustomizations and 16 HelmReleases Ready except `alloy-audit` (suspended by design). It fixes neither #42 nor #375 (infra), **does not
-fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
+## [0.3.2] — 2026-10-22
+
+0.3.2 is a **security patch** of 0.3.1, paired with OpenAether-infra 0.3.2 (which only changes its `git_ref` pin). It ships the fixes that were merged on main after 0.3.1
+(below, "Fixed") and, above all, the **Zitadel v4.19.5** update. No new scope. Rungs: **mocked** (static checks, a real Zitadel v4.19.5 and PostgreSQL in containers through
+`scripts/dev/test-zitadel-config.sh`, Kyverno CLI on the rendered workloads); nothing of this patch was run on a cluster by this change (a lab run, if any, is added by the release notes).
+It fixes neither #42 nor #375 (infra), **does not fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
+
+### Security
+
+- **Zitadel server and login v4.19.2 -> v4.19.5**: three HIGH advisories, published 2026-10-15, fixed in v4.19.5 (affected 4.0.0 to 4.19.4): GHSA-mchc-246r-6m76 (account takeover through
+  header injection), GHSA-84fg-x5h4-w8xv (Login V2: forgeable email verification proof), GHSA-qj3q-235g-qr6w (one-click account takeover through the device code). Zitadel is the one brick
+  routed on the public Gateway. The chart stays 10.4.0 (11.0.0 is beta); `image.tag` and `login.image.tag` are set in the HelmRelease as `tag@digest`, digests re-read from the registry.
+  The login now ships next 16.3.6, which clears the three CRITICAL next findings of the 0.3.1 scan.
+- **The login's session cookie secret is a generated secret**: `login.sessionCookieSecretName` reads `zitadel-login-session-cookie`, an ExternalSecret over `secret/zitadel/session-cookie`
+  (48 random characters, created by `configure.sh`, create only). Before, the chart set nothing and the login derived the key from its service key (deprecated fallback). **Effect on a running
+  cluster:** open login sessions end once at the rollout. Until the OpenBao key exists the new login pods wait (`CreateContainerConfigError`) and the old ones keep serving.
+- **wait4x 3.6 -> 3.7.2** (the readiness init container of the login pods; digest pinned): clears its 5 CRITICAL findings.
+- **`gen-sbom.py` skips `helm.sh/hook: test` resources**: the bats pod of the Zitadel chart is never deployed (Flux runs no `helm test`) and was failing the scan on a perl CVE.
+- Also in v4.19.5, handled in `docs/zitadel-hardening.md`: list endpoints enforce query limits (nothing in this repository lists objects) and the device flow has a consent screen (no client of
+  the platform uses the device flow).
+
+### Image scan follow-up
+
+The weekly scan (`sbom.yml`) had been red since the 0.3.0 release (3 runs) and nobody was told. Now:
+
+- a failing scan opens or comments on ONE issue per image, titled `[vuln] <image>`, and closes it when the scan passes (`scripts/ops/vuln-issue.sh`, `issues: write` on that job only; a
+  `workflow_dispatch` on a branch opens none). The failing criterion is unchanged: CRITICAL with a fix upstream. HIGH findings stay invisible to this scan.
+- `.vex/openaether-apps.openvex.json` now records the findings accepted with a reason, each with ONE expiry date: restic 0.19.1 openssh (CVE-2026-60002), the Go stdlib in the `alpine/k8s`
+  kustomize (CVE-2025-68121) and PyJWT in the CloudNativePG PostgreSQL images (CVE-2026-102268) until 2026-11-20; the Longhorn 1.12.1 libexpat (SUSE-SU-2026:4619-1) until 2026-11-20 or
+  Longhorn v1.12.2; the Istio 1.24.2 grpc (CVE-2026-33186) and stdlib (CVE-2025-68121) until 2026-12-14. `scripts/check-vex.py` (CI step, and a job of the scan workflow that opens
+  `[vuln] VEX statements`) fails on a statement without justification or expiry, or past its date. Trivy does not read the dates; the check does.
+
+### What this patch does NOT fix
+
+- **Istio 1.24.2 stays**: its grpc finding is waived (above), and Istio's HIGH advisories of 2026-10-16 and 2026-03 (fixed in 1.29.x and later) remain open until the Istio 1.31 upgrade (apps #96).
+  The line has been out of support since 2025-06; the waiver in `docs/eol-calendar.yaml` ends 2026-12-14.
+- The Longhorn, restic, `alpine/k8s` and CloudNativePG findings are **waived, not fixed**: no patched image exists yet. The VEX reasons are analyses of reachability, not proofs.
+- The next advisories newer than the login's next 16.3.6 (fixed in 16.4.1) are not fixed by Zitadel yet; see the VEX file for what was waived.
+- HIGH findings and application-level advisories (like the three above) are not seen by Trivy.
 
 ### Fixed
 
