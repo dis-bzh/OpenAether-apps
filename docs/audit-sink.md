@@ -77,5 +77,5 @@ stays (it is locked).
 
 `scripts/dev/test-audit-sink-shipper.sh` (real restic 0.19.1 and busybox from the pinned image: whole lines, contiguous ranges, restart from the
 sink, rotation with `eof`, outage then recovery with no loss and no repeat, an explicit gap, no lock object), `scripts/dev/test-audit-sink.py
---selftest` (opt-in, narrow, exempt by name), `scripts/dev/test-vmrules.sh` (unit cases of the five alerts), `scripts/dev/test-alert-metrics.py`
+--selftest` (opt-in, narrow, exempt by name), `scripts/dev/test-audit-sink-exporter.py` (the delivery check against a fake `aws`: ages, a failing store, an empty sink), `scripts/dev/test-vmrules.sh` (unit cases of the five alerts), `scripts/dev/test-alert-metrics.py`
 (the four `oa_audit_sink_*` series are catalogued UNVERIFIED), `scripts/dev/test-kyverno-policies.sh` (the shipper is spared, an intruder next to it is not).
