@@ -103,7 +103,8 @@ sql "delete from eventstore.unique_constraints where unique_type='migration_done
 sql "select count(*) from eventstore.events2 where event_type='system.migration.started' and payload->>'name'='$STEP'" | grep -qx 1 \
   && ok "(fixture) step $STEP has a started event and no done" || bad "fixture for $STEP"
 zsetup setup 45 1; rc=$?
-if [ "$rc" = 137 ] && grep -q "already started" "$W/setup.log"; then ok "a new setup waits on $STEP for ever ('migration already started'), as in the lab"
+# `timeout -s KILL` exits 137 with GNU coreutils and 124 with the newer runner images' timeout: either means "still waiting at the deadline".
+if { [ "$rc" = 137 ] || [ "$rc" = 124 ]; } && grep -q "already started" "$W/setup.log"; then ok "a new setup waits on $STEP for ever ('migration already started'), as in the lab"
 else bad "the setup did not wait (rc=$rc)"; tail -3 "$W/setup.log"; fi
 docker rm -f "$NET-z" >/dev/null 2>&1
 
