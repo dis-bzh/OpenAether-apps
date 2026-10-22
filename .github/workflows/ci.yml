@@ -254,6 +254,7 @@ jobs:
           # The optional database profiles: render, CRD shape, guarantees, platform policies (apps #157).
           KYVERNO="$d/kyverno" python3 -I scripts/dev/test-cnpg-profiles.py
           python3 -I scripts/dev/test-cnpg-profiles.py --selftest
+          python3 -I scripts/dev/test-database-profiles-doc.py
 
       - name: Vendored upstream dumps match their recorded sha256 (critic, static)
         run: |

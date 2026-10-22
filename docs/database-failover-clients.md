@@ -23,8 +23,8 @@ Use `<cluster>-rw.foundation-databases.svc` (the read-write Service follows the 
 - Do not catch the error and carry on as if the write had happened.
 - Do not retry non-idempotent writes blindly (double charge, double e-mail).
 - Do not disable synchronous replication to make writes "faster" or "unblock" them: that is the one way to lose acknowledged commits (`resilience.md`).
-- Do not point a pooler's server connections at a pod; a connection pooler in front of the Service helps only if it also reconnects and retries.
+- Do not point a pooler's server connections at a pod; a connection pooler in front of the Service helps only if it also reconnects and retries. The `ha` database profile ships one (PgBouncer, transaction mode, `<name>-pooler-rw`): it hides the reconnect, not the transaction in flight, and has limits of its own (`database-profiles.md`).
 
 ## Checking your own client
 
-Run the writer of `resilience.md` ("Zero-loss proof") against your Cluster, or your application's own workload, while you delete the primary pod (`kubectl cnpg promote` for a planned switchover, `kubectl delete pod <primary> --grace-period=0 --force` for a crash). Pass: no error reaches the user beyond the gap, no duplicate row, no lost row.
+Run the writer of `resilience.md` ("Zero-loss proof"; the script is `scripts/ops/db-zeroloss.sh`, checker included) against your Cluster, or your application's own workload, while you delete the primary pod (`kubectl cnpg promote` for a planned switchover, `kubectl delete pod <primary> --grace-period=0 --force` for a crash). Pass: no error reaches the user beyond the gap, no duplicate row, no lost row.

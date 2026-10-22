@@ -105,6 +105,8 @@ Every resilience feature aims at no interruption or, at the very least, **no dat
 
 ### Zero-loss proof: lab pass criteria
 
+The writer and the checker below exist as `scripts/ops/db-zeroloss.sh` (and as suspended Jobs, `apps/components/cnpg-profile-bench`); `scripts/dev/test-db-bench.sh` shows on a real PostgreSQL that the checker catches a lost id and that a crash restart loses no acknowledged one. The profiles built on this setting are in `database-profiles.md`.
+
 One writer, one verifier, run against `zitadel-db` and `grafana-db` (a scratch database `zl` and a dedicated role in each Cluster, dropped afterwards; never an application table).
 
 - **Writer** (outside the node under test: the bastion or a pod on a node not in the drill): a unique `run_id`; a loop at 100 commits per second (10 sequential workers at 10 per second is enough); each iteration opens a **fresh connection** (`connect_timeout=2`), runs `INSERT INTO zl_ack(run_id, seq) VALUES (...) ON CONFLICT DO NOTHING` with the default `synchronous_commit`, and only **after the COMMIT returned** appends `seq` and the client clock to a local log that is flushed to disk. A failed attempt is retried with the same `seq`. The log of acknowledged ids lives on the writer, never in the database.
