@@ -57,8 +57,9 @@ The weekly scan (`sbom.yml`) had been red since the 0.3.0 release (3 runs) and n
 - **Istio 1.24.2 stays**: its grpc finding is waived (above), and Istio's HIGH advisories of 2026-10-16 and 2026-03 (fixed in 1.29.x and later) remain open until the Istio 1.31 upgrade (apps #96).
   The line has been out of support since 2025-06; the waiver in `docs/eol-calendar.yaml` ends 2026-12-14.
 - The Longhorn, restic, `alpine/k8s` and CloudNativePG findings above are **waived, not fixed**: no patched image exists yet. The reasons are analyses of reachability, not proofs.
-- **certifi in the CloudNativePG PostgreSQL images 18.6 and 16.15 (GHSA-6q48-6c7w-9gw2, CRITICAL, fixed in certifi 2026.10.19) is NOT waived**: barman-cloud uses it for TLS to the S3 endpoint, so
-  the code is on the execution path (the attack needs a leaked emSign intermediate key and an on-path position). The scan of these two images stays red and the new issue mechanism reports it.
+- **certifi in the CloudNativePG PostgreSQL images 18.6 and 16.15 and in `quay.io/kiwigrid/k8s-sidecar:2.14.1` (GHSA-6q48-6c7w-9gw2, CRITICAL, fixed in certifi 2026.10.19, published 2026-10-20) is NOT waived**:
+  barman-cloud uses certifi for TLS to the S3 endpoint, and whether the sidecar's clients consult it was not established, so the code is treated as on the execution path (the attack needs a leaked emSign
+  intermediate key and an on-path position). The scans of these three images stay red and the new issue mechanism reports them; no newer image exists.
   The `-standard-trixie` variants of both tags scan with no CRITICAL finding with a fix; they were not adopted here because the base moves from Debian 11 to 13 (glibc, collations), which needs its own analysis.
 - The next advisories newer than the login's next 16.3.6 (fixed in 16.4.1) are not fixed by Zitadel yet; see the VEX file for what was waived.
 - HIGH findings and application-level advisories (like the three above) are not seen by Trivy.
