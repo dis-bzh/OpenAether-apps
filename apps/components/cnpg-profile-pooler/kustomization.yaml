@@ -20,9 +20,38 @@ patches:
                 cnpg.io/poolerName: NAME-pooler-rw
           toPorts:
             - ports: [{port: "5432", protocol: TCP}]
+  # TLS to the pooler (lab 23): PgBouncer presents the Cluster server certificate, which names only the -rw, -ro and -r
+  # Services, so `sslmode=verify-full` to <name>-pooler-rw failed ("server certificate for ... does not match host
+  # name"). The operator-managed certificate takes extra names; after it is reissued the pooler pods must be restarted
+  # to serve it (a rollout of the Pooler Deployment, once).
+  - target: {kind: Cluster, labelSelector: "openaether.io/db-profile=ha"}
+    patch: |-
+      - op: add
+        path: /spec/certificates
+        value:
+          serverAltDNSNames:
+            - NAME-pooler-rw
+            - NAME-pooler-rw.NAMESPACE
+            - NAME-pooler-rw.NAMESPACE.svc
+            - NAME-pooler-rw.NAMESPACE.svc.cluster.local
 replacements:
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.namespace}
+    targets:
+      - select: {kind: Cluster, labelSelector: "openaether.io/db-profile=ha"}
+        fieldPaths:
+          - spec.certificates.serverAltDNSNames.1
+          - spec.certificates.serverAltDNSNames.2
+          - spec.certificates.serverAltDNSNames.3
+        options: {delimiter: ".", index: 1}
   - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.name}
     targets:
+      - select: {kind: Cluster, labelSelector: "openaether.io/db-profile=ha"}
+        fieldPaths:
+          - spec.certificates.serverAltDNSNames.0
+          - spec.certificates.serverAltDNSNames.1
+          - spec.certificates.serverAltDNSNames.2
+          - spec.certificates.serverAltDNSNames.3
+        options: {delimiter: "-", index: 0}
       - select: {kind: Pooler}
         fieldPaths:
           - metadata.name

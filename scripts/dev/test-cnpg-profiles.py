@@ -208,6 +208,12 @@ def main():
     ps = po["spec"]
     check(po["metadata"]["name"] == "shop-db-pooler-rw" and ps["cluster"]["name"] == "shop-db" and ps["type"] == "rw", "pooler: read-write, fronts the Cluster")
     check(ps["instances"] == 2 and ps["pgbouncer"]["poolMode"] == "transaction", "pooler: 2 pods, transaction pooling")
+    # lab 23: PgBouncer serves the Cluster's server certificate; verify-full to the pooler needs its Service names in it
+    alt = by_kind(H, "Cluster")[0]["spec"].get("certificates", {}).get("serverAltDNSNames", [])
+    check(alt == ["shop-db-pooler-rw", "shop-db-pooler-rw.shop", "shop-db-pooler-rw.shop.svc", "shop-db-pooler-rw.shop.svc.cluster.local"],
+          "pooler: the server certificate names the pooler Service (sslmode=verify-full works through it): %s" % alt)
+    check("certificates" not in by_kind(S, "Cluster")[0]["spec"] and "certificates" not in by_kind(L, "Cluster")[0]["spec"],
+          "light and standard: no extra certificate names (no pooler)")
     prm = ps["pgbouncer"]["parameters"]
     check(int(prm["query_wait_timeout"]) >= 120 and int(prm["server_login_retry"]) <= 2 and int(prm["max_prepared_statements"]) > 0
           and prm["server_reset_query_always"] == "0", "pooler: waits through a failover, retries a lost server at once, prepared statements on")
@@ -254,6 +260,12 @@ def main():
         check(jobs["bench"]["spec"]["template"]["spec"]["containers"][0]["args"][1] == "ha" and any(
             e["name"] == "POOLER_HOST" and e["value"] == "shop-db-pooler-rw" for e in jobs["bench"]["spec"]["template"]["spec"]["containers"][0]["env"]),
             "bench: the benchmark names the profile and both endpoints")
+        bn = [d for d in by_kind(bench, "CiliumNetworkPolicy") if d["metadata"]["labels"].get("openaether.io/db-profile") == "bench"]
+        check(len(bn) == 1 and bn[0]["metadata"]["name"] == "shop-db-bench" and bn[0]["metadata"]["namespace"] == "shop"
+              and bn[0]["spec"]["endpointSelector"]["matchLabels"] == {"openaether.io/db-profile": "bench"}
+              and bn[0]["spec"]["egress"][0]["toEndpoints"][0]["matchLabels"] == {"cnpg.io/cluster": "shop-db"}
+              and bn[0]["spec"]["egress"][0]["toPorts"][0]["ports"] == [{"port": "5432", "protocol": "TCP"}],
+              "bench: the Job pods may reach their database and its pooler on 5432 (lab 23: a pod selected by a policy denies the rest)")
         cm = next(d for d in by_kind(bench, "ConfigMap") if d["metadata"]["name"] == "shop-db-bench-scripts")
         for f in ("db-bench.sh", "db-bench-parse.py", "db-zeroloss.sh"):
             check(cm["data"][f] == (COMP / "cnpg-profile-bench" / f).read_text() and (REPO / "scripts/ops" / f).resolve() == (COMP / "cnpg-profile-bench" / f).resolve(),

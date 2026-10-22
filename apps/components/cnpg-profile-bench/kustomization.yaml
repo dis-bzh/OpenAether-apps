@@ -7,6 +7,7 @@ apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 resources:
   - jobs.yaml
+  - networkpolicy.yaml
 configMapGenerator:
   - name: NAME-bench-scripts
     files:
@@ -53,6 +54,11 @@ replacements:
       - select: {kind: PersistentVolumeClaim}
         fieldPaths:
           - metadata.name
+        options: {delimiter: "-", index: 0}
+      - select: {kind: CiliumNetworkPolicy, labelSelector: "openaether.io/db-profile=bench"}
+        fieldPaths:
+          - metadata.name
+          - spec.egress.0.toEndpoints.0.matchLabels.[cnpg.io/cluster]
         options: {delimiter: "-", index: 0}
   - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.profile}
     targets:
