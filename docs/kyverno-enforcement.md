@@ -73,15 +73,25 @@ namespace on an idle cluster, then fixes or exempts them.
 `require-limits` 46 fails, `require-ro-rootfs` 29, `require-security-context` (`check-run-as-non-root`) 3, nothing for the other
 policies. Fixed since (rendered-chart test `scripts/dev/test-chart-limits.py`): the memory limit of Alloy and its config-reloaders,
 cert-manager's webhook and cainjector, the Zitadel login and its `wait-for-zitadel` init container, Grafana's dashboard sidecar.
-Left, and why (do not flip `require-limits` or `require-ro-rootfs` to Enforce in these namespaces before they are done):
+Lab 22 (Scaleway, idle healthy cluster, the reports of the pods that exist, lab namespaces left out): `require-ro-rootfs` 14 -> 0 (all six VictoriaMetrics components and the operator's `config-reloader` / `config-init`),
+`require-limits` 13 -> 2, every other policy 0. Per policy and namespace, before (apps 71f2496) / after:
+
+| Policy | Namespace | Before | After |
+|---|---|---|---|
+| `require-ro-rootfs` | `services-observability` | 14 | 0 |
+| `require-limits` | `services-observability` | 8 | 2 |
+| `require-limits` | `foundation-databases` | 3 | 0 |
+| `require-limits` | `services-identity` | 2 | 0 on a running cluster (2 at each install) |
+
+What the changes were: `readOnlyRootFilesystem` on the flat `securityContext` of the VictoriaMetrics CRs, a 64Mi memory limit on the operator's own sidecar and init container (patched by name), `spec.resources` on `zitadel-db` (request 50m / 256Mi, memory limit 1Gi,
+from 255Mi measured; Flux rolled the instances with a 12 s write gap). Left, and why (do not flip `require-limits` to Enforce in these namespaces before they are done):
 
 | Workload | Policy | Why it stays |
 |---|---|---|
-| `zitadel-db` | `require-limits` (`postgres`, `bootstrap-controller`) | `zitadel-db` has no `spec.resources`; adding it rolls every instance and a limit below the working set kills Postgres: a cluster exercise |
-| `vmagent`, `vmalert`, `vmalertmanager`, `vminsert`, `vmselect`, `vmstorage` and their `config-reloader` / `config-init` | `require-limits`, `require-ro-rootfs` | operator-managed pods: the limits come from the CR (set for the main containers; not for the reloaders), and the read-only root filesystem needs the operator's volume layout checked per component |
-| `grafana-sc-dashboard`, `alertmanager` | `require-ro-rootfs` | not tried with a read-only root filesystem; the sidecar writes its dashboards to an emptyDir, which would need confirming |
+| `vmalert` (2 pods), init container `config-init` | `require-limits` | the operator appends a patch of a VMAlert's init container instead of merging it: the Deployment is refused (duplicate init container name, lab 22) |
+| `zitadel-init` and `zitadel-setup` Job pods | `require-limits` | one-shot Job pods at install; the chart exposes no resources for them and the peak of the 110 s setup Job is not measured |
 | `alloy-audit` | `require-security-context` (`runAsNonRoot`) | root by design: the apiserver writes the audit file 0600 for its own user (exempt by name in `restrict-capabilities`, not here) |
-| `zitadel-setup` Job | `require-limits` | one-shot Job pods that finished; the chart exposes no resources for them |
+| `grafana-sc-dashboard`, `alertmanager` | `require-ro-rootfs` | no violation seen in lab 22 (the grafana sidecar is covered by the earlier fix, alertmanager by the flat block above) |
 
 ## When to flip, in this order
 

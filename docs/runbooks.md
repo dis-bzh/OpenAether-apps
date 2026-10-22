@@ -547,7 +547,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 ### BackupCopyJobFailed
 
 - Check: `kubectl -n <ns> logs job/<job>`; the Job is one of `cnpg-store-replicate`, `etcd-snapshot`, `backup-verify`. `cnpg-store-replicate` prints `the primary lists no object while the replica holds N` when the primary store was wiped (nothing is pruned on the replica then). `etcd-snapshot` prints which stage failed: `discover-controlplane` (`kubectl logs <pod> -c discover-controlplane`: the Kubernetes API listing, or "no control plane answers on port 50000"), then `talos-snapshot`, then `restic-push`.
-- Do: Fix what the log names (a store or its key pair, the Talos grant `os:etcd:backup`, restic), then `kubectl -n <ns> create job --from=cronjob/<cronjob> manual-$(date +%s)`. A failed CHECK of the verifier is a metric, not a failed Job.
+- Do: Fix what the log names (a store or its key pair, the Talos grant `os:etcd:backup`, restic), then `kubectl -n <ns> create job --from=cronjob/<cronjob> manual-$(date +%s)`. A failed CHECK of the verifier is a metric, not a failed Job. **The alert reads the failed Job objects**: it stays firing after the cause is fixed and later runs succeed, until the failed Jobs are deleted (`kubectl -n <ns> delete job <job>`; lab 22: it cleared two minutes after the delete). Check first that a newer Job of the same CronJob completed.
 
 ### CnpgStoreReplicationStale
 

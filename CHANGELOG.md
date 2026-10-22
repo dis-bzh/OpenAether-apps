@@ -22,6 +22,13 @@ Bug fixes, documentation corrections and safety nets after 0.3.1, for the next r
 in 9 min 07 s, `cluster-verify` 15 passed, 0 failed, 38 Kustomizations and 16 HelmReleases Ready except `alloy-audit` (suspended by design). It fixes neither #42 nor #375 (infra), **does not
 fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
 
+### Observed and fixed (lab 22, Scaleway, 3 control planes + 5 workers, rung: observed on a cluster)
+
+- The lab 21 follow-up changes ran on a cluster (database failover 44-64 s for a primary on a powered-off worker, 6 s with a CoreDNS replica lost, kube-state-metrics at two replicas); a database primary inside a lost ZONE took 122 s because the kube-controller-manager leader was in the zone (`docs/resilience.md`, "Measured in lab 22").
+- **Kyverno Audit noise (#47)**: `readOnlyRootFilesystem` on the VictoriaMetrics CRs, a memory limit on the operator's `config-reloader` / `config-init` (not on a VMAlert's `config-init`: the operator refuses the patch), `spec.resources` on `zitadel-db`. `require-ro-rootfs` 14 -> 0, `require-limits` 13 -> 2 on an idle cluster; table in `docs/kyverno-enforcement.md`. Static tests extended (`test-container-security-context.py`, `test-container-bounds.py`).
+- **`FluxObjectSuspended`** exempted `alloy-audit` in the wrong namespace (`services-observability` instead of `services-observability-audit`) and would have fired after 24 h on every default install; fixed, unit test corrected.
+- `BackupCopyJobFailed` stays firing after the cause is fixed until the failed Jobs are deleted: runbook says so.
+
 ### Added (0.4.0, owner decisions of 2026-10-21)
 
 - **Kyverno: why Audit is the default and how to switch a namespace** (#37): `docs/kyverno-enforcement.md` records the decision, the label steps, the rollback and what the labs proved; the remaining noise stays in #47.

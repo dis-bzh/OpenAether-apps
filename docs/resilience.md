@@ -52,9 +52,9 @@ toleration, or for `task cluster-replace-node` in OpenAether-infra, which delete
 description and runbook heading names the task to run (`cluster-node-state`, `cluster-node-recover`, `cluster-replace-node`, `failure-domain-check`, `dr-restore-plan` as the last resort) and what not to do.
 The Longhorn "fewer than two healthy replicas" case is `LonghornVolumeDegraded` (Longhorn exports no replica count). New series no cluster has shown are listed in `docs/monitoring-0.4.md`.
 
-## What a node loss costs, and the levers (0.4.0, lab 21 findings; offline changes, not yet drilled)
+## What a node loss costs, and the levers (0.4.0, lab 21 findings; drilled in lab 22)
 
-Rung: **mocked/static**. Every number below is from lab 21 (before the changes) or a derivation marked UNVERIFIED. Not a compliance claim.
+Rung: **mocked/static** for the design below; **observed on a cluster** in lab 22 for the figures in "Measured in lab 22" at the end of this section. The other numbers are from lab 21 (before the changes) or derivations marked UNVERIFIED. Not a compliance claim.
 
 ### Database failover (apps #154)
 
@@ -84,3 +84,11 @@ Two pods, not autosharding (a shard holds only part of the objects, so losing on
 ### Lab pass criteria (worker power-off with the primary on it)
 
 Power the worker off through the provider API and leave it off for 5 minutes: the longest write gap of the 1 Hz database writer (fresh connection per sample) is at most 75 s (expected about 60 s; the 30 s target is unmet by design, see above); a replica is promoted within 45 s of the node turning Unknown (the eviction is 30 s after the taint); the data facts are identical; the old primary rejoins as a replica without a manual step after power-on (or after `cluster-replace-node`, see OpenAether-infra). With kube-state-metrics on the lost node: `NodeUnreachable` still fires. `count(kube_node_info)` equals the number of nodes with both kube-state-metrics pods up and with one killed. `zonespread` shows no workload with all replicas in one zone on a fresh install (a preference: record the exceptions).
+
+### Measured in lab 22 (Scaleway, 3 control planes + 5 workers, 2026-10-22)
+
+The offline changes above ran on a cluster (the full table is in OpenAether-infra `docs/resilience.md`). Database primary on a worker powered off for 5 minutes: write gap 43.6 s and 64 s (expected about 60 s, bar 75 s), promotion before the node turned Unknown
+because the kubelet posts NotReady at once on the provider's clean shutdown; undrained reboot of the primary's worker 57 s. Worker with a CoreDNS replica: write gap 6 s (was 287 s). Both two-worker zones of the 5-worker profile powered off 10 minutes: HTTP longest run 2 s,
+`/readyz` 2 s, nothing Pending for lack of CPU, OpenBao 2 of 3 then 3 of 3; the database gap was 11 s with the primary outside the zone and **122 s with it inside** (the kube-controller-manager leader was in the lost zone, so the node lifecycle and taint eviction controllers started 37 s late: the
+30 s toleration of this section does not cover that case). `NodeUnreachable` fires with one kube-state-metrics pod killed and the other lost (+300 s). Not observed: a machine that dies without the kubelet saying NotReady (both provider actions shut the OS down cleanly).
+`FluxObjectSuspended` named the wrong namespace for the by-design suspended `alloy-audit` and would have fired after 24 h on a default install: fixed.
