@@ -122,6 +122,21 @@ def check_patches():
     return out
 
 
+def check_cnpg_limits():
+    """Both CNPG Clusters carry spec.resources with a memory limit: CNPG copies it onto every container of the instance pod,
+    the bootstrap-controller init container included (Kyverno require-limits, apps #47; lab 22 rolled zitadel-db with it)."""
+    out = []
+    for rel in ("apps/base/cnpg/cluster.yaml", "apps/base/cnpg/grafana-db-cluster.yaml"):
+        for d in docs(rel):
+            if d.get("kind") == "Cluster":
+                r = d["spec"].get("resources") or {}
+                if not (r.get("limits") or {}).get("memory") or not (r.get("requests") or {}).get("memory"):
+                    out.append(f"{rel}: {d['metadata']['name']} needs spec.resources with a memory request and limit")
+                if "cpu" in (r.get("limits") or {}) and d["metadata"]["name"] == "zitadel-db":
+                    out.append(f"{rel}: zitadel-db must not carry a CPU limit (throttling)")
+    return out
+
+
 def check_scrape_size():
     """The kube-apiserver scrape must be allowed more than vmagent's 16 MiB default, or a busy control plane goes unmonitored."""
     out = []
@@ -150,7 +165,7 @@ def self_test():
 def main():
     if not self_test():
         sys.exit(1)
-    problems = check_values() + check_local_path() + check_emptydirs() + check_patches() + check_scrape_size()
+    problems = check_values() + check_local_path() + check_emptydirs() + check_patches() + check_cnpg_limits() + check_scrape_size()
     for p in problems:
         print("✗", p)
     if problems:

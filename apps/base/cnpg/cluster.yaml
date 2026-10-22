@@ -36,6 +36,16 @@ spec:
     size: 5Gi
     storageClass: local-path-retain
 
+  # Memory limit for every container of the instance pod, the CNPG init container included (Kyverno require-limits, apps #47).
+  # Measured on a lab cluster: the primary uses about 255Mi, a replica about 80Mi. No CPU limit (throttling), a small
+  # request like grafana-db.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
   # Bootstrap from SQL (create DB/User if needed)
   bootstrap:
     initdb:
