@@ -81,8 +81,9 @@ check("none carries a retention policy (nothing is deleted through them)", not a
 es = {d["metadata"]["name"] for d in get(cn, "ExternalSecret", ns=rc.SCRATCH_NS)}
 check("the credentials Secrets the ObjectStores name are rebuilt from OpenBao in that namespace",
       {d["spec"]["configuration"]["s3Credentials"]["accessKeyId"]["name"] for d in sc_stores.values()} <= es, es)
-check("the CNPG operator may reach the scratch instances",
-      any("backup-restore-test" in str(e) for p in get(cn, "CiliumNetworkPolicy", "cnpg", "cnpg-system") for e in p["spec"]["egress"]))
+check("the CNPG operator may reach the scratch instances (instances of any namespace: customer profiles too)",
+      any("cnpg.io/podRole" in str(e) and "io.kubernetes.pod.namespace" in str(e) and "Exists" in str(e)
+          for p in get(cn, "CiliumNetworkPolicy", "cnpg", "cnpg-system") for e in p["spec"]["egress"]))
 store = [d for d in yaml.safe_load_all(open(os.path.join(ROOT, "apps/base/external-secrets/stores/clustersecretstore.yaml"))) if d][0]
 check("the ClusterSecretStore lists the scratch namespace", rc.SCRATCH_NS in store["spec"]["conditions"][0]["namespaces"])
 

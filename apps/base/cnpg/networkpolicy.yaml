@@ -57,26 +57,19 @@ spec:
         - ports:
             - port: "9090"
               protocol: TCP
-    # Postgres instances (foundation-databases): the operator polls status through
-    # the instance-manager (:8000 /pg/status) and runs the SQL (:5432). Without
-    # this egress rule the operator cannot get out → "Instance Status Extraction
-    # Error: i/o timeout" → the Cluster is never "healthy". Its ingress
-    # counterpart is in networkpolicy-db-restricted.yaml (rule #5).
+    # Postgres instances, in ANY namespace: the operator polls status through the instance-manager (:8000 /pg/status)
+    # and runs the SQL (:5432). Without this egress rule the operator cannot get out -> "Instance Status Extraction
+    # Error: i/o timeout" -> the Cluster is never "healthy". It covers foundation-databases, the scratch instances of the
+    # restore tests (restore-scratch.yaml) and the customer database profiles (docs/database-profiles.md: lab 23 found
+    # the profile of another namespace stuck on 1 of 3 instances with the two namespace-pinned rules this replaces).
+    # The ingress side is each database's own policy (networkpolicy-db-restricted.yaml rule #5, the profile's common
+    # policy): a namespace without that rule still refuses the operator.
     - toEndpoints:
         - matchLabels:
-            io.kubernetes.pod.namespace: foundation-databases
             cnpg.io/podRole: instance
-      toPorts:
-        - ports:
-            - port: "8000"
-              protocol: TCP
-            - port: "5432"
-              protocol: TCP
-    # The scratch instances of the restore tests (restore-scratch.yaml): same two ports.
-    - toEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: backup-restore-test
-            cnpg.io/podRole: instance
+          matchExpressions:
+            - key: io.kubernetes.pod.namespace
+              operator: Exists
       toPorts:
         - ports:
             - port: "8000"
