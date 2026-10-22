@@ -282,6 +282,9 @@ oa_restore_test_ok:
 oa_restore_test_recovery_seconds:
   source: backup-verify
   status: existing
+process_start_time_seconds:
+  source: flux
+  status: UNVERIFIED
 up:
   source: scrape
   status: existing

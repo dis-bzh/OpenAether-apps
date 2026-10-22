@@ -52,6 +52,8 @@ silent for an 18-minute Pending Pod with a running init container and fired at 1
 `oa_restore_test_recovery_seconds` (published by the restore-test Jobs, scraped through the verifier's exporter: the value reaches
 VictoriaMetrics about 1 to 2 minutes after the Job ends).
 
+Lab 22 added `process_start_time_seconds` of the Flux controllers (the standard Go process collector; `FluxReconciliationStalled` ignores a controller younger than its window with it). It was missing from the catalogue, so `test-alert-metrics.py` failed; it is catalogued UNVERIFIED: read it with `task check-alerts`.
+
 Lab 19 (Scaleway, Longhorn 1.12.1, Talos 1.14.2) had read the others: the scrapes `istio-gateway` (15090) and `longhorn-manager` (9500) are up,
 the PSI series exist on all six nodes (Talos exposes them), `istio_requests_total` carries `response_code` and `reporter` (`source` only, on the
 gateway), the `alertmanager_notification_requests_*` counters count per integration and per attempt. Two shapes differed from the assumption and
