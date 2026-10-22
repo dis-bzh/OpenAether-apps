@@ -94,16 +94,22 @@ gap() { # <what is missing>
 
 # Ship file $1 (inode $2, closed=0|1) from CUR_OFF to its end. 0 = caught up; 1 = a failure (try again next cycle).
 ship_file() {
-  f="$1"; ino="$2"; closed="$3"
+  f="$1"; ino="$2"; closed="$3"; lim=""
   while :; do
     size="$(stat -c %s "$f" 2>/dev/null)" || return 1                     # gone while we were here: list again next cycle
     [ "$(stat -c %i "$f" 2>/dev/null)" = "$ino" ] || return 1             # renamed under us: list again
-    if [ "$size" -lt "$CUR_OFF" ]; then gap "$ino:$CUR_OFF:truncated-to-$size" || return 1; CUR_OFF=0; continue; fi
+    [ -n "$lim" ] || lim="$size"                                          # this cycle ships what the file held when it began
+    if [ "$size" -lt "$CUR_OFF" ]; then gap "$ino:$CUR_OFF:truncated-to-$size" || return 1; CUR_OFF=0; lim=""; continue; fi
+    # A live file that keeps growing (an API server writes all the time) would otherwise be chased forever: every put takes a
+    # moment, the file has grown by then, and the cycle never ends, so the interval is never honoured and a snapshot is made
+    # every second or two (lab 23: about 1000 snapshots per node in 45 minutes). The rest waits for the next cycle.
+    [ "$size" -le "$lim" ] || size="$lim"
     if [ "$size" -eq "$CUR_OFF" ]; then
       if [ "$closed" = 1 ] && [ "$CLOSED_AT_EOF" != 1 ]; then printf 'eof-marker\n' >"$CHUNK"; put "$ino" "$CUR_OFF" "$CUR_OFF" eof "$CHUNK" || return 1; CLOSED_AT_EOF=1; fi
       return 0
     fi
-    tail -c "+$((CUR_OFF + 1))" "$f" 2>/dev/null | head -c "$MAXB" >"$CHUNK"
+    want=$((lim - CUR_OFF)); [ "$want" -le "$MAXB" ] || want="$MAXB"
+    tail -c "+$((CUR_OFF + 1))" "$f" 2>/dev/null | head -c "$want" >"$CHUNK"
     [ "$(stat -c %i "$f" 2>/dev/null)" = "$ino" ] || return 1             # the file was rotated while we read it: discard, list again
     n="$(wc -c <"$CHUNK")"; [ "$n" -gt 0 ] || return 0
     eof=""

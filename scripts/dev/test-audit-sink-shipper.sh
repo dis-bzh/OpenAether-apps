@@ -114,6 +114,23 @@ snaps | grep -q "^oa-gap=$INO2:[0-9]*:file-gone" && ok "the loss is recorded as 
 grep -q 'GAP recorded' <<<"$OUT" && ok "and logged" || bad "not logged"
 contiguous "$INO3" && ok "the surviving file is shipped from 0" || bad "$(contiguous "$INO3")"
 
+echo "== a live file that keeps growing: one cycle ends, it does not chase the file (lab 23) =="
+# An API server writes all the time. A cycle that looped until it had caught up would never end (each put takes a moment, the file has
+# grown by then) and would make a snapshot every second or two. The cycle ships what the file held when it began; the rest waits.
+BEFORE="$(snaps | grep -c oa-pos)"
+( for i in $(seq 1000 3000); do line "$i" >>"$LIVE"; sleep 0.005; done ) & GROW=$!
+T0=$SECONDS; OUT="$(ship)"; RC=$?; T1=$((SECONDS - T0))
+kill "$GROW" 2>/dev/null; wait "$GROW" 2>/dev/null
+is "the cycle ends while the file is still growing" 0 "$RC"
+ADDED=$(( $(snaps | grep -c oa-pos) - BEFORE ))
+[ "$ADDED" -ge 1 ] && [ "$ADDED" -le 2 ] && ok "at most two snapshots for the whole cycle ($ADDED in ${T1}s)" || bad "$ADDED snapshots in one cycle of ${T1}s: the shipper chased the file"
+contiguous "$INO3" && ok "still contiguous" || bad "$(contiguous "$INO3")"
+SHIPPED="$(posl | awk -F: -v i="$INO3" '$1 == i {t = $3} END {print t}')"
+is "what is in the sink is a whole-line prefix of the file" "$(head -c "$SHIPPED" "$LIVE" | sha256sum | cut -d' ' -f1)" "$(sink_bytes "$INO3" | sha256sum | cut -d' ' -f1)"
+OUT="$(ship)"; RC=$?
+is "the next cycle takes the rest, still contiguous" 0 "$RC"
+contiguous "$INO3" && ok "contiguous after the second cycle" || bad "$(contiguous "$INO3")"
+
 echo "== the source is never written =="
 is "the audit directory is mounted read-only (a write is refused)" "refused" "$(docker run --rm -v "$SRC:/s:ro" --entrypoint /bin/sh "$IMAGE" -c 'touch /s/x 2>/dev/null && echo written || echo refused')"
 [ ! -e "$SRC/x" ] && ok "nothing appeared in the audit directory" || bad "a file appeared"
