@@ -41,6 +41,12 @@ results:
 - policy: restrict-restore-test-clusters
   rule: scratch-clusters-recover-and-never-archive
   resources:
+  - rt-sync
+  kind: Cluster
+  result: fail
+- policy: restrict-restore-test-clusters
+  rule: scratch-clusters-recover-and-never-archive
+  resources:
   - not-rt
   kind: Cluster
   result: fail

@@ -2,7 +2,8 @@
 # ──────────────────────────────────────────────────────────────────
 # Grafana HA (2 replicas) requires a shared DB backend for the session,
 # dashboards, users and alerts.
-# PostgreSQL CNPG: 2 instances (streaming replication) on local-path storage.
+# PostgreSQL CNPG: 3 instances (synchronous quorum replication, any 1 of 2) on local-path storage. Three, not two: with
+# one replica and dataDurability required, losing it would block every write.
 # CNPG handles ALL the HA (transaction-aware WAL replication + failover).
 # Stacking Longhorn (block replication, blind to transactions) = anti-pattern:
 # amplification and concurrent double failover (the cause of the "faulted" volumes, 06/2026),
@@ -23,7 +24,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: grafana-db
 spec:
-  instances: 2
+  instances: 3
   imageName: ghcr.io/cloudnative-pg/postgresql:16.15
   primaryUpdateStrategy: unsupervised
   # See cluster.yaml: replicas first, then a switchover, instead of restarting the only writer in place.
@@ -31,7 +32,7 @@ spec:
   storage:
     # local-path-retain: node-local storage, immediate mount (no CSI
     # attach/detach), Retain (data kept if the PVC is deleted).
-    # HA comes from the 2 CNPG instances, not from the storage.
+    # HA comes from the 3 CNPG instances, not from the storage.
     storageClass: local-path-retain
     size: 5Gi
   # Connexion Grafana: user grafana, base grafana.
@@ -49,6 +50,14 @@ spec:
     limits:
       cpu: 500m
       memory: 512Mi
+
+  # Class A data (dashboards, users, alert rules, sessions): same durability as zitadel-db, see cluster.yaml.
+  postgresql:
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: required
+      failoverQuorum: true
 
   affinity:
     # CNPG AffinityConfiguration (not the standard K8s type)

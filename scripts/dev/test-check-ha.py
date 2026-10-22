@@ -120,6 +120,14 @@ check(errs([dep(), pdb(maxUnavailable=1)]) == [], "a zone gap is not an audit er
 cz = copy.deepcopy(cn); cz["spec"]["affinity"]["additionalPodAntiAffinity"] = {"preferredDuringSchedulingIgnoredDuringExecution": [
     {"weight": 100, "podAffinityTerm": {"topologyKey": ha.ZONE, "labelSelector": {"matchLabels": {"cnpg.io/cluster": "db"}}}}]}
 check(ha.zone_gaps([cn]) == ["Cluster/ns/db"] and ha.zone_gaps([cz]) == [], "a CNPG Cluster is covered by its zone anti-affinity term")
+# the CPU of the CNPG instance pods (a Cluster is no Deployment): instances x (instance + Barman sidecar), 0.4.0 synchronous replication
+cs = {"apiVersion": "postgresql.cnpg.io/v1", "kind": "Cluster", "metadata": {"name": "db", "namespace": "ns"},
+      "spec": {"instances": 3, "resources": {"requests": {"cpu": "50m"}},
+               "plugins": [{"name": "barman-cloud.cloudnative-pg.io", "parameters": {"barmanObjectName": "db-primary"}}]}}
+st = {"apiVersion": "barmancloud.cnpg.io/v1", "kind": "ObjectStore", "metadata": {"name": "db-primary", "namespace": "ns"},
+      "spec": {"instanceSidecarConfiguration": {"resources": {"requests": {"cpu": "50m"}}}}}
+check(ha.cnpg_cpu([cs, st])[0] == 300, "CNPG instance CPU counts the sidecar of the ObjectStore: 3 x (50 + 50) m")
+check(ha.cnpg_cpu([cs])[0] == 150, "a Cluster without its ObjectStore counts the instance only")
 # the real allow-list
 real = yaml.safe_load((REPO / "scripts/ha-allowlist.yaml").read_text())
 check(all(str(e.get("reason", "")).strip() for k in ("single_replica", "strict_spread", "known_gaps") for e in real.get(k) or []),

@@ -40,6 +40,9 @@ ZONE = "topology.kubernetes.io/zone"
 ALLOWLIST = REPO / "scripts/ha-allowlist.yaml"
 WORKLOADS = ("Deployment", "StatefulSet")
 CPU_BUDGET_M = 3300  # rendered Deployment/StatefulSet CPU requests, in millicores; raising it is a capacity decision
+# The pods of the CNPG Clusters (instances x (instance + Barman sidecar requests)) are not Deployments, so they were never in the
+# figure above. 6 instances (zitadel-db 3, grafana-db 3, synchronous replication needs the third) x (50 m + 50 m).
+CNPG_CPU_BUDGET_M = 600
 
 
 def ident(d):
@@ -105,6 +108,25 @@ def normalise(docs):
         elif k in ("VMAgent", "VMAlert", "VMAlertmanager"):
             out.append(cr_workload(d, k.lower(), d["spec"], "app.kubernetes.io/name", k.lower()))
     return out
+
+
+def cnpg_cpu(docs):
+    """CPU requests (m) of the pods of every CNPG Cluster: instances x (the instance + the Barman Cloud sidecar of its ObjectStore)."""
+    stores = {(d["metadata"].get("namespace", ""), d["metadata"]["name"]): d for d in docs if d.get("kind") == "ObjectStore"}
+    total, parts = 0, []
+    for d in docs:
+        if d.get("kind") != "Cluster" or not d.get("apiVersion", "").startswith("postgresql.cnpg.io"):
+            continue
+        ns, sp = d["metadata"].get("namespace", ""), d["spec"]
+        per = cpu_m(sp)
+        for p in sp.get("plugins") or []:
+            st = stores.get((ns, (p.get("parameters") or {}).get("barmanObjectName")))
+            if st:
+                per += cpu_m((st["spec"].get("instanceSidecarConfiguration") or {}))
+        n = sp.get("instances", 1)
+        total += per * n
+        parts.append("%s %d x %d m" % (d["metadata"]["name"], n, per))
+    return total, parts
 
 
 def cr_workload(d, comp, c, lkey, lval):
@@ -272,6 +294,11 @@ def main():
           % (sum(1 for w in ws if w["replicas"] >= 2) - len(gaps_z), sum(1 for w in ws if w["replicas"] >= 2)))
     print("%d workloads audited, %d single-replica listed, CPU requests of the rendered Deployments/StatefulSets %d m (budget %d m)"
           % (len(ws), len(allow.get("single_replica", [])), cpu, CPU_BUDGET_M))
+    ccpu, parts = cnpg_cpu(docs)
+    print("CNPG instance pods (not in the figure above): %d m (budget %d m): %s" % (ccpu, CNPG_CPU_BUDGET_M, ", ".join(parts)))
+    if ccpu > CNPG_CPU_BUDGET_M:
+        errs.append("CNPG instance CPU requests %d m exceed the budget %d m (a CNPG instance is a pod that counts in the infra "
+                    "capacity gate; raise CNPG_CPU_BUDGET_M only with the arithmetic of docs/capacity.md)" % (ccpu, CNPG_CPU_BUDGET_M))
     if cpu > CPU_BUDGET_M:
         errs.append("CPU requests %d m exceed the budget %d m: the shipped 4 x 4 vCPU examples must stay roll-able "
                     "(infra capacity gate, docs/capacity.md); raise CPU_BUDGET_M only with that arithmetic" % (cpu, CPU_BUDGET_M))

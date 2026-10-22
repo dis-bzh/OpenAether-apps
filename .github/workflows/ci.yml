@@ -167,6 +167,9 @@ jobs:
       - name: CNPG clusters and operator prefer different zones, not only different hosts (lab 21)
         run: python3 -I scripts/dev/test-cnpg-zone-spread.py
 
+      - name: CNPG clusters acknowledge a commit only after a replica has it, and the restore-test copy does not inherit that (0.4.0, zero loss)
+        run: python3 -I scripts/dev/test-cnpg-sync-replication.py
+
       - name: "CNPG primaries are evicted after 30 s on a lost node, not 300 s (apps #154, lab 21)"
         run: |
           python3 -I scripts/dev/test-cnpg-eviction.py

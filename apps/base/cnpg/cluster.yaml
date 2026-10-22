@@ -26,6 +26,14 @@ spec:
     parameters:
       max_connections: "200"
       shared_buffers: "128MB"
+    # Class A data (identity): a commit is acknowledged only after ONE replica has it (quorum, any 1 of the 2), and a
+    # failover refuses a replica that cannot prove it holds every acknowledged commit (failoverQuorum). With both replicas
+    # gone writes BLOCK instead of being acknowledged unreplicated (CnpgSyncReplicaMissing). docs/resilience.md, "Data classes".
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: required
+      failoverQuorum: true
 
   # Storage Configuration
   # local-path-retain: CNPG handles HA itself (3 instances, streaming

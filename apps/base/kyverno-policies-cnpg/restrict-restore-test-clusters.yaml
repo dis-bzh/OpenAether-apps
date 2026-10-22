@@ -57,7 +57,7 @@ spec:
       validate:
         message: >-
           In backup-restore-test a Cluster is named rt-*, recovers (bootstrap.recovery), has one instance, and has no
-          WAL-archiving plugin, no backup section and no scheduled backup.
+          WAL-archiving plugin, no backup section, no synchronous replication and no scheduled backup.
         deny:
           conditions:
             any:
@@ -74,5 +74,9 @@ spec:
                 operator: GreaterThan
                 value: 0
               - key: "{{ length(keys(request.object.spec.backup || `{}`)) }}"
+                operator: GreaterThan
+                value: 0
+              # A synchronous setting copied from a live Cluster would block every write of a one-instance copy.
+              - key: "{{ length(keys(request.object.spec.postgresql.synchronous || `{}`)) }}"
                 operator: GreaterThan
                 value: 0
