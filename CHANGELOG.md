@@ -21,7 +21,7 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 0.3.2 is a **security patch** of 0.3.1, paired with OpenAether-infra 0.3.2 (which only changes its `git_ref` pin). It ships the fixes that were merged on main after 0.3.1
 (below, "Fixed") and, above all, the **Zitadel v4.19.5** update. No new scope. Rungs: **mocked** (static checks, a real Zitadel v4.19.5 and PostgreSQL in containers through
-`scripts/dev/test-zitadel-config.sh`, Kyverno CLI on the rendered workloads); nothing of this patch was run on a cluster by this change (a lab run, if any, is added by the release notes).
+`scripts/dev/test-zitadel-config.sh`, Kyverno CLI on the rendered workloads) and **real cloud, once, by hand** (lab 24, Scaleway, 3 control planes + 4 workers, 2026-10-22): an upgrade from the 0.3.1 content (Zitadel v4.19.2) to this patch (4 min 12 s from the switch to a Ready HelmRelease; the generated session-cookie key was created before the login pods rolled; a 1 Hz probe of the public Zitadel URL saw 620 samples and 0 failures; Grafana OIDC logins through the rollout all passed) and a fresh install of the patch (cluster-verify 15 passed, 0 failed, all Flux objects Ready). Not observed: the open login sessions ending at the rollout (no browser in the lab), the device-flow consent screen, and a repeat on OVH or Outscale.
 It fixes neither #42 nor #375 (infra), **does not fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
 
 ### Security
@@ -54,6 +54,7 @@ The weekly scan (`sbom.yml`) had been red since the 0.3.0 release (3 runs) and n
 
 ### What this patch does NOT fix
 
+- **The Login V2 UI is not reachable through the Gateway, in 0.3.0, 0.3.1 and this patch (apps #161).** The HTTPRoute sends only `/` to `zitadel:8080`, so `/ui/v2/login/...` answers 404, and the Gateway egress policy does not allow `zitadel-login:3000`. Found in lab 24; the OIDC code flow through the Session API works, a browser user cannot get past the authorize step. Not fixed here because it changes what the public Gateway serves.
 - **Istio 1.24.2 stays**: its grpc finding is waived (above), and Istio's HIGH advisories of 2026-10-16 and 2026-03 (fixed in 1.29.x and later) remain open until the Istio 1.31 upgrade (apps #96).
   The line has been out of support since 2025-06; the waiver in `docs/eol-calendar.yaml` ends 2026-12-14.
 - The Longhorn, restic, `alpine/k8s` and CloudNativePG findings above are **waived, not fixed**: no patched image exists yet. The reasons are analyses of reachability, not proofs.
