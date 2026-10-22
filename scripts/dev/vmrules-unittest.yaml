@@ -552,13 +552,15 @@ tests:
   - name: a suspended HelmRelease does not raise FluxReconciliationStalled, a stuck live one does
     interval: 10m
     input_series:
-      - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="alloy-audit", namespace="obs-audit"}'
+      - series: 'process_start_time_seconds{job="services-observability/flux", pod="old"}'
+        values: '0x40'
+      - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="alloy-audit", namespace="obs-audit", pod="old"}'
         values: '5x40'
       - series: >-
           gotk_resource_info{customresource_kind="HelmRelease", name="alloy-audit",
           exported_namespace="obs-audit", namespace="obs", suspended="true"}
         values: '1x40'
-      - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="stuck", namespace="x"}'
+      - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="stuck", namespace="x", pod="old"}'
         values: '5x40'
       - series: >-
           gotk_resource_info{customresource_kind="HelmRelease", name="stuck", exported_namespace="x",
@@ -568,7 +570,23 @@ tests:
       - eval_time: 5h
         alertname: FluxReconciliationStalled
         exp_alerts:
-          - exp_labels: {kind: HelmRelease, name: stuck, namespace: x, severity: critical}
+          - exp_labels: {kind: HelmRelease, name: stuck, namespace: x, pod: old, severity: critical}
+  # Lab 22: after a node loss the helm-controller was replaced. The counters of the DEAD pod stay in the 150 minute window as flat series,
+  # so `increase()` is 0 for them and seven 1 h HelmReleases fired this critical alert 19 minutes later although nothing was stalled; a
+  # controller younger than the window has flat or single-sample counters as well. Only a controller that is alive and older than the window is judged.
+  - name: a replaced flux controller does not raise FluxReconciliationStalled (dead pod series, young pod)
+    interval: 10m
+    input_series:
+      - series: 'process_start_time_seconds{job="services-observability/flux", pod="dead"}'
+        values: '5x18'
+      - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="idle", namespace="x", pod="dead"}'
+        values: '3x18'
+      - series: 'process_start_time_seconds{job="services-observability/flux", pod="young"}'
+        values: '14400x40'
+      - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="idle", namespace="x", pod="young"}'
+        values: '_x24 1x16'
+    alert_rule_test:
+      - {eval_time: 270m, alertname: FluxReconciliationStalled, exp_alerts: []}
   - name: Longhorn degraded for 30 minutes
     # The real shape (Longhorn 1.12.1, lab 19): one series per state, 1 for the current state.
     interval: 1m
