@@ -56,6 +56,13 @@ spec:
       securityContext:
         runAsNonRoot: true
         seccompProfile: {type: RuntimeDefault}
+      # policy require-limits reported every pooler pod (lab 23). Naming it here sets them.
+      # policy require-limits reported every pooler pod (lab 23). Naming it here sets them.
+      initContainers:
+        - name: bootstrap-controller
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 64Mi}
       containers:
         - name: pgbouncer
           resources:

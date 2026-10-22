@@ -224,6 +224,9 @@ def main():
     prm = ps["pgbouncer"]["parameters"]
     check(int(prm["query_wait_timeout"]) >= 120 and int(prm["server_login_retry"]) <= 2 and int(prm["max_prepared_statements"]) > 0
           and prm["server_reset_query_always"] == "0", "pooler: waits through a failover, retries a lost server at once, prepared statements on")
+    ic = (ps["template"]["spec"].get("initContainers") or [{}])[0]
+    check(ic.get("name") == "bootstrap-controller" and ic.get("resources", {}).get("limits", {}).get("memory"),
+          "pooler: the operator's init container has a memory limit (require-limits reported it in lab 23)")
     check(int(prm["default_pool_size"]) * ps["instances"] < 100, "pooler: pool size x pods stays under PostgreSQL's default max_connections (100)")
     check(ps["pgbouncer"]["image"].startswith("ghcr.io/cloudnative-pg/pgbouncer:") and "latest" not in ps["pgbouncer"]["image"], "pooler: pinned image")
     tpl = ps["template"]["spec"]
@@ -334,7 +337,8 @@ def main():
                 pods.append({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": j["metadata"]["name"], "namespace": "shop"}, "spec": j["spec"]["template"]["spec"]})
             t = ps["template"]["spec"]
             pods.append({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "pooler", "namespace": "shop"},
-                         "spec": dict(t, containers=[dict(t["containers"][0], image=ps["pgbouncer"]["image"])])})
+                         "spec": dict(t, containers=[dict(t["containers"][0], image=ps["pgbouncer"]["image"])],
+                                      initContainers=[dict(c_, image=ps["pgbouncer"]["image"]) for c_ in t.get("initContainers", [])])})
             res = work / "pods.yaml"
             res.write_text(yaml.safe_dump_all(pods))
             r = subprocess.run([ky, "apply", str(REPO / "apps/base/kyverno-policies"), "--resource", str(res)], capture_output=True, text=True)
