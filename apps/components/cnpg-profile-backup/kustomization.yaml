@@ -1,0 +1,67 @@
+# Continuous archiving and base backups of a profile that keeps them (standard, ha): the Barman Cloud plugin objects
+# follow the
+# application name, the archive path follows archiveServerName. Needs cnpg-profile-common too.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - objectstores.yaml
+  - scheduledbackup.yaml
+  - externalsecret.yaml
+patches:
+  # The archiving plugin of the Cluster. serverName is the archive generation (the name, then NAME-g2 after a
+  # rebuild from a store,
+  # apps/base/backup/README.md "Archive generation"): the value archiveServerName.
+  - target: {kind: Cluster}
+    patch: |-
+      - op: add
+        path: /spec/plugins
+        value:
+          - name: barman-cloud.cloudnative-pg.io
+            isWALArchiver: true
+            parameters:
+              barmanObjectName: NAME-primary
+              serverName: ARCHIVE_SERVER_NAME
+  # S3 egress of the instances (WAL push, base backup, restore_command of a joining replica): the FQDNs the platform
+  # allows.
+  - target: {kind: CiliumNetworkPolicy, labelSelector: "openaether.io/db-netpol=database"}
+    patch: |-
+      - op: add
+        path: /spec/egress/-
+        value:
+          toFQDNs:
+            - matchPattern: "s3.*.scw.cloud"
+            - matchPattern: "s3.*.io.cloud.ovh.net"
+            - matchPattern: "oos.*.outscale.com"
+          toPorts:
+            - ports: [{port: "443", protocol: TCP}]
+replacements:
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.name}
+    targets:
+      - select: {kind: Cluster}
+        fieldPaths:
+          - spec.plugins.0.parameters.barmanObjectName
+        options: {delimiter: "-", index: 0}
+      - select: {kind: ObjectStore, labelSelector: "openaether.io/db-store=primary"}
+        fieldPaths:
+          - metadata.name
+          - spec.configuration.s3Credentials.accessKeyId.name
+          - spec.configuration.s3Credentials.secretAccessKey.name
+        options: {delimiter: "-", index: 0}
+      - select: {kind: ObjectStore, labelSelector: "openaether.io/db-store=primary"}
+        fieldPaths:
+          - spec.configuration.destinationPath
+        options: {delimiter: "/", index: 4}
+      - select: {kind: ScheduledBackup}
+        fieldPaths:
+          - metadata.name
+          - spec.cluster.name
+        options: {delimiter: "-", index: 0}
+      - select: {kind: ExternalSecret, labelSelector: "openaether.io/db-secret=backup"}
+        fieldPaths:
+          - spec.data.1.remoteRef.key
+        options: {delimiter: "/", index: 1}
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.archiveServerName}
+    targets:
+      - select: {kind: Cluster}
+        fieldPaths:
+          - spec.plugins.0.parameters.serverName

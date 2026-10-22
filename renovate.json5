@@ -211,12 +211,22 @@
     {
       customType: "regex",
       description: "CNPG Cluster's own Postgres engine image — self-authored, single value, safe to bump directly (unlike the vendored operator dump above).",
-      fileMatch: ["^apps/base/cnpg/cluster\\.yaml$"],
+      fileMatch: ["^apps/base/cnpg/cluster\\.yaml$", "^apps/components/cnpg-profile-[a-z]+/cluster\\.yaml$"],
       matchStrings: [
         "imageName:\\s*ghcr\\.io/cloudnative-pg/postgresql:(?<currentValue>[0-9.]+)",
       ],
       datasourceTemplate: "docker",
       depNameTemplate: "ghcr.io/cloudnative-pg/postgresql",
+    },
+    {
+      customType: "regex",
+      description: "PgBouncer image of the ha database profile's Pooler (apps #157).",
+      fileMatch: ["^apps/components/cnpg-profile-pooler/pooler\\.yaml$"],
+      matchStrings: [
+        "image:\\s*ghcr\\.io/cloudnative-pg/pgbouncer:(?<currentValue>[0-9.]+)",
+      ],
+      datasourceTemplate: "docker",
+      depNameTemplate: "ghcr.io/cloudnative-pg/pgbouncer",
     },
     {
       customType: "regex",

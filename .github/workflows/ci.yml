@@ -251,6 +251,9 @@ jobs:
           KYVERNO="$d/kyverno" ./scripts/dev/test-backup-kyverno.sh
           ./scripts/dev/test-backup-namespaces.sh
           KYVERNO="$d/kyverno" python3 -I scripts/dev/test-cnpg-barman-plugin.py
+          # The optional database profiles: render, CRD shape, guarantees, platform policies (apps #157).
+          KYVERNO="$d/kyverno" python3 -I scripts/dev/test-cnpg-profiles.py
+          python3 -I scripts/dev/test-cnpg-profiles.py --selftest
 
       - name: Vendored upstream dumps match their recorded sha256 (critic, static)
         run: |

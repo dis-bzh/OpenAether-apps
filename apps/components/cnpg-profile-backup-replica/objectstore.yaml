@@ -1,0 +1,29 @@
+# Read side of the second store: the Cluster archives into NAME-primary only (the plugin writes to one store); the
+# backup brick
+# copies that archive here (cnpg-store-replicate, add NAME to its CLUSTERS), and a recovery from the replica store
+# names this object.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: NAME-replica
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database
+    openaether.io/db-profile: customer
+    openaether.io/db-store: replica
+spec:
+  configuration:
+    destinationPath: "s3://${BACKUP_REPLICA_S3_BUCKET:=}/cnpg/NAME"
+    endpointURL: "${BACKUP_REPLICA_S3_ENDPOINT:=}"
+    s3Credentials:
+      accessKeyId: { name: NAME-backup-s3-replica, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: NAME-backup-s3-replica, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip, encryption: AES256 }
+    data: { compression: gzip, encryption: AES256 }
+  instanceSidecarConfiguration:
+    env:
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: when_required }
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: when_required }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }

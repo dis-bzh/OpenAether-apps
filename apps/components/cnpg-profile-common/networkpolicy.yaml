@@ -1,0 +1,65 @@
+# Default deny for the database pods, then only what a database needs. Cilium denies every other ingress and egress
+# of a pod
+# once a rule of that direction selects it. Rule 0 is the application (namespace + app.kubernetes.io/name), the
+# others are the
+# instances of this Cluster, the CNPG operator and the metrics agent. Same family as apps/base/cnpg/networkpolicy-
+# db-restricted.yaml,
+# narrowed to ONE Cluster (that one allows the whole foundation-databases namespace).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: NAME-database
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database
+    openaether.io/db-profile: customer
+    openaether.io/db-netpol: database
+spec:
+  description: "One customer database: its application, instances and operator in; DNS, API server, instances out"
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: NAME
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": CLIENT_NAMESPACE
+            "k8s:app.kubernetes.io/name": CLIENT_APP
+      toPorts:
+        - ports: [{port: "5432", protocol: TCP}]
+    - fromEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: NAME
+      toPorts:
+        - ports: [{port: "5432", protocol: TCP}, {port: "8000", protocol: TCP}]
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": cnpg-system
+            "k8s:app.kubernetes.io/name": cloudnative-pg
+      toPorts:
+        - ports: [{port: "5432", protocol: TCP}, {port: "8000", protocol: TCP}, {port: "9187", protocol: TCP}]
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": services-observability
+            "k8s:app.kubernetes.io/name": vmagent
+      toPorts:
+        - ports: [{port: "9187", protocol: TCP}]
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports: [{port: "53", protocol: UDP}, {port: "53", protocol: TCP}]
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toServices:
+        - k8sService: {serviceName: kubernetes, namespace: default}
+      toPorts:
+        - ports: [{port: "443", protocol: TCP}]
+    - toEntities: [kube-apiserver]
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: NAME
+      toPorts:
+        - ports: [{port: "5432", protocol: TCP}, {port: "8000", protocol: TCP}]
