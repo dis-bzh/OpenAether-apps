@@ -7,7 +7,7 @@ import yaml
 KEYWORDS = {"and", "or", "unless", "by", "without", "on", "ignoring", "group_left", "group_right", "bool", "offset",
             "inf", "nan", "keep_metric_names", "with"}
 RULE_FILES = ["apps/base/observability/vm-customresources/vmrule-*.yaml", "apps/base/observability-openbao/vmrule.yaml",
-              "apps/base/observability-alert-probe/vmrule.yaml"]
+              "apps/base/observability-alert-probe/vmrule.yaml", "apps/base/observability-audit-sink/vmrule.yaml"]
 
 
 def rules(repo):

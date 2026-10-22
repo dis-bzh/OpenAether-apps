@@ -31,6 +31,7 @@ SCRAPES = {  # source -> (kind, name)
     "vmalert": ("VMServiceScrape", "vmalert"), "alertmanager": ("VMServiceScrape", "vmalert"),
     "flux": ("VMPodScrape", "flux"), "istio-gateway": ("VMPodScrape", "istio-gateway"),
     "longhorn": ("VMPodScrape", "longhorn-manager"), "backup-verify": ("VMServiceScrape", "backup-verify"),
+    "audit-sink": ("VMServiceScrape", "audit-sink-check"),
 }
 NO_SCRAPE = {"scrape"}   # `up`, which every scrape makes
 

@@ -651,3 +651,44 @@ Do not, whatever the alert:
 
 - Check: `kubectl top nodes`; the CPU requests per node (`kubectl describe nodes | grep -A8 Allocated`).
 - Do: add a worker (the grow-nodes path of OpenAether-infra, `docs/capacity.md`) or lower requests. `task cluster-roll` refuses to start with the same arithmetic.
+
+## Audit sink (opt-in component audit-log-sink)
+
+The audit log is class A: a copy outside the cluster, object-locked and encrypted (infra #318, `docs/audit-sink.md` here and in OpenAether-infra).
+While the sink is not receiving, the only copy is the apiserver's own rotated file on each control plane, which the apiserver deletes by its
+rotation: treat these as a clock, not as a nuisance. Nothing here has fired on a cluster.
+
+### AuditSinkDown
+
+- Check: `kubectl -n services-observability-audit-sink logs deploy/audit-sink-check` (the failing list call), then from a shipper pod
+  `kubectl -n services-observability-audit-sink logs ds/audit-sink-shipper` (`sink:` lines). Causes in order: the ExternalSecret is not Ready
+  (`kubectl -n services-observability-audit-sink get externalsecret`), the key pair was revoked or rotated, the egress policy does not name the
+  host (`AUDIT_SINK_HOST` in the `cluster-identity` ConfigMap), the provider is down.
+- Do: Fix the cause; the next 5-minute check clears it. While it lasts, keep an eye on the size of `/var/log/audit/kube` on the control planes
+  (`talosctl -n <cp> ls -l /var/log/audit/kube`) and tell the owner if rotation would delete a file that was not shipped. After a long outage run
+  `scripts/ops/audit-sink-check.sh` (infra repository) over the outage window: it reports any gap.
+
+### AuditSinkStale
+
+- Check: which node and sink the alert names; `kubectl -n services-observability-audit-sink get pods -o wide`; the shipper log of that node
+  (`NOT shipped` lines name the cause, `cycle incomplete` means it will retry).
+- Do: Fix the cause (sink unreachable, restic error, a full `/work` volume, a stuck pod: delete it, the new one reads its position back from the sink).
+  A node whose shipper is healthy but whose apiserver writes nothing is not expected: check the audit policy.
+
+### AuditSinkEmpty
+
+- Check: the sink is reachable and has no node under its prefix: `kubectl -n services-observability-audit-sink logs ds/audit-sink-shipper` shows
+  why the shipper never wrote (a wrong prefix or bucket in `secret/audit/sink`, a restic password mismatch with an existing repository, no audit
+  file on the node).
+- Do: Fix `secret/audit/sink` (the seed is create-only: replace it by hand, `docs/admin-access.md` of the infra repository, section 3), then delete the shipper pods.
+
+### AuditSinkShipperUnavailable
+
+- Check: `kubectl -n services-observability-audit-sink describe ds audit-sink-shipper` and the pods on the control planes (Kyverno admission,
+  the `audit-sink-credentials` Secret missing, the image, the node taints).
+- Do: Fix it; until then that node's audit file is not copied at all.
+
+### AuditSinkCheckAbsent
+
+- Check: `kubectl -n services-observability-audit-sink get deploy audit-sink-check`, and that vmagent scrapes it (port 9101, `VMServiceScrape audit-sink-check`).
+- Do: Restore the check. Until it is back a stopped sink would not be seen: run `scripts/ops/audit-sink-check.sh` by hand.

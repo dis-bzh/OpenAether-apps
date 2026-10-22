@@ -1,0 +1,10 @@
+# yamllint disable rule:line-length
+# OPT-IN, off by default, and only on top of audit-log-sink: the shipper of the SECOND audit sink (audit_sink_placement = both in the infra tfvars:
+# another provider AND the same provider in another region, two independent copies; infra #318, docs/audit-sink.md). It writes to
+# secret/audit/sink-secondary, seeded by seed-openbao.sh, and to the host AUDIT_SINK_SECONDARY_HOST of the cluster-identity ConfigMap.
+#   components: [../components/audit-log-sink, ../components/audit-log-sink-secondary]
+# Rollback: remove the component line.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - audit-sink-secondary.yaml

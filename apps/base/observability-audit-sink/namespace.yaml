@@ -1,0 +1,15 @@
+# yamllint disable rule:line-length
+# The audit-sink shipper ALONE (with its delivery check): it mounts the node's /var/log/audit/kube read-only, a hostPath, which only the
+# privileged Pod Security level allows. Its own namespace, like services-observability-audit (alloy-audit), so that neither inherits the
+# other's exemption; Kyverno exempts the shipper pods by name (audit-sink-shipper-*), never the namespace. Out of the mesh like the rest
+# of the observability stack. Created only when the opt-in component is on.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: services-observability-audit-sink
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/audit: privileged
+    openaether.io/managed: "true"
+    openaether.io/component: "audit-sink"

@@ -32,7 +32,8 @@ availability, and one heartbeat service plus one chat receiver as the only out-o
   eviction risk for no gain. Re-run the probe on every Alloy bump; enable when both scenarios say YES.
 - **No external blackbox probe** of the customer path (the RED rules read the gateway's own metrics, so they cannot see a dead
   gateway or a broken load balancer; only the heartbeat covers a dead cluster).
-- **No second log sink** (infra #318) and **no Loki ruler** (audit-log alerts stay in Explore): not an M1 item.
+- **A second log sink is opt-in, not default** (infra #318): the component `audit-log-sink` ships the apiserver audit log outside the cluster
+  (`docs/audit-sink.md`); a default install has neither the sink nor its alerts. **No Loki ruler** (audit-log alerts stay in Explore): not an M1 item.
 - **Verifier series not yet read on a cluster.** The M2 verifier exports `oa_backup_verify_ok{dataset}`,
   `oa_backup_verify_last_success_timestamp_seconds{dataset}` and `oa_backup_verify_store_ok{dataset,store}`; they are
   catalogued as `existing` because the code ships here, but only a lab proves them (criterion 12).
@@ -55,6 +56,12 @@ VictoriaMetrics about 1 to 2 minutes after the Job ends).
 Lab 22 added `process_start_time_seconds` of the Flux controllers (the standard Go process collector; `FluxReconciliationStalled` ignores a controller younger than its window with it). It was missing from the catalogue, so `test-alert-metrics.py` failed; it is catalogued UNVERIFIED: read it with `task check-alerts`.
 
 Added after lab 22 and still UNVERIFIED: `cnpg_pg_replication_streaming_replicas` (the number of rows of `pg_stat_replication`, a column of the CNPG default `pg_replication` query; read by `CnpgSyncReplicaMissing`; only the primary reports more than 0). Read it on the primary and on a replica in the next lab, and with a replica scaled down: it must reach 0 on the primary.
+
+Added with the audit sink (infra #318) and UNVERIFIED, read only with the opt-in component `audit-log-sink` on: `oa_audit_sink_ok{sink}`,
+`oa_audit_sink_last_check_timestamp_seconds{sink}`, `oa_audit_sink_nodes{sink}` and `oa_audit_sink_last_object_age_seconds{sink,node}` (exported by
+`audit-sink-check`, scraped on 9101; the age is computed at each scrape from the LastModified of the newest snapshot object). Read them with
+`task check-alerts` in the sink lab (`docs/audit-sink.md`, "Lab pass criteria"); the rules also use `kube_node_info` and the DaemonSet series
+already catalogued.
 
 Lab 19 (Scaleway, Longhorn 1.12.1, Talos 1.14.2) had read the others: the scrapes `istio-gateway` (15090) and `longhorn-manager` (9500) are up,
 the PSI series exist on all six nodes (Talos exposes them), `istio_requests_total` carries `response_code` and `reporter` (`source` only, on the

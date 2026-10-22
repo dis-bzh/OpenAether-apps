@@ -264,6 +264,18 @@ node_timex_offset_seconds:
 node_timex_sync_status:
   source: node-exporter
   status: existing
+oa_audit_sink_last_check_timestamp_seconds:
+  source: audit-sink
+  status: UNVERIFIED
+oa_audit_sink_last_object_age_seconds:
+  source: audit-sink
+  status: UNVERIFIED
+oa_audit_sink_nodes:
+  source: audit-sink
+  status: UNVERIFIED
+oa_audit_sink_ok:
+  source: audit-sink
+  status: UNVERIFIED
 oa_backup_verify_last_success_timestamp_seconds:
   source: backup-verify
   status: existing

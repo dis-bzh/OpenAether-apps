@@ -1,0 +1,45 @@
+# yamllint disable rule:line-length
+# Two Flux Kustomizations, not one: the network policies need postBuild substitution (the sink's host name from cluster-identity), and the
+# scripts of the first contain bare shell variables that substitution would blank (the reason of apps/flux/base/22a-backup-identity.yaml).
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: observability-audit-sink
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/observability-audit-sink
+  prune: true
+  wait: false   # the ExternalSecret is NotReady until the operator has seeded audit/sink: by design
+  dependsOn:
+    - name: observability-vm-customresources   # VMRule, VMServiceScrape
+    - name: external-secrets-stores            # implies foundation-vault + external-secrets
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: observability-audit-sink-policy
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/observability-audit-sink-policy
+  prune: true
+  wait: false
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-identity
+        optional: true   # a cluster whose ConfigMap predates the sink has no host: the impossible default opens nothing
+  dependsOn:
+    - name: observability-audit-sink   # owner of the namespace
