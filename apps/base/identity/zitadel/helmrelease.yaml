@@ -197,6 +197,10 @@ spec:
             Database: zitadel
             MaxOpenConns: 20
             MaxIdleConns: 10
+            # A failover (or a lost node) leaves pooled connections dead: recycle them quickly so none outlives a failover
+            # by more than minutes (defaults 30m / 5m). docs/database-failover-clients.md.
+            MaxConnLifetime: 5m
+            MaxConnIdleTime: 2m
             User:
               Username: zitadel
               SSL:
