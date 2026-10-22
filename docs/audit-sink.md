@@ -1,7 +1,7 @@
 # Audit sink: a second copy of the Kubernetes audit log outside the cluster (opt-in)
 
-> Infra #318. **Rung: mocked/static plus a real restic and busybox in a container. Nothing here has run on a cluster, a Talos node or a
-> provider's object store.** It claims no compliance with any ANSSI document. The design (choice of placement, key custody, honest limits, lab
+> Infra #318. **Rung: mocked/static plus a real restic and busybox in a container, and one run on a cluster (lab 23: Scaleway control planes, an OVH
+> object store): see "Measured in lab 23" at the end.** It claims no compliance with any ANSSI document. The design (choice of placement, key custody, honest limits, lab
 > pass criteria) is `docs/audit-sink.md` in OpenAether-infra; this page is what the apps repository ships and how to operate it.
 
 ## What it is
@@ -79,3 +79,21 @@ stays (it is locked).
 sink, rotation with `eof`, outage then recovery with no loss and no repeat, an explicit gap, no lock object), `scripts/dev/test-audit-sink.py
 --selftest` (opt-in, narrow, exempt by name), `scripts/dev/test-audit-sink-exporter.py` (the delivery check against a fake `aws`: ages, a failing store, an empty sink), `scripts/dev/test-vmrules.sh` (unit cases of the five alerts), `scripts/dev/test-alert-metrics.py`
 (the four `oa_audit_sink_*` series are catalogued UNVERIFIED), `scripts/dev/test-kyverno-policies.sh` (the shipper is spared, an intruder next to it is not).
+
+## Measured in lab 23 (Scaleway cluster, OVH sink, GOVERNANCE 1 day, 2026-10-22)
+
+The full table of the lab criteria is in OpenAether-infra `docs/audit-sink.md`, section 10. What changed here:
+
+- **The shipper chased the file.** The API server appends to its audit file all the time, and a cycle looped until it had caught up: each put takes a
+  moment, the file has grown by then, so the cycle never ended, the 300 s interval was never honoured and a snapshot was made every one to two seconds
+  (about 1000 per node in 45 minutes); after 45 minutes without a completed cycle its liveness probe killed it. A cycle now ships what the file held when
+  it began (`ship.sh`; `test-audit-sink-shipper.sh` appends to the live file during a cycle: 21 snapshots before, 1 after). The script reaches running pods
+  at their next restart (the ConfigMap has no hash in its name), so restart the DaemonSet after upgrading.
+- **`AuditSinkDown`** now fires after two failed listings in a row (`for: 5m`): the check lists every 5 minutes and the 10 minute rule fired 16 min 41 s
+  after the sink was cut, against a 15 minute target. `AuditSinkStale` fired 22 minutes after the cut.
+- **Observed**: delivery within 2 minutes of the component; a window of 2 h 29 min with 7 rotations of the 100 MB file, 3 shipper restarts and a 40 minute outage
+  read back by `audit-sink-check.sh` with no gap and 0 missing range; the backlog of the outage (about 190 MB per node) shipped in 4 to 8 minutes after the
+  sink was back; the shipper's work directory stayed at 19 to 32 MB of its 384 Mi; `kubectl` answered in under 0.4 s throughout; the apiserver keeps 10 rotated files
+  of 100 MB (`--audit-log-maxbackup=10`), 20 to 33 minutes per file on that busy lab, so an outage of 3.5 to 5 hours is absorbed there before the oldest file is lost.
+- **Limit on OVH**: the sink pair cannot be restricted by a bucket policy; it listed every bucket of the project and could write delete markers and change the
+  bucket's default retention (not delete or shorten a locked version).

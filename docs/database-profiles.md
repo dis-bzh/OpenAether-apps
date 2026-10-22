@@ -1,8 +1,8 @@
 # Database profiles: which PostgreSQL for your application
 
-The platform tunes its own databases (`zitadel-db`, `grafana-db`: three instances, synchronous quorum replication, `docs/resilience.md`). For **your** application it offers CNPG (CloudNativePG, PostgreSQL) as three named profiles. You pick one per application; each states what it guarantees, what it does not, and which numbers were measured. A profile is a promise limited to what was measured: a row marked `UNMEASURED` below is **experimental** until the lab fills it (apps #157). Nothing here is a compliance claim.
+The platform tunes its own databases (`zitadel-db`, `grafana-db`: three instances, synchronous quorum replication, `docs/resilience.md`). For **your** application it offers CNPG (CloudNativePG, PostgreSQL) as three named profiles. You pick one per application; each states what it guarantees, what it does not, and which numbers were measured. A profile is a promise limited to what was measured: a row that is not measured below (it says so) is **experimental** (apps #157). Nothing here is a compliance claim.
 
-Rung of this page: manifests, render and policy tests pass offline (`scripts/dev/test-cnpg-profiles.py`, `test-db-bench.sh`); **no profile has run on a cluster yet**. Every behaviour described as "intended" or `UNVERIFIED` is the lab's to confirm.
+Rung of this page: manifests, render and policy tests pass offline (`scripts/dev/test-cnpg-profiles.py`, `test-db-bench.sh`), and **the three profiles ran once on a real cluster** (lab 23, 2026-10-22: Scaleway, 3 control planes + 5 workers POP2-4C-16G, volumes on `local-path-retain`, PostgreSQL 18.6): the numbers and the observed behaviour below come from that one lab. What it found wrong in the profiles was fixed on the branch (list in "What the lab found"). Everything marked `UNVERIFIED` or `UNMEASURED` was not observed; nothing here is a compliance claim, and one lab on one provider is not a support matrix.
 
 ## Choose
 
@@ -15,7 +15,7 @@ Rung of this page: manifests, render and policy tests pass offline (`scripts/dev
 | Backups | none | WAL + daily base backup, one store | WAL + daily base backup, primary store and a read-side replica store |
 | Survives | a pod restart (the data stays on its volume) | loss of one node, replica present | loss of any one node; with a replica lost, writes continue |
 | Does **not** survive | a node loss or drain = downtime; node-local storage: data unreachable until the node returns, lost with its disk; no backup | a primary lost while the replica is absent or lagging out of the quorum loses the commits acknowledged in that window; both disks lost | both disks holding an acknowledged commit lost at once (two nodes, or one zone holding both); both replicas lost = writes BLOCK, nothing is lost; the whole cluster lost = restore from the stores (RPO of minutes) |
-| Write gap on a primary loss | outage until the node returns | expected like `ha` (UNMEASURED) | 12 s planned, 44-64 s node power-off, 122 s in one zone-loss case: measured on the platform databases (lab 22), not yet on a profile |
+| Write gap on a primary loss | outage until the node returns | like `ha` expected (UNMEASURED: only `ha` was failed over) | `ha`, measured (lab 23): 12.5-14 s planned switchover (direct and through the pooler), 28-36 s pod kill, 40-60 s node power-off, 62 s forced reboot, 112-120 s zone power-off direct and **314 s through the pooler** (see "The Pooler"); a primary and a replica lost together = no promotion until one returns (about 6 minutes in the lab) |
 
 Not sure? `ha` for production data, `light` for everything else. `standard` exists for the middle ground and is the least certain: its loss window is real (see its row), say so to your users.
 
@@ -40,7 +40,7 @@ Not parameterised on purpose: `instances`, replication and pooler settings (chan
 
 ## How a profile is built
 
-`cnpg-profile-common` (credentials, per-database CiliumNetworkPolicy) + the profile's Cluster + `cnpg-profile-backup` (standard, ha: ObjectStore, daily ScheduledBackup, S3 egress) + `cnpg-profile-backup-replica` (ha) + `cnpg-profile-pooler` (ha) + `cnpg-profile-values` last. Off by default: no brick, no generated profile references them (`test-cnpg-profiles.py`). Reused from the platform: restricted PSA, memory limits on every container, 30 s tolerations on a lost node (apps #154), hostname and zone preference (lab 21), `primaryUpdateMethod: switchover`, Barman plugin archiving with the checksum fix, the S3 egress FQDNs. The platform's own policies apply to the pods (`test-cnpg-profiles.py` runs them with Kyverno CLI 1.19.1 on pods built from the rendered Clusters, Pooler and Jobs: the instance pods are built the way the operator is documented to, UNVERIFIED until a cluster's policy reports are read).
+`cnpg-profile-common` (credentials, per-database CiliumNetworkPolicy) + the profile's Cluster + `cnpg-profile-backup` (standard, ha: ObjectStore, daily ScheduledBackup, S3 egress) + `cnpg-profile-backup-replica` (ha) + `cnpg-profile-pooler` (ha) + `cnpg-profile-values` last. Off by default: no brick, no generated profile references them (`test-cnpg-profiles.py`). Reused from the platform: restricted PSA, memory limits on every container, 30 s tolerations on a lost node (apps #154), hostname and zone preference (lab 21), `primaryUpdateMethod: switchover`, Barman plugin archiving with the checksum fix, the S3 egress FQDNs. The platform's own policies apply to the pods (`test-cnpg-profiles.py` runs them with Kyverno CLI 1.19.1 on pods built from the rendered Clusters, Pooler and Jobs: the instance pods are built the way the operator is documented to; lab 23 read the real policy reports of the three profiles: 0 failures after the pooler init container got its limits).
 
 ## The Pooler (ha)
 
@@ -56,12 +56,15 @@ Applications connect to `<name>-pooler-rw` (port 5432). PgBouncer 1.25.1, `pgbou
 | `server_connect_timeout`, `tcp_keepalive*` | 5 s; idle 10, interval 5, count 3 | notice a dead server connection (powered-off node, no reset) in about 25 s instead of the kernel's minutes |
 | `max_prepared_statements` | 100 | protocol-level prepared statements (JDBC, pgx, psycopg3) work in transaction mode |
 | `server_reset_query_always` | 0 | no reset between clients in transaction mode: see the limits |
+| `client_tls_sslmode` | require | clients must use TLS (the default accepts plaintext; lab 23: `sslmode=disable` was accepted by the pooler while refused by the database) |
 
-HA of the pooler itself: 2 pods, `RollingUpdate` with `maxUnavailable 0`, a PodDisruptionBudget of one, a hostname and a zone spread (both soft), 30 s tolerations, restricted pod and container security contexts (read-only root filesystem: UNVERIFIED that the pooler image starts with it), a policy that lets in only your application and lets out only to the Cluster, DNS and the API server.
+HA of the pooler itself: 2 pods, `RollingUpdate` with `maxUnavailable 0`, a PodDisruptionBudget of one, a hostname and a zone spread (both soft), 30 s tolerations, restricted pod and container security contexts (read-only root filesystem: verified in lab 23, the pods run with it under restricted PSA), a policy that lets in only your application and lets out only to the Cluster, DNS and the API server.
 
-**What a client sees during a failover** (intended, UNVERIFIED): a connection that is idle keeps its pooler connection and its next statement waits for the new primary, up to `query_wait_timeout`; a transaction in flight when the primary dies fails with a connection error and the client connection is closed, so retry the whole transaction on a fresh connection (`docs/database-failover-clients.md`, unchanged). The pooler hides the reconnect storm and the DNS/IP change, not the in-flight transaction. A pooler pod rolled or lost drops its client connections: same retry.
+**Zone loss through the pooler (lab 23, observed twice, unexplained).** Powering off the zone that held the primary: the first time the pooler path was down for 314.5 s while the direct path was back at 120 s (pgbouncer logged `DNS lookup failed` for `<name>-rw` 3331 times; two of the three CoreDNS replicas were in the lost zone); the repeat, with one CoreDNS replica in the zone, took 60.1 s through the pooler and 79.8 s direct; losing one CoreDNS node alone cost 9.5 s. Until this is understood, count a zone loss as a possible several-minute outage on the pooler path and retry as in `docs/database-failover-clients.md`.
 
-**Limits of transaction pooling** (PgBouncer's, documented): no session state across transactions (`SET` without `LOCAL`, temporary tables, `LISTEN/NOTIFY`, session advisory locks, `WITH HOLD` cursors); SQL-level `PREPARE`/`EXECUTE` is not tracked (protocol-level is, see above); a migration tool that takes an advisory lock must use `<name>-rw` directly, which the database policy allows to the same application. TLS to the pooler: the clients' TLS on port 5432 and its certificate names are the operator's defaults; **whether `verify-full` works against `<name>-pooler-rw` is UNVERIFIED** (lab step below), `verify-ca` is the fallback, and `<name>-rw` enforces TLS in the database whatever the pooler does. No pooler metrics are scraped yet (known gap).
+**What a client sees during a failover** (lab 23, `ha` through the pooler: 5 idle clients saw no error across a planned switchover and their next statement ran; the 8 pgbench clients with a transaction in flight all aborted at the switchover (`terminating connection due to administrator command`); deleting ONE of the two pooler pods aborted the clients that sat on it (2 of 5 idle sessions: `SSL SYSCALL error: EOF`, 2 of 8 pgbench clients) and cost a fresh-connection writer 0.3 s; the intended behaviour follows): a connection that is idle keeps its pooler connection and its next statement waits for the new primary, up to `query_wait_timeout`; a transaction in flight when the primary dies fails with a connection error and the client connection is closed, so retry the whole transaction on a fresh connection (`docs/database-failover-clients.md`, unchanged). The pooler hides the reconnect storm and the DNS/IP change, not the in-flight transaction. A pooler pod rolled or lost drops its client connections: same retry.
+
+**Limits of transaction pooling** (PgBouncer's, documented): no session state across transactions (`SET` without `LOCAL`, temporary tables, `LISTEN/NOTIFY`, session advisory locks, `WITH HOLD` cursors); SQL-level `PREPARE`/`EXECUTE` is not tracked (protocol-level is, see above); a migration tool that takes an advisory lock must use `<name>-rw` directly, which the database policy allows to the same application. The pooler requires TLS from its clients (`client_tls_sslmode: require`; its default accepted `sslmode=disable`, found in lab 23). TLS to the pooler: the clients' TLS on port 5432 and its certificate names are the operator's defaults; **`verify-full` against `<name>-pooler-rw` FAILED in lab 23** (PgBouncer serves the Cluster's server certificate, which named only `-rw`, `-ro`, `-r`): the profile now adds the pooler Service names to `spec.certificates.serverAltDNSNames`, after which `verify-full` works (the pooler pods need one rollout to serve the reissued certificate on an existing database); `verify-ca` always worked, and `<name>-rw` enforces TLS in the database whatever the pooler does. No pooler metrics are scraped yet (known gap).
 
 ## Capacity
 
@@ -77,20 +80,26 @@ The infra capacity gate counts requests: one `ha` database is about 1.1 vCPU of 
 
 ## Numbers
 
-Filled by the lab, one row per run, produced by `db-bench.sh` (below). Until a row exists the profile is experimental for that metric. Empty on purpose:
+Measured in lab 23 (2026-10-22) with `db-bench.sh`: Scaleway fr-par, workers POP2-4C-16G (4 vCPU, 16 GB, block-storage root disk), Cluster volumes on `local-path-retain` (the node's disk; Longhorn was **not** measured), PostgreSQL 18.6 with the profiles' parameters (shared_buffers 128 MB, max_connections 100), pgbench scale 10 (about 150 MB: over shared_buffers), 16 clients, 60 s per row, **3 runs, the median of each column**, `failed` 0 in every run. The client pod ran on a worker of the primary's zone (fr-par-1 for `ha` and `standard`; the `light` primary was in fr-par-2). The CPU **limits** of the shipped examples shape the rows: `light` is capped at 500 m and `standard` at 1 CPU, `ha` at 2.
 
 | profile | path | mode | scale | clients | secs | TPS | avg ms | p50 ms | p95 ms | p99 ms | failed |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| light | direct | rw | 10 | 16 | 60 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED |
-| light | direct | ro | 10 | 16 | 60 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED |
-| standard | direct | rw | 10 | 16 | 60 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED |
-| standard | direct | ro | 10 | 16 | 60 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED |
-| ha | direct | rw | 10 | 16 | 60 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED |
-| ha | direct | ro | 10 | 16 | 60 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED |
-| ha | pooler | rw | 10 | 16 | 60 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED |
-| ha | pooler | ro | 10 | 16 | 60 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED |
+| light | direct | rw | 10 | 16 | 60 | 643 | 24.90 | 20.88 | 44.43 | 73.34 | 0 |
+| light | direct | ro | 10 | 16 | 60 | 4546 | 3.52 | 2.48 | 5.31 | 32.08 | 0 |
+| standard | direct | rw | 10 | 16 | 60 | 952 | 16.81 | 13.51 | 34.24 | 61.03 | 0 |
+| standard | direct | ro | 10 | 16 | 60 | 8857 | 1.81 | 0.94 | 2.37 | 39.07 | 0 |
+| ha | direct | rw | 10 | 16 | 60 | 1048 | 15.27 | 12.38 | 29.71 | 49.30 | 0 |
+| ha | direct | ro | 10 | 16 | 60 | 13967 | 1.15 | 0.94 | 2.04 | 3.40 | 0 |
+| ha | pooler | rw | 10 | 16 | 60 | 748 | 21.39 | 17.83 | 41.69 | 67.57 | 0 |
+| ha | pooler | ro | 10 | 16 | 60 | 8580 | 1.86 | 1.15 | 4.03 | 5.71 | 0 |
 
-Also to record, same shape and storage: the cost of synchronous replication (`ha` against the same Cluster with `spec.postgresql.synchronous` removed: TPS ratio and p99 of `rw`), the commit latency of three instances in three zones against one zone (one client, `rw`), and the storage class (`local-path-retain` against Longhorn). Together with the provider and node shape.
+Same shape and storage, also measured:
+
+- **Cost of synchronous replication** (`ha` against the same Cluster with `spec.postgresql.synchronous` removed, `rw`, 3 runs each, `pg_stat_replication.sync_state` read as `quorum` before the synchronous runs): synchronous **1046 TPS, p50 12.58 ms, p99 50.16 ms**; asynchronous **1395 TPS, p50 9.63 ms, p99 32.90 ms**. Synchronous replication costs about **25% of the write throughput** (ratio 0.75) and adds about 17 ms to p99 at 16 clients; reads do not change. One lab note: after the synchronous setting was restored in the spec, the running `synchronous_standby_names` stayed empty for about 5 minutes until `pg_reload_conf()` was called by hand (the instance manager had logged "reloading the instance" at once; cause not found, seen once, under a 16-client load): after any change of that setting, read `pg_stat_replication.sync_state` (`quorum`) before trusting it.
+- **Commit latency across zones** (1 client, `rw`, 40 s, 3 to 5 runs): instances in three zones **8.07 / 8.14 / 8.15 ms (123 TPS)**; the same profile pinned to one zone (a second Cluster, `affinity.nodeSelector` zone, since deleted) **5.93 / 5.89 / 5.87 ms (169 TPS)**: waiting for a replica in another zone adds **about 2.2 ms (+37%)** to every commit. A read costs 0.55-0.62 ms either way. The `ha` Cluster of the lab had one instance in each of the three zones (the zone term is a preference: read `kubectl get pods -o wide` on yours).
+- **Cost of the pooler** (`ha`, 16 clients): `rw` 748 TPS against 1048 direct (-29%), `ro` 8580 against 13967 (-39%), p99 67.6 against 49.3 ms for `rw`. The pooler pays for connection reuse at 16 clients that already reuse their connections: it is for many short-lived clients, not for speed.
+- **Resources observed** (`kubectl top`): PostgreSQL 4-25 m CPU and 72-120 Mi idle; the `ha` primary 647 m and the replicas 102-119 m, 202-271 Mi, under 16 clients; the Barman sidecar 0-1 m CPU and 17-103 Mi at all times (request 50 m / 128 Mi); each PgBouncer pod 112-210 m CPU and 22-35 Mi serving that load (request 100 m / 64 Mi).
+- **Storage class**: only `local-path-retain` was measured. Longhorn: UNMEASURED.
 
 ## Measure it
 
@@ -116,13 +125,31 @@ A profile moves from experimental to supported on a row only when its criterion 
 6. **Security** (below): each line of the checklist observed once per profile.
 7. **Policies**: the pods of each profile in a namespace with the platform's Kyverno policies: no new report; pods Ready under restricted PSA, the pooler with its read-only root filesystem.
 
+### Status after lab 23 (2026-10-22, one cluster, Scaleway; this is not a support matrix)
+
+| criterion | `light` | `standard` | `ha` |
+|---|---|---|---|
+| 1 numbers (3 runs, median) | measured | measured | measured, direct and pooler |
+| 2 zero loss | not run | not run | **0 missing acknowledged ids in 7 fault runs** through `-rw` AND the pooler (pod kill, worker power-off, forced reboot, zone power-off, both replicas down x3, plus a primary and a replica lost together); see `docs/resilience.md` |
+| 3 failover through the pooler | - | - | planned switchover 12.7-14.1 s (bar 20 s) met; node loss 40-62 s (bar 75 s) met; idle clients saw no error across a switchover; in-flight transactions DO fail (8 of 8 pgbench clients aborted at a switchover, 2 of 8 when one pooler pod was deleted); a deleted pooler pod cost the fresh-connection writer 0.3 s; **zone power-off through the pooler: 314.5 s once, 60.1 s on the repeat** (cause not found, see "The Pooler") |
+| 4 sync cost | - | - | measured: about -25% write TPS, +17 ms p99; `sync_state` `quorum` confirmed |
+| 5 cross-zone latency | - | - | measured: +2.2 ms per commit (8.1 against 5.9 ms) |
+| 6 security | observed | observed | observed (and the pooler accepted plaintext until fixed) |
+| 7 policies | restricted PSA, no report | restricted PSA, no report | restricted PSA, pooler read-only root filesystem, no report after the fixes |
+
+`standard` was not failed over or loss-tested; `light` was not stopped. Both are experimental on those rows.
+
+### What the lab found wrong in the profiles (all fixed on the branch)
+
+The operator could not reach instances outside `foundation-databases` (its egress policy named two namespaces), so the `ha` Cluster stayed at 1 of 3 instances; `verify-full` to the pooler failed (its certificate did not name it); the bench Jobs had no egress to their database; nothing scraped a profile, so `CnpgSyncReplicaMissing` and the other database alerts could never fire for it; the pooler's init container had no limits (Kyverno `require-limits`); the pooler accepted `sslmode=disable`; and `CnpgSyncReplicaMissing` fired for good on `light`. **Not fixed, and yours to do:** an application's own network policy. A pod selected by any policy of the platform is denied the rest, so the application needs egress to its database (and pooler) on 5432; the profile only admits it on the database side.
+
 ## Security checklist
 
 | | light | standard | ha | how it is checked |
 |---|---|---|---|---|
-| Network policy per database: default deny both ways, only your application (+ operator, metrics agent, the instances; the pooler in ha) | yes | yes | yes | `test-cnpg-profiles.py` (shape); lab: a pod from another namespace times out |
-| TLS and SCRAM only: `hostnossl ... reject`, then `hostssl ... scram-sha-256`; `password_encryption scram-sha-256`; no `md5`, no `trust` | yes | yes | yes | `test-cnpg-profiles.py`; lab: `sslmode=disable` refused; operator-managed rules come first (UNVERIFIED that the operator keeps the rule order) |
-| No superuser over the network: `enableSuperuserAccess: false` | yes | yes | yes | `test-cnpg-profiles.py` |
+| Network policy per database: default deny both ways, only your application (+ operator, metrics agent, the instances; the pooler in ha) | yes | yes | yes | `test-cnpg-profiles.py` (shape); lab 23: a pod of another namespace and a pod of the same namespace without the client label both time out, on all three |
+| TLS and SCRAM only: `hostnossl ... reject`, then `hostssl ... scram-sha-256`; `password_encryption scram-sha-256`; no `md5`, no `trust` | yes | yes | yes | `test-cnpg-profiles.py`; lab 23: `sslmode=disable` refused on all three (`pg_hba.conf rejects connection`), `verify-full` connects with `ssl = t`; the pooler refuses plaintext since `client_tls_sslmode: require` (it accepted it before); the operator kept the rule order (the `hostnossl` reject is effective) |
+| No superuser over the network: `enableSuperuserAccess: false` | yes | yes | yes | `test-cnpg-profiles.py`; lab 23: `postgres` over the network answers `password authentication failed` on all three |
 | Owner's password from OpenBao (ExternalSecret), none in git | yes | yes | yes | `test-cnpg-profiles.py`; `check-externalsecret-namespaces.py` |
 | Restricted PSA namespace, memory limits, pinned images, no Kyverno report | yes | yes | yes | `test-cnpg-profiles.py` (Kyverno CLI) |
 | Backup keys per application, scoped to `cnpg/<name>/` | n/a | yes | yes | OpenBao policy (platform operator); not testable here |
@@ -137,7 +164,7 @@ kubectl -n <ns> get secret <name>-ca -o jsonpath='{.data.ca\.crt}' | base64 -d >
 psql "host=<name>-rw.<ns>.svc port=5432 dbname=<db> user=<owner> sslmode=verify-full sslrootcert=ca.crt"
 ```
 
-Through the pooler use `host=<name>-pooler-rw.<ns>.svc` and `sslmode=verify-ca` until the lab confirms `verify-full` works there.
+Through the pooler use `host=<name>-pooler-rw.<ns>.svc`; `sslmode=verify-full` works there since the profile names the pooler in the server certificate (lab 23; an existing database needs one rollout of the pooler pods to serve the reissued certificate).
 
 **`pgaudit` decision**: not enabled by default in any profile. It logs statements, including their text, to the instance logs the platform ships to its log store: that is data about your data, volume proportional to traffic, and a setting (`pgaudit.log`) that is a per-application choice of classes. Enable it in your copy with `postgresql.shared_preload_libraries: [pgaudit]` and `postgresql.parameters.pgaudit.log`, after deciding who may read those logs and for how long; it is not measured here.
 
@@ -147,4 +174,4 @@ The platform **validates PostgreSQL through CNPG**, in the profiles above: manif
 
 ## Not done
 
-Nothing here ran on a cluster. Unverified: pods Ready under every restriction (pooler read-only root filesystem); the operator's pg_hba rule order; TLS verify-full to the pooler; failover through the pooler; the numbers; PostgreSQL major 18 with the shipped parameters (the Cluster image is the one `zitadel-db` runs); the S3 egress of a customer namespace; `cnpg-store-replicate` copying a customer database (add its name to the `CLUSTERS` of that CronJob: not done, a customer database is not on its list); backup verification and restore tests of a customer database (the daily restore tests cover the platform's two Clusters only).
+Lab 23 ran each profile once on one provider. Not observed: `standard` and `light` under a node loss or a power-off; Longhorn volumes under a profile; any provider other than Scaleway; the cause of the 314 s zone-loss gap through the pooler (once; 60 s on the repeat); why `synchronous_standby_names` stayed empty for 5 minutes after the setting was restored (once, under load); the operator upgrade rolling a profile; `cnpg-store-replicate` copying a customer database (add its name to the `CLUSTERS` of that CronJob: not done, a customer database is not on its list); backup verification and restore tests of a customer database (the daily restore tests cover the platform's two Clusters only); PostgreSQL major upgrades; LUKS2 at rest (apps #157).
