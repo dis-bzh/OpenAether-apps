@@ -78,6 +78,25 @@ spec:
               A replica or the primary is gone, Pending or unscheduled, and its series disappeared with it, so the replication and
               collector rules cannot see it. Compare `kubectl cnpg status` with the number of instances wanted.
 
+        # Both Clusters run synchronous replication with dataDurability required (any 1 of 2, class A data): with no streaming
+        # replica left, PostgreSQL BLOCKS every commit instead of acknowledging it unreplicated. Applications see timeouts, not
+        # errors: this is an outage of the writes, not a warning. The threshold is `number` of the Clusters (1).
+        # UNVERIFIED on a cluster: cnpg_pg_replication_streaming_replicas (a column of the CNPG default pg_replication query).
+        - alert: CnpgSyncReplicaMissing
+          expr: |
+            max by (cnpg_io_cluster) (cnpg_pg_replication_streaming_replicas and on (cnpg_io_cluster, pod) (cnpg_pg_replication_in_recovery == 0)) < 1
+          for: 3m
+          labels:
+            severity: critical
+            component: database
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgsyncreplicamissing"
+            summary: "CNPG {{ $labels.cnpg_io_cluster }}: no replica streams from the primary, synchronous commits are BLOCKED"
+            description: >-
+              The primary has no streaming replica, and dataDurability is required: every write waits for a standby that is
+              not there (applications time out). Nothing is lost, nothing is acknowledged. Bring a replica back
+              (`kubectl cnpg status`), see the runbook.
+
         - alert: CnpgWalFilesPiling
           expr: |
             max by (cnpg_io_cluster, pod) (cnpg_collector_pg_wal{value="count"}) > 200

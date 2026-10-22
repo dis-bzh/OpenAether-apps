@@ -591,6 +591,13 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: `kubectl cnpg status <cluster> -n foundation-databases`; `kubectl -n foundation-databases get pods -l cnpg.io/cluster=<cluster> -o wide`; Events of a Pending pod (capacity, volume node affinity).
 - Do: Free capacity or fix the volume or node so the instance comes back. If the number of instances was lowered on purpose, the alert clears by itself once the day-long reference no longer holds the old count (up to 24 h); silence it meanwhile.
 
+### CnpgSyncReplicaMissing
+
+Critical: the Cluster's writes are BLOCKED, not lost. Both Clusters keep `dataDurability: required` (synchronous replication, any 1 of 2 replicas): with no streaming replica the primary does not acknowledge a commit, so Zitadel logins that write, or Grafana saves, time out until a replica streams again.
+
+- Check: `kubectl cnpg status <cluster> -n foundation-databases` (replicas, "Synchronous replication" section, replication lag); `kubectl -n foundation-databases get pods -l cnpg.io/cluster=<cluster> -o wide`; Events of a Pending pod. Usually a lost worker or zone plus a replica already down (see CnpgInstanceMissing and CnpgReplicaNotStreaming).
+- Do: bring one replica back (free capacity, fix the node or the volume; a replica that cannot reconnect is re-cloned by deleting its pod and PVC). Writes resume by themselves within seconds of the first replica streaming. Do NOT turn synchronous replication off to "unblock": that is the one way to lose acknowledged commits. If the primary itself is the lost pod, the operator promotes only a replica that holds every acknowledged commit (`failoverQuorum`); it may wait for a second replica rather than promote a stale one, which is the intended behaviour.
+
 ### CnpgWalFilesPiling
 
 - Check: `kubectl cnpg status`; archive log; replication slots.

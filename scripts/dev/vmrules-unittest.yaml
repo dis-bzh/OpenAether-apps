@@ -743,6 +743,28 @@ tests:
         alertname: CnpgReplicaNotStreaming
         exp_alerts:
           - exp_labels: {cnpg_io_cluster: db, pod: db-2, severity: warning, component: database}
+  - name: CNPG primary without a streaming replica blocks synchronous commits (zero-loss rule)
+    interval: 1m
+    input_series:
+      - series: 'cnpg_pg_replication_streaming_replicas{cnpg_io_cluster="db", pod="db-1"}'
+        values: '2x10 0x40 1x30'      # both replicas gone at 11 min, one back at 52 min (the file evaluates every 10 min)
+      - series: 'cnpg_pg_replication_in_recovery{cnpg_io_cluster="db", pod="db-1"}'
+        values: '0x80'
+      - series: 'cnpg_pg_replication_streaming_replicas{cnpg_io_cluster="db", pod="db-2"}'
+        values: '0x80'                # a replica never streams to anyone: not a primary, never counted
+      - series: 'cnpg_pg_replication_in_recovery{cnpg_io_cluster="db", pod="db-2"}'
+        values: '1x80'
+      - series: 'cnpg_pg_replication_streaming_replicas{cnpg_io_cluster="ok", pod="ok-1"}'
+        values: '1x80'                # one replica is enough (number 1)
+      - series: 'cnpg_pg_replication_in_recovery{cnpg_io_cluster="ok", pod="ok-1"}'
+        values: '0x80'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: CnpgSyncReplicaMissing, exp_alerts: []}
+      - eval_time: 40m
+        alertname: CnpgSyncReplicaMissing
+        exp_alerts:
+          - exp_labels: {cnpg_io_cluster: db, severity: critical, component: database}
+      - {eval_time: 70m, alertname: CnpgSyncReplicaMissing, exp_alerts: []}
   - name: CNPG instance that left the exporters (lab 19)
     interval: 1m
     input_series:
