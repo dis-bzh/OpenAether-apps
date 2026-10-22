@@ -17,6 +17,10 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+### Security
+
+- **Two CRITICAL Next.js advisories on `zitadel-login` v4.19.5 (Next.js 16.3.6) are recorded as not affected, with an expiry of 2026-11-05** (GHSA-673q-mjm6-r5xr, `use cache` typed arrays; GHSA-2464-fhr4-w9xw, image optimization). Read from the v4.19.5 image: cache components and `use cache` are off; the vulnerable `sharp` binary cannot load on the musl base image (fragile: reachable if the image moves to glibc). The Login V2 UI is not routed through the Gateway in 0.3.x (apps #161); fixing #161 must also block `/ui/v2/login/_next/image`. Zitadel v4.20.0 still pins Next.js 16.3.6 (read from its source tag, not an image). Re-check at the first tag with Next.js >= 16.4.1. Not a compliance claim.
+
 ## [0.3.2] — 2026-10-22
 
 0.3.2 is a **security patch** of 0.3.1, paired with OpenAether-infra 0.3.2 (which only changes its `git_ref` pin). It ships the fixes that were merged on main after 0.3.1

@@ -176,6 +176,48 @@
       "impact_statement": "Go crypto/tls session resumption, mesh-internal mTLS only (xDS port, not published). The line is past upstream support.",
       "action_statement": "Replace by the Istio 1.31 upgrade (fixed in 1.29.10, 1.30.7, 1.31.3); this waiver ends with it and matches the end-of-support calendar.",
       "status_notes": "Expires: 2026-12-14"
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-673q-mjm6-r5xr"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/zitadel-login?repository_url=ghcr.io/zitadel/zitadel-login",
+          "subcomponents": [
+            {
+              "@id": "pkg:npm/next@16.3.6"
+            }
+          ]
+        }
+      ],
+      "impact_statement": "Next.js 'use cache' functions returning typed arrays. The Zitadel login build has cacheComponents, experimental.useCache and ppr set to false and no 'use cache' function in its server code (read from required-server-files.json and the built app in the v4.19.5 image).",
+      "action_statement": "Re-check at the first Zitadel tag with Next.js >= 16.4.1 and drop this statement then.",
+      "timestamp": "2026-10-22T00:00:00Z",
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "status_notes": "Expires: 2026-11-05"
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-2464-fhr4-w9xw"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/zitadel-login?repository_url=ghcr.io/zitadel/zitadel-login",
+          "subcomponents": [
+            {
+              "@id": "pkg:npm/next@16.3.6"
+            }
+          ]
+        }
+      ],
+      "impact_statement": "Next.js image optimization endpoint (libvips memory bug in sharp on glibc, fixed in sharp >= 0.35.5). The login image is built on node:24-alpine (musl) and ships only glibc sharp binaries: require('sharp') fails there ('linuxmusl-x64 runtime') and Next.js 16 has no fallback, so the vulnerable code never loads. FRAGILE: it becomes reachable if the image is rebuilt on a glibc base. Also, the Login V2 UI is not routed through the Gateway in 0.3.x (apps #161); fixing #161 must also block /ui/v2/login/_next/image.",
+      "action_statement": "Re-check at the first Zitadel tag with Next.js >= 16.4.1 or if the base image changes; review by 2026-11-05.",
+      "timestamp": "2026-10-22T00:00:00Z",
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "status_notes": "Expires: 2026-11-05"
     }
   ]
 }
