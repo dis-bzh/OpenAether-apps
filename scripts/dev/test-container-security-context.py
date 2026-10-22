@@ -19,6 +19,7 @@ import yaml
 REPO = Path(__file__).resolve().parents[2]
 VM_DIR = REPO / "apps/base/observability/vm-customresources"
 GATEWAY_CRDS = REPO / "apps/base/platform/gateway-api/standard-install.yaml"
+SIDECAR_PATCH = ("VMAgent", "VMAlert", "VMAlertmanager")
 VM_KINDS = {"VMAgent": [()], "VMAlert": [()], "VMAlertmanager": [()],
             "VMCluster": [("vminsert",), ("vmstorage",), ("vmselect",)]}
 
@@ -37,7 +38,7 @@ def vm_problems(doc):
         if "containerSecurityContext" in node:
             out.append(f"{where}: containerSecurityContext is not a field of this CR, the operator ignores it; use securityContext")
         sc = node.get("securityContext") or {}
-        want = {"runAsNonRoot": True, "allowPrivilegeEscalation": False}
+        want = {"runAsNonRoot": True, "allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True}
         for k, v in want.items():
             if sc.get(k) is not v:
                 out.append(f"{where}: securityContext.{k} must be {v}")
@@ -47,6 +48,16 @@ def vm_problems(doc):
             out.append(f"{where}: securityContext.seccompProfile.type must be RuntimeDefault")
         if not isinstance(sc.get("runAsUser"), int) or sc["runAsUser"] == 0:
             out.append(f"{where}: securityContext.runAsUser must be a non-zero uid (these images run as root)")
+    # The operator's own sidecar and init container carry no memory limit unless the CR patches them by name (Kyverno
+    # require-limits, apps #47). A VMAlert's init container cannot be patched (the operator appends it: duplicate name).
+    if kind in SIDECAR_PATCH:
+        spec = doc.get("spec", {})
+        for field, cname in (("containers", "config-reloader"), ("initContainers", "config-init")):
+            if field == "initContainers" and kind == "VMAlert":
+                continue
+            c = next((c for c in spec.get(field) or [] if c.get("name") == cname), {})
+            if not ((c.get("resources") or {}).get("limits") or {}).get("memory"):
+                out.append(f"{kind}/{name}: spec.{field}[{cname}].resources.limits.memory is missing (the operator sets none)")
     return out
 
 
@@ -65,7 +76,7 @@ def bundle_version():
     return int(m.group(1)), int(m.group(2))
 
 
-GOOD_SC = {"runAsNonRoot": True, "runAsUser": 65534, "allowPrivilegeEscalation": False,
+GOOD_SC = {"runAsNonRoot": True, "runAsUser": 65534, "allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True,
            "capabilities": {"drop": ["ALL"]}, "seccompProfile": {"type": "RuntimeDefault"}}
 
 
@@ -76,8 +87,15 @@ def self_test():
         if bool(problems) != want_nonempty:
             ok = False
             print(f"✗ self-test: {label}: {problems}")
-    agent = {"kind": "VMAgent", "metadata": {"name": "a"}, "spec": {"securityContext": dict(GOOD_SC)}}
+    lim = {"resources": {"limits": {"memory": "64Mi"}}}
+    agent = {"kind": "VMAgent", "metadata": {"name": "a"}, "spec": {"securityContext": dict(GOOD_SC),
+             "containers": [{"name": "config-reloader", **lim}], "initContainers": [{"name": "config-init", **lim}]}}
     expect("a complete block passes", vm_problems(agent), False)
+    expect("no limit on the operator sidecars is caught", vm_problems({**agent, "spec": {"securityContext": dict(GOOD_SC)}}), True)
+    rw = {k: v for k, v in GOOD_SC.items() if k != "readOnlyRootFilesystem"}
+    expect("a writable root filesystem is caught", vm_problems({**agent, "spec": {**agent["spec"], "securityContext": rw}}), True)
+    alert = {"kind": "VMAlert", "metadata": {"name": "a"}, "spec": {"securityContext": dict(GOOD_SC), "containers": [{"name": "config-reloader", **lim}]}}
+    expect("a VMAlert needs no init container patch", vm_problems(alert), False)
     wrong = {"kind": "VMAgent", "metadata": {"name": "a"}, "spec": {"containerSecurityContext": dict(GOOD_SC)}}
     expect("the ignored field name is caught", vm_problems(wrong), True)
     root = {"kind": "VMAlert", "metadata": {"name": "a"}, "spec": {"securityContext": {k: v for k, v in GOOD_SC.items() if k != "runAsUser"}}}
