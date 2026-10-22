@@ -1207,10 +1207,10 @@ tests:
               description: >-
                 The newest object of node cp-2 in the primary sink is older than 20 minutes (the shipper sends every
                 5). Its audit file is the only copy until delivery resumes. Runbook: docs/runbooks.md.
-      - eval_time: 35m   # the list call failed at minute 30: ten minutes of "for" are not over yet
+      - eval_time: 33m   # the list call failed at minute 30: the five minutes of "for" are not over yet
         alertname: AuditSinkDown
         exp_alerts: []
-      - eval_time: 55m   # the first evaluation that saw ok = 0 was at 40 m (the test evaluates every 10 m), plus the 10 m of "for"
+      - eval_time: 55m   # the first evaluation that saw ok = 0 was at 40 m (the test evaluates every 10 m), plus the 5 m of "for"
         alertname: AuditSinkDown
         exp_alerts:
           - exp_labels: {sink: primary, severity: critical, component: audit-sink}

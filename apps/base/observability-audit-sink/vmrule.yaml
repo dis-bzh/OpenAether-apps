@@ -18,7 +18,9 @@ spec:
         # The check could not list the sink (credentials, the store, the network, the egress policy), or it stopped checking.
         - alert: AuditSinkDown
           expr: '(oa_audit_sink_ok == 0) or (time() - oa_audit_sink_last_check_timestamp_seconds > 900)'
-          for: 10m
+          # The check lists every 5 minutes: `for: 10m` fired 16 min 41 s after the sink was cut in lab 23 (target 15 minutes).
+          # Two failed listings in a row are 5 minutes of `for`: at most about 11-12 minutes from the cut.
+          for: 5m
           labels:
             severity: critical
             component: audit-sink
