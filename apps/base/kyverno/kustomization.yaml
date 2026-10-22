@@ -22,8 +22,9 @@ patches:
   # NOT measured on a cluster: 1 CPU for the admission webhook (a throttled webhook times out the API server's
   # requests), 500m for the others. Tighten from `kubectl top pod -n kyverno` (LAB-CHECKLIST B21).
   - path: patch-cpu-limits.yaml
-  # Client-side rate limit of the two controllers that list and watch the most kinds (default 20 QPS / burst 50): lab 22 saw
-  # their leader-election lease renewal fail behind it ("client rate limiter Wait returned an error: context deadline exceeded",
+  # Client-side rate limit of the two controllers that list and watch the most kinds (default 20 QPS / burst 50): lab
+  # 22 saw their leader-election lease renewal fail behind it ("client rate limiter Wait returned an error: context
+  # deadline exceeded",
   # "failed to wait for cache sync") and both restart in a loop once a few drills had churned the cluster.
   - target:
       kind: Deployment

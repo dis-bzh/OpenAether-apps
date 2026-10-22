@@ -27,7 +27,8 @@ spec:
         #    so they get a 2.5 h window. HelmRepository (24 h) and the other kinds are not watched here.
         #    A controller that restarted less than a window ago (a node loss, a Flux upgrade) starts every counter again
         #    at 1: `increase()` of a series with one sample is 0 and the 1 h HelmReleases showed no second sample for an
-        #    hour, so seven of them fired this CRITICAL alert 19 minutes after a node loss on a healthy cluster (lab 22).
+        #    hour, so seven of them fired this CRITICAL alert 19 minutes after a node loss on a healthy cluster
+        #    (lab 22).
         #    The `and on (pod)` clauses keep a restarted controller out until it has lived one full window.
         #    Does NOT catch "reconciling but failing": Flux 2.8 and 2.9 export no
         #    per-object Ready condition (OpenAether-infra CHANGELOG, Known limits).

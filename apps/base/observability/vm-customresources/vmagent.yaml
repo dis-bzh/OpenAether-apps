@@ -116,7 +116,8 @@ spec:
   # Kyverno reads the container level (#47). The operator copies this flat block onto every container
   # (pod and container fields share it: spec.securityContext, not containerSecurityContext).
   # runAsUser is explicit because these images run as root and runAsNonRoot alone makes the container fail to start.
-  # The operator's own sidecar and init container: it sets no memory limit (Kyverno require-limits, #47). Patched by name.
+  # The operator's own sidecar and init container: it sets no memory limit (Kyverno require-limits, #47).
+  # Patched by name.
   containers:
     - name: config-reloader
       resources:

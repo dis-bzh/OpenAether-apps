@@ -81,7 +81,7 @@ spec:
         password: "$__env{GF_DATABASE_PASSWORD}"
         # CNPG serves TLS: encrypted, server not authenticated (no CA mounted). Rollback: disable.
         ssl_mode: require
-        # A failover leaves pooled connections dead: bound the pool and recycle connections in minutes, not the 4 h default
+        # A failover leaves pooled connections dead: bound the pool and recycle in minutes, not the 4 h default
         # (conn_max_lifetime is in seconds). docs/database-failover-clients.md.
         max_open_conn: 20
         max_idle_conn: 10

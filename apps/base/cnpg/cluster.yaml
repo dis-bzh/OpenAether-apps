@@ -27,8 +27,8 @@ spec:
       max_connections: "200"
       shared_buffers: "128MB"
     # Class A data (identity): a commit is acknowledged only after ONE replica has it (quorum, any 1 of the 2), and a
-    # failover refuses a replica that cannot prove it holds every acknowledged commit (failoverQuorum). With both replicas
-    # gone writes BLOCK instead of being acknowledged unreplicated (CnpgSyncReplicaMissing). docs/resilience.md, "Data classes".
+    # failover refuses a replica that cannot prove it holds every acknowledged commit (failoverQuorum). With both
+    # replicas gone writes BLOCK instead of being acknowledged alone (CnpgSyncReplicaMissing). docs/resilience.md.
     synchronous:
       method: any
       number: 1
@@ -44,7 +44,8 @@ spec:
     size: 5Gi
     storageClass: local-path-retain
 
-  # Memory limit for every container of the instance pod, the CNPG init container included (Kyverno require-limits, apps #47).
+  # Memory limit for every container of the instance pod, the CNPG init container included (Kyverno require-limits,
+  # apps #47).
   # Measured on a lab cluster: the primary uses about 255Mi, a replica about 80Mi. No CPU limit (throttling), a small
   # request like grafana-db.
   resources:

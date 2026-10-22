@@ -167,7 +167,7 @@ jobs:
       - name: CNPG clusters and operator prefer different zones, not only different hosts (lab 21)
         run: python3 -I scripts/dev/test-cnpg-zone-spread.py
 
-      - name: CNPG clusters acknowledge a commit only after a replica has it, and the restore-test copy does not inherit that (0.4.0, zero loss)
+      - name: CNPG clusters acknowledge a commit only after a replica has it, scratch copies do not inherit it (0.4.0)
         run: python3 -I scripts/dev/test-cnpg-sync-replication.py
 
       - name: Zitadel and Grafana recycle their database connections in minutes (rendered charts, 0.4.0)
