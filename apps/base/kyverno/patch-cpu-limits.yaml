@@ -1,3 +1,6 @@
+# Lab 22: with 500m the background and reports controllers were throttled 89-97% of the CPU periods once a few hundred
+# PolicyReport results existed (after node losses), missed their lease renewal ("client rate limiter Wait returned an error",
+# "leadership lost") and restarted in a loop (kyverno-reports-controller already in lab 21). They get 2 CPUs; usage stays near 0.3.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,7 +27,7 @@ spec:
         - name: controller
           resources:
             limits:
-              cpu: "500m"
+              cpu: "2"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -52,4 +55,4 @@ spec:
         - name: controller
           resources:
             limits:
-              cpu: "500m"
+              cpu: "2"

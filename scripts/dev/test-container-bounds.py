@@ -109,6 +109,16 @@ def check_patches():
             for c in d["spec"]["template"]["spec"]["containers"]:
                 if "cpu" not in c.get("resources", {}).get("limits", {}):
                     out.append(f"{rel}: {d['metadata']['name']}/{c['name']} has no cpu limit")
+    # Lab 22: the Kyverno background and reports controllers throttled 89-97% of the CPU periods at 500m, lost their lease and
+    # restarted in a loop. They keep at least one CPU and the raised client rate limit.
+    for d in docs("apps/base/kyverno/patch-cpu-limits.yaml"):
+        if d["metadata"]["name"] in ("kyverno-background-controller", "kyverno-reports-controller"):
+            cpu = d["spec"]["template"]["spec"]["containers"][0]["resources"]["limits"]["cpu"]
+            cores = float(cpu[:-1]) / 1000 if cpu.endswith("m") else float(cpu)
+            if cores < 1:
+                out.append(f"apps/base/kyverno/patch-cpu-limits.yaml: {d['metadata']['name']} has a CPU limit of {cpu}, under the 1 CPU it needs (lab 22)")
+    if "--clientRateLimitQPS" not in (REPO / "apps/base/kyverno/kustomization.yaml").read_text():
+        out.append("apps/base/kyverno/kustomization.yaml: the background and reports controllers need --clientRateLimitQPS (lab 22)")
     for rel in ("apps/base/external-secrets/patch-resources.yaml",):
         for d in docs(rel):
             for c in d["spec"]["template"]["spec"]["containers"]:
