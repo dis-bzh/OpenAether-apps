@@ -1,0 +1,16 @@
+# Findings the image scan (sbom.yml) accepts for a while, in Trivy's own ignore format, which ENFORCES `expired_at`
+# (an expired entry is simply no longer ignored, and the scan goes red again). Used only where an OpenVEX statement
+# cannot do the job: Trivy 0.69 does not match the product of the Longhorn UI and manager images (the share-manager
+# one matches), whatever the purl form. Everything else is in .vex/openaether-apps.openvex.json.
+# scripts/check-vex.py requires a statement and a date on every entry. Not a fix: see the CHANGELOG.
+vulnerabilities:
+  # libexpat in the SLES base image of the Longhorn UI, manager and share-manager v1.12.1. None of the three parses XML
+  # from an outside source. Wait for Longhorn v1.12.2 (milestone due 2026-10-28) and rescan; no jump to 1.13.0 for this
+  # (docs/patching.md).
+  - id: SUSE-SU-2026:4619-1
+    purls:
+      - "pkg:rpm/suse/libexpat1@2.7.1-150700.3.12.1"
+    expired_at: 2026-11-20
+    statement: >-
+      libexpat is present but none of the three Longhorn processes parses XML from an outside source;
+      fixed in 2.8.5-150700.3.15.1, not yet in a Longhorn image.

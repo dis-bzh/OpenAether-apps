@@ -146,6 +146,8 @@ application_secrets() {
   # alphanumeric, so the suffix guarantees the four character classes of Zitadel's password policy (a missing
   # class makes the setup Job fail, and with it the whole identity layer). Forced to change at the first login.
   d="$(P="$(rand 28 28)Aa1!" jq -nc '{username:"zitadel-admin",password:$ENV.P}')"; D="$d" kv_create zitadel/admin D
+  # Signs the Zitadel login UI's session cookie (ZITADEL_SESSION_COOKIE_SECRET, 32 characters at least; v4.19.5).
+  d="$(P="$(rand 48 48)" jq -nc '{secret:$ENV.P}')";                      D="$d" kv_create zitadel/session-cookie D
   # The restic repositories' password. Without it the backups are undecryptable the day OpenBao is lost, so an
   # operator reads it ONCE with the openaether-admin identity and escrows it (README): it is not in any log.
   d="$(P="$(rand 48 48)" jq -nc '{password:$ENV.P}')";                    D="$d" kv_create backup/restic D

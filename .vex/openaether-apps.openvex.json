@@ -2,7 +2,180 @@
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/dis-bzh/OpenAether-apps/.vex/openaether-apps.openvex.json",
   "author": "OpenAether maintainers",
-  "timestamp": "2026-10-14T00:00:00Z",
-  "version": 1,
-  "statements": []
+  "timestamp": "2026-10-22T00:00:00Z",
+  "version": 2,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2026-60002"
+      },
+      "timestamp": "2026-10-22T00:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/restic?repository_url=index.docker.io/restic/restic",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/openssh-client-common@10.3_p1-r0"
+            },
+            {
+              "@id": "pkg:apk/alpine/openssh-client-default@10.3_p1-r0"
+            },
+            {
+              "@id": "pkg:apk/alpine/openssh-keygen@10.3_p1-r0"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "OpenSSH host key handling use-after-free. The restic image carries the ssh client binaries in its alpine layer; our jobs use an S3 repository (no sftp backend) and never run ssh.",
+      "action_statement": "Re-check on restic 0.19.2 (the image was last built 2026-07-05; no fixed tag exists). Drop this statement once a fixed tag is pinned.",
+      "status_notes": "Expires: 2026-11-20"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-68121"
+      },
+      "timestamp": "2026-10-22T00:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/k8s?repository_url=index.docker.io/alpine/k8s",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@v1.24.0"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Go crypto/tls session resumption in the kustomize binary bundled in the toolbox image. Our Jobs run kubectl, jq and curl, never kustomize.",
+      "action_statement": "Re-check on the next alpine/k8s tag (1.36.5 and 1.37.1 are the latest); consider a minimal kubectl image so unused tools are not shipped.",
+      "status_notes": "Expires: 2026-11-20"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-102268"
+      },
+      "timestamp": "2026-10-22T00:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/postgresql?repository_url=ghcr.io/cloudnative-pg/postgresql",
+          "subcomponents": [
+            {
+              "@id": "pkg:pypi/pyjwt@2.13.0"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "PyJWT public key handling, pulled in by barman-cloud's Azure authentication path. We archive WAL to S3 and never configure Azure; nothing verifies a JWT with it.",
+      "action_statement": "No newer plain 18.x/16.x tag exists. Evaluate the -standard-trixie variant by a scan before the expiry.",
+      "status_notes": "Expires: 2026-11-20"
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-6q48-6c7w-9gw2"
+      },
+      "timestamp": "2026-10-22T00:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/k8s?repository_url=index.docker.io/alpine/k8s",
+          "subcomponents": [
+            {
+              "@id": "pkg:pypi/certifi@2026.6.17"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "certifi bundles emSign roots whose intermediate CA keys leaked (fixed in certifi 2026.10.19). It is a dependency of Python tools in the toolbox image; our Jobs run kubectl, jq and curl, which use the system CA store, and never start Python.",
+      "action_statement": "Re-check on the next alpine/k8s tag (none carries certifi 2026.10.19 yet).",
+      "status_notes": "Expires: 2026-11-20"
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-6q48-6c7w-9gw2"
+      },
+      "timestamp": "2026-10-22T00:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/k8s-sidecar?repository_url=quay.io/kiwigrid/k8s-sidecar",
+          "subcomponents": [
+            {
+              "@id": "pkg:pypi/certifi@2026.6.17"
+            },
+            {
+              "@id": "pkg:pypi/certifi@2026.7.22"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "certifi is only consulted by `requests`. In k8s-sidecar 2.14.1 `requests` calls only REQ_URL, and the Grafana chart sets it to http://localhost:3000 (plain HTTP, nothing to verify); the Kubernetes API client verifies against the ServiceAccount ca.crt (ssl_ca_cert), not certifi. Read in the image's sidecar.py, helpers.py and kubernetes/config/incluster_config.py, and in the rendered Grafana chart. Revisit if a sidecar URL annotation or an HTTPS REQ_URL is ever configured.",
+      "action_statement": "No newer k8s-sidecar tag exists (2.14.1 is the latest, 2026-10-08). Bump when one carries certifi 2026.10.19.",
+      "status_notes": "Expires: 2026-11-20"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-33186"
+      },
+      "timestamp": "2026-10-22T00:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/pilot?repository_url=index.docker.io/istio/pilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/google.golang.org/grpc@v1.67.1"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/install-cni?repository_url=index.docker.io/istio/install-cni",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/google.golang.org/grpc@v1.67.1"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "grpc-go authorization bypass through a malformed :path matters to servers with path-based authorization interceptors; istiod and the CNI plugin use none. The line is past upstream support.",
+      "action_statement": "Replace by the Istio 1.31 upgrade (fixed in 1.29.10, 1.30.7, 1.31.3); this waiver ends with it and matches the end-of-support calendar.",
+      "status_notes": "Expires: 2026-12-14"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-68121"
+      },
+      "timestamp": "2026-10-22T00:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/pilot?repository_url=index.docker.io/istio/pilot",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@v1.23.2"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/install-cni?repository_url=index.docker.io/istio/install-cni",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/stdlib@v1.23.2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Go crypto/tls session resumption, mesh-internal mTLS only (xDS port, not published). The line is past upstream support.",
+      "action_statement": "Replace by the Istio 1.31 upgrade (fixed in 1.29.10, 1.30.7, 1.31.3); this waiver ends with it and matches the end-of-support calendar.",
+      "status_notes": "Expires: 2026-12-14"
+    }
+  ]
 }

@@ -16,8 +16,16 @@ pods), or what the child clusters' own profile deploys. 14 images come from the 
 charts on 2026-10-14.
 
 - **VEX:** a finding that does not apply is an OpenVEX statement in `.vex/openaether-apps.openvex.json`
-  (`not_affected` with a justification, one product purl each); the scan reads the file once it has a statement.
-  The file is empty today: nothing has been scanned yet.
+  (`not_affected` with a justification, an `impact_statement`, an `action_statement` and ONE `Expires: YYYY-MM-DD` in
+  `status_notes`, at most 90 days after the statement). Trivy reads the file once it has a statement but knows nothing of
+  dates, so `scripts/check-vex.py` (a CI step, and the `VEX statements` job of the SBOM workflow) fails on a missing
+  justification or expiry and on an expired statement. A statement never covers a fixable, reachable CRITICAL. Docker Hub products are written with
+  Trivy's `index.docker.io` repository URL. `.github/trivy-ignore.yaml` (Trivy's format, with its own `expired_at`) holds the
+  one accepted finding Trivy's VEX matching misses (Longhorn UI and manager); `check-vex.py` holds it to the same rule.
+  Whether Trivy matches a product is only seen by scanning the image: `trivy image --config .github/trivy-image-vex.yaml <ref>`.
+- **Failing scans are announced:** a failed scan opens, or comments on, one issue `[vuln] <image>` and closes it when the
+  scan passes (`scripts/ops/vuln-issue.sh`); an expired waiver does the same under `[vuln] VEX statements`. Before, a red
+  run was the only signal. HIGH findings are still not scanned.
 
 ## What is checked on every pull request
 
@@ -48,7 +56,7 @@ external-secrets). Checked against the versions **pinned here**:
 | `ghcr.io/cloudnative-pg/cloudnative-pg:1.23.1` (the former pin; 1.30.1 not re-checked) | **no signature at all** |
 | `quay.io/jetstack/cert-manager-controller:v1.15.3` (the former pin; not re-checked at v1.21.2) | a `.sig` tag exists but no keyless signature matches (key-signed or another scheme) |
 | `docker.io/openbao/openbao:2.7.1` | a signature verifies, identity not recorded here |
-| `docker.io/restic/restic:0.19.1`, `grafana/grafana:11.3.1` (the former pin; 13.2.4 not re-checked), `ghcr.io/zitadel/zitadel:v4.14.0` (the former pin; v4.19.2 not re-checked), `istio/pilot:1.24.2` | no keyless signature |
+| `docker.io/restic/restic:0.19.1`, `grafana/grafana:11.3.1` (the former pin; 13.2.4 not re-checked), `ghcr.io/zitadel/zitadel:v4.14.0` (the former pin; v4.19.5 not re-checked), `istio/pilot:1.24.2` | no keyless signature |
 
 So a `verifyImages` policy in Enforce would admit only a minority of what runs, and the largest parts of the audit's
 list cannot be verified at these versions. **No policy is shipped.** The practical order is: pin by digest (Renovate,

@@ -17,10 +17,57 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
-Bug fixes, documentation corrections and safety nets after 0.3.1, for the next release (a 0.3.2 patch was prepared and abandoned: there is no 0.3.2 tag). No new scope. Rungs: **mocked**
-(static checks, a real Zitadel and PostgreSQL in containers for #133) for every line, plus one short lab (lab 18, Scaleway, infra 7e367d9 / apps 75e464f, on branches): nominal `cluster-up`
-in 9 min 07 s, `cluster-verify` 15 passed, 0 failed, 38 Kustomizations and 16 HelmReleases Ready except `alloy-audit` (suspended by design). It fixes neither #42 nor #375 (infra), **does not
-fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
+## [0.3.2] — 2026-10-22
+
+0.3.2 is a **security patch** of 0.3.1, paired with OpenAether-infra 0.3.2 (which only changes its `git_ref` pin). It ships the fixes that were merged on main after 0.3.1
+(below, "Fixed") and, above all, the **Zitadel v4.19.5** update. No new scope. Rungs: **mocked** (static checks, a real Zitadel v4.19.5 and PostgreSQL in containers through
+`scripts/dev/test-zitadel-config.sh`, Kyverno CLI on the rendered workloads) and **real cloud, once, by hand** (lab 24, Scaleway, 3 control planes + 4 workers, 2026-10-22): an upgrade from the 0.3.1 content (Zitadel v4.19.2) to this patch (4 min 12 s from the switch to a Ready HelmRelease; the generated session-cookie key was created before the login pods rolled; a 1 Hz probe of the public Zitadel URL saw 620 samples and 0 failures; Grafana OIDC logins through the rollout all passed) and a fresh install of the patch (cluster-verify 15 passed, 0 failed, all Flux objects Ready). Not observed: the open login sessions ending at the rollout (no browser in the lab), the device-flow consent screen, and a repeat on OVH or Outscale.
+It fixes neither #42 nor #375 (infra), **does not fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
+
+### Security
+
+- **Zitadel server and login v4.19.2 -> v4.19.5**: three HIGH advisories, published 2026-10-15, fixed in v4.19.5 (affected 4.0.0 to 4.19.4): GHSA-mchc-246r-6m76 (account takeover through
+  header injection), GHSA-84fg-x5h4-w8xv (Login V2: forgeable email verification proof), GHSA-qj3q-235g-qr6w (one-click account takeover through the device code). Zitadel is the one brick
+  routed on the public Gateway. The chart stays 10.4.0 (11.0.0 is beta); `image.tag` and `login.image.tag` are set in the HelmRelease as `tag@digest`, digests re-read from the registry.
+  The login ships next 16.3.6: the image scan of the v4.19.5 login (by digest) reports no CRITICAL finding with a fix, where v4.19.2 had three on next.
+- **The login's session cookie secret is a generated secret**: `login.sessionCookieSecretName` reads `zitadel-login-session-cookie`, an ExternalSecret over `secret/zitadel/session-cookie`
+  (48 random characters, created by `configure.sh`, create only). Before, the chart set nothing and the login derived the key from its service key (deprecated fallback). **Effect on a running
+  cluster:** open login sessions end once at the rollout. Until the OpenBao key exists the new login pods wait (`CreateContainerConfigError`) and the old ones keep serving.
+- **wait4x 3.6 -> 3.7.2** (the readiness init container of the login pods; digest pinned): clears its 5 CRITICAL findings.
+- **`gen-sbom.py` skips `helm.sh/hook: test` resources**: the bats pod of the Zitadel chart is never deployed (Flux runs no `helm test`) and was failing the scan on a perl CVE.
+- Also in v4.19.5, handled in `docs/zitadel-hardening.md`: list endpoints enforce query limits (nothing in this repository lists objects) and the device flow has a consent screen (no client of
+  the platform uses the device flow).
+
+### Image scan follow-up
+
+The weekly scan (`sbom.yml`) had been red since the 0.3.0 release (3 runs) and nobody was told. Now:
+
+- a failing scan opens or comments on ONE issue per image, titled `[vuln] <image>`, and closes it when the scan passes (`scripts/ops/vuln-issue.sh`, `issues: write` on that job only; a
+  `workflow_dispatch` on a branch opens none). The failing criterion is unchanged: CRITICAL with a fix upstream. HIGH findings stay invisible to this scan.
+- `.vex/openaether-apps.openvex.json` now records the findings accepted with a reason, each with ONE expiry date: restic 0.19.1 openssh (CVE-2026-60002), the Go stdlib in the `alpine/k8s`
+  kustomize (CVE-2025-68121), the `alpine/k8s` certifi (GHSA-6q48-6c7w-9gw2, published 2026-10-20; also in k8s-sidecar, see below) and PyJWT in the CloudNativePG PostgreSQL images (CVE-2026-102268) until 2026-11-20; the
+  Istio 1.24.2 grpc and stdlib findings (CVE-2026-33186, CVE-2025-68121) until 2026-12-14, the date of the end-of-support waiver. The Longhorn 1.12.1 libexpat (SUSE-SU-2026:4619-1) is in
+  `.github/trivy-ignore.yaml` (Trivy's own format, `expired_at` 2026-11-20) because Trivy 0.69 does not match the product of the Longhorn UI and manager images in a VEX file. The products
+  use Trivy's `index.docker.io` repository URL for Docker Hub images. Checked against Trivy 0.69.3 on the real images: the statements suppress exactly these findings.
+  `scripts/check-vex.py` (CI step, and a job of the scan workflow that opens `[vuln] VEX statements`) fails on a statement without justification or expiry, or past its date. Trivy does not
+  read the dates of a VEX file; the check does.
+
+### What this patch does NOT fix
+
+- **The Login V2 UI is not reachable through the Gateway, in 0.3.0, 0.3.1 and this patch (apps #161).** The HTTPRoute sends only `/` to `zitadel:8080`, so `/ui/v2/login/...` answers 404, and the Gateway egress policy does not allow `zitadel-login:3000`. Found in lab 24; the OIDC code flow through the Session API works, a browser user cannot get past the authorize step. Not fixed here because it changes what the public Gateway serves.
+- **Istio 1.24.2 stays**: its grpc finding is waived (above), and Istio's HIGH advisories of 2026-10-16 and 2026-03 (fixed in 1.29.x and later) remain open until the Istio 1.31 upgrade (apps #96).
+  The line has been out of support since 2025-06; the waiver in `docs/eol-calendar.yaml` ends 2026-12-14.
+- The Longhorn, restic, `alpine/k8s` and CloudNativePG findings above are **waived, not fixed**: no patched image exists yet. The reasons are analyses of reachability, not proofs.
+- **certifi in the CloudNativePG PostgreSQL images 18.6 and 16.15 (GHSA-6q48-6c7w-9gw2, CRITICAL, fixed in certifi 2026.10.19, published 2026-10-20) is NOT waived, and stays red.**
+  What it does there: certifi 2026.7.22 sits in the images' Python (barman-cloud, which the in-tree `barmanObjectStore` runs for every WAL archive and base backup), and botocore uses
+  `certifi.where()` as its default CA bundle for TLS to the S3 endpoint. So the code is on the execution path. The attack needs a leaked emSign intermediate key AND an on-path position
+  between the pod and the S3 endpoint; unlikely, not excluded, so no waiver. Registry check (2026-10-22): the plain tags `18.6` and `16.15` were not republished (built 2026-08-31, Debian 11,
+  no dated rebuilds exist); only the `-standard-*` / `-minimal-*` / `-system-*` variants are rebuilt (2026-10-19) and they scan clean, **but they do not contain barman-cloud** (checked: no
+  `barman-cloud-wal-archive`), so they would break the WAL archiving and backups this release's Clusters rely on. They are not an option while the in-tree `barmanObjectStore` is used; the
+  way out is the Barman Cloud plugin (0.4.0 line) or a plain-tag rebuild by CloudNativePG. The scans of these two images fail until then and the issue mechanism reports them.
+- **certifi in `quay.io/kiwigrid/k8s-sidecar:2.14.1`** (the Grafana dashboard sidecar) is waived until 2026-11-20 with a reason read in the image: certifi is only consulted by `requests`, which
+  there only calls `REQ_URL`, set by the Grafana chart to `http://localhost:3000` (plain HTTP); the Kubernetes API client verifies against the ServiceAccount `ca.crt`. No newer tag exists
+  (2.14.1, 2026-10-08, is the latest). The waiver ends if an HTTPS `REQ_URL` or a sidecar URL annotation is configured.
 
 ### Fixed
 
