@@ -58,12 +58,12 @@ spec:
             - port: "9090"
               protocol: TCP
     # Postgres instances, in ANY namespace: the operator polls status through the instance-manager (:8000 /pg/status)
-    # and runs the SQL (:5432). Without this egress rule the operator cannot get out -> "Instance Status Extraction
-    # Error: i/o timeout" -> the Cluster is never "healthy". It covers foundation-databases, the scratch instances of the
-    # restore tests (restore-scratch.yaml) and the customer database profiles (docs/database-profiles.md: lab 23 found
-    # the profile of another namespace stuck on 1 of 3 instances with the two namespace-pinned rules this replaces).
-    # The ingress side is each database's own policy (networkpolicy-db-restricted.yaml rule #5, the profile's common
-    # policy): a namespace without that rule still refuses the operator.
+    # and runs the SQL (:5432). Without this egress rule the operator cannot get out ("Instance Status Extraction
+    # Error: i/o timeout") and the Cluster is never healthy. It covers foundation-databases, the scratch instances
+    # of the restore tests (restore-scratch.yaml) and the customer database profiles (docs/database-profiles.md):
+    # lab 23 found a profile of another namespace stuck on 1 of 3 instances with the two namespace-pinned rules this
+    # replaces. The ingress side is each database's own policy (networkpolicy-db-restricted.yaml rule 5, the
+    # profile's common policy): a namespace without that rule still refuses the operator.
     - toEndpoints:
         - matchLabels:
             cnpg.io/podRole: instance
