@@ -224,6 +224,7 @@ def main():
     prm = ps["pgbouncer"]["parameters"]
     check(int(prm["query_wait_timeout"]) >= 120 and int(prm["server_login_retry"]) <= 2 and int(prm["max_prepared_statements"]) > 0
           and prm["server_reset_query_always"] == "0", "pooler: waits through a failover, retries a lost server at once, prepared statements on")
+    check(prm.get("client_tls_sslmode") == "require", "pooler: clients must use TLS (the default accepts sslmode=disable; lab 23)")
     ic = (ps["template"]["spec"].get("initContainers") or [{}])[0]
     check(ic.get("name") == "bootstrap-controller" and ic.get("resources", {}).get("limits", {}).get("memory"),
           "pooler: the operator's init container has a memory limit (require-limits reported it in lab 23)")

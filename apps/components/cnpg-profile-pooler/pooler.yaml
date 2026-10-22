@@ -51,6 +51,9 @@ spec:
       # visible to
       # the next. Applications must not rely on SET, temp tables, advisory locks or LISTEN through the pooler.
       server_reset_query_always: "0"
+      # TLS only from the clients too (lab 23: the default accepted sslmode=disable on the pooler although the
+      # database refuses it, so the client leg was in clear text). Its certificate is the Cluster's (serverAltDNSNames).
+      client_tls_sslmode: "require"
   template:
     spec:
       securityContext:
