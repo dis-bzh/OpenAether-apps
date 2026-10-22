@@ -45,7 +45,7 @@ The weekly scan (`sbom.yml`) had been red since the 0.3.0 release (3 runs) and n
 - a failing scan opens or comments on ONE issue per image, titled `[vuln] <image>`, and closes it when the scan passes (`scripts/ops/vuln-issue.sh`, `issues: write` on that job only; a
   `workflow_dispatch` on a branch opens none). The failing criterion is unchanged: CRITICAL with a fix upstream. HIGH findings stay invisible to this scan.
 - `.vex/openaether-apps.openvex.json` now records the findings accepted with a reason, each with ONE expiry date: restic 0.19.1 openssh (CVE-2026-60002), the Go stdlib in the `alpine/k8s`
-  kustomize (CVE-2025-68121), the `alpine/k8s` certifi (GHSA-6q48-6c7w-9gw2, published 2026-10-20) and PyJWT in the CloudNativePG PostgreSQL images (CVE-2026-102268) until 2026-11-20; the
+  kustomize (CVE-2025-68121), the `alpine/k8s` certifi (GHSA-6q48-6c7w-9gw2, published 2026-10-20; also in k8s-sidecar, see below) and PyJWT in the CloudNativePG PostgreSQL images (CVE-2026-102268) until 2026-11-20; the
   Istio 1.24.2 grpc and stdlib findings (CVE-2026-33186, CVE-2025-68121) until 2026-12-14, the date of the end-of-support waiver. The Longhorn 1.12.1 libexpat (SUSE-SU-2026:4619-1) is in
   `.github/trivy-ignore.yaml` (Trivy's own format, `expired_at` 2026-11-20) because Trivy 0.69 does not match the product of the Longhorn UI and manager images in a VEX file. The products
   use Trivy's `index.docker.io` repository URL for Docker Hub images. Checked against Trivy 0.69.3 on the real images: the statements suppress exactly these findings.
@@ -57,12 +57,16 @@ The weekly scan (`sbom.yml`) had been red since the 0.3.0 release (3 runs) and n
 - **Istio 1.24.2 stays**: its grpc finding is waived (above), and Istio's HIGH advisories of 2026-10-16 and 2026-03 (fixed in 1.29.x and later) remain open until the Istio 1.31 upgrade (apps #96).
   The line has been out of support since 2025-06; the waiver in `docs/eol-calendar.yaml` ends 2026-12-14.
 - The Longhorn, restic, `alpine/k8s` and CloudNativePG findings above are **waived, not fixed**: no patched image exists yet. The reasons are analyses of reachability, not proofs.
-- **certifi in the CloudNativePG PostgreSQL images 18.6 and 16.15 and in `quay.io/kiwigrid/k8s-sidecar:2.14.1` (GHSA-6q48-6c7w-9gw2, CRITICAL, fixed in certifi 2026.10.19, published 2026-10-20) is NOT waived**:
-  barman-cloud uses certifi for TLS to the S3 endpoint, and whether the sidecar's clients consult it was not established, so the code is treated as on the execution path (the attack needs a leaked emSign
-  intermediate key and an on-path position). The scans of these three images stay red and the new issue mechanism reports them; no newer image exists.
-  The `-standard-trixie` variants of both tags scan with no CRITICAL finding with a fix; they were not adopted here because the base moves from Debian 11 to 13 (glibc, collations), which needs its own analysis.
-- The next advisories newer than the login's next 16.3.6 (fixed in 16.4.1) are not fixed by Zitadel yet; see the VEX file for what was waived.
-- HIGH findings and application-level advisories (like the three above) are not seen by Trivy.
+- **certifi in the CloudNativePG PostgreSQL images 18.6 and 16.15 (GHSA-6q48-6c7w-9gw2, CRITICAL, fixed in certifi 2026.10.19, published 2026-10-20) is NOT waived, and stays red.**
+  What it does there: certifi 2026.7.22 sits in the images' Python (barman-cloud, which the in-tree `barmanObjectStore` runs for every WAL archive and base backup), and botocore uses
+  `certifi.where()` as its default CA bundle for TLS to the S3 endpoint. So the code is on the execution path. The attack needs a leaked emSign intermediate key AND an on-path position
+  between the pod and the S3 endpoint; unlikely, not excluded, so no waiver. Registry check (2026-10-22): the plain tags `18.6` and `16.15` were not republished (built 2026-08-31, Debian 11,
+  no dated rebuilds exist); only the `-standard-*` / `-minimal-*` / `-system-*` variants are rebuilt (2026-10-19) and they scan clean, **but they do not contain barman-cloud** (checked: no
+  `barman-cloud-wal-archive`), so they would break the WAL archiving and backups this release's Clusters rely on. They are not an option while the in-tree `barmanObjectStore` is used; the
+  way out is the Barman Cloud plugin (0.4.0 line) or a plain-tag rebuild by CloudNativePG. The scans of these two images fail until then and the issue mechanism reports them.
+- **certifi in `quay.io/kiwigrid/k8s-sidecar:2.14.1`** (the Grafana dashboard sidecar) is waived until 2026-11-20 with a reason read in the image: certifi is only consulted by `requests`, which
+  there only calls `REQ_URL`, set by the Grafana chart to `http://localhost:3000` (plain HTTP); the Kubernetes API client verifies against the ServiceAccount `ca.crt`. No newer tag exists
+  (2.14.1, 2026-10-08, is the latest). The waiver ends if an HTTPS `REQ_URL` or a sidecar URL annotation is configured.
 
 ### Fixed
 

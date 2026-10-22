@@ -97,6 +97,30 @@
     },
     {
       "vulnerability": {
+        "name": "GHSA-6q48-6c7w-9gw2"
+      },
+      "timestamp": "2026-10-22T00:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/k8s-sidecar?repository_url=quay.io/kiwigrid/k8s-sidecar",
+          "subcomponents": [
+            {
+              "@id": "pkg:pypi/certifi@2026.6.17"
+            },
+            {
+              "@id": "pkg:pypi/certifi@2026.7.22"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "certifi is only consulted by `requests`. In k8s-sidecar 2.14.1 `requests` calls only REQ_URL, and the Grafana chart sets it to http://localhost:3000 (plain HTTP, nothing to verify); the Kubernetes API client verifies against the ServiceAccount ca.crt (ssl_ca_cert), not certifi. Read in the image's sidecar.py, helpers.py and kubernetes/config/incluster_config.py, and in the rendered Grafana chart. Revisit if a sidecar URL annotation or an HTTPS REQ_URL is ever configured.",
+      "action_statement": "No newer k8s-sidecar tag exists (2.14.1 is the latest, 2026-10-08). Bump when one carries certifi 2026.10.19.",
+      "status_notes": "Expires: 2026-11-20"
+    },
+    {
+      "vulnerability": {
         "name": "CVE-2026-33186"
       },
       "timestamp": "2026-10-22T00:00:00Z",
