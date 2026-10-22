@@ -20,7 +20,7 @@ component `audit-log-sink` copies the apiserver audit log of each control plane 
 | Second sink | `observability-audit-sink-secondary`, component `audit-log-sink-secondary` | the same shipper for `audit_sink_placement = both`, its own credentials and position |
 
 It is **off in every profile**: no namespace, DaemonSet, ExternalSecret, rule or policy exists until the component is added. The only default
-changes are an exemption by pod name in three Kyverno policies for a namespace that does not exist by default, and two create-only paths
+changes are an exemption by pod name in four Kyverno policies for a namespace that does not exist by default, and two create-only paths
 (`audit/sink`, `audit/sink-secondary`) in the `secret-seeder` OpenBao policy.
 
 ## How the data moves, and what that guarantees

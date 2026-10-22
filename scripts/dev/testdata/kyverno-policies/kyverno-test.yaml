@@ -542,6 +542,18 @@ results:
   - intruder-audit
   kind: Pod
   result: fail
+- policy: require-security-context
+  rule: check-run-as-non-root
+  resources:
+  - audit-sink-shipper-abc
+  kind: Pod
+  result: skip
+- policy: require-security-context
+  rule: check-run-as-non-root
+  resources:
+  - intruder-sink
+  kind: Pod
+  result: fail
 - policy: restrict-capabilities
   rule: deny-sensitive-capabilities
   resources:

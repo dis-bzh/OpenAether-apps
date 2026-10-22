@@ -7,7 +7,7 @@ What keeps that acceptable is checked here:
   - the shipper: the only hostPath is /var/log/audit/kube, read-only, on control planes only, read-only root filesystem, ALL capabilities
     dropped but DAC_READ_SEARCH, no host namespace, no API token, limits; it runs ship.sh, which uses --no-lock and never writes the source;
   - the namespace holds the shipper and the check and nothing else, no Role/ClusterRole at all, and Kyverno exempts the shipper BY NAME
-    (audit-sink-shipper-*) in all three policies, never the namespace and never the check;
+    (audit-sink-shipper-*) in all four policies, never the namespace and never the check;
   - the check is non-root, read-only and is not given the repository password;
   - the network policies allow DNS and the sink hosts on 443 only, hosts from cluster-identity with an impossible default;
   - the substitution never touches the scripts (two Flux Kustomizations);
@@ -38,7 +38,7 @@ def load():
          "es": docs(BASE / "externalsecret.yaml")[0], "rule": docs(BASE / "vmrule.yaml")[0], "cnp": docs(POLICY / "networkpolicy.yaml"),
          "comp": docs(COMP / "audit-sink.yaml"), "ship": (BASE / "scripts/ship.sh").read_text(), "check": (BASE / "scripts/check.py").read_text(),
          "kust": yaml.safe_load((BASE / "kustomization.yaml").read_text()), "sa": docs(BASE / "serviceaccounts.yaml")}
-    d["kyverno"] = {n: docs(REPO / f"apps/base/kyverno-policies/{n}.yaml")[0] for n in ("restrict-privileged", "disallow-root-user", "restrict-capabilities")}
+    d["kyverno"] = {n: docs(REPO / f"apps/base/kyverno-policies/{n}.yaml")[0] for n in ("restrict-privileged", "disallow-root-user", "restrict-capabilities", "require-security-context")}
     return d
 
 
