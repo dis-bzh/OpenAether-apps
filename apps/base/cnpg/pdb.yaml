@@ -12,3 +12,18 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: cloudnative-pg
+---
+# The Barman Cloud plugin: a failover waits for it (lab 25, D3), so one voluntary disruption at a time, never both pods.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: barman-cloud
+  namespace: cnpg-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: barman-cloud

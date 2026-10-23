@@ -28,6 +28,7 @@ resources:
 # The vendored operator sets runAsNonRoot on the pod only; Kyverno require-security-context reads the container (#47).
 patches:
   - path: patch-ha.yaml
+  - path: patch-barman-ha.yaml
   - target:
       kind: Deployment
       name: cnpg-controller-manager

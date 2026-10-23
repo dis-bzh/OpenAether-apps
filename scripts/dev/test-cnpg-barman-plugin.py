@@ -124,6 +124,23 @@ def main(path="apps/base/cnpg"):
             errs.append("plugin: no memory limit")
         if c["securityContext"].get("runAsNonRoot") is not True:
             errs.append("plugin: container runAsNonRoot must be true")
+        # lab 25 (D3): the operator asks the plugin at every Cluster reconcile and never reaches the failover while it is
+        # unreachable; one pod in a lost zone held every database without a primary for 388-402 s.
+        spec = plugin[0]["spec"]
+        pod = spec["template"]["spec"]
+        if spec.get("replicas", 1) < 2:
+            errs.append("plugin: needs 2 replicas, a failover waits for it (lab 25, D3)")
+        if spec.get("strategy", {}).get("type") != "RollingUpdate":
+            errs.append("plugin: a Recreate rollout takes both pods away; use RollingUpdate")
+        keys = {t["topologyKey"] for t in pod.get("topologySpreadConstraints", [])}
+        if keys != {"kubernetes.io/hostname", "topology.kubernetes.io/zone"}:
+            errs.append(f"plugin: spread over hostname and zone, got {sorted(keys)}")
+        secs = {t["key"]: t.get("tolerationSeconds") for t in pod.get("tolerations", [])}
+        if secs.get("node.kubernetes.io/unreachable") != 30 or secs.get("node.kubernetes.io/not-ready") != 30:
+            errs.append("plugin: 30 s tolerations on unreachable and not-ready, like the database pods")
+        pdb = [d for d in docs if d["kind"] == "PodDisruptionBudget" and d["metadata"]["name"] == "barman-cloud"]
+        if not pdb or pdb[0]["spec"].get("maxUnavailable") != 1 or pdb[0]["spec"]["selector"]["matchLabels"] != {"app": "barman-cloud"}:
+            errs.append("plugin: a PodDisruptionBudget allowing one disruption and selecting app=barman-cloud")
     ky = os.environ.get("KYVERNO") or shutil.which("kyverno")
     if ky and not errs:
         with tempfile.TemporaryDirectory() as t:

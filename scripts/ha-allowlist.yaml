@@ -16,13 +16,6 @@ single_replica:
     loss: >-
       the oa_backup_verify_* series stop; BackupVerifierStale fires after its window; backups and
       databases are untouched
-  - workload: Deployment/cnpg-system/barman-cloud
-    reason: >-
-      the Barman Cloud plugin is a gRPC server that only the CNPG instances call, and PostgreSQL buffers
-      WAL while it is away
-    loss: >-
-      WAL archiving and base backups pause until it is rescheduled (CnpgWalArchiveFailing); the databases
-      keep serving
   - workload: Deployment/orc-system/orc-controller-manager
     reason: >-
       the OpenStack resource controller of the optional CAPI brick, idle unless a child cluster on
