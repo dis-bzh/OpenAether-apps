@@ -60,9 +60,12 @@ validated on a staging cluster before the next (never in one Renovate batch). Th
    leaves already do; `foundation/vault-ca` keeps `Never` on purpose), then the baseline of issued certificates is
    recorded, then the hops. CRDs ride `crds: CreateReplace`; webhook and cainjector must be Ready before
    `13b-cert-manager-issuers`.
-2. **Gateway API CRDs** (vendored v1.2.1), to the release the target Istio expects. v1.2.1 is what Istio 1.24 is built against and
-   the highest this repository can justify with it: with the v1.5 CRDs installed, Istio up to 1.29 never becomes Ready (istio/istio#59443,
-   the 1.24 CRD watcher has no maximum-version filter). The CRDs move to 1.5.x only with the Istio hop that supports them (1.30).
+2. **Gateway API CRDs** (vendored v1.6.0, standard channel), to the release the target Istio expects. v1.6.0 is what Istio 1.31.3 is built
+   against (its go.mod); 1.6.1 to 1.6.3 change only the `bundle-version` annotation. The CRDs and Istio move together: with the v1.5 CRDs
+   installed, Istio up to 1.29 never becomes Ready (istio/istio#59443, the 1.24 CRD watcher has no maximum-version filter), and from
+   Istio 1.30 the old CRDs hide TLSRoute and ReferenceGrant from istiod. A fresh install gets both in order (`platform-gateway-api`
+   before `istio`); a running cluster is not covered by this page. The 1.6 standard install also ships a ValidatingAdmissionPolicy
+   (`safe-upgrades.gateway.networking.k8s.io`) that refuses an experimental-channel CRD on top and a downgrade below 1.5.
 3. **Istio** (`base`, `istiod`, `istio-cni`, `ztunnel`), minor by minor, reading each upgrade note; the control plane
    first, then the node-level `istio-cni` and `ztunnel`. No mesh TLS floor is set in
    `meshConfig` (`tlsDefaults` does not apply to ISTIO_MUTUAL); after the hop, re-check with `openssl s_client` that the
@@ -80,8 +83,8 @@ from [`eol-calendar.yaml`](eol-calendar.yaml).
 ## Phase 1 (0.3.0): independent bumps
 
 Done outside the order above because they touch nothing the order depends on, one commit per component: local-path-provisioner v0.0.37
-(re-vendored), prometheus-node-exporter 4.60.0, kube-state-metrics 8.6.0, metrics-server 3.14.0, restic 0.19.1, Gateway API CRDs v1.2.1 (not
-1.5.x, see item 2). Offline only: the rendered Helm output at the old and new pins was diffed, the scripts under `scripts/dev/` that touch each
+(re-vendored), prometheus-node-exporter 4.60.0, kube-state-metrics 8.6.0, metrics-server 3.14.0, restic 0.19.1, Gateway API CRDs v1.2.1 (since moved to v1.6.0
+with Istio 1.31.3, see item 2). Offline only: the rendered Helm output at the old and new pins was diffed, the scripts under `scripts/dev/` that touch each
 component pass; the per-bump observations and rollbacks are in the maintainers' lab checklist (section UPGRADE-PHASE1). `helm rollback` does not
 roll CRDs back, and the Gateway API CRDs are not a Helm release at all.
 
@@ -189,8 +192,8 @@ project's site, not data (a check that parsed them would be guessing); `docs/eol
 
 
 
-After phase 2 the pins in [`eol-calendar.yaml`](eol-calendar.yaml) are on supported lines except Istio 1.24 (EOL 2025-06-24, waived to 2026-12-31),
-MinIO (dev profile only) and the rows whose upstream publishes no schedule. The 30-day rule is therefore **not met for Istio**. The new pins **ran on real
+After phase 2 the pins in [`eol-calendar.yaml`](eol-calendar.yaml) are on supported lines except Istio 1.24 (EOL 2025-06-24, waived to 2026-12-31; the tree has since moved to Istio 1.31.3, offline only, apps #96),
+MinIO (dev profile only) and the rows whose upstream publishes no schedule. The 30-day rule was therefore **not met for Istio** at 0.3.0. The new pins **ran on real
 clouds as a fresh install** (labs 12 to 15, Scaleway, OVH, Outscale) and, on Scaleway only, as in-place hops from 0.2.0 for cert-manager, Longhorn, CNPG,
 Zitadel, Kyverno, External Secrets, the VM operator and the first Loki steps (lab 15c). **Not rehearsed in place:** Loki 6.55 -> 18, Grafana, Alloy, the
 Gateway API CRDs, Flux on the children, Cilium and Talos patches, Istio (#121). Whether the releases still pinned (Istio 1.24) have unpatched advisories was

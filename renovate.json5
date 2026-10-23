@@ -111,10 +111,11 @@
       prBodyNotes: ["⚠️ This only bumps the tracking comment/label. Re-download the upstream manifest and replace the file per the kustomization.yaml's own 'To upgrade:' / 'Regenerate:' note before merging."],
     },
     {
-      // Held on purpose (apps #57, closed 2026-10-21): the Gateway API CRDs stay at v1.2.1 until the Istio upgrade
-      // (Istio 1.31.x needs a newer CRD set, verified then). Remove this rule with that upgrade.
-      description: "Gateway API CRDs are held at 1.2.1 until the Istio upgrade (apps #57).",
+      // Minor and major bumps stay manual (apps #96): the Gateway API CRDs follow the release the pinned Istio is built
+      // against (v1.6.0 for Istio 1.31, go.mod), not the latest. Patch releases still come as PRs.
+      description: "Gateway API CRDs move to a new minor only with the Istio release that supports it (apps #96).",
       matchPackageNames: ["kubernetes-sigs/gateway-api"],
+      matchUpdateTypes: ["major", "minor"],
       enabled: false,
     },
   ],

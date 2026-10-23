@@ -121,64 +121,6 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-33186"
-      },
-      "timestamp": "2026-10-22T00:00:00Z",
-      "products": [
-        {
-          "@id": "pkg:oci/pilot?repository_url=index.docker.io/istio/pilot",
-          "subcomponents": [
-            {
-              "@id": "pkg:golang/google.golang.org/grpc@v1.67.1"
-            }
-          ]
-        },
-        {
-          "@id": "pkg:oci/install-cni?repository_url=index.docker.io/istio/install-cni",
-          "subcomponents": [
-            {
-              "@id": "pkg:golang/google.golang.org/grpc@v1.67.1"
-            }
-          ]
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "grpc-go authorization bypass through a malformed :path matters to servers with path-based authorization interceptors; istiod and the CNI plugin use none. The line is past upstream support.",
-      "action_statement": "Replace by the Istio 1.31 upgrade (fixed in 1.29.10, 1.30.7, 1.31.3); this waiver ends with it and matches the end-of-support calendar.",
-      "status_notes": "Expires: 2026-12-14"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-68121"
-      },
-      "timestamp": "2026-10-22T00:00:00Z",
-      "products": [
-        {
-          "@id": "pkg:oci/pilot?repository_url=index.docker.io/istio/pilot",
-          "subcomponents": [
-            {
-              "@id": "pkg:golang/stdlib@v1.23.2"
-            }
-          ]
-        },
-        {
-          "@id": "pkg:oci/install-cni?repository_url=index.docker.io/istio/install-cni",
-          "subcomponents": [
-            {
-              "@id": "pkg:golang/stdlib@v1.23.2"
-            }
-          ]
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Go crypto/tls session resumption, mesh-internal mTLS only (xDS port, not published). The line is past upstream support.",
-      "action_statement": "Replace by the Istio 1.31 upgrade (fixed in 1.29.10, 1.30.7, 1.31.3); this waiver ends with it and matches the end-of-support calendar.",
-      "status_notes": "Expires: 2026-12-14"
-    },
-    {
-      "vulnerability": {
         "name": "GHSA-673q-mjm6-r5xr"
       },
       "products": [

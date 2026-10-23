@@ -145,6 +145,6 @@ belong to. What follows has no skill of its own yet.
 - **Moving a workload from root to non-root leaves its local-path volume root-owned.** `fsGroup` does nothing on those volumes.
   `vmstorage` and `vmselect` then crash on their lock file / cache (apps 0.2.0 Upgrade notes, #71).
 - **`Gateway.spec.infrastructure` needs Gateway API v1.2.** On the v1.1.0 CRDs this repository vendors, the dry-run of the `istio`
-  Kustomization fails and everything behind it stays not Ready until the change is reverted (#70). The vendored CRDs are v1.2.1 since the 0.3.0 upgrade campaign; v1.5.x is NOT an option while Istio is 1.24 (see docs/patching.md).
+  Kustomization fails and everything behind it stays not Ready until the change is reverted (#70). The vendored CRDs are v1.2.1 since the 0.3.0 upgrade campaign; the CRDs are v1.6.0 with Istio 1.31.3 (apps #96, not yet shown on a cluster); they must not be paired with Istio 1.24 to 1.29 (see docs/patching.md).
 - **A policy report keeps results for pods a changed `exclude` no longer covers**, at least for the first hour on a cluster
   moved from an earlier tree; a fresh cluster does not show them (#37).
