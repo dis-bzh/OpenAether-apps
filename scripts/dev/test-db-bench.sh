@@ -65,7 +65,9 @@ x bash /bench/db-zeroloss.sh check 'r1;drop table zl_ack' /tmp/l1 >/dev/null 2>&
 chk "a run id with SQL in it is refused" "[ $? = 2 ] && x psql -qAtc 'select count(*) from zl_ack' >/dev/null"
 
 echo "=== a crash of the server during the writer ==="
-( sleep 3; x bash -c 'BIN=$(ls -d /usr/lib/postgresql/*/bin | tail -n 1); $BIN/pg_ctl -D /tmp/pg -m immediate -w restart >/dev/null 2>&1' ) &
+# A crash (immediate stop, no checkpoint), a second down, then a start: a plain `restart` is back in 0.4 s on a fast runner, which is
+# shorter than the 0.5 s this test needs to tell an outage from a slow commit. The second makes the gap the test's, not the machine's.
+( sleep 3; x bash -c 'BIN=$(ls -d /usr/lib/postgresql/*/bin | tail -n 1); $BIN/pg_ctl -D /tmp/pg -m immediate -w stop >/dev/null 2>&1; sleep 1; $BIN/pg_ctl -D /tmp/pg -w start >/dev/null 2>&1' ) &
 x bash /bench/db-zeroloss.sh write r2 9 /tmp/l2 4 10 >/dev/null 2>&1; wait
 res="$(x bash /bench/db-zeroloss.sh check r2 /tmp/l2)"; rc=$?
 echo "      $res" | head -2
