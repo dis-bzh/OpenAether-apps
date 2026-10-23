@@ -43,12 +43,19 @@ def table_after(title):
 
 
 parse = load(REPO / "apps/components/cnpg-profile-bench/db-bench-parse.py", "dbp")
-num = table_after("Filled by the lab")
+num = table_after("## Numbers")
 check([c.replace(" ms", "_ms") for c in num[0]] == [c.replace("tps", "TPS") if c == "tps" else c for c in parse.COLS],
       "the numbers table has exactly the columns db-bench.sh prints")
 body = num[2:]
-check(len(body) == 8 and all(c == "UNMEASURED" for r in body for c in r[6:]),
-      "every measured cell is UNMEASURED: no figure is written before the lab measured it")
+def figure(c):
+    try:
+        float(c)
+        return True
+    except ValueError:
+        return c == "UNMEASURED"
+numbers_text = DOC[DOC.index("## Numbers"):DOC.index("| profile", DOC.index("## Numbers"))]
+check(len(body) == 8 and all(figure(c) for r in body for c in r[6:]) and re.search(r"Measured in lab \d+ \(\d{4}-\d{2}-\d{2}\)", numbers_text),
+      "every figure is a number or UNMEASURED, and the page names the lab and the date that measured them")
 check({r[0] for r in body} == {"light", "standard", "ha"} and {(r[0], r[1]) for r in body if r[0] == "ha"} == {("ha", "direct"), ("ha", "pooler")},
       "the table covers the three profiles, and ha both direct and through the pooler")
 
@@ -92,6 +99,8 @@ check("automatic and autonomous" not in low and not re.search(r"\banssi\b.{0,40}
       "no forbidden claim (automatic and autonomous, ANSSI compliance)")
 check(not re.search(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", DOC) and "sk-" not in DOC and "claude" not in low,
       "no address, key or model identifier in the page")
-check(DOC.count("UNVERIFIED") >= 6 and "Not done" in DOC, "the page lists what is unverified and what is not done")
+not_done = DOC[DOC.index("## Not done"):]
+check(DOC.count("UNVERIFIED") + DOC.count("UNMEASURED") >= 2 and "Not observed" in not_done and "(open: apps #" in not_done,
+      "the page still says what is unmeasured and what was not observed, with the issues that track it")
 print("%d failed" % fails)
 sys.exit(1 if fails else 0)
