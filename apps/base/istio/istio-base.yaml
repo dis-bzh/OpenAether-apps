@@ -21,7 +21,7 @@ spec:
   chart:
     spec:
       chart: base
-      version: "1.24.2"
+      version: "1.31.3"
       sourceRef:
         kind: HelmRepository
         name: istio
@@ -46,5 +46,7 @@ metadata:
   name: istio
   namespace: foundation-service-mesh
 spec:
-  url: https://istio-release.storage.googleapis.com/charts
+  # Istio 1.31 no longer publishes charts to istio-release.storage.googleapis.com (its index stops at 1.31.0-rc.0).
+  # blob.istio.io answers 308 to istio-release.r2.istio.io; the egress policies allow both names.
+  url: https://blob.istio.io/istio-release/charts
   interval: 1h
