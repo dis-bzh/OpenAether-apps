@@ -48,6 +48,9 @@ cnpg_collector_last_failed_backup_timestamp:
 cnpg_collector_pg_wal:
   source: cnpg
   status: existing
+cnpg_collector_sync_replicas:
+  source: cnpg
+  status: existing
 cnpg_collector_up:
   source: cnpg
   status: existing
