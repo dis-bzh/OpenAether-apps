@@ -196,6 +196,9 @@ jobs:
       - name: The Gateway keeps two replicas and a disruption budget (lab 15c)
         run: python3 -I scripts/dev/test-gateway-ha.py
 
+      - name: The Zitadel login is routed through the Gateway and its image optimizer is not (#161)
+        run: python3 -I scripts/dev/test-zitadel-login-route.py
+
       - name: The OpenBao replicas spread over the workers (#129)
         run: |
           python3 -I scripts/dev/test-openbao-spread.py

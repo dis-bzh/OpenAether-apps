@@ -212,7 +212,7 @@
           ]
         }
       ],
-      "impact_statement": "Next.js image optimization endpoint (libvips memory bug in sharp on glibc, fixed in sharp >= 0.35.5). The login image is built on node:24-alpine (musl) and ships only glibc sharp binaries: require('sharp') fails there ('linuxmusl-x64 runtime') and Next.js 16 has no fallback, so the vulnerable code never loads. FRAGILE: it becomes reachable if the image is rebuilt on a glibc base. Also, the Login V2 UI is not routed through the Gateway in 0.3.x (apps #161); fixing #161 must also block /ui/v2/login/_next/image.",
+      "impact_statement": "Next.js image optimization endpoint (libvips memory bug in sharp on glibc, fixed in sharp >= 0.35.5). The login image is built on node:24-alpine (musl) and ships only glibc sharp binaries: require('sharp') fails there ('linuxmusl-x64 runtime') and Next.js 16 has no fallback, so the vulnerable code never loads. FRAGILE: it becomes reachable if the image is rebuilt on a glibc base. The Login V2 UI is routed through the Gateway since 0.4.0 (apps #161) and the optimizer path /ui/v2/login/_next/image is answered 404 by the server, a rule that scripts/dev/test-zitadel-login-route.py keeps in place.",
       "action_statement": "Re-check at the first Zitadel tag with Next.js >= 16.4.1 or if the base image changes; review by 2026-11-05.",
       "timestamp": "2026-10-22T00:00:00Z",
       "status": "not_affected",
