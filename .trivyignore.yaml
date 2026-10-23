@@ -8,6 +8,28 @@ misconfigurations:
       - apps__base__orc.yaml
       - apps__base__platform__local-path-provisioner.yaml
     statement: "vendored upstream dump: its container posture is upstream's, replaced on re-vendoring"
+  # 0.4.0 bricks. Each one is ours, so the reason is ours and is checked by a person when the brick changes.
+  - id: KSV-0014
+    paths:
+      - apps__base__observability__vm-customresources.yaml
+    statement: >-
+      false positive: the securityContext (read-only root filesystem, no privilege escalation, drop ALL) is
+      set once on the VMAgent/VMAlert spec and the operator copies it onto every container, config-reloader
+      and config-init included; the Kyverno policies read it at container level (apps #47) and pass on it.
+      The named entries only add resources, and Trivy does not know that the operator copies the block
+  - id: KSV-0053
+    paths:
+      - apps__base__backup__databases.yaml
+    statement: >-
+      the restore test execs psql in a RESTORED scratch cluster: a namespaced Role in backup-restore-test (a
+      namespace that holds no application data), verb create only, bound to the test ServiceAccount;
+      scripts/dev/test-restore-test-brick.py pins the rights
+  - id: KSV-0109
+    paths:
+      - apps__base__backup__databases.yaml
+    statement: >-
+      false positive: the scripts name RESTIC_REPOSITORY and PGHOST (an address and a host name); the keys and
+      passwords come from Secrets mounted at run time, none is in the ConfigMap
   - id: KSV-0041
     paths:
       - apps__base__cnpg.yaml
