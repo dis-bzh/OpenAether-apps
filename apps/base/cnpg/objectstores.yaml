@@ -77,8 +77,8 @@ metadata:
     openaether.io/component: cnpg
 spec:
   configuration:
-    destinationPath: "s3://${BACKUP_REPLICA_S3_BUCKET:=}/cnpg/zitadel-db"
-    endpointURL: "${BACKUP_REPLICA_S3_ENDPOINT:=}"
+    destinationPath: "s3://${BACKUP_REPLICA_S3_BUCKET:=replica-not-set}/cnpg/zitadel-db"
+    endpointURL: "${BACKUP_REPLICA_S3_ENDPOINT:=https://replica-not-set.invalid}"
     s3Credentials:
       accessKeyId: { name: cnpg-backup-s3-replica, key: ACCESS_KEY_ID }
       secretAccessKey: { name: cnpg-backup-s3-replica, key: ACCESS_SECRET_KEY }
@@ -104,8 +104,8 @@ metadata:
     openaether.io/component: cnpg
 spec:
   configuration:
-    destinationPath: "s3://${BACKUP_REPLICA_S3_BUCKET:=}/cnpg/grafana-db"
-    endpointURL: "${BACKUP_REPLICA_S3_ENDPOINT:=}"
+    destinationPath: "s3://${BACKUP_REPLICA_S3_BUCKET:=replica-not-set}/cnpg/grafana-db"
+    endpointURL: "${BACKUP_REPLICA_S3_ENDPOINT:=https://replica-not-set.invalid}"
     s3Credentials:
       accessKeyId: { name: cnpg-backup-s3-replica, key: ACCESS_KEY_ID }
       secretAccessKey: { name: cnpg-backup-s3-replica, key: ACCESS_SECRET_KEY }

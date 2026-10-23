@@ -13,8 +13,8 @@ metadata:
     openaether.io/db-store: replica
 spec:
   configuration:
-    destinationPath: "s3://${BACKUP_REPLICA_S3_BUCKET:=}/cnpg/NAME"
-    endpointURL: "${BACKUP_REPLICA_S3_ENDPOINT:=}"
+    destinationPath: "s3://${BACKUP_REPLICA_S3_BUCKET:=replica-not-set}/cnpg/NAME"
+    endpointURL: "${BACKUP_REPLICA_S3_ENDPOINT:=https://replica-not-set.invalid}"
     s3Credentials:
       accessKeyId: { name: NAME-backup-s3-replica, key: ACCESS_KEY_ID }
       secretAccessKey: { name: NAME-backup-s3-replica, key: ACCESS_SECRET_KEY }

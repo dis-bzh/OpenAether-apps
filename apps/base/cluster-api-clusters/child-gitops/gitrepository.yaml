@@ -60,9 +60,10 @@ data:
   CLUSTER_NAME: ${CHILD_NAME}
   BACKUP_S3_BUCKET: ${CHILD_BACKUP_S3_BUCKET}
   BACKUP_S3_ENDPOINT: ${CHILD_BACKUP_S3_ENDPOINT}
-  # The replica store of the CNPG archive (objectstores.yaml *-replica); optional, empty leaves those ObjectStores idle.
-  BACKUP_REPLICA_S3_BUCKET: ${CHILD_BACKUP_REPLICA_S3_BUCKET:=}
-  BACKUP_REPLICA_S3_ENDPOINT: ${CHILD_BACKUP_REPLICA_S3_ENDPOINT:=}
+  # The replica store of the CNPG archive (objectstores.yaml *-replica); optional. Unset, the child gets the
+  # placeholders the ObjectStores default to (empty would render as YAML null, see above), never a real store.
+  BACKUP_REPLICA_S3_BUCKET: ${CHILD_BACKUP_REPLICA_S3_BUCKET:=replica-not-set}
+  BACKUP_REPLICA_S3_ENDPOINT: ${CHILD_BACKUP_REPLICA_S3_ENDPOINT:=https://replica-not-set.invalid}
   BACKUP_TARGET_URL: ${CHILD_BACKUP_TARGET_URL}
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
