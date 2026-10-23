@@ -51,6 +51,14 @@ def main():
         ns = {t["matchLabels"].get("io.kubernetes.pod.namespace") for e in eg for t in e["toEndpoints"]}
         if ports != ["3000"] or ns != {"services-identity"}:
             print(f"FAIL the Gateway egress to zitadel-login must be services-identity port 3000 only (got ports {ports}, namespaces {ns})"); bad += 1
+    # Grafana calls Zitadel server-side by its public name, which is the Gateway (lab 25, D1)
+    gcnp = [d for d in yaml.safe_load_all((REPO / "apps/base/observability/networkpolicy.yaml").read_text())
+            if d and d.get("kind") == "CiliumNetworkPolicy" and d["spec"].get("endpointSelector", {}).get("matchLabels", {}).get("app.kubernetes.io/name") == "grafana"]
+    to_gw = [e for d in gcnp for e in d["spec"].get("egress", [])
+             if any(t.get("matchLabels", {}).get("io.kubernetes.pod.namespace") == "services-gateway" for t in e.get("toEndpoints", []))]
+    gports = sorted(p["port"] for e in to_gw for tp in e.get("toPorts", []) for p in tp["ports"])
+    if not gcnp or gports != ["443"]:
+        print(f"FAIL Grafana's egress to the Gateway must be port 443 only (got {gports}): its token exchange goes through the public name"); bad += 1
     print("ok" if not bad else f"{bad} failure(s)")
     return 1 if bad else 0
 

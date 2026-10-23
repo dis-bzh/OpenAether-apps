@@ -872,3 +872,16 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
+    # The same two calls go to the PUBLIC name of Zitadel (token_url and api_url are https://zitadel.<domain>/...),
+    # that is to the Gateway: Cilium translates the load balancer address to a Gateway pod before the policy is
+    # applied, so the pod is what this rule must name (lab 24 and 25: without it the callback hangs 30 s and returns
+    # to /login; apps #161). The Gateway's own ingress already admits the cluster entity on 443. UNVERIFIED with real
+    # public DNS and a trusted certificate: the lab reached the Gateway through a host alias and a throwaway CA.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-gateway
+            service.istio.io/canonical-name: openaether-gateway-istio
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
