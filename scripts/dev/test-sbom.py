@@ -99,6 +99,12 @@ with tempfile.TemporaryDirectory() as d:
     r = subprocess.run([sys.executable, str(HERE / "gen-sbom.py"), "--rendered", d], capture_output=True, text=True)
     check("an empty tree is an error, not an empty inventory", r.returncode == 1)
 
+# Helm test hooks (the zitadel chart's bats pod) are not deployed by Flux, so they are not inventoried.
+check("a helm.sh/hook: test pod is skipped", gen.is_test_hook({"metadata": {"annotations": {"helm.sh/hook": "test"}}}))
+check("a test hook among several is skipped", gen.is_test_hook({"metadata": {"annotations": {"helm.sh/hook": "pre-install, test"}}}))
+check("a pre-install hook is kept", not gen.is_test_hook({"metadata": {"annotations": {"helm.sh/hook": "pre-install"}}}))
+check("a plain pod is kept", not gen.is_test_hook({"metadata": {"name": "p"}}))
+
 # check-image-pins.py: the floating ones fail, the tag-only ones are counted.
 spec2 = importlib.util.spec_from_file_location("pins", HERE.parent / "check-image-pins.py")
 pins = importlib.util.module_from_spec(spec2)

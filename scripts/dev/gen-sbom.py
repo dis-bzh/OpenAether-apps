@@ -139,6 +139,12 @@ def chart_component(chart, version, url):
             "description": "Helm chart installed by a HelmRelease"}
 
 
+def is_test_hook(doc):
+    """A `helm.sh/hook: test` resource only exists when someone runs `helm test`, which Flux does not (no spec.test)."""
+    ann = (doc.get("metadata") or {}).get("annotations") or {}
+    return "test" in [h.strip() for h in str(ann.get("helm.sh/hook", "")).split(",")]
+
+
 def helm_images(rel, ns, chart, version, url, values):
     """Images a chart renders with the release's values. Raises RuntimeError with helm's message on failure."""
     with tempfile.TemporaryDirectory() as d:
@@ -154,7 +160,7 @@ def helm_images(rel, ns, chart, version, url, values):
         raise RuntimeError(res.stderr.strip().splitlines()[-1] if res.stderr.strip() else "helm template failed")
     found = set()
     for doc in yaml.safe_load_all(res.stdout):
-        if isinstance(doc, dict):
+        if isinstance(doc, dict) and not is_test_hook(doc):
             walk_images(doc, found)
     return found
 

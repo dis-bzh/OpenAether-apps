@@ -112,6 +112,15 @@ jobs:
           python3 scripts/check-eol.py
           python3 scripts/check-eol.py --check-doc
 
+      # Every VEX statement has a justification and one expiry date, and none is past it (Trivy ignores dates).
+      # An expired waiver fails every pull request until the image is fixed or the finding is re-read.
+      - name: VEX statements
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test-check-vex.py
+          scripts/dev/test-vuln-issue.sh
+          python3 scripts/check-vex.py
+
   build:
     name: Kustomize Build + Collision Check
     runs-on: ubuntu-latest

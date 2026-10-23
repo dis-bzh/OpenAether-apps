@@ -41,7 +41,9 @@ PY
 read -r CHART VERSION < "$W/chart"; REPO="$(cat "$W/repo")"
 helm template zitadel "$CHART" --repo "$REPO" --version "$VERSION" -n services-identity -f "$W/values.yaml" > "$W/rendered.yaml" \
   && ok "the chart $CHART $VERSION renders with the shipped values" || { bad "helm template failed"; exit 1; }
-APPVER="$(helm show chart "$CHART" --repo "$REPO" --version "$VERSION" | sed -n 's/^appVersion: *//p')"
+# The image the HelmRelease sets (image.tag, `tag@digest` is cut to the tag) wins over the chart's appVersion.
+APPVER="$(python3 -I -c 'import sys, yaml; print(((yaml.safe_load(open(sys.argv[1])).get("image") or {}).get("tag") or "").split("@")[0])' "$W/values.yaml")"
+[ -n "$APPVER" ] || APPVER="$(helm show chart "$CHART" --repo "$REPO" --version "$VERSION" | sed -n 's/^appVersion: *//p')"
 IMAGE="ghcr.io/zitadel/zitadel:$APPVER"
 python3 -I - "$W" <<'PY'
 import sys, yaml
@@ -101,7 +103,8 @@ sql "delete from eventstore.unique_constraints where unique_type='migration_done
 sql "select count(*) from eventstore.events2 where event_type='system.migration.started' and payload->>'name'='$STEP'" | grep -qx 1 \
   && ok "(fixture) step $STEP has a started event and no done" || bad "fixture for $STEP"
 zsetup setup 45 1; rc=$?
-if [ "$rc" = 137 ] && grep -q "already started" "$W/setup.log"; then ok "a new setup waits on $STEP for ever ('migration already started'), as in the lab"
+# `timeout -s KILL` exits 137 with GNU coreutils and 124 with the newer runner images' timeout: either means "still waiting at the deadline".
+if { [ "$rc" = 137 ] || [ "$rc" = 124 ]; } && grep -q "already started" "$W/setup.log"; then ok "a new setup waits on $STEP for ever ('migration already started'), as in the lab"
 else bad "the setup did not wait (rc=$rc)"; tail -3 "$W/setup.log"; fi
 docker rm -f "$NET-z" >/dev/null 2>&1
 
