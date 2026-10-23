@@ -34,7 +34,7 @@ spec:
             principals:
               - "cluster.local/ns/istio-system/sa/ztunnel"
               - "cluster.local/ns/services-gateway/sa/openaether-gateway-istio"
-              - "cluster.local/ns/foundation-service-mesh/sa/istio-waypoint-istio"
+              - "cluster.local/ns/foundation-service-mesh/sa/istio-waypoint"
       to:
         - operation:
             ports:
