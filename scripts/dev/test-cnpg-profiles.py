@@ -228,6 +228,9 @@ def main():
     ic = (ps["template"]["spec"].get("initContainers") or [{}])[0]
     check(ic.get("name") == "bootstrap-controller" and ic.get("resources", {}).get("limits", {}).get("memory"),
           "pooler: the operator's init container has a memory limit (require-limits reported it in lab 23)")
+    check(ic.get("securityContext", {}).get("readOnlyRootFilesystem") is True and ic["securityContext"].get("allowPrivilegeEscalation") is False
+          and ic["securityContext"].get("capabilities") == {"drop": ["ALL"]},
+          "pooler: the operator's init container has the restricted container security context (the platform policies read the manifest)")
     check(int(prm["default_pool_size"]) * ps["instances"] < 100, "pooler: pool size x pods stays under PostgreSQL's default max_connections (100)")
     check(ps["pgbouncer"]["image"].startswith("ghcr.io/cloudnative-pg/pgbouncer:") and "latest" not in ps["pgbouncer"]["image"], "pooler: pinned image")
     tpl = ps["template"]["spec"]

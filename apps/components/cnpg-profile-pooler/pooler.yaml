@@ -60,12 +60,19 @@ spec:
         runAsNonRoot: true
         seccompProfile: {type: RuntimeDefault}
       # The operator adds an init container, bootstrap-controller (it copies its binary), with no resources:
-      # the platform policy require-limits reported every pooler pod (lab 23). Naming it here sets them.
+      # the platform policy require-limits reported every pooler pod (lab 23). Naming it here sets them, and its
+      # restricted security context, which the policies read from the manifest and not from what the operator adds.
       initContainers:
         - name: bootstrap-controller
           resources:
             requests: {cpu: 10m, memory: 32Mi}
             limits: {memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}
       containers:
         - name: pgbouncer
           resources:
