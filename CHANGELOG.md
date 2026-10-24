@@ -22,6 +22,11 @@ Bug fixes, documentation corrections and safety nets after 0.3.1, for the next r
 in 9 min 07 s, `cluster-verify` 15 passed, 0 failed, 38 Kustomizations and 16 HelmReleases Ready except `alloy-audit` (suspended by design). It fixes neither #42 nor #375 (infra), **does not
 fix #134** and does not make the Zitadel recovery automatic: a person still runs it. Not a compliance claim.
 
+### Documented (0.4.0, study LAB-B2: moving existing CNPG databases from the 0.3.x spec to this one; rung: mocked, offline, nothing changed in the manifests; evidence: a reduced real lab)
+- `docs/resilience.md` ("The Barman Cloud plugin, two replicas") says why the 0.4.0 database spec must not reach a 0.3.x Cluster in one change: CloudNativePG 1.30.1's configuration-uniformity gate with a lost reload (cloudnative-pg#11627), and the freeze of
+  every pod that predates the plugin sidecar once a plugin is enabled. The recipe (`task cnpg-presync` in the infra repository, before the apps ref moves) was measured on a REDUCED lab (one k3s node per VM, no Flux, Talos, Cilium or zones, run twice: write gap 17-22 s,
+  0 acknowledged commits lost, WAL archive contiguous); it is UNVERIFIED on the full platform. No manifest changed. Not a compliance claim.
+
 ### Documented (0.4.0, infra #408: what the apps ref and the child versions are tied to; rung: mocked, offline, nothing changed in the manifests)
 - Supported upgrade path, owner decision 2026-10-24: before 1.0.0 only the previous minor to the current one (0.3.x to 0.4.0). The in-place move of the 0.3.x content was observed once (lab 25); the supported, tested path is the one the release notes name.
 - The apps ref a running cluster follows (`GitRepository openaether`, `GIT_REF` of `openaether-platform`) is moved by infra's `task cluster-apps-ref`, not by a machine-config change; `cluster-verify` compares it with `git_ref`.
