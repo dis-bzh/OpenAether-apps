@@ -30,6 +30,13 @@ routes:
       instances only.
     default: true
     private_admin: false
+  - route: services-git/forgejo
+    host: forge.openaether.local
+    authentication: >-
+      Forgejo's own: local accounts, the initial admin password comes from OpenBao; Zitadel OIDC lands at rung 3.
+      No ACL in front; the login page answers anyone.
+    default: true
+    private_admin: false
   - route: services-gateway/global-http-redirect
     host: ""
     authentication: "n/a: answers every plain-HTTP request with a 301 to https and serves nothing else."
