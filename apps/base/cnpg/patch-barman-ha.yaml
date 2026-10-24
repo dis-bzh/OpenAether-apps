@@ -18,10 +18,6 @@ spec:
       maxSurge: 1
   template:
     spec:
-      containers:
-        # LAB 26 ONLY (candidate fix, finding B1): without --leader-elect the standby serves :9090 too and becomes Ready
-        - name: barman-cloud
-          args: ["operator", "--server-cert=/server/tls.crt", "--server-key=/server/tls.key", "--client-cert=/client/tls.crt", "--server-address=:9090", "--log-level=info", "--log-level=debug"]
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
