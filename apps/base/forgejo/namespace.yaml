@@ -1,0 +1,25 @@
+# Forgejo namespace — deliberately OUTSIDE the ambient mesh, like the foundation
+# and services-identity.
+#
+# The forge is dogfooding brick #1: it hosts the repositories that OpenAether's
+# own GitOps story lives in, so its availability must not depend on the mesh
+# (ztunnel intercepts the kubelet probes → HBONE → dropped by the L4 CNP →
+# startupProbe timeout, the trap seen on Scaleway for services-observability,
+# cf. apps/base/namespaces/namespaces.yaml).
+# Zero-trust still holds without it: WireGuard east-west, the L3/L4
+# CiliumNetworkPolicy (networkpolicy.yaml), and the forge's own authn (local
+# admin for V1, Zitadel OIDC at rung 3). North-south TLS terminates at the
+# Gateway.
+#
+# baseline (not restricted): the chart's init containers need a few tolerances;
+# tighten later, like services-identity.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: services-git
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+    openaether.io/managed: "true"
+    openaether.io/component: forgejo

@@ -1,0 +1,144 @@
+# OpenAether — Forgejo (self-hosted git forge, dogfooding V1)
+# ──────────────────────────────────────────────────────────────────────────
+# Chart forgejo-contrib/forgejo-helm (Codeberg, published at
+# https://forgejo-contrib.codeberg.page/forgejo-helm/). Backend Postgres =
+# CNPG forgejo-db (apps/base/cnpg/forgejo-db-cluster.yaml, foundation-databases,
+# 2 instances). TLS terminated upstream by the Gateway → Forgejo serves
+# cleartext HTTP (PROTOCOL http, ROOT_URL https). Secrets (DB password, initial
+# admin, OIDC client) through ESO/OpenBao (externalsecrets.yaml).
+# Single replica: the git repositories live on one RWO PVC (longhorn-x2-rwo —
+# Longhorn provides the volume's HA; a multi-replica forge needs RWX, a later
+# rung). Strategy: the chart default is Recreate, coherent with RWO.
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: forgejo
+  namespace: services-git
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: forgejo
+spec:
+  url: https://forgejo-contrib.codeberg.page/forgejo-helm/
+  interval: 1h
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: forgejo
+  namespace: services-git
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: forgejo
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: forgejo
+      version: "6.1.0"
+      sourceRef:
+        kind: HelmRepository
+        name: forgejo
+        namespace: services-git
+      interval: 1h
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    replicaCount: 1
+
+    # ── Image: chart default (code.forgejo.org/forgejo/forgejo, rootless). ──
+    # Left at the chart default rather than tag@digest-pinned here: pin the
+    # digest once a Renovate pipeline covers this HelmRelease (follow-up).
+    # The chart values also declare serviceAccount.automountServiceAccountToken
+    # = false — re-verify the pod spec actually carries it at rung 3.
+
+    persistence:
+      enabled: true
+      size: 10Gi
+      # GOLDEN RULE (apps/base/storage/storageclasses.yaml): single-replica app
+      # with no HA of its own → longhorn-x2-rwo. Not encrypted: repository data
+      # is code; revisit for private client work.
+      storageClass: longhorn-x2-rwo
+
+    # Kyverno require-limits (lab 11): requests AND limits.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 1
+        memory: 1Gi
+
+    podSecurityContext:
+      fsGroup: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      privileged: false
+      capabilities:
+        drop: ["ALL"]
+        # No SYS_CHROOT: the nodes run containerd, not cri-o (gitea helm-chart#161).
+
+    deployment:
+      env:
+        # The DB password never lands in the chart values: Forgejo's
+        # GITEA__section__KEY env overrides app.ini at runtime. Same Secret as
+        # the CNPG bootstrap twin (apps/base/cnpg/forgejo-db-externalsecret.yaml).
+        - name: GITEA__database__PASSWD
+          valueFrom:
+            secretKeyRef:
+              name: forgejo-db-credentials
+              key: password
+
+    gitea:
+      admin:
+        # Initial admin from OpenBao (secret/forgejo/admin), created ONCE at
+        # the first install (initialOnlyRequireReset); the password is then
+        # owned by the forge. Break-glass: re-seed OpenBao + passwordMode
+        # keepUpdated.
+        existingSecret: forgejo-admin
+        username: forgejo-admin
+        email: admin@forge.openaether.local
+        passwordMode: initialOnlyRequireReset
+
+      metrics:
+        enabled: true
+
+      config:
+        # TLS is terminated at the Gateway (forge.openaether.local → HTTPRoute).
+        server:
+          DOMAIN: forge.openaether.local
+          ROOT_URL: https://forge.openaether.local/
+          PROTOCOL: http
+          # V1: git over HTTPS only. SSH ingress needs a Gateway TCPRoute —
+          # a later rung.
+          DISABLE_SSH: true
+          START_SSH_SERVER: false
+        database:
+          DB_TYPE: postgres
+          HOST: forgejo-db-rw.foundation-databases.svc.cluster.local:5432
+          NAME: forgejo
+          USER: forgejo
+          # `require` = encrypted, server not authenticated (same posture as
+          # Zitadel); verify-full once the CNPG CA is mounted — later rung.
+          SSL_MODE: require
+          # PASSWD: injected through GITEA__database__PASSWD (deployment.env).
+        session:
+          PROVIDER: memory     # V1: memory (single replica). Valkey later.
+        cache:
+          ADAPTER: memory
+        queue:
+          TYPE: level
+
+      # ── Zitadel OIDC (rung 3) — shipped disabled ────────────────────────────
+      # Enable together with: the Zitadel project app registration (OpenBao
+      # secret/forgejo/oidc → forgejo-oauth), in-cluster resolution of
+      # *.openaether.local, and `identity` added to dependsOn (37-forgejo.yaml).
+      # oauth:
+      #   - name: "Zitadel"
+      #     provider: openidConnect
+      #     existingSecret: forgejo-oauth
+      #     autoDiscoverUrl: https://zitadel.openaether.local/.well-known/openid-configuration
