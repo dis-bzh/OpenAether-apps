@@ -3,8 +3,10 @@
 # traffic for 74 s (lab 15c, measured by a 1 Hz probe through the load balancer). Istio leaves `replicas` to an HPA when
 # there is one, so two replicas are kept by the HPA's floor, and the PDB lets a drain evict one at a time. Spreading
 # the two
-# pods over different nodes is the Kyverno mutation kyverno-policies/spread-gateway-pods.yaml (Istio 1.24 offers no
-# setting).
+# pods over different nodes is the Kyverno mutation kyverno-policies/spread-gateway-pods.yaml (Istio 1.31 can do it with
+# a parametersRef overlay, not adopted yet).
+# Istio 1.31 can also create an HPA and a PDB of its own for a Gateway, but only when a parametersRef or GatewayClass
+# overlay asks for one (both are "required overlays" in its controller); none is set here, so these two stay ours.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

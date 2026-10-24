@@ -126,6 +126,9 @@ spec:
                   fi
                   export RESTIC_CACHE_DIR=/tmp/restic-cache
                   retention_failed=0
+                  # A destination that fails must not keep the other from receiving its copy (the replica exists for the day
+                  # the primary store is down): failures are recorded and fail the Job last.
+                  dest_failed=0
                   push() {
                     ep="$1"; bucket="$2"; label="$3"
                     export RESTIC_REPOSITORY="s3:${ep}/${bucket}/${CLUSTER_NAME}/openbao"
@@ -133,6 +136,8 @@ spec:
                     # ⚠️ restic does NOT create the bucket (it MUST pre-exist —
                     # ensure-buckets on the infra side, the minio chart locally)
                     # and retries a NoSuchBucket for ~15 min silently → bounded probe.
+                    # a stale lock (a pod killed during forget --prune) makes `cat config` fail and would pass for a foreign repository: unlock removes stale locks only
+                    restic unlock >/dev/null 2>&1 || true
                     if ! timeout 60 restic cat config >/dev/null 2>&1; then
                       # Two very different failures hide here:
                       #  • repository MISSING     → a legitimate init;
@@ -151,7 +156,7 @@ spec:
                             echo "ERROR: cannot init repository ${label} — does bucket ${bucket} exist?"
                             echo "  $init_err" ;;
                         esac
-                        exit 1
+                        dest_failed=1; return 0
                       }
                     fi
                     restic unlock >/dev/null 2>&1 || true
@@ -163,7 +168,8 @@ spec:
                     restic backup /backup --host openbao --tag openbao-raft || rc=$?
                     if [ "$rc" -ne 0 ]; then
                       echo "ERROR: restic backup exited $rc on ${label} (3 = incomplete snapshot, 130 = interrupted)"
-                      exit "$rc"
+                      [ "$rc" -eq 130 ] && exit 130
+                      dest_failed=1; return 0
                     fi
                     rc=0
                     restic forget --host openbao \
@@ -173,7 +179,7 @@ spec:
                       [ "$rc" -eq 130 ] && exit 130
                       retention_failed=1
                     fi
-                    restic check
+                    restic check || { echo "ERROR: restic check failed on ${label}"; dest_failed=1; }
                   }
                   AWS_ACCESS_KEY_ID="$PRIMARY_ACCESS_KEY" \
                     AWS_SECRET_ACCESS_KEY="$PRIMARY_SECRET_KEY" \
@@ -181,6 +187,7 @@ spec:
                   AWS_ACCESS_KEY_ID="$REPLICA_ACCESS_KEY" \
                     AWS_SECRET_ACCESS_KEY="$REPLICA_SECRET_KEY" \
                     push "$REPLICA_ENDPOINT" "$REPLICA_BUCKET" replica
+                  [ "$dest_failed" -eq 0 ] || { echo "ERROR: at least one destination did not get its snapshot or failed its check"; exit 1; }
                   [ "$retention_failed" -eq 0 ] || { echo "ERROR: retention failed on at least one repository"; exit 1; }
                   echo "✅ OpenBao snapshot pushed to both destinations"
               envFrom:

@@ -1,13 +1,11 @@
-# Spread the Istio Gateway pods over the nodes. Istio 1.24 builds the Gateway's Deployment itself and offers no way
-# to set
-# scheduling on it (the Gateway API `infrastructure.parametersRef` is in the CRDs but istiod 1.24 does not read it),
-# and the
-# kube-scheduler's default scoring put both replicas on one node in lab 15c: one node loss or drain then cut the ingress
-# although the HPA keeps two replicas and the PDB lets one be evicted. This MUTATES the pod at creation. Soft on purpose
-# (ScheduleAnyway + preferred anti-affinity): a cluster with one worker must still run both pods. Pods already
-# running keep
-# their placement until they are recreated (`kubectl -n services-gateway rollout restart deployment
-# openaether-gateway-istio`).
+# Spread the Istio Gateway pods over the nodes. Istio builds the Gateway's Deployment itself. Istio 1.24 offered no
+# way to set scheduling on it (`infrastructure.parametersRef` was in the CRDs but istiod 1.24 did not read it). Istio
+# 1.31 does read it (a ConfigMap whose `deployment` key is a strategic-merge overlay); that route is NOT adopted yet,
+# this mutation stays until a lab shows the overlay does the same job. The kube-scheduler's default scoring put both
+# replicas on one node in lab 15c: one node loss or drain then cut the ingress although the HPA keeps two replicas
+# and the PDB lets one be evicted. This MUTATES the pod at creation. Soft on purpose (ScheduleAnyway + preferred
+# anti-affinity): a cluster with one worker must still run both pods. Pods already running keep their placement
+# until they are recreated (`kubectl -n services-gateway rollout restart deployment openaether-gateway-istio`).
 # Not a validation: it has no failure action and is not part of the Enforce switch.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
@@ -44,6 +42,13 @@ spec:
             +(topologySpreadConstraints):
               - maxSkew: 1
                 topologyKey: kubernetes.io/hostname
+                whenUnsatisfiable: ScheduleAnyway
+                labelSelector:
+                  matchLabels:
+                    gateway.networking.k8s.io/gateway-name: openaether-gateway
+              # Zone preference too (apps #155, lab 21): both Gateway pods can sit in one zone otherwise.
+              - maxSkew: 1
+                topologyKey: topology.kubernetes.io/zone
                 whenUnsatisfiable: ScheduleAnyway
                 labelSelector:
                   matchLabels:

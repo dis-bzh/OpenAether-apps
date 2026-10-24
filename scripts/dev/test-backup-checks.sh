@@ -43,6 +43,9 @@ mk; sed -i 's#postgresql:18\.[0-9]*#postgresql:16.3#' "$W/t/apps/base/backup/dat
 expect "restore-test image below the highest Cluster major fails" fail "$CHK" "$W/t"
 mk; sed -i 's#imageName: \(.*\)postgresql:16\.[0-9]*#imageName: \1postgresql:19.0#' "$W/t/apps/base/cnpg/grafana-db-cluster.yaml"
 expect "a Cluster bumped above the dump image fails" fail "$CHK" "$W/t"
+mk; mkdir -p "$W/t/apps/components"; cp -r "$ROOT/apps/components/cnpg-profile-ha" "$W/t/apps/components/"
+sed -i 's#postgresql:18\.[0-9]*#postgresql:19.0#' "$W/t/apps/components/cnpg-profile-ha/cluster.yaml"
+expect "a database profile Cluster above the dump image fails (apps #157)" fail "$CHK" "$W/t"
 mk; rm -rf "$W/t/apps/base/backup"; mkdir "$W/t/apps/base/backup"
 expect "no client image found fails instead of passing vacuously" fail "$CHK" "$W/t"
 
@@ -171,10 +174,21 @@ for spec in "openbao/cronjob.yaml openbao" "databases/cronjob.yaml cnpg"; do
   rm -f "$W/calls-$N"; expect "$N push: all exit codes 0 passes" 0 push
   [ "$(grep -c '^backup' "$W/calls-$N")" = 2 ] && ok "$N push: both repositories got a snapshot" || bad "$N push: backup calls: $(cat "$W/calls-$N")"
   rm -f "$W/calls-$N"; expect "$N push: backup exit 3 (missing source) fails" fail push STUB_RC_BACKUP=3
-  [ "$(grep -c '^backup' "$W/calls-$N")" = 1 ] && ok "$N push: stops at the first incomplete snapshot" || bad "$N push: calls: $(cat "$W/calls-$N")"
+  [ "$(grep -c '^backup' "$W/calls-$N")" = 2 ] && ok "$N push: an incomplete snapshot fails the Job but the other repository is still tried" || bad "$N push: calls: $(cat "$W/calls-$N")"
   push STUB_RC_BACKUP=130 >/dev/null 2>&1; [ $? = 130 ] && ok "$N push: SIGINT code 130 is passed on" || bad "$N push: 130 not passed on"
   rm -f "$W/calls-$N"; expect "$N push: forget exit 3 fails the Job" fail push STUB_RC_FORGET=3
   [ "$(grep -c '^backup' "$W/calls-$N")" = 2 ] && ok "$N push: ... but only after the replica got its snapshot" || bad "$N push: calls: $(cat "$W/calls-$N")"
+done
+
+# A stale exclusive lock (a pod killed during forget --prune) makes `restic cat config` fail, and the push scripts read that as a
+# repository of another cluster: each one must remove stale locks BEFORE it looks at the repository (lab 20).
+for f in apps/base/backup/openbao/cronjob.yaml apps/base/backup/etcd/cronjob.yaml apps/base/backup/databases/cronjob.yaml; do
+  if python3 -I - "$ROOT/$f" <<'PY'
+import sys
+s = open(sys.argv[1]).read()
+sys.exit(0 if 0 <= s.find("restic unlock") < s.find("restic cat config") else 1)
+PY
+  then ok "$f: stale locks are removed before the repository is read"; else bad "$f: restic unlock must come before restic cat config"; fi
 done
 
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"

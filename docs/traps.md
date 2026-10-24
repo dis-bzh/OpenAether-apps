@@ -79,8 +79,18 @@ belong to. What follows has no skill of its own yet.
   `barman-cloud-check-wal-archive` refuses a non-empty archive for a new cluster ("WAL archive check failed for server ...:
   Expected empty archive"), the `ContinuousArchiving` condition stays `False` with `ContinuousArchivingFailing`, and no WAL
   leaves the cluster. It happens when a lab or a rebuild reuses the bucket (and the `cnpg/<cluster>` path) of an earlier cluster.
-  Either bootstrap the new cluster from that archive (recovery), or, once you are sure you do not need it, remove that path
-  from the bucket. Seen on a Scaleway lab that reused its bucket (105 objects under `cnpg/`).
+  Either bootstrap the new cluster from that archive (recovery), or give it a NEW `serverName`: the DR chain does it (generation suffix `-g2`,
+  `cnpg-archive-generation`, apps #153, README of the backup brick; fixed offline, UNVERIFIED on a cluster), or, once you are sure you do not need it, remove that path
+  from the bucket. Do not change `serverName` of a running cluster by hand: the history before the change stays in the old path. Seen on a Scaleway lab that reused its bucket (105 objects under `cnpg/`).
+
+- **With the Barman Cloud plugin, the S3 settings live in the ObjectStore, not in the Cluster** (offline findings, not yet seen on a
+  cluster). The boto3 process is the plugin's sidecar, so the Outscale checksum variables belong to the ObjectStore's
+  `instanceSidecarConfiguration.env` (a `spec.env` on the Cluster no longer reaches it); the ObjectStore must sit in the Cluster's
+  namespace; `serverName` is a parameter of the Cluster's plugin entry, not of the ObjectStore (the CRD refuses it there); the
+  plugin's mTLS certificates need cert-manager before the operator can call it, which is why `cnpg` depends on `cert-manager`. The
+  plugin writes to one store: the second copy is a job (`cnpg-store-replicate`), so the replica trails by its schedule.
+- **A mid-file flip in a gzip base backup passes a tar walk.** Reading a `data.tar.gz` through `tarfile` stops at the end-of-archive
+  blocks and never checks the gzip CRC; the verifier decompresses itself and drains the stream (found by its own damage test).
 
 - **A CloudNativePG instance does not see an S3 Secret that appeared after its pod started.** `ContinuousArchiving` stays False with
   `failed to get envs: cache miss` in the instance log, although the ExternalSecret is synced. Annotate the Cluster
@@ -118,7 +128,8 @@ belong to. What follows has no skill of its own yet.
   queries and `/metrics` on 8481. Check `up == 0` after touching an observability
   CNP. And **a `VMRule` with no `VMAlert` is inert.**
 - **`repeat_interval` must be strictly greater than `group_interval`.** With both at
-  5m, Alertmanager sent one webhook in eleven minutes.
+  5m, Alertmanager sent one webhook in eleven minutes. And the real gap between pings is `repeat_interval` rounded UP to the next
+  `group_interval` tick: 5m with 1m measured 360 s (lab 19), hence 3m, about 4 min.
 
 ## Pod security (Kyverno `require-security-context`)
 
@@ -134,6 +145,6 @@ belong to. What follows has no skill of its own yet.
 - **Moving a workload from root to non-root leaves its local-path volume root-owned.** `fsGroup` does nothing on those volumes.
   `vmstorage` and `vmselect` then crash on their lock file / cache (apps 0.2.0 Upgrade notes, #71).
 - **`Gateway.spec.infrastructure` needs Gateway API v1.2.** On the v1.1.0 CRDs this repository vendors, the dry-run of the `istio`
-  Kustomization fails and everything behind it stays not Ready until the change is reverted (#70). The vendored CRDs are v1.2.1 since the 0.3.0 upgrade campaign; v1.5.x is NOT an option while Istio is 1.24 (see docs/patching.md).
+  Kustomization fails and everything behind it stays not Ready until the change is reverted (#70). The vendored CRDs are v1.2.1 since the 0.3.0 upgrade campaign; the CRDs are v1.6.0 with Istio 1.31.3 (apps #96, not yet shown on a cluster); they must not be paired with Istio 1.24 to 1.29 (see docs/patching.md).
 - **A policy report keeps results for pods a changed `exclude` no longer covers**, at least for the first hour on a cluster
   moved from an earlier tree; a fresh cluster does not show them (#37).

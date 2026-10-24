@@ -8,6 +8,7 @@ cat >"$W/aws" <<'STUB'
 #!/usr/bin/env bash
 # aws --endpoint-url URL s3api <op> ...
 op="$4"
+case "$*" in *--server-side-encryption*) op=put-object-sse ;; esac
 case " $DENY " in *" $op "*) echo "An error occurred (403) when calling the $op operation: Forbidden" >&2; exit 254;; esac
 [ "$op" = create-multipart-upload ] && echo upload-id
 exit 0
@@ -23,6 +24,7 @@ t() { # DESC DENY WANT_RC WANT_TEXT
 t "every right held" "" 0 "every right held"
 t "HeadBucket refused (the lab 11 case) is named" "head-bucket" 1 "FAIL HeadBucket"
 t "multipart create refused is named" "create-multipart-upload" 1 "FAIL CreateMultipartUpload"
+t "a store that refuses the server-side-encryption request is named" "put-object-sse" 1 "FAIL PutObject with the AES256"
 t "delete refused is named" "delete-object" 1 "FAIL DeleteObject"
 t "two missing rights are both counted" "head-bucket list-multipart-uploads" 1 "2 right(s) missing"
 echo "$pass passed, $fail failed"

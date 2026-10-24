@@ -1,0 +1,258 @@
+# These Jobs write pgbench tables and test rows into the database they target: run them on a scratch instance of the
+# profile,
+# never on a database that holds data.
+# Benchmark and zero-loss Jobs for ONE profile instance, all SUSPENDED: nothing runs when the component is applied.
+# Start one with
+#   kubectl -n <ns> patch job <name> --type merge -p '{"spec":{"suspend":false}}'   and delete it before the next run.
+# They run as the application's pod (same labels), so the database policy admits them. Read the results with
+# `kubectl logs`.
+# The scripts are the files next to this one (also in scripts/ops/ for a bastion). docs/database-profiles.md has the
+# lab steps.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: NAME-bench
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database-bench
+    openaether.io/db-profile: bench
+    openaether.io/bench-role: bench
+spec:
+  suspend: true
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: CLIENT_APP
+        openaether.io/db-profile: bench
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 26
+        runAsGroup: 26
+        seccompProfile: {type: RuntimeDefault}
+      volumes:
+        - name: scripts
+          configMap: {name: NAME-bench-scripts, defaultMode: 0555}
+        - name: ca
+          secret: {secretName: NAME-ca}
+        - name: tmp
+          emptyDir: {sizeLimit: 1Gi}
+      containers:
+        - name: bench
+          image: ghcr.io/cloudnative-pg/postgresql:18.6
+          # -P is the profile label of the row, -T the endpoints: the Service of the primary and the pooler (ha
+          # only: delete the
+          # second -T for light and standard). Scale 10 is about 160 MB; raise -s so the data exceeds shared_buffers
+          # for a disk test.
+          # PGSSLMODE verify-full holds for the Services of the Cluster; through the pooler it needs the pooler's
+          # certificate to
+          # carry its name (UNVERIFIED, lab step): otherwise run that target with PGSSLMODE=verify-ca.
+          command: [bash, /scripts/db-bench.sh]
+          args:
+            - -P
+            - PROFILE
+            - -H
+            - -I
+            - -s
+            - "10"
+            - -c
+            - "16"
+            - -j
+            - "4"
+            - -t
+            - "60"
+            - -m
+            - rw ro
+            - -T
+            - direct=$(DIRECT_HOST)
+            - -T
+            - pooler=$(POOLER_HOST)
+          env:
+            - {name: DIRECT_HOST, value: NAME-rw}
+            - {name: POOLER_HOST, value: NAME-pooler-rw}
+            - {name: HOME, value: /tmp}
+            - name: PGUSER
+              valueFrom: {secretKeyRef: {name: NAME-credentials, key: username}}
+            - name: PGPASSWORD
+              valueFrom: {secretKeyRef: {name: NAME-credentials, key: password}}
+            - name: PGDATABASE
+              valueFrom: {configMapKeyRef: {name: db-profile-values, key: database}}
+            - {name: PGSSLMODE, value: verify-full}
+            - {name: PGSSLROOTCERT, value: /ca/ca.crt}
+          resources:
+            requests: {cpu: 500m, memory: 128Mi}
+            limits: {cpu: "2", memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - {name: scripts, mountPath: /scripts, readOnly: true}
+            - {name: ca, mountPath: /ca, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+---
+# The acknowledged-id writer: 10 workers x 10 commits/s, a fresh connection per commit, the log of acknowledged ids
+# on a volume
+# that outlives the Job. Run it on a node that is NOT under test (add a nodeAffinity in a patch), start it, inject
+# the fault.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: NAME-zeroloss-write
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database-bench
+    openaether.io/db-profile: bench
+    openaether.io/bench-role: writer
+spec:
+  suspend: true
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: CLIENT_APP
+        openaether.io/db-profile: bench
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 26
+        runAsGroup: 26
+        seccompProfile: {type: RuntimeDefault}
+      volumes:
+        - name: scripts
+          configMap: {name: NAME-bench-scripts, defaultMode: 0555}
+        - name: ca
+          secret: {secretName: NAME-ca}
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}
+        - name: log
+          persistentVolumeClaim: {claimName: NAME-zeroloss-log}
+      containers:
+        - name: writer
+          image: ghcr.io/cloudnative-pg/postgresql:18.6
+          # RUN SECS LOGDIR WORKERS RATE: 300 s covers 60 s before the fault, the fault and the recovery. PGHOST is
+          # the Service
+          # under test: NAME-rw, or NAME-pooler-rw to measure what the pooler hides.
+          command:
+            - bash
+            - -c
+            - bash /scripts/db-zeroloss.sh setup && bash /scripts/db-zeroloss.sh write "$RUN" 300 /log/$RUN 10 10
+          env:
+            - {name: RUN, value: lab1}
+            - {name: PGHOST, value: NAME-rw}
+            - {name: PGCONNECT_TIMEOUT, value: "2"}
+            - {name: HOME, value: /tmp}
+            - name: PGUSER
+              valueFrom: {secretKeyRef: {name: NAME-credentials, key: username}}
+            - name: PGPASSWORD
+              valueFrom: {secretKeyRef: {name: NAME-credentials, key: password}}
+            - name: PGDATABASE
+              valueFrom: {configMapKeyRef: {name: db-profile-values, key: database}}
+            - {name: PGSSLMODE, value: verify-full}
+            - {name: PGSSLROOTCERT, value: /ca/ca.crt}
+          resources:
+            requests: {cpu: 250m, memory: 64Mi}
+            limits: {cpu: "1", memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - {name: scripts, mountPath: /scripts, readOnly: true}
+            - {name: ca, mountPath: /ca, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+            - {name: log, mountPath: /log}
+---
+# The checker: run it after recovery (a primary elected, every instance Ready, two minutes steady). It reads the
+# acknowledged ids
+# from the volume and the rows from the primary, prints missing= and PASS or FAIL, and exits 1 on a missing
+# acknowledged id.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: NAME-zeroloss-check
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database-bench
+    openaether.io/db-profile: bench
+    openaether.io/bench-role: checker
+spec:
+  suspend: true
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: CLIENT_APP
+        openaether.io/db-profile: bench
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 26
+        runAsGroup: 26
+        seccompProfile: {type: RuntimeDefault}
+      volumes:
+        - name: scripts
+          configMap: {name: NAME-bench-scripts, defaultMode: 0555}
+        - name: ca
+          secret: {secretName: NAME-ca}
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}
+        - name: log
+          persistentVolumeClaim: {claimName: NAME-zeroloss-log}
+      containers:
+        - name: checker
+          image: ghcr.io/cloudnative-pg/postgresql:18.6
+          command: [bash, -c, 'bash /scripts/db-zeroloss.sh check "$RUN" /log/$RUN']
+          env:
+            - {name: RUN, value: lab1}
+            - {name: PGHOST, value: NAME-rw}
+            - {name: HOME, value: /tmp}
+            - name: PGUSER
+              valueFrom: {secretKeyRef: {name: NAME-credentials, key: username}}
+            - name: PGPASSWORD
+              valueFrom: {secretKeyRef: {name: NAME-credentials, key: password}}
+            - name: PGDATABASE
+              valueFrom: {configMapKeyRef: {name: db-profile-values, key: database}}
+            - {name: PGSSLMODE, value: verify-full}
+            - {name: PGSSLROOTCERT, value: /ca/ca.crt}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - {name: scripts, mountPath: /scripts, readOnly: true}
+            - {name: ca, mountPath: /ca, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+            - {name: log, mountPath: /log}
+---
+# Where the writer keeps the acknowledged ids: not the database under test. 100 Mi holds more than a day of
+# acknowledgements.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: NAME-zeroloss-log
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database-bench
+    openaether.io/db-profile: bench
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: STORAGE_CLASS
+  resources:
+    requests: {storage: 100Mi}

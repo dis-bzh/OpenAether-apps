@@ -64,6 +64,10 @@ spec:
       retries: 0
       remediateLastFailure: false
   values:
+    # The web UI only: one replica (the chart's two share no spread and no budget, and its loss costs nothing; see
+    # scripts/ha-allowlist.yaml). The volumes, their replicas and the CSI sidecars do not depend on it.
+    longhornUI:
+      replicas: 1
     # 1.12 renders NetworkPolicies by default (restrictInternalTraffic); the CiliumNetworkPolicy of this
     # brick already governs longhorn-system, so keep it the single authority until a cluster has shown both agree.
     networkPolicies:

@@ -1,0 +1,163 @@
+# Second copy of the CNPG archive (WAL and base backups) on the replica store, with the replica key pair.
+#
+# The Barman Cloud plugin writes to ONE object store per Cluster (the primary ObjectStore). This job ships what is
+# there to the replica store: every object of cnpg/<cluster>/ that the replica lacks, or holds with another size, is copied
+# (base backups first, `backup.info` last and only once the WAL segment that ends that backup is on the replica, so a base
+# backup never looks complete on the replica before its data AND its end segment are there). The replica copy therefore trails the primary by at most one schedule period (15 min), not by the minutes of a
+# WAL switch: that is its RPO, and the verifier (backup-verify) measures it.
+#
+# Prune: an object that left the primary (Barman retention) is deleted on the replica only after REPLICA_GRACE_DAYS, and never
+# when the primary listing is empty or the prune would remove more than half of the replica: a primary that was wiped by a
+# mistake or an attacker must not wipe the copy. An empty primary while the replica holds objects also FAILS the job
+# (BackupCopyJobFailed): a wiped primary must not look like a healthy run.
+#
+# Keys: PRIMARY_* and REPLICA_* are the two dedicated pairs of backup-restic-env (backup/s3-primary, backup/s3-replica).
+# Region: the signing region is us-east-1 as for barman-cloud (boto3 without a region), override with PRIMARY_REGION / REPLICA_REGION.
+# The replica copy is uploaded with the SSE-S3 request; like the ObjectStores it is not client-side encrypted.
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cnpg-store-replicate
+  namespace: foundation-databases
+  labels:
+    app: cnpg-store-replicate
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3000
+      template:
+        metadata:
+          labels:
+            app: cnpg-store-replicate
+            openaether.io/component: backup
+        spec:
+          serviceAccountName: cnpg-dump
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: tmp
+              emptyDir: { sizeLimit: 1Gi }
+          containers:
+            - name: replicate
+              image: docker.io/alpine/k8s:1.36.5
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -euo pipefail
+                  export HOME=/tmp
+                  # Outscale refuses the trailing checksum newer aws/boto3 send by default (apps #132).
+                  export AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
+                  : "${PRIMARY_ENDPOINT:?}" "${PRIMARY_BUCKET:?}" "${PRIMARY_ACCESS_KEY:?}" "${PRIMARY_SECRET_KEY:?}"
+                  : "${REPLICA_ENDPOINT:?}" "${REPLICA_BUCKET:?}" "${REPLICA_ACCESS_KEY:?}" "${REPLICA_SECRET_KEY:?}"
+                  CLUSTERS="${CLUSTERS:-zitadel-db grafana-db}"
+                  GRACE_DAYS="${REPLICA_GRACE_DAYS:-45}"
+                  W="$(mktemp -d /tmp/rep.XXXXXX)"
+                  P_REGION="${PRIMARY_REGION:-us-east-1}"; R_REGION="${REPLICA_REGION:-us-east-1}"
+                  pa() { AWS_ACCESS_KEY_ID="$PRIMARY_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$PRIMARY_SECRET_KEY" \
+                           aws --region "$P_REGION" --endpoint-url "$PRIMARY_ENDPOINT" "$@"; }
+                  ra() { AWS_ACCESS_KEY_ID="$REPLICA_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$REPLICA_SECRET_KEY" \
+                           aws --region "$R_REGION" --endpoint-url "$REPLICA_ENDPOINT" "$@"; }
+                  # key<TAB>size<TAB>last-modified, one object per line; an empty prefix prints nothing or "None".
+                  list() { # pa|ra bucket prefix
+                    "$1" s3api list-objects-v2 --bucket "$2" --prefix "$3" \
+                      --query 'Contents[].[Key,Size,LastModified]' --output text | awk -F'\t' 'NF==3'
+                  }
+                  cutoff="$(date -u -d "@$(( $(date +%s) - GRACE_DAYS * 86400 ))" +%Y-%m-%dT%H:%M:%S)"
+                  failed=0
+                  for c in $CLUSTERS; do
+                    prefix="cnpg/${c}/"
+                    list pa "$PRIMARY_BUCKET" "$prefix" | sort > "$W/p.tsv"
+                    list ra "$REPLICA_BUCKET" "$prefix" | sort > "$W/r.tsv"
+                    np="$(wc -l < "$W/p.tsv")"; nr="$(wc -l < "$W/r.tsv")"
+                    # Missing on the replica, or another size: data first, backup.info last.
+                    # (FILENAME, not NR==FNR: that test is true for the second file when the first is empty.)
+                    awk -F'\t' 'FILENAME==ARGV[1]{r[$1]=$2; next} !($1 in r) || r[$1]!=$2 {print $1}' "$W/r.tsv" "$W/p.tsv" > "$W/todo"
+                    { grep -v '/backup\.info$' "$W/todo" || true; grep '/backup\.info$' "$W/todo" || true; } > "$W/order"
+                    copied=0; bad=0
+                    deferred=0
+                    while IFS= read -r k; do
+                      [ -n "$k" ] || continue
+                      # backup.info LAST and only when the WAL segment that ends the backup is on the replica too: a base backup
+                      # whose end segment is missing cannot be restored ("could not locate required checkpoint record", lab 26,
+                      # I7: the copy ran a minute before the plugin archived segment 1E and the first recovery from the replica
+                      # store failed six times). The primary may hold backup.info before that segment; it waits for the next run.
+                      # No end_wal in it (an unknown shape): copied as before.
+                      case "$k" in
+                        */backup.info)
+                          ew="$(pa s3 cp "s3://${PRIMARY_BUCKET}/${k}" - --only-show-errors 2>/dev/null | sed -n 's/^end_wal=//p' | head -1 | tr -d '[:space:]' || true)"
+                          if [ "${#ew}" -ge 24 ]; then
+                            wp="${k%/base/*}/wals/${ew:0:16}/${ew}"
+                            have="$(ra s3api list-objects-v2 --bucket "$REPLICA_BUCKET" --prefix "$wp" --query 'length(Contents)' --output text 2>/dev/null || true)"
+                            case "$have" in ''|None|0)
+                              echo "NOTE: ${k} waits: its end WAL segment ${ew} is not on the replica yet (next run)"
+                              deferred=$((deferred+1)); continue ;;
+                            esac
+                          fi ;;
+                      esac
+                      if pa s3 cp "s3://${PRIMARY_BUCKET}/${k}" - --only-show-errors \
+                           | ra s3 cp - "s3://${REPLICA_BUCKET}/${k}" --sse AES256 --only-show-errors; then
+                        copied=$((copied+1))
+                      else
+                        echo "ERROR: copy of ${k} failed"; bad=$((bad+1))
+                      fi
+                    done < "$W/order"
+                    # A primary that lists nothing while the replica holds objects was wiped, emptied by a lifecycle rule or has lost
+                    # its prefix: that is a failure of the job (BackupCopyJobFailed), never a quiet exit 0 (lab 19, apps #151). Nothing
+                    # is pruned on the replica in that state: the replica is then the only copy. Both empty is a cluster that has
+                    # archived nothing yet.
+                    if [ "$np" -eq 0 ] && [ "$nr" -gt 0 ]; then
+                      echo "ERROR: ${c}: the primary lists no object while the replica holds ${nr}: the primary store is wiped, emptied or unreadable; nothing is pruned"
+                      bad=$((bad+1))
+                    elif [ "$np" -eq 0 ]; then
+                      echo "NOTE: ${c}: neither store holds an object yet (nothing archived)"
+                    fi
+                    # Prune: gone from the primary, older than the grace period.
+                    awk -F'\t' -v c="$cutoff" 'FILENAME==ARGV[1]{p[$1]=1; next} !($1 in p) && substr($3,1,19) < c {print $1}' "$W/p.tsv" "$W/r.tsv" > "$W/old"
+                    pruned=0; nold="$(wc -l < "$W/old")"
+                    if [ "$nold" -gt 0 ]; then
+                      if [ "$np" -eq 0 ]; then
+                        echo "${c}: the primary lists no object, nothing is pruned on the replica"
+                      elif [ "$nr" -gt 20 ] && [ $((nold * 2)) -gt "$nr" ]; then
+                        echo "ERROR: ${c}: pruning would remove ${nold} of ${nr} replica objects, refused"; bad=$((bad+1))
+                      else
+                        while IFS= read -r k; do
+                          ra s3 rm "s3://${REPLICA_BUCKET}/${k}" --only-show-errors && pruned=$((pruned+1)) || bad=$((bad+1))
+                        done < "$W/old"
+                      fi
+                    fi
+                    echo "${c}: primary ${np} objects, replica ${nr}, copied ${copied}, deferred ${deferred}, pruned ${pruned}, failed ${bad}"
+                    failed=$((failed+bad))
+                  done
+                  [ "$failed" -eq 0 ] || { echo "ERROR: ${failed} operation(s) failed"; exit 1; }
+              envFrom:
+                - secretRef:
+                    name: backup-restic-env
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: tmp, mountPath: /tmp }
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: "1", memory: 512Mi }

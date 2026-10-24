@@ -121,6 +121,12 @@ HelmRelease overrides `image.tag` and `login.image.tag` (tag and digest) because
   platform uses the device flow; if you register one, tell your users to expect the screen.
 - **Not covered by this bump:** the login's `next` is 16.3.6, which newer advisories flag again (fixed in 16.4.1); they are
   waived with an expiry in `.vex/openaether-apps.openvex.json` until Zitadel ships a newer `next`.
+- **The login page is routed through the Gateway** (apps #161): `/ui/v2/login` goes to `zitadel-login:3000`, and the Gateway may
+  reach that pod on port 3000 and nothing else of it. Before, the authorize step of any OIDC client ended on a 404 for a person in
+  a browser. The image optimizer of the login, `/ui/v2/login/_next/image`, is sent to the server and answers 404 on purpose (the
+  VEX statements about Next.js rest on it); `scripts/dev/test-zitadel-login-route.py` keeps both rules. Proven by manifests only:
+  a browser sign-in with a second factor into Grafana is a lab check. A cluster without public DNS for the Zitadel host, or whose
+  Grafana does not trust the Gateway's CA, cannot complete the token exchange: Grafana's egress allows `zitadel:8080` only.
 
 ## What this does not do
 

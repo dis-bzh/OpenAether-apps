@@ -157,11 +157,37 @@ jobs:
       - name: Provider S3 egress rules admit every region of the provider (#53)
         run: python3 -I scripts/dev/test-s3-egress-fqdns.py
 
-      - name: "CNPG clusters send checksums only when required (barman-cloud on Outscale OOS, #132)"
+      - name: "CNPG archives through the Barman Cloud plugin and its objects match the CRDs (#114)"
+        run: python3 -I scripts/dev/test-cnpg-barman-plugin.py
+      - name: "CNPG ObjectStores send checksums only when required (barman-cloud on Outscale OOS, #132)"
         run: python3 -I scripts/dev/test-cnpg-s3-checksum-env.py
+      - name: "A rebuilt cluster archives under a new serverName, the verifier and restore tests follow it (#153)"
+        run: python3 -I scripts/dev/test-cnpg-archive-generation.py
+      - name: "A missing or empty cluster-identity replica key does not null the ObjectStores (lab 25, D9)"
+        run: python3 -I scripts/dev/test-cnpg-identity-defaults.py
+
+      - name: "The restore tests stay scratch: RBAC, quota, ObjectStores, Jobs, exporter (0.4.0 M3)"
+        run: python3 -I scripts/dev/test-restore-test-brick.py
+
+      - name: "The Longhorn restore test: canary files, flow against a double, rights (0.4.0 M3, opt-in component)"
+        run: python3 -I scripts/dev/test-restore-test-longhorn.py
 
       - name: CNPG clusters roll the primary by switchover, not by an in-place restart (lab 15c)
         run: python3 -I scripts/dev/test-cnpg-primary-update.py
+
+      - name: CNPG clusters and operator prefer different zones, not only different hosts (lab 21)
+        run: python3 -I scripts/dev/test-cnpg-zone-spread.py
+
+      - name: CNPG clusters acknowledge a commit only after a replica has it, scratch copies do not inherit it (0.4.0)
+        run: python3 -I scripts/dev/test-cnpg-sync-replication.py
+
+      - name: Zitadel and Grafana recycle their database connections in minutes (rendered charts, 0.4.0)
+        run: python3 -I scripts/dev/test-db-client-settings.py
+
+      - name: "CNPG primaries are evicted after 30 s on a lost node, not 300 s (apps #154, lab 21)"
+        run: |
+          python3 -I scripts/dev/test-cnpg-eviction.py
+          python3 -I scripts/dev/test-cnpg-eviction.py --selftest
 
       - name: "Longhorn values are keys the pinned chart reads, and its remediation stays off (#115, #134)"
         run: python3 -I scripts/dev/test-longhorn-values.py
@@ -172,17 +198,41 @@ jobs:
       - name: The Gateway keeps two replicas and a disruption budget (lab 15c)
         run: python3 -I scripts/dev/test-gateway-ha.py
 
+      - name: The Zitadel login is routed through the Gateway and its image optimizer is not (#161)
+        run: python3 -I scripts/dev/test-zitadel-login-route.py
+
       - name: The OpenBao replicas spread over the workers (#129)
         run: |
           python3 -I scripts/dev/test-openbao-spread.py
           python3 -I scripts/dev/test-openbao-spread.py --selftest | tee spread.out
           ! grep -q "NOT detected" spread.out
 
+      - name: The HA audit rules catch what they exist for (0.4.0 M4)
+        run: python3 -I scripts/dev/test-check-ha.py
+
       - name: Flux errors reach Alertmanager (#139)
         run: |
           python3 -I scripts/dev/test-flux-notifications.py
           python3 -I scripts/dev/test-flux-notifications.py --selftest | tee notif.out
           ! grep -q "NOT detected" notif.out
+
+      - name: Alert delivery chain keeps its shape (0.4.0 M1)
+        run: |
+          python3 -I scripts/dev/test-alert-delivery.py
+          python3 -I scripts/dev/test-alert-delivery.py --selftest | tee delivery.out
+          ! grep -q "selftest FAIL" delivery.out
+
+      - name: Every alert metric is catalogued, scraped and honest about its status (0.4.0 M1)
+        run: |
+          python3 -I scripts/dev/test-alert-metrics.py
+          python3 -I scripts/dev/test-alert-metrics.py --selftest | tee metrics.out
+          ! grep -q "selftest FAIL" metrics.out
+
+      - name: New scrapes pass the network policies (0.4.0 M1)
+        run: |
+          python3 -I scripts/dev/test-scrape-paths.py
+          python3 -I scripts/dev/test-scrape-paths.py --selftest | tee scrape.out
+          ! grep -q "selftest FAIL" scrape.out
 
       - name: Container securityContext is set where the operators read it (#47)
         run: python3 -I scripts/dev/test-container-security-context.py
@@ -212,6 +262,13 @@ jobs:
           echo "${KYVERNO_CLI_SHA256}  $d/k.tgz" | sha256sum -c -
           tar -xzf "$d/k.tgz" -C "$d" kyverno
           KYVERNO="$d/kyverno" ./scripts/dev/test-kyverno-policies.sh
+          KYVERNO="$d/kyverno" ./scripts/dev/test-backup-kyverno.sh
+          ./scripts/dev/test-backup-namespaces.sh
+          KYVERNO="$d/kyverno" python3 -I scripts/dev/test-cnpg-barman-plugin.py
+          # The optional database profiles: render, CRD shape, guarantees, platform policies (apps #157).
+          KYVERNO="$d/kyverno" python3 -I scripts/dev/test-cnpg-profiles.py
+          python3 -I scripts/dev/test-cnpg-profiles.py --selftest
+          python3 -I scripts/dev/test-database-profiles-doc.py
 
       - name: Vendored upstream dumps match their recorded sha256 (critic, static)
         run: |
@@ -228,6 +285,11 @@ jobs:
         run: python3 -I scripts/dev/test-node-exporter-namespace.py
       - name: the audit-log collector keeps its narrow shape (read-only hostPath, control planes, exempt by name)
         run: python3 -I scripts/dev/test-audit-collector.py
+      - name: the audit sink (infra 318) stays opt-in, narrow and exempt by name
+        run: |
+          python3 -I scripts/dev/test-audit-sink.py
+          python3 -I scripts/dev/test-audit-sink.py --selftest
+          python3 -I scripts/dev/test-audit-sink-exporter.py
 
       - name: dependsOn covers the cross-Kustomization contracts (#38)
         run: |
@@ -268,7 +330,8 @@ jobs:
   backup-checks:
     name: Backup brick checks
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The verifier test runs 14 full passes of its three stages on real restic and Barman data (about 10 minutes).
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
@@ -294,6 +357,51 @@ jobs:
 
       - name: The S3 rights probe of a dedicated backup key names a missing right (stub aws)
         run: ./scripts/dev/test-backup-key-rights.sh
+
+      - name: The CNPG archive is copied to the replica store with its own key pair (fake S3 stores, real image)
+        run: |
+          set -euo pipefail
+          CI=true ./scripts/dev/test-cnpg-store-replicate.sh | tee replicate.out
+          grep -qE '^[0-9]+ passed, 0 failed$' replicate.out
+          ! grep -q 'SKIPPED' replicate.out
+
+      - name: "Restic Jobs keep both destinations independent; the etcd Job refuses a non-snapshot (real restic)"
+        run: |
+          set -euo pipefail
+          for t in test-backup-independent-stores test-etcd-snapshot; do
+            CI=true ./scripts/dev/$t.sh | tee "$t.out"
+            grep -qE '^[0-9]+ passed, 0 failed$' "$t.out"
+            if grep -q 'SKIPPED' "$t.out"; then exit 1; fi
+          done
+
+      - name: "The backup verifier sees each damage (real restic, a real Barman archive, an etcd snapshot)"
+        run: |
+          set -euo pipefail
+          ./scripts/dev/test-backup-verify-listing.sh
+          python3 -I scripts/dev/test-backup-verify-aggregate.py
+          CI=true ./scripts/dev/test-backup-verify.sh | tee verify.out
+          grep -qE '^[0-9]+ passed, 0 failed$' verify.out
+          ! grep -q 'SKIPPED' verify.out
+
+      - name: "The CNPG restore test: each damage found, the scratch Cluster removed (double, real PostgreSQL)"
+        run: |
+          set -euo pipefail
+          python3 -I scripts/dev/test-restore-test-cnpg.py | tee restore-test.out
+          grep -qE '^[0-9]+ passed, 0 failed$' restore-test.out
+          CI=true ./scripts/dev/test-restore-test-cnpg-sql.sh | tee restore-test-sql.out
+          grep -qE '^[0-9]+ passed, 0 failed$' restore-test-sql.out
+          if grep -q 'SKIPPED' restore-test-sql.out; then exit 1; fi
+          CI=true ./scripts/dev/test-restore-test-dumps.sh | tee restore-test-dumps.out
+          grep -qE '^[0-9]+ passed, 0 failed$' restore-test-dumps.out
+          ! grep -q 'SKIPPED' restore-test-dumps.out
+
+      - name: "DB benchmark and zero-loss writer: percentiles, a lost id caught, a crash survived (real PostgreSQL)"
+        run: |
+          set -euo pipefail
+          python3 -I scripts/dev/test-db-bench-parse.py
+          CI=true ./scripts/dev/test-db-bench.sh | tee db-bench.out
+          grep -qE '^[0-9]+ passed, 0 failed$' db-bench.out
+          ! grep -q 'SKIPPED' db-bench.out
 
   loki-render:
     name: Loki chart render
@@ -345,6 +453,14 @@ jobs:
       # Alloy, cert-manager, Zitadel login and Grafana read resources under their own key: render, require limits.
       - name: Charts that read resources under their own key have memory limits (rendered)
         run: python3 -I scripts/dev/test-chart-limits.py
+
+      # Every Deployment and StatefulSet the bricks make, charts included, is spread, budgeted and has two replicas,
+      # or is listed in scripts/ha-allowlist.yaml with what its loss means. Needs helm and the charts (network).
+      - name: Every platform workload survives the loss of a worker, or says why not (rendered)
+        run: python3 scripts/check-ha.py
+
+      - name: The database profile examples pass the same audit, within their CPU budgets (apps #157)
+        run: python3 scripts/check-ha.py --profiles
 
   vmrules:
     name: VMRules (vmalert dry run)
@@ -483,6 +599,10 @@ jobs:
       - name: The rules still catch what they claim
         run: ./scripts/dev/check-gitleaks-rules.sh
 
+      # .gitleaksignore silences one known false positive (an image name in an upstream Secret) and nothing else.
+      - name: The ignore file is as narrow as it says
+        run: ./scripts/dev/test-gitleaksignore.sh
+
       - name: Scan what this PR adds
         run: |
           gitleaks git -c .gitleaks-envdata.toml \
@@ -612,6 +732,23 @@ jobs:
           set -euo pipefail
           ./scripts/dev/test-alloy-scrub.sh | tee alloy-scrub.out
           grep -qE '^[0-9]+ passed, 0 failed$' alloy-scrub.out
+
+      - name: "Audit-sink shipper (real restic, busybox): lines, ranges, restart, rotation, outage, gap"
+        env:
+          # The test reads the sink back with restic on the host; the runner has none. Same release as the shipper image
+          # (apps/base/observability-audit-sink/shipper.yaml); the sum is the one in the release's SHA256SUMS.
+          RESTIC_SHA256: f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c
+        run: |
+          set -euo pipefail
+          d="$(mktemp -d)"
+          url=https://github.com/restic/restic/releases/download/v0.19.1
+          curl -fsSL -o "$d/restic.bz2" "$url/restic_0.19.1_linux_amd64.bz2"
+          echo "${RESTIC_SHA256}  $d/restic.bz2" | sha256sum -c -
+          mkdir "$d/bin"
+          bunzip2 -c "$d/restic.bz2" >"$d/bin/restic"
+          chmod 0755 "$d/bin/restic"
+          PATH="$d/bin:$PATH" ./scripts/dev/test-audit-sink-shipper.sh | tee audit-sink-shipper.out
+          grep -qE '^[0-9]+ passed, 0 failed$' audit-sink-shipper.out
 
       - name: Alloy reads the API audit log, labels it and skips the backlog (real Alloy)
         run: |

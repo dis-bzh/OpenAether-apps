@@ -1,0 +1,77 @@
+# OPT-IN, off by default: benchmark and zero-loss Jobs (suspended) for one database profile instance, added to the
+# application's
+# overlay AFTER the profile component (docs/database-profiles.md, "Measure it"). Needs the values ConfigMap db-
+# profile-values of
+# the profile (name, namespace, database, storageClass, clientApp, profile).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - jobs.yaml
+  - networkpolicy.yaml
+configMapGenerator:
+  - name: NAME-bench-scripts
+    files:
+      - db-bench.sh
+      - db-bench-parse.py
+      - db-zeroloss.sh
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database-bench
+    openaether.io/db-profile: bench
+replacements:
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.namespace}
+    targets:
+      - select: {labelSelector: "openaether.io/db-profile=bench"}
+        fieldPaths:
+          - metadata.namespace
+        options: {create: true}
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.name}
+    targets:
+      - select: {kind: ConfigMap, labelSelector: "openaether.io/db-profile=bench"}
+        fieldPaths:
+          - metadata.name
+        options: {delimiter: "-", index: 0}
+      - select: {kind: Job}
+        fieldPaths:
+          - metadata.name
+          - spec.template.spec.volumes.0.configMap.name
+          - spec.template.spec.volumes.1.secret.secretName
+          - spec.template.spec.containers.0.env.[name=PGUSER].valueFrom.secretKeyRef.name
+          - spec.template.spec.containers.0.env.[name=PGPASSWORD].valueFrom.secretKeyRef.name
+        options: {delimiter: "-", index: 0}
+      - select: {kind: Job, labelSelector: "openaether.io/bench-role=bench"}
+        fieldPaths:
+          - spec.template.spec.containers.0.env.[name=DIRECT_HOST].value
+          - spec.template.spec.containers.0.env.[name=POOLER_HOST].value
+        options: {delimiter: "-", index: 0}
+      - select: {kind: Job, labelSelector: "openaether.io/bench-role in (writer,checker)"}
+        fieldPaths:
+          - spec.template.spec.containers.0.env.[name=PGHOST].value
+          - spec.template.spec.volumes.3.persistentVolumeClaim.claimName
+        options: {delimiter: "-", index: 0}
+      - select: {kind: PersistentVolumeClaim}
+        fieldPaths:
+          - metadata.name
+        options: {delimiter: "-", index: 0}
+      - select: {kind: CiliumNetworkPolicy, labelSelector: "openaether.io/db-profile=bench"}
+        fieldPaths:
+          - metadata.name
+          - spec.egress.0.toEndpoints.0.matchLabels.[cnpg.io/cluster]
+        options: {delimiter: "-", index: 0}
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.profile}
+    targets:
+      - select: {kind: Job, labelSelector: "openaether.io/bench-role=bench"}
+        fieldPaths:
+          - spec.template.spec.containers.0.args.1
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.clientApp}
+    targets:
+      - select: {kind: Job}
+        fieldPaths:
+          - spec.template.metadata.labels.[app.kubernetes.io/name]
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.storageClass}
+    targets:
+      - select: {kind: PersistentVolumeClaim}
+        fieldPaths:
+          - spec.storageClassName

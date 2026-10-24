@@ -22,6 +22,7 @@ companions:
   - istio-authorizationpolicies-storage  # foundation-storage policies (if istio AND storage picked)
   - kyverno-policies                 # policies (if kyverno picked)
   - kyverno-policies-eso             # Audit guard on External Secrets objects (if kyverno AND ESO picked)
+  - kyverno-policies-cnpg            # Enforce guard on the restore-test Clusters (if kyverno AND CNPG picked)
   - observability-vm-customresources  # VMCluster/VMAgent (if observability picked)
   - observability-openbao            # OpenBao scrape + alerts (if observability AND OpenBao picked)
   - storage-backup-target            # S3 target for volume backups (if storage + ESO picked)
@@ -29,6 +30,7 @@ companions:
   - backup-databases-identity        # same, on the CNPG side
   - backup-openbao                   # backup by default once OpenBao + ESO are picked
   - backup-databases                 # backup by default once CNPG + ESO are picked
+  - backup-etcd                      # scheduled etcd snapshot once the databases backup is picked
   - capi-clusters                    # client cluster instantiation (if CAPI picked)
   - orc                              # CAPO (OpenStack) dependency — openstack.k-orc.cloud CRDs
 
@@ -91,6 +93,7 @@ descriptions:
   kyverno: Kyverno (policy engine)
   kyverno-policies: OpenAether Kyverno policies
   kyverno-policies-eso: Audit-only Kyverno policy, External Secrets objects outside the platform namespaces
+  kyverno-policies-cnpg: Enforce Kyverno policy, the scratch Clusters of the restore tests stay scratch
   cluster-api-operator: CAPI operator (management layer)
   cluster-api-providers: CAPI providers (Talos, Scaleway, OpenStack, Outscale)
   capi-clusters: CAPI client clusters (apps/clusters, kubeception/gitception)

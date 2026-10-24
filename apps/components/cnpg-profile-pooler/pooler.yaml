@@ -1,0 +1,102 @@
+# PgBouncer in front of the read-write service, in TRANSACTION mode: a pooler of 2 pods (the application connects to
+# NAME-pooler-rw and its connection survives a failover; only the statement in flight fails). docs/database-
+# profiles.md explains
+# each parameter and the limits of transaction pooling (session state, SQL-level PREPARE, advisory locks, LISTEN).
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: NAME-pooler-rw
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database
+    openaether.io/db-profile: ha
+spec:
+  cluster: {name: NAME}
+  instances: 2
+  type: rw
+  monitoring:
+    enablePodMonitor: false
+  # Never take both poolers down at once while rolling.
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  pgbouncer:
+    image: ghcr.io/cloudnative-pg/pgbouncer:1.25.1
+    poolMode: transaction
+    # auth: the operator's own `cnpg_pooler_pgbouncer` role and an auth_query on the cluster (SCRAM hashes), no
+    # password file;
+    # the pooler authenticates to PostgreSQL with a client certificate, over TLS.
+    parameters:
+      # Server connections per (database, user) per pooler pod: 2 pods x 20 = 40, under max_connections 100 with
+      # room for the
+      # instance manager, replication and admin sessions.
+      default_pool_size: "20"
+      max_client_conn: "1000"
+      # A client waits for a server connection this long before an error. A failover lasts 12-64 s in the lab (122 s
+      # in one
+      # zone-loss case): 150 s is the bound of docs/database-failover-clients.md, the client sees a slow statement,
+      # not an error.
+      query_wait_timeout: "150"
+      # Retry a lost server at once: the default of 15 s would add up to 15 s to every failover.
+      server_login_retry: "1"
+      server_connect_timeout: "5"
+      # Notice a dead server connection (powered-off node: no reset arrives) in about 25 s.
+      tcp_keepalive: "1"
+      tcp_keepidle: "10"
+      tcp_keepintvl: "5"
+      tcp_keepcnt: "3"
+      # Protocol-level prepared statements (JDBC, pgx, psycopg3) work in transaction mode with this (PgBouncer >= 1.21).
+      max_prepared_statements: "100"
+      # Transaction mode runs no reset query between clients (the default 0): session state set by one client is
+      # visible to
+      # the next. Applications must not rely on SET, temp tables, advisory locks or LISTEN through the pooler.
+      server_reset_query_always: "0"
+      # TLS only from the clients too (lab 23: the default accepted sslmode=disable on the pooler although the
+      # database refuses it, so the client leg was in clear text). Its certificate is the Cluster's (serverAltDNSNames).
+      client_tls_sslmode: "require"
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      # The operator adds an init container, bootstrap-controller (it copies its binary), with no resources:
+      # the platform policy require-limits reported every pooler pod (lab 23). Naming it here sets them, and its
+      # restricted security context, which the policies read from the manifest and not from what the operator adds.
+      initContainers:
+        - name: bootstrap-controller
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: pgbouncer
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              cnpg.io/poolerName: NAME-pooler-rw
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              cnpg.io/poolerName: NAME-pooler-rw
+      tolerations:
+        - {key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30}
+        - {key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30}

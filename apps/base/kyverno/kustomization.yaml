@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - networkpolicy.yaml
+  - pdb.yaml
   # VENDORED install.yaml of Kyverno v1.19.1, unmodified (the dump is replaced whole on re-vendoring, every local
   # change is a patch below):
   #   https://github.com/kyverno/kyverno/releases/download/v1.19.1/install.yaml
@@ -21,6 +22,21 @@ patches:
   # NOT measured on a cluster: 1 CPU for the admission webhook (a throttled webhook times out the API server's
   # requests), 500m for the others. Tighten from `kubectl top pod -n kyverno` (LAB-CHECKLIST B21).
   - path: patch-cpu-limits.yaml
+  # Client-side rate limit of the two controllers that list and watch the most kinds (default 20 QPS / burst 50): lab
+  # 22 saw their leader-election lease renewal fail behind it ("client rate limiter Wait returned an error: context
+  # deadline exceeded",
+  # "failed to wait for cache sync") and both restart in a loop once a few drills had churned the cluster.
+  - target:
+      kind: Deployment
+      name: kyverno-(background|reports)-controller
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --clientRateLimitQPS=100
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --clientRateLimitBurst=200
+  - path: patch-ha.yaml
   # The kyverno Namespace is ALREADY declared by install.yaml (vendored file).
   # Redeclaring it under resources: causes "may not add resource with an
   # already registered id: Namespace/kyverno". Our labels (Istio ambient + PSS

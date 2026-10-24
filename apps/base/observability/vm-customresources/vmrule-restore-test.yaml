@@ -1,0 +1,134 @@
+# yamllint disable rule:line-length
+# The restore tests (0.4.0 M3, apps/base/backup/databases/restore): a backup that cannot be restored is useless, so each
+# archive is recovered on a schedule into a scratch Cluster and compared with the live database. These alerts watch the
+# RESULT (oa_restore_test_ok, 0 after a failed test), the AGE of the last pass (a test that stopped running is not a pass),
+# the time the recovery took (the data part of the RTO), the leftovers a killed test could leave, and the canary writer the
+# comparison depends on. The series come from the backup verifier's exporter (same pod, same scrape).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: restore-test-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  groups:
+    - name: openaether-restore-test
+      interval: 5m
+      rules:
+        - alert: RestoreTestFailed
+          expr: min by (kind, dataset, store, mode) (oa_restore_test_ok) == 0
+          for: 10m
+          labels:
+            severity: critical
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#restoretestfailed"
+            summary: "The last restore test of {{ $labels.dataset }} from the {{ $labels.store }} store ({{ $labels.mode }}) FAILED"
+            description: >-
+              The backup was recovered into a scratch Cluster and the result did not match the live database (canary chain
+              broken, copy too old, tables empty), or it could not be recovered at all. Treat that store's backup of the
+              dataset as unusable until the test passes again. The Job log says which check failed.
+
+        - alert: RestoreTestNoRecentPass
+          expr: |
+            (time() - max by (kind, dataset, store, mode) (oa_restore_test_last_success_timestamp_seconds{mode="latest"}) > 3 * 86400)
+            or
+            (time() - max by (kind, dataset, store, mode) (oa_restore_test_last_success_timestamp_seconds{mode=~"pitr|volume"}) > 10 * 86400)
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#restoretestnorecentpass"
+            summary: "No restore test of {{ $labels.dataset }} ({{ $labels.store }}, {{ $labels.mode }}) passed for days"
+            description: >-
+              The daily restore tests have no pass in 3 days, the weekly ones (point in time, volumes) none in 10. A test that
+              no longer runs proves nothing.
+
+        - alert: RestoreTestNeverReported
+          expr: |
+            (absent(oa_restore_test_last_run_timestamp_seconds{kind="cnpg"}) == 1)
+            and on ()
+            (time() - max(kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}) > 3 * 86400)
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#restoretestneverreported"
+            summary: "The CNPG restore test has never reported a result"
+            description: >-
+              The CronJob exists since more than 3 days and the exporter has no oa_restore_test_* series: the test never
+              ran to its end, or the exporter is not scraped. Silent until the CronJob is 3 days old.
+
+        - alert: RestoreRecoverySlow
+          expr: max by (kind, dataset, store, mode) (oa_restore_test_recovery_seconds) > 900
+          for: 30m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#restorerecoveryslow"
+            summary: "Recovering {{ $labels.dataset }} from the {{ $labels.store }} store took over 15 minutes"
+            description: >-
+              The measured time from the scratch Cluster's creation to its healthy state (lab 15c: 54 s, 72 s). Over 15 minutes
+              the data part of the 8 h recovery target is at risk: the archive grew, the store is slow, or the nodes are loaded.
+
+        - alert: RestoreScratchLeftover
+          expr: count(kube_pod_status_phase{namespace="backup-restore-test", phase=~"Running|Pending|Failed"} == 1) > 0
+          for: 3h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#restorescratchleftover"
+            summary: "A restore-test scratch pod has been there for 3 hours"
+            description: >-
+              A scratch Cluster outlived its test (the Job was killed or the deletion is stuck). It holds quota and a volume. The
+              next run removes it; if it stays, delete the Cluster in backup-restore-test by hand.
+
+        - alert: CnpgCanaryNotWriting
+          expr: time() - max(kube_cronjob_status_last_successful_time{namespace="foundation-databases", cronjob="cnpg-canary"}) > 1800
+          for: 15m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgcanarynotwriting"
+            summary: "The CNPG canary writer has not succeeded for 30 minutes"
+            description: >-
+              The restore tests compare a restored copy with the canary rows the live databases receive every 5 minutes.
+              Without fresh rows a stale copy looks as new as the live database, so the tests can no longer tell them apart.
+
+        # The Longhorn pair is an opt-in component (components/longhorn-restore-test): silent without it, because both CronJob
+        # series are absent. A Job that skips (no backup target) never reports, which is what the first alert says.
+        - alert: LonghornRestoreTestNeverReported
+          expr: |
+            (absent(oa_restore_test_last_run_timestamp_seconds{kind="longhorn"}) == 1)
+            and on ()
+            (time() - max(kube_cronjob_created{namespace="foundation-storage", cronjob="longhorn-restore-test"}) > 10 * 86400)
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#longhornrestoretestneverreported"
+            summary: "The Longhorn restore test has never reported a result"
+            description: >-
+              The component is installed since more than 10 days and the exporter has no Longhorn restore series: the Job skips
+              (no backup target, or the canary volume has no backup), or it never completes.
+
+        - alert: LonghornCanaryNotWriting
+          expr: time() - max(kube_cronjob_status_last_successful_time{namespace="foundation-storage", cronjob="longhorn-canary"}) > 4 * 3600
+          for: 30m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#longhorncanarynotwriting"
+            summary: "The Longhorn canary writer has not succeeded for 4 hours"
+            description: >-
+              The restore test checks that the newest file generation is at most 3 hours older than the backup it restores. With a stopped
+              writer every restore test fails.

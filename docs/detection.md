@@ -3,7 +3,7 @@
 The rules live in `apps/base/observability/vm-customresources/vmrule-*.yaml` and are evaluated by VMAlert; Alertmanager
 routes them to Slack (`vmalert.yaml`). Rung of everything below: written and parsed (`scripts/dev/test-vmrules.sh`; the
 logic of `OpenBaoEscrowNotAttested` and `KyvernoMetricsAbsent` is also run on synthetic series, `scripts/dev/vmrules-unittest.yaml`),
-**not yet fired on a cluster**; the thresholds are starting values to tune during the first week. `task check-alerts` (in
+**not yet fired on a cluster** (what 0.4.0 M1 added, and what a lab must still see: `docs/monitoring-0.4.md`; every alert links to `docs/runbooks.md`); the thresholds are starting values to tune during the first week. `task check-alerts` (in
 OpenAether-infra) asks a running cluster which metrics the rules read have no data.
 
 ## Covered
@@ -24,6 +24,16 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 | An OpenBao pod sealed, no active node, raft without failure tolerance or lagging in applying entries, its metrics not scraped | `OpenBaoWorkloadSealed`, `OpenBaoNoActiveNode`, `OpenBaoRaftNoFailureTolerance`, `OpenBaoRaftApplyLag`, `OpenBaoMetricsDown` | `observability-openbao/vmrule.yaml` |
 | The OpenBao seal-key escrow not attested, or attested too long ago (also when the check has never succeeded) | `OpenBaoEscrowNotAttested` | `vmrule-backup.yaml` |
 | Backups: a restore test or CronJob that no longer runs, WAL archive failing, base backup failed or stale | `RestoreTestStale`, `BackupCronJobMissing`, `CnpgWalArchiveFailing`, `CnpgBackupFailed`, `CnpgBackupStale` | `vmrule-backup.yaml` |
+| The last SUCCESS of a backup or restore test too old (the schedule alone is not enough); the verification alerts on the M2 verifier's series | `BackupNotSucceededRecently`, `RestoreTestNotSucceeding`, `BackupVerificationStale`, `BackupVerificationFailed` | `vmrule-backup-signals.yaml` |
+| A restore test that failed (canary chain, copy too old, tables empty), no pass for days, never reported, a slow recovery, a scratch Cluster left behind, the canary writer stopped | `RestoreTestFailed`, `RestoreTestNoRecentPass`, `RestoreTestNeverReported`, `RestoreRecoverySlow`, `RestoreScratchLeftover`, `CnpgCanaryNotWriting` | `vmrule-restore-test.yaml` |
+| The copies of the backups (0.4.0 M2): a copy, etcd snapshot or verifier Job failed; the CNPG archive not copied to the replica store for an hour; no etcd snapshot for 36 h; the verifier not completed for 36 h; a store failing verification | `BackupCopyJobFailed`, `CnpgStoreReplicationStale`, `EtcdSnapshotStale`, `BackupVerifierStale`, `BackupStoreVerificationFailed` | `vmrule-backup-copies.yaml` |
+| CNPG replica lag, replica not streaming, PostgreSQL not answering, an instance gone from the exporters, no replica left so synchronous writes are blocked, WAL files piling | `CnpgReplicationLagHigh`, `CnpgReplicaNotStreaming`, `CnpgInstanceDown`, `CnpgInstanceMissing`, `CnpgSyncReplicaMissing`, `CnpgWalFilesPiling` | `vmrule-database.yaml` |
+| The alerting chain itself: VMAlert to Alertmanager, rule evaluation, alert state, config reload, Alertmanager absent | `VMAlertNotifierErrors`, `VMAlertRuleEvaluationErrors`, `VMAlertRemoteWriteErrors`, `AlertmanagerConfigReloadFailed`, `AlertmanagerAbsent` | `vmrule-alerting.yaml` |
+| The scheduled delivery test, notifications failing, the test not acknowledged (opt-in component, `docs/alert-delivery.md`) | `AlertDeliveryProbe`, `AlertDeliveryFailing`, `AlertDeliveryNotAcknowledged` | `observability-alert-probe/vmrule.yaml` |
+| Customer path (RED) at the gateway: 5xx error-budget burn (fast, slow), p99 latency, fewer than 2 replicas; its metrics missing | `GatewayErrorBudgetBurnFast`, `GatewayErrorBudgetBurnSlow`, `GatewayLatencyP99High`, `GatewayReplicasLow`, `GatewayMetricsAbsent` | `vmrule-gateway.yaml` |
+| Resources (USE): OOM kill, CPU throttling, I/O and memory pressure, disk busy or slow, memory low, network errors, Pending pods, a PDB allowing no disruption, requests near capacity | `ContainerOOMKilled`, `ContainerCpuThrottled`, `NodeIoPressure`, `NodeMemoryPressureStall`, `NodeDiskBusy`, `NodeDiskLatencyHigh`, `NodeMemoryLow`, `NodeNetworkErrors`, `PodPendingTooLong`, `PdbBlocksDisruption`, `ClusterCpuRequestsHigh`, `ClusterMemoryRequestsHigh` | `vmrule-resources.yaml` |
+| Longhorn volume degraded or faulted, node not ready, disk filling, backup in error, its metrics missing | `LonghornVolumeDegraded`, `LonghornVolumeFaulted`, `LonghornNodeNotReady`, `LonghornDiskFilling`, `LonghornBackupFailed`, `LonghornMetricsAbsent` | `vmrule-storage.yaml` |
+| Loki compactor no longer applying retention (the sweep runs; that chunks vanish is for a lab, #127) | `LokiRetentionNotSwept` | `vmrule-retention.yaml` |
 
 ## Not covered (and why)
 
@@ -53,8 +63,14 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 - **Zitadel.** Scraped (`/debug/metrics`), but no rule reads it: its metric names are not checked against a running
   instance.
 - **Who was denied by a network policy.** Hubble is off; the counter says how much, on which node, not by whom.
-- **Longhorn backups and etcd snapshots.** No Longhorn metrics are scraped; the etcd snapshots are taken outside the
-  cluster (OpenAether-infra).
+- **Etcd snapshots.** Taken outside the cluster (OpenAether-infra): nothing here sees a missing one.
+- **A dead gateway or load balancer seen from outside.** The RED rules read the gateway's own metrics; no blackbox probe
+  exists. Only the heartbeat covers a dead cluster.
+- **Data written by the delivery test to a muted channel.** The receiver answering 2xx is the only acknowledgement.
+- **Alloy keeps log batches in memory only (#119, #80).** Its write-ahead log was tried with the real Alloy of the pinned chart
+  and does not replay after a hard restart (`scripts/dev/probe-alloy-wal.sh`): not enabled.
+- **Metrics no cluster has shown.** `docs/monitoring-0.4.md` lists them; `scripts/dev/test-alert-metrics.py` checks offline that
+  every metric an alert reads is catalogued with a scrape that exists.
 
 ## Reviewing policy violations
 

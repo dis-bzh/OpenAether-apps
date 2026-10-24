@@ -1,6 +1,6 @@
 # BASE backups, the indispensable complement to WAL archiving.
 #
-# `barmanObjectStore` archives WAL continuously, but a WAL can only be replayed
+# The Barman Cloud plugin archives WAL continuously, but a WAL can only be replayed
 # from a base backup: without these ScheduledBackups the destination fills up
 # with unusable archives. It is the pair that delivers PITR.
 #
@@ -22,6 +22,9 @@ spec:
   # writes or disk load at the same moment.
   schedule: "0 10 3 * * *"
   backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
   cluster:
     name: zitadel-db
 ---
@@ -36,6 +39,9 @@ metadata:
 spec:
   schedule: "0 25 3 * * *"
   backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
   cluster:
     name: grafana-db
 ---

@@ -26,6 +26,14 @@ spec:
     parameters:
       max_connections: "200"
       shared_buffers: "128MB"
+    # Class A data (identity): a commit is acknowledged only after ONE replica has it (quorum, any 1 of the 2), and a
+    # failover refuses a replica that cannot prove it holds every acknowledged commit (failoverQuorum). With both
+    # replicas gone writes BLOCK instead of being acknowledged alone (CnpgSyncReplicaMissing). docs/resilience.md.
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: required
+      failoverQuorum: true
 
   # Storage Configuration
   # local-path-retain: CNPG handles HA itself (3 instances, streaming
@@ -35,6 +43,17 @@ spec:
   storage:
     size: 5Gi
     storageClass: local-path-retain
+
+  # Memory limit for every container of the instance pod, the CNPG init container included (Kyverno require-limits,
+  # apps #47).
+  # Measured on a lab cluster: the primary uses about 255Mi, a replica about 80Mi. No CPU limit (throttling), a small
+  # request like grafana-db.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
 
   # Bootstrap from SQL (create DB/User if needed)
   bootstrap:
@@ -67,52 +86,48 @@ spec:
   monitoring:
     enablePodMonitor: true
 
-  # barman-cloud (boto3) against an S3 store that rejects the trailing checksum newer boto3 sends by default
-  # ("PutObject: trailing checksum is not supported", measured on Outscale OOS: continuous archiving False and
-  # every Backup stuck "running"). Send checksums only where the API requires them; harmless on stores that accept both.
-  env:
-    - name: AWS_REQUEST_CHECKSUM_CALCULATION
-      value: when_required
-    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
-      value: when_required
-
   # Affinity: preferred anti-affinity to spread the 3 instances across nodes
   # (same config as grafana-db-cluster.yaml)
   affinity:
     podAntiAffinityType: preferred
     topologyKey: kubernetes.io/hostname
+    # Lab 21: both grafana-db instances and both CNPG operators landed in ONE zone (hostname spread only), so losing
+    # that zone took the whole database. A second, zone-level preference keeps the instances in different zones when
+    # the cluster has them; it never blocks scheduling (a lost zone leaves fewer zones than instances).
+    additionalPodAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: topology.kubernetes.io/zone
+            labelSelector:
+              matchLabels:
+                cnpg.io/cluster: zitadel-db
+    # Lab 21: a primary on a lost node was failed over only when the TaintManager evicted its pod, after the default
+    # 300 s toleration (write gaps of 328 and 333 s, target 30 s, apps #154). 30 s is the liveness probe of the instance
+    # manager (period 10 s x 3 failures): an isolated-but-alive primary shuts itself down by then, so the evicted pod
+    # and the promoted replica do not both take writes. Docs: docs/resilience.md.
+    tolerations:
+      - key: node.kubernetes.io/unreachable
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
 
   # ── PITR (Point-In-Time Recovery) ───────────────────────────────────────────
-  # Before: the only net was the backup brick's daily `pg_dump`, i.e. a 24 h
-  # RPO. barmanObjectStore archives WAL continuously → an RPO of a few minutes,
-  # and restoration to a precise point in time.
-  #
-  # `${BACKUP_S3_*}` comes from the `cluster-identity` ConfigMap — laid down by
-  # the management's own bootstrap, or (gitception children) by
-  # child-gitops/gitrepository.yaml's ${CHILD_BACKUP_S3_*} substitution.
-  # ⚠️ NOT optional in practice: found live 2026-07-30 that an unset
-  # BACKUP_S3_ENDPOINT doesn't degrade to "" here (unlike destinationPath,
-  # where the empty substitution lands inside a larger string) — endpointURL's
-  # entire value IS the substitution, so it renders as YAML `null` and CNPG's
-  # CRD rejects the whole Cluster at dry-run. Any profile picking cnpg needs
-  # real values from its cluster-identity source.
-  #
-  # The path includes the database name: both clusters share the bucket without
-  # stepping on each other, like the restic repositories.
-  backup:
-    retentionPolicy: "30d"
-    barmanObjectStore:
-      destinationPath: "s3://${BACKUP_S3_BUCKET:=}/cnpg/zitadel-db"
-      endpointURL: "${BACKUP_S3_ENDPOINT:=}"
-      s3Credentials:
-        accessKeyId:
-          name: cnpg-backup-s3
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: cnpg-backup-s3
-          key: ACCESS_SECRET_KEY
-      wal:
-        # WAL are bulky and S3 storage is billed by volume.
-        compression: gzip
-      data:
-        compression: gzip
+  # The Barman Cloud plugin archives WAL continuously (an RPO of minutes) and takes the base backups
+  # (scheduledbackups.yaml). Where and how is the ObjectStore `zitadel-db-primary` (objectstores.yaml); the second copy
+  # on the replica store is shipped by the backup brick (backup/databases, cnpg-store-replicate).
+  # The WAL archive name (serverName) is the Cluster name plus the archive generation suffix: empty on an install,
+  # and "-g2", "-g3"... on a cluster REBUILT from a store (task dr-restore-plan writes the ConfigMap
+  # cnpg-archive-generation in flux-system, Flux substitutes it here). A rebuilt cluster must not archive into the
+  # dead one's path: barman refuses a non-empty archive ("Expected empty archive", issue #153). Never edit this by
+  # hand on a running cluster; docs/traps.md.
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: zitadel-db-primary
+        serverName: "zitadel-db${CNPG_ARCHIVE_SUFFIX:=}"

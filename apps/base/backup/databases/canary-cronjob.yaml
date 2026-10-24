@@ -1,0 +1,81 @@
+# The canary of the restore tests (0.4.0 M3): every 5 minutes one row, with a counter and a hash chained to the previous
+# row, goes into `oa_canary` of zitadel-db and grafana-db (restore/canary-write.sh). A restored copy proves itself from
+# it (cnpg-recovery-restore-test): the chain is intact, its newest row is the live one's, and its age is the lag of the
+# copy. It uses the credentials of each database's own owner (the same Secrets as cnpg-dump), a few KB a day.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cnpg-canary
+  namespace: foundation-databases
+  labels:
+    app: cnpg-canary
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cnpg-canary
+  namespace: foundation-databases
+  labels:
+    app: cnpg-canary
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 120
+      template:
+        metadata:
+          labels:
+            app: cnpg-canary
+            openaether.io/component: backup
+        spec:
+          serviceAccountName: cnpg-canary
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: scripts
+              configMap: { name: backup-restore-scripts, defaultMode: 0555 }
+            - name: tmp
+              emptyDir: { sizeLimit: 16Mi }
+            - name: zitadel-db-creds
+              secret: { secretName: zitadel-db-app }
+            - name: grafana-db-creds
+              secret: { secretName: grafana-db-credentials }
+          containers:
+            - name: canary
+              # The image of the dump (its psql), kept in step by scripts/dev/check-pg-dump-version.sh.
+              image: ghcr.io/cloudnative-pg/postgresql:18.6
+              command: ["/bin/sh", "/scripts/canary-write.sh"]
+              env:
+                - { name: HOME, value: /tmp }
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: scripts, mountPath: /scripts, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+                - { name: zitadel-db-creds, mountPath: /creds/zitadel, readOnly: true }
+                - { name: grafana-db-creds, mountPath: /creds/grafana, readOnly: true }
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits: { cpu: 200m, memory: 128Mi }

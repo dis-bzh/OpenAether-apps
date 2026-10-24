@@ -1,0 +1,14 @@
+# yamllint disable rule:line-length
+# The network policies of the audit sink, alone in their Kustomization because the sink's host names come from Flux substitution
+# (cluster-identity: AUDIT_SINK_HOST, AUDIT_SINK_SECONDARY_HOST; a CiliumNetworkPolicy cannot read a Secret) and substitution would
+# blank the shell variables of the scripts in ../observability-audit-sink. Same reason as backup/*-identity. Opt-in with the component.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - networkpolicy.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      openaether.io/managed: "true"

@@ -1,0 +1,47 @@
+# Two Barman Cloud plugin replicas, spread over hosts and zones (lab 25, D3). The CNPG operator asks the plugin for its
+# identity at every reconcile of a Cluster that uses it, and while the plugin is unreachable it never reaches the
+# failover: one plugin pod in the zone that was powered off left every plugin-backed database without a primary for
+# 388-402 s (zero acknowledged commit lost), 81-89 s with a second pod outside the zone. RollingUpdate, not the
+# vendored Recreate: a rollout must not take both pods away.
+#
+# NO LEADER ELECTION (lab 26, B1). The vendored v0.15.1 runs with `--leader-elect`, and there the gRPC server
+# (:9090) is a controller-runtime runnable that does not opt out of the election, so only the lease holder listens:
+# the standby was 0/1 (TCP readiness on 9090), the Deployment hit ProgressDeadlineExceeded, Flux failed `cnpg` and
+# the budget below blocked every drain. kustomization.yaml removes the flag, so BOTH pods serve and are Ready, and
+# the ObjectStore controller runs on both: all it does is patch the RBAC Roles of the Clusters from the ObjectStore
+# specs (idempotent, the same patch the gRPC handlers' pre-hook makes on every Cluster reconcile), so two of them
+# are harmless. Upstream fixed exactly this in cloudnative-pg/plugin-barman-cloud PR 1105 (merged 2026-10-02, after
+# v0.15.1, not in a release yet): the gRPC runnable opts out of the election and only the ObjectStore controller
+# keeps it. When the vendored plugin is bumped to a release that contains it, put `--leader-elect` back
+# (scripts/dev/test-cnpg-barman-plugin.py then needs its flag check changed).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: barman-cloud
+  namespace: cnpg-system
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: barman-cloud
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: barman-cloud
+      # Same 30 s as the database pods: the 300 s default would keep a dead node's plugin pod "running" for 5 minutes.
+      tolerations:
+        - {key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30}
+        - {key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30}

@@ -1,0 +1,22 @@
+# yamllint disable rule:line-length
+# vmagent scrapes the delivery check on 9101, the port its egress policy already allows for the backup verifier's exporter.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: audit-sink-check
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmagent-scrapes
+spec:
+  selector:
+    matchLabels:
+      app: audit-sink-check
+  namespaceSelector:
+    matchNames:
+      - services-observability-audit-sink
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 60s
+      scrapeTimeout: 10s

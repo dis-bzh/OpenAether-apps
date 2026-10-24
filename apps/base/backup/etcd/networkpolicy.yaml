@@ -1,0 +1,55 @@
+# etcd-snapshot: the Kubernetes API (the first init container lists the control-plane nodes), the Talos API of the
+# control planes (50000, addressed by node IP: the `talos.default` name of the grant resolves to nothing) and the object
+# stores. A pod reaches a control-plane node as a node entity.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: etcd-snapshot
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "etcd snapshot: egress DNS + kube-apiserver + Talos API 50000 (nodes) + the provider S3 endpoints (443)"
+  endpointSelector:
+    matchLabels:
+      app: etcd-snapshot
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEntities:
+        - remote-node
+        - host
+      toPorts:
+        - ports:
+            - port: "50000"
+              protocol: TCP
+    - toFQDNs:
+        - matchPattern: "s3.*.scw.cloud"          # Scaleway Object Storage
+        - matchPattern: "s3.*.io.cloud.ovh.net"   # OVH Object Storage (standard class)
+        - matchPattern: "oos.*.outscale.com"      # Outscale OSU
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

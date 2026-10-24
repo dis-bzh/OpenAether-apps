@@ -1,0 +1,195 @@
+# Scheduled etcd snapshot, shipped to BOTH stores through the restic repositories (client-side encryption, the restic password
+# of OpenBao + escrow), with the retention of the other datasets, verified the next morning by backup-verify.
+#
+# Why here: nothing ran the snapshot (infra scripts/ops/etcd-snapshot.sh is an operator command; its cron needs the operator's
+# machine, the state passphrase and tunnels). The Talos API is reachable from a pod through machine.features.
+# kubernetesTalosAPIAccess with the role os:etcd:backup, which can take a snapshot and nothing else. A bastion timer would need
+# the tofu state, its passphrase and the S3 keys on an internet-facing host with closed egress.
+#
+# The snapshot holds every Secret of the cluster in clear: it goes to a memory-backed volume (never to a disk), is gated on the
+# bolt magic, is encrypted by restic before it leaves, and the Talos grant is scoped to this namespace. A compromised pod of
+# foundation-databases that mounts the grant Secret can take the snapshot: the namespace holds the CNPG instances and the backup
+# jobs only, the Secret is readable by the one ServiceAccount that needs it (RBAC of the namespace), and only the discovery
+# init container holds a Kubernetes token (read right on Nodes, nothing else); the containers that see the snapshot hold none.
+# Which control planes to ask: the grant's talosconfig names `talos.default` as its endpoint, a Service that the Talos API
+# access feature does not create here (lab 19: "produced zero addresses"), and `talosctl etcd snapshot` refuses to run
+# without a node. The first init container therefore lists the control-plane nodes through the Kubernetes API (its own
+# ServiceAccount, read right on Nodes only), tries each InternalIP on port 50000 until one accepts a connection, and writes a
+# copy of the grant's talosconfig whose endpoint AND node are that address. Nothing is seeded: a replaced or added control plane
+# is found at the next run. No control plane answering is a failure of the Job (BackupCopyJobFailed), never a silent skip.
+# Restore (disaster only): restic restore the latest `etcd` snapshot, then `talosctl bootstrap --recover-from=<file>`
+# (add --recover-skip-hash-check only if the file has no sha256 trailer).
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: etcd-snapshot
+  namespace: foundation-databases
+  labels:
+    app: etcd-snapshot
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  schedule: "10 4 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app: etcd-snapshot
+            openaether.io/component: backup
+        spec:
+          serviceAccountName: etcd-snapshot
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: snap
+              emptyDir: { medium: Memory, sizeLimit: 512Mi }
+            - name: tmp
+              emptyDir: { sizeLimit: 256Mi }
+            - name: talos
+              secret:
+                secretName: etcd-snapshot-talos
+                defaultMode: 0440
+            - name: work
+              emptyDir: { medium: Memory, sizeLimit: 1Mi }
+            - name: token
+              projected:
+                sources:
+                  - serviceAccountToken: { path: token, expirationSeconds: 3600 }
+                  - configMap: { name: kube-root-ca.crt, items: [{ key: ca.crt, path: ca.crt }] }
+                  - downwardAPI: { items: [{ path: namespace, fieldRef: { fieldPath: metadata.namespace } }] }
+          initContainers:
+            - name: discover-controlplane
+              image: docker.io/alpine/k8s:1.36.5
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  IN="${TALOS_GRANT_CONFIG:-/var/run/secrets/talos.dev/config}"
+                  OUT="${TALOS_WORK_CONFIG:-/work/config}"
+                  [ -s "$IN" ] || { echo "ERROR: the Talos grant config ${IN} is missing or empty (Secret etcd-snapshot-talos)"; exit 1; }
+                  # the timeout is the shell's: kubectl's own request-timeout flag makes kubectl 1.36 ignore the in-cluster config (localhost:8080, lab 20)
+                  ips="$(timeout 30 kubectl get nodes -l node-role.kubernetes.io/control-plane \
+                    -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}')" \
+                    || { echo "ERROR: cannot list the control-plane nodes through the Kubernetes API"; exit 1; }
+                  ips="$(printf '%s\n' "$ips" | grep -v '^$' | shuf || true)"
+                  [ -n "$ips" ] || { echo "ERROR: no control-plane node with an InternalIP found (label node-role.kubernetes.io/control-plane)"; exit 1; }
+                  echo "control-plane candidates: $(printf '%s\n' "$ips" | wc -l)"
+                  for ip in $ips; do
+                    if nc -w 3 "$ip" 50000 </dev/null >/dev/null 2>&1; then
+                      cp "$IN" "$OUT"; chmod 0600 "$OUT"
+                      ip="$ip" yq -i '.contexts[.context].endpoints = [strenv(ip)] | .contexts[.context].nodes = [strenv(ip)]' "$OUT"
+                      echo "Talos API answers on ${ip}:50000: snapshot from this node"
+                      exit 0
+                    fi
+                    echo "WARN: ${ip}:50000 does not answer, trying the next control plane"
+                  done
+                  echo "ERROR: no control plane answers on port 50000: no snapshot taken"
+                  exit 1
+              env:
+                - { name: HOME, value: /tmp }
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: work, mountPath: /work }
+                - { name: tmp, mountPath: /tmp }
+                - { name: talos, mountPath: /var/run/secrets/talos.dev, readOnly: true }
+                - { name: token, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true }
+              resources:
+                requests: { cpu: 20m, memory: 64Mi }
+                limits: { cpu: 200m, memory: 192Mi }
+            - name: talos-snapshot
+              image: ghcr.io/siderolabs/talosctl:v1.14.2
+              command: ["/talosctl", "etcd", "snapshot", "/snap/etcd.snap"]
+              env:
+                - { name: TALOSCONFIG, value: /work/config }
+                - { name: HOME, value: /tmp }
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: snap, mountPath: /snap }
+                - { name: tmp, mountPath: /tmp }
+                - { name: work, mountPath: /work, readOnly: true }
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: 500m, memory: 768Mi }
+          containers:
+            - name: restic-push
+              image: docker.io/restic/restic:0.19.1
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  [ -n "${CLUSTER_NAME:-}" ] || { echo "ERROR: CLUSTER_NAME empty (ConfigMap cluster-identity)"; exit 1; }
+                  f=/snap/etcd.snap
+                  # Gate: a snapshot is a bolt database (magic 0xED0CDAED at offset 16) of a plausible size. Anything else
+                  # is not uploaded: an empty or garbage file would become the "latest" and push real ones out of retention.
+                  size="$(wc -c < "$f")"
+                  magic="$(od -An -tx1 -j16 -N4 "$f" | tr -d ' \n')"
+                  [ "$size" -ge 16384 ] && [ "$magic" = "edda0ced" ] || { echo "ERROR: ${f} is ${size} bytes, magic ${magic}: not an etcd snapshot, nothing uploaded"; exit 1; }
+                  echo "snapshot ${size} bytes"
+                  export RESTIC_CACHE_DIR=/tmp/restic-cache
+                  fail=0
+                  push() {
+                    ep="$1"; bucket="$2"; label="$3"
+                    export RESTIC_REPOSITORY="s3:${ep}/${bucket}/${CLUSTER_NAME}/etcd"
+                    echo "── repository ${label}"
+                    # a stale lock (a pod killed during forget --prune) makes `cat config` fail and would pass for a foreign repository: unlock removes stale locks only
+                    restic unlock >/dev/null 2>&1 || true
+                    if ! timeout 60 restic cat config >/dev/null 2>&1; then
+                      restic init >/dev/null 2>/tmp/init.err || { echo "ERROR: cannot init repository ${label}: $(tail -1 /tmp/init.err)"; fail=1; return; }
+                    fi
+                    restic unlock >/dev/null 2>&1 || true
+                    restic backup "$f" --host etcd --tag etcd-snapshot || { echo "ERROR: restic backup failed on ${label}"; fail=1; return; }
+                    restic forget --host etcd --keep-daily 14 --keep-weekly 8 --keep-monthly 12 --prune \
+                      || { echo "ERROR: retention failed on ${label} (the snapshot is written)"; fail=1; }
+                    restic check || { echo "ERROR: restic check failed on ${label}"; fail=1; }
+                  }
+                  AWS_ACCESS_KEY_ID="$PRIMARY_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$PRIMARY_SECRET_KEY" push "$PRIMARY_ENDPOINT" "$PRIMARY_BUCKET" primary
+                  AWS_ACCESS_KEY_ID="$REPLICA_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$REPLICA_SECRET_KEY" push "$REPLICA_ENDPOINT" "$REPLICA_BUCKET" replica
+                  [ "$fail" -eq 0 ] || exit 1
+                  echo "etcd snapshot pushed to both destinations"
+              envFrom:
+                - secretRef:
+                    name: backup-restic-env
+                - configMapRef:
+                    name: cluster-identity
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: snap, mountPath: /snap, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: "1", memory: 768Mi }

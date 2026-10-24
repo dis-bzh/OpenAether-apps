@@ -109,6 +109,16 @@ def check_patches():
             for c in d["spec"]["template"]["spec"]["containers"]:
                 if "cpu" not in c.get("resources", {}).get("limits", {}):
                     out.append(f"{rel}: {d['metadata']['name']}/{c['name']} has no cpu limit")
+    # Lab 22: the Kyverno background and reports controllers throttled 89-97% of the CPU periods at 500m, lost their lease and
+    # restarted in a loop. They keep at least one CPU and the raised client rate limit.
+    for d in docs("apps/base/kyverno/patch-cpu-limits.yaml"):
+        if d["metadata"]["name"] in ("kyverno-background-controller", "kyverno-reports-controller"):
+            cpu = d["spec"]["template"]["spec"]["containers"][0]["resources"]["limits"]["cpu"]
+            cores = float(cpu[:-1]) / 1000 if cpu.endswith("m") else float(cpu)
+            if cores < 1:
+                out.append(f"apps/base/kyverno/patch-cpu-limits.yaml: {d['metadata']['name']} has a CPU limit of {cpu}, under the 1 CPU it needs (lab 22)")
+    if "--clientRateLimitQPS" not in (REPO / "apps/base/kyverno/kustomization.yaml").read_text():
+        out.append("apps/base/kyverno/kustomization.yaml: the background and reports controllers need --clientRateLimitQPS (lab 22)")
     for rel in ("apps/base/external-secrets/patch-resources.yaml",):
         for d in docs(rel):
             for c in d["spec"]["template"]["spec"]["containers"]:
@@ -119,6 +129,21 @@ def check_patches():
         flat = yaml.dump(pr)
         if "automountServiceAccountToken" not in flat or "value: false" not in flat:
             out.append(f"{rel}: the Deployments must drop the ServiceAccount token (postRenderers)")
+    return out
+
+
+def check_cnpg_limits():
+    """Both CNPG Clusters carry spec.resources with a memory limit: CNPG copies it onto every container of the instance pod,
+    the bootstrap-controller init container included (Kyverno require-limits, apps #47; lab 22 rolled zitadel-db with it)."""
+    out = []
+    for rel in ("apps/base/cnpg/cluster.yaml", "apps/base/cnpg/grafana-db-cluster.yaml"):
+        for d in docs(rel):
+            if d.get("kind") == "Cluster":
+                r = d["spec"].get("resources") or {}
+                if not (r.get("limits") or {}).get("memory") or not (r.get("requests") or {}).get("memory"):
+                    out.append(f"{rel}: {d['metadata']['name']} needs spec.resources with a memory request and limit")
+                if "cpu" in (r.get("limits") or {}) and d["metadata"]["name"] == "zitadel-db":
+                    out.append(f"{rel}: zitadel-db must not carry a CPU limit (throttling)")
     return out
 
 
@@ -150,7 +175,7 @@ def self_test():
 def main():
     if not self_test():
         sys.exit(1)
-    problems = check_values() + check_local_path() + check_emptydirs() + check_patches() + check_scrape_size()
+    problems = check_values() + check_local_path() + check_emptydirs() + check_patches() + check_cnpg_limits() + check_scrape_size()
     for p in problems:
         print("✗", p)
     if problems:

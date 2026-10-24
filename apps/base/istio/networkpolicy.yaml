@@ -228,6 +228,15 @@ spec:
         - ports:
             - port: "15021"
               protocol: TCP
+    # RED metrics: VMAgent scrapes the Envoy stats port (vmscapes.yaml, istio-gateway).
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "15090"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:
@@ -278,7 +287,7 @@ spec:
     # Same trap as the ingress side (worked around with fromEntities: cluster).
     # So we target each backend by ns+app on its REAL targetPort (the pod's port,
     # not the Service's — Cilium enforces on the targetPort). Least privilege:
-    # Envoy can only reach the 4 UI backends.
+    # Envoy can only reach the UI backends listed here.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: services-observability
@@ -294,6 +303,15 @@ spec:
       toPorts:
         - ports:
             - port: "8080"
+              protocol: TCP
+    # The Login V2 UI of Zitadel (a separate Deployment, port 3000): the route /ui/v2/login needs it (apps #161).
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-identity
+            app.kubernetes.io/name: zitadel-login
+      toPorts:
+        - ports:
+            - port: "3000"
               protocol: TCP
     - toEndpoints:
         - matchLabels:

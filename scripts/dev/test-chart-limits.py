@@ -6,8 +6,8 @@ Lab 11: several charts read `resources` under a key of their own (`alloy.resourc
 ignored, so the workers' Alloy ran at 340 Mi with no limit and Kyverno require-limits reported 46 containers. Renders each HelmRelease
 below with the shipped values (`helm template`) and fails if a named workload has a container, init containers included, without a
 memory request and limit, or (Alloy) a limit under the 380 Mi seen on the busiest worker (below real use is an OOM loop).
-Not covered, on purpose: the CNPG `zitadel-db` Cluster (a resources change rolls every instance), operator-managed VictoriaMetrics
-pods, Longhorn, Cilium. Needs helm, PyYAML and network for the charts. Rung: mocked/static.
+Not covered, on purpose: the CNPG Clusters (test-container-bounds.py), the operator-managed VictoriaMetrics
+pods (test-container-security-context.py), Longhorn, Cilium. Needs helm, PyYAML and network for the charts. Rung: mocked/static.
 Usage: python3 scripts/dev/test-chart-limits.py
 """
 import subprocess

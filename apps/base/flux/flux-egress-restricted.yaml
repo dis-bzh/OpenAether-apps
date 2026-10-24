@@ -3,7 +3,7 @@
 # Allows ONLY the required destinations:
 # - github.com (GitRepository + Helm charts GitHub Pages)
 # - Helm registries: charts.jetstack.io, charts.longhorn.io, charts.min.io,
-#   istio-release.storage.googleapis.com, victoriametrics.github.io,
+#   blob.istio.io (redirects to istio-release.r2.istio.io), victoriametrics.github.io,
 #   grafana.github.io, grafana-community.github.io, prometheus-community.github.io, kubernetes-sigs.github.io
 # - CoreDNS (cluster) for DNS resolution
 # - Kube-API (cluster) for Kubernetes operations
@@ -59,9 +59,11 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-    # 5. Istio Helm repository (GCS)
+    # 5. Istio Helm repository: blob.istio.io answers 308, index and charts come from istio-release.r2.istio.io
+    #    (Istio 1.31 stopped publishing to istio-release.storage.googleapis.com)
     - toFQDNs:
-        - matchName: istio-release.storage.googleapis.com
+        - matchName: blob.istio.io
+        - matchName: istio-release.r2.istio.io
       toPorts:
         - ports:
             - port: "443"

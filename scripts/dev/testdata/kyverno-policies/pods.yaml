@@ -163,6 +163,30 @@ spec:
       image: docker.io/grafana/alloy:v1
       securityContext: {capabilities: {add: [DAC_READ_SEARCH]}}
 ---
+# The audit-sink shipper (opt-in): the same read-only hostPath and capability, exempt by name in its own namespace.
+apiVersion: v1
+kind: Pod
+metadata: {name: audit-sink-shipper-abc, namespace: services-observability-audit-sink}
+spec:
+  volumes:
+    - {name: audit, hostPath: {path: /var/log/audit/kube}}
+  containers:
+    - name: c
+      image: docker.io/restic/restic:0.19.1
+      securityContext: {capabilities: {add: [DAC_READ_SEARCH]}}
+---
+# Same namespace, another name: the exemption is the pod, not the namespace.
+apiVersion: v1
+kind: Pod
+metadata: {name: intruder-sink, namespace: services-observability-audit-sink}
+spec:
+  volumes:
+    - {name: root, hostPath: {path: /}}
+  containers:
+    - name: c
+      image: docker.io/restic/restic:0.19.1
+      securityContext: {capabilities: {add: [DAC_READ_SEARCH]}}
+---
 # Same namespace, another name: the exemption is the pod, not the namespace.
 apiVersion: v1
 kind: Pod
