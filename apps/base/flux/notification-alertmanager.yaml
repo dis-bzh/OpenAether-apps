@@ -62,6 +62,12 @@ spec:
     - kind: HelmRelease
       name: "*"
       namespace: longhorn-system
+    # The forgejo brick added this repository's first HelmRelease in services-git
+    # (git forge, dogfooding V1): without an entry here its install/upgrade errors
+    # reach no Alertmanager — the controller matches one namespace per source.
+    - kind: HelmRelease
+      name: "*"
+      namespace: services-git
     - kind: HelmRelease
       name: "*"
       namespace: services-identity

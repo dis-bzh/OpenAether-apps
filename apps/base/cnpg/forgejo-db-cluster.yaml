@@ -1,0 +1,85 @@
+# CNPG PostgreSQL Cluster for Forgejo
+# ──────────────────────────────────────────────────────────────────
+# Dogfooding V1: the forge stores its users, issues, metadata and LFS objects
+# in forgejo-db. Same HA posture as grafana-db: 2 CNPG instances (streaming
+# replication) on local-path storage — CNPG provides the HA, NOT Longhorn
+# (stacking block replication under CNPG = anti-pattern, cf. grafana-db).
+# ExternalSecret: forgejo-db-credentials (forgejo-db-externalsecret.yaml)
+# → OpenBao secret/forgejo/db. The services-git twin (same OpenBao key) feeds
+# the app itself through GITEA__database__PASSWD.
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: forgejo-db
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprintC"
+    openaether.io/component: forgejo-db
+spec:
+  instances: 2
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.15
+  primaryUpdateStrategy: unsupervised
+  # See cluster.yaml: replicas first, then a switchover, instead of restarting the only writer in place.
+  primaryUpdateMethod: switchover
+  storage:
+    # local-path-retain: node-local storage, immediate mount (no CSI
+    # attach/detach), Retain (data kept if the PVC is deleted).
+    # HA comes from the 2 CNPG instances, not from the storage.
+    storageClass: local-path-retain
+    size: 5Gi
+  # Connexion forgejo : user forgejo, base forgejo.
+  # The postgres superuser is managed by CNPG (auto-generated secret).
+  bootstrap:
+    initdb:
+      database: forgejo
+      owner: forgejo
+      secret:
+        name: forgejo-db-credentials
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # barman-cloud (boto3) against S3 stores that reject the trailing checksum newer boto3 sends
+  # by default — send checksums only where the API requires them (cf. grafana-db).
+  env:
+    - name: AWS_REQUEST_CHECKSUM_CALCULATION
+      value: when_required
+    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
+      value: when_required
+
+  affinity:
+    # CNPG AffinityConfiguration (not the standard K8s type)
+    podAntiAffinityType: preferred
+    topologyKey: kubernetes.io/hostname
+  monitoring:
+    enablePodMonitor: false
+
+  # ── PITR (Point-In-Time Recovery) ───────────────────────────────────────────
+  # barmanObjectStore archives WAL continuously → an RPO of a few minutes; the
+  # base backup comes from the forgejo-db-daily ScheduledBackup
+  # (scheduledbackups.yaml) — the pair that delivers PITR.
+  # ${BACKUP_S3_*} comes from the `cluster-identity` ConfigMap — a profile
+  # picking cnpg needs real values from its cluster-identity source (endpointURL's
+  # entire value IS the substitution → YAML `null` → the CRD rejects the Cluster).
+  backup:
+    retentionPolicy: "30d"
+    barmanObjectStore:
+      destinationPath: "s3://${BACKUP_S3_BUCKET:=}/cnpg/forgejo-db"
+      endpointURL: "${BACKUP_S3_ENDPOINT:=}"
+      s3Credentials:
+        accessKeyId:
+          name: cnpg-backup-s3
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: cnpg-backup-s3
+          key: ACCESS_SECRET_KEY
+      wal:
+        # WAL are bulky and S3 storage is billed by volume.
+        compression: gzip
+      data:
+        compression: gzip

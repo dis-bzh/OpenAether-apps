@@ -19,8 +19,10 @@ spec:
     kind: ClusterIssuer
     name: openbao
   # Explicit names, no wildcard and no commonName: the `openaether` role refuses both (ANSSI NT35-R29). A new HTTPRoute
-  # hostname must be added here. These are the hostnames of the zitadel, grafana, vault (OpenBao) and longhorn routes.
+  # hostname must be added here. These are the hostnames of the forgejo, zitadel, grafana, vault (OpenBao) and
+  # longhorn routes.
   dnsNames:
+    - forge.openaether.local
     - grafana.openaether.local
     - longhorn.openaether.local
     - vault.openaether.local

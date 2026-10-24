@@ -147,6 +147,18 @@ components:
   eol: unknown
   owner: '@vde-dis'
   next_review: '2026-12-14'
+- id: forgejo
+  brick: forgejo
+  component: forgejo (git forge, dogfooding V1)
+  pin: 6.1.0
+  file: apps/base/forgejo/helmrelease.yaml
+  pattern: chart:\s*forgejo\s*\n\s*version:\s*"?([^"\s]+)
+  cycle: Forgejo chart 6.1 (appVersion unverified)
+  eol: unknown
+  note: chart from the forgejo-contrib Codeberg repository (dogfooding V1); upstream publishes no support calendar,
+    the row is re-read at every Renovate bump
+  owner: '@vde-dis'
+  next_review: '2026-12-14'
 - id: vm-operator
   brick: observability
   component: victoria-metrics-operator

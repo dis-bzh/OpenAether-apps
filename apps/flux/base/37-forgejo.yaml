@@ -1,0 +1,34 @@
+# Group 37 — forge (Forgejo, dogfooding V1)
+# ──────────────────────────────────────────────────────────────────────────
+# Self-hosted git forge: OpenAether hosting its own code, on its own stack —
+# the first dogfooding brick of OpenAether-self. Postgres backend = CNPG
+# forgejo-db (group 20). Secrets (DB password, initial admin, OIDC client)
+# through ESO/OpenBao (group 12). Exposed through the Istio Gateway (group 14c).
+# services-git is OUT of the mesh (L3/L4 CiliumNetworkPolicy instead, cf.
+# identity, group 35). Storage: longhorn-x2-rwo for the repository PVC
+# (group 21).
+#
+# NO dependency on `identity` yet: the Zitadel OIDC auth source ships
+# disabled (helmrelease.yaml) — add `identity` to dependsOn when it is
+# enabled, together with in-cluster *.openaether.local resolution.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: forgejo
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 15m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/forgejo
+  prune: true
+  wait: false
+  dependsOn:
+    - name: cnpg               # backend Postgres forgejo-db
+    - name: external-secrets   # DB password + initial admin + OIDC client
+    - name: services-gateway   # HTTPRoute → openaether-gateway
+    - name: storage            # longhorn-x2-rwo (repository PVC)
