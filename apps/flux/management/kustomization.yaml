@@ -18,3 +18,5 @@ kind: Kustomization
 #   └─ 40 kyverno → kyverno-policies
 resources:
   - ../base
+components:
+  - ../components/alert-delivery-probe   # LAB 26 ONLY: scheduled alert delivery test enabled (1.13)
