@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# OpenAether — Forgejo (git forge, dogfooding V1). The services-git namespace
+# is declared HERE (not in apps/base/namespaces/) because no early layer
+# targets it before the `forgejo` Flux Kustomization (step 37) — same rule as
+# services-identity. The forgejo-db CNPG Postgres backend lives in
+# apps/base/cnpg/ (foundation-databases).
+# NB: NO Istio AuthorizationPolicy — services-git is OUTSIDE the mesh (it would
+# be inert there). Network security comes from the L3/L4 CiliumNetworkPolicy
+# (networkpolicy.yaml).
+resources:
+  - namespace.yaml
+  - externalsecrets.yaml
+  - helmrelease.yaml
+  - httproute.yaml
+  - networkpolicy.yaml

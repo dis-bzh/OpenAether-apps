@@ -1,0 +1,78 @@
+# OpenAether — CiliumNetworkPolicy Forgejo (Zero Trust L3/L4)
+# ──────────────────────────────────────────────────────────────────────────
+# services-git is OUTSIDE the mesh (see namespace.yaml) → all of the forge's
+# network security rests on THIS L3/L4 CiliumNetworkPolicy (+ node-level
+# WireGuard + the forge's own authn). No Istio AuthorizationPolicy (inert
+# outside the mesh, security theatre). The CNPG side (forgejo → forgejo-db
+# :5432 ingress) is allowed by apps/base/cnpg/networkpolicy-db-restricted.yaml
+# (rule 2c).
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: forgejo
+  namespace: services-git
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: forgejo
+spec:
+  description: "Forgejo: ingress gateway :3000 + vmagent, egress CNPG :5432 + Zitadel :8080 + DNS."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo
+  ingress:
+    # kubelet probes (liveness/readiness :3000) — host/remote-node entity, outside the mesh.
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    # Gateway Istio — north-south (HTTPRoute forge.openaether.local).
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-gateway
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    # VMAgent — /metrics on the HTTP port (gitea.metrics.enabled).
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # forgejo-db (CNPG) — the application database.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: foundation-databases
+            cnpg.io/cluster: forgejo-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # Zitadel — server-to-server OIDC calls (discovery/token/userinfo) once the
+    # auth source is enabled (rung 3). Harmless until then.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-identity
+            app.kubernetes.io/name: zitadel
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
