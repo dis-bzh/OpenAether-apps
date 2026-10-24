@@ -45,8 +45,13 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
         value: true
+      # No `--leader-elect` (lab 26, B1). In v0.15.1 the gRPC server is a controller-runtime runnable that only starts
+      # on the pod holding the lease, so the second replica never opened :9090 and stayed 0/1 for ever. Without the
+      # flag every replica serves. Args 0-4: operator, TLS and address flags; 5: --leader-elect; 6: the log level.
+      - op: remove
+        path: /spec/template/spec/containers/0/args/5
       - op: replace
-        path: /spec/template/spec/containers/0/args/6
+        path: /spec/template/spec/containers/0/args/5
         value: --log-level=info
       - op: replace
         path: /spec/template/spec/containers/0/resources

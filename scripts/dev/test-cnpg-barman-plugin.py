@@ -122,6 +122,17 @@ def main(path="apps/base/cnpg"):
             errs.append("plugin: log level must be info")
         if "memory" not in c.get("resources", {}).get("limits", {}):
             errs.append("plugin: no memory limit")
+        # lab 26 (B1): v0.15.1 starts the gRPC server (:9090) only on the pod holding the leader lease, so with --leader-elect the
+        # second replica is never Ready (TCP readiness on 9090), Flux fails `cnpg` and the budget blocks every drain. Both
+        # replicas must serve. Put the flag back only with a plugin release that contains upstream PR 1105.
+        if any(a.startswith("--leader-elect") for a in c["args"]):
+            errs.append("plugin: --leader-elect makes the standby never Ready on v0.15.1 (lab 26, B1); remove it, or bump to a release with upstream PR 1105")
+        for need in ("operator", "--server-address=:9090", "--log-level=info"):
+            if need not in c["args"]:
+                errs.append(f"plugin: args lost {need!r}: {c['args']}")
+        probe = (c.get("readinessProbe") or {}).get("tcpSocket", {}).get("port")
+        if probe != 9090:
+            errs.append(f"plugin: readiness must be the TCP check on 9090, which is what proves the pod serves (got {probe!r})")
         if c["securityContext"].get("runAsNonRoot") is not True:
             errs.append("plugin: container runAsNonRoot must be true")
         # lab 25 (D3): the operator asks the plugin at every Cluster reconcile and never reaches the failover while it is
