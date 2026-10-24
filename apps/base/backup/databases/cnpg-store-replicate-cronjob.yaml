@@ -2,8 +2,8 @@
 #
 # The Barman Cloud plugin writes to ONE object store per Cluster (the primary ObjectStore). This job ships what is
 # there to the replica store: every object of cnpg/<cluster>/ that the replica lacks, or holds with another size, is copied
-# (base backups first, `backup.info` last, so a base backup never looks complete on the replica before its data is
-# there). The replica copy therefore trails the primary by at most one schedule period (15 min), not by the minutes of a
+# (base backups first, `backup.info` last and only once the WAL segment that ends that backup is on the replica, so a base
+# backup never looks complete on the replica before its data AND its end segment are there). The replica copy therefore trails the primary by at most one schedule period (15 min), not by the minutes of a
 # WAL switch: that is its RPO, and the verifier (backup-verify) measures it.
 #
 # Prune: an object that left the primary (Barman retention) is deleted on the replica only after REPLICA_GRACE_DAYS, and never
@@ -91,8 +91,26 @@ spec:
                     awk -F'\t' 'FILENAME==ARGV[1]{r[$1]=$2; next} !($1 in r) || r[$1]!=$2 {print $1}' "$W/r.tsv" "$W/p.tsv" > "$W/todo"
                     { grep -v '/backup\.info$' "$W/todo" || true; grep '/backup\.info$' "$W/todo" || true; } > "$W/order"
                     copied=0; bad=0
+                    deferred=0
                     while IFS= read -r k; do
                       [ -n "$k" ] || continue
+                      # backup.info LAST and only when the WAL segment that ends the backup is on the replica too: a base backup
+                      # whose end segment is missing cannot be restored ("could not locate required checkpoint record", lab 26,
+                      # I7: the copy ran a minute before the plugin archived segment 1E and the first recovery from the replica
+                      # store failed six times). The primary may hold backup.info before that segment; it waits for the next run.
+                      # No end_wal in it (an unknown shape): copied as before.
+                      case "$k" in
+                        */backup.info)
+                          ew="$(pa s3 cp "s3://${PRIMARY_BUCKET}/${k}" - --only-show-errors 2>/dev/null | sed -n 's/^end_wal=//p' | head -1 | tr -d '[:space:]' || true)"
+                          if [ "${#ew}" -ge 24 ]; then
+                            wp="${k%/base/*}/wals/${ew:0:16}/${ew}"
+                            have="$(ra s3api list-objects-v2 --bucket "$REPLICA_BUCKET" --prefix "$wp" --query 'length(Contents)' --output text 2>/dev/null || true)"
+                            case "$have" in ''|None|0)
+                              echo "NOTE: ${k} waits: its end WAL segment ${ew} is not on the replica yet (next run)"
+                              deferred=$((deferred+1)); continue ;;
+                            esac
+                          fi ;;
+                      esac
                       if pa s3 cp "s3://${PRIMARY_BUCKET}/${k}" - --only-show-errors \
                            | ra s3 cp - "s3://${REPLICA_BUCKET}/${k}" --sse AES256 --only-show-errors; then
                         copied=$((copied+1))
@@ -124,7 +142,7 @@ spec:
                         done < "$W/old"
                       fi
                     fi
-                    echo "${c}: primary ${np} objects, replica ${nr}, copied ${copied}, pruned ${pruned}, failed ${bad}"
+                    echo "${c}: primary ${np} objects, replica ${nr}, copied ${copied}, deferred ${deferred}, pruned ${pruned}, failed ${bad}"
                     failed=$((failed+bad))
                   done
                   [ "$failed" -eq 0 ] || { echo "ERROR: ${failed} operation(s) failed"; exit 1; }

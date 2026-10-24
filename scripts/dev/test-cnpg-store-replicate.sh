@@ -61,6 +61,22 @@ run; rc=$?
 chk "a new archive generation (cnpg/<c>/<c>-g2) is copied to the replica, byte for byte" "[ $rc = 0 ] && same && [ -f '$W/R/br/cnpg/zitadel-db/zitadel-db-g2/base/20261022T031000/data.tar.gz' ]"
 chk "the OLD generation is still on the replica (it is the recovery source of the rebuilt cluster)" "[ -f '$W/R/br/cnpg/zitadel-db/zitadel-db/base/20261001T031000/backup.info' ] && [ -f '$W/R/br/cnpg/grafana-db/grafana-db/wals/0000000100000000/000000010000000000000003.gz' ]"
 chk "the new generation's backup.info is written after its data" "d=\$(grep -n 'PUT /br/cnpg/zitadel-db/zitadel-db-g2/base/.*/data.tar.gz' '$W/R.log' | head -1 | cut -d: -f1); i=\$(grep -n 'PUT /br/cnpg/zitadel-db/zitadel-db-g2/base/.*/backup.info' '$W/R.log' | head -1 | cut -d: -f1); [ -n \"\$d\" ] && [ -n \"\$i\" ] && [ \"\$d\" -lt \"\$i\" ]"
+# I7 (lab 26): a base backup whose end WAL segment is not archived yet must not look complete on the replica
+bi() { mkdir -p "$(dirname "$W/P/bp/$1")"; printf 'backup_label=x\nbegin_wal=000000010000000000000010\nend_wal=%s\ntimeline=1\nstatus=DONE\n' "$2" >"$W/P/bp/$1"; }
+bi cnpg/zitadel-db/zitadel-db-g3/base/20261023T031000/backup.info 000000010000000000000011
+put cnpg/zitadel-db/zitadel-db-g3/base/20261023T031000/data.tar.gz 4000
+put cnpg/zitadel-db/zitadel-db-g3/wals/0000000100000000/000000010000000000000010.gz 800
+: >"$W/R.log"
+run; rc=$?
+chk "a base backup whose end segment (…11) is not on the primary yet: data and earlier WAL copied, backup.info NOT (rc 0)" "[ $rc = 0 ] && [ -f '$W/R/br/cnpg/zitadel-db/zitadel-db-g3/base/20261023T031000/data.tar.gz' ] && [ ! -e '$W/R/br/cnpg/zitadel-db/zitadel-db-g3/base/20261023T031000/backup.info' ] && grep -q 'waits: .*end WAL segment 000000010000000000000011' '$W/out' && grep -q 'deferred 1' '$W/out'"
+put cnpg/zitadel-db/zitadel-db-g3/wals/0000000100000000/000000010000000000000011.gz 800
+: >"$W/R.log"
+run; rc=$?
+chk "once the end segment is archived the next run copies backup.info, after that segment" "[ $rc = 0 ] && [ -f '$W/R/br/cnpg/zitadel-db/zitadel-db-g3/base/20261023T031000/backup.info' ] && w=\$(grep -n 'PUT /br/cnpg/zitadel-db/zitadel-db-g3/wals/.*0011.gz' '$W/R.log' | head -1 | cut -d: -f1); i=\$(grep -n 'PUT /br/cnpg/zitadel-db/zitadel-db-g3/base/.*/backup.info' '$W/R.log' | head -1 | cut -d: -f1); [ -n "\$w" ] && [ -n "\$i" ] && [ "\$w" -lt "\$i" ]"
+bi cnpg/grafana-db/grafana-db/base/20261023T031000/backup.info 000000010000000000000003
+put cnpg/grafana-db/grafana-db/base/20261023T031000/data.tar.gz 4000
+run; rc=$?
+chk "an end segment that is already on the replica (…03) does not hold backup.info back" "[ $rc = 0 ] && [ -f '$W/R/br/cnpg/grafana-db/grafana-db/base/20261023T031000/backup.info' ]"
 head -c 100 /dev/urandom >"$W/R/br/cnpg/grafana-db/grafana-db/base/20261001T031000/data.tar.gz"
 run; rc=$?
 chk "an object of another size is copied again" "[ $rc = 0 ] && same"
