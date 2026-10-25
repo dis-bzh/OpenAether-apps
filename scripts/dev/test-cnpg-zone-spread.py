@@ -12,7 +12,8 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 ZONE = "topology.kubernetes.io/zone"
-CLUSTERS = {"apps/base/cnpg/cluster.yaml": "zitadel-db", "apps/base/cnpg/grafana-db-cluster.yaml": "grafana-db"}
+CLUSTERS = {"apps/base/cnpg/cluster.yaml": "zitadel-db", "apps/base/cnpg/grafana-db-cluster.yaml": "grafana-db",
+            "apps/base/forgejo-db/cluster.yaml": "forgejo-db"}
 
 
 def docs(path):

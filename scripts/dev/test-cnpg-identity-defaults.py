@@ -32,12 +32,13 @@ REPO = Path(__file__).resolve().parents[2]
 PASS = FAIL = 0
 PLACEHOLDER_ENDPOINT = "https://replica-not-set.invalid"
 PLACEHOLDER_BUCKET = "replica-not-set"
-RENDERS = ("apps/base/cnpg", "apps/components/cnpg-profile-examples/ha")
+RENDERS = ("apps/base/cnpg", "apps/base/forgejo-db", "apps/components/cnpg-profile-examples/ha")
 # Fields that are ONLY a substitution with an empty default today. Each is a separate decision, not a silent pass.
 KNOWN_EMPTY_DEFAULTS = {
     ("apps/base/storage/backup-target/settings.yaml", "BACKUP_TARGET_URL"),   # Longhorn target; tracked, see CHANGELOG
     ("apps/base/cnpg/objectstores.yaml", "BACKUP_S3_ENDPOINT"),               # primary store: every cluster has it, loud on purpose
     ("apps/components/cnpg-profile-backup/objectstores.yaml", "BACKUP_S3_ENDPOINT"),
+    ("apps/base/forgejo-db/objectstores.yaml", "BACKUP_S3_ENDPOINT"),         # the same primary store, for forgejo-db
     ("apps/base/cnpg/restore-scratch.yaml", "BACKUP_S3_ENDPOINT"),             # the scratch copy of the primary store
     ("apps/base/backup/databases-identity/configmap.yaml", "CNPG_ARCHIVE_SUFFIX"),  # a ConfigMap value, empty by design (no generation suffix)
 }
@@ -103,7 +104,7 @@ for path in RENDERS:
 
 print("=== the primary store and its path keep their meaning ===")
 env2 = {"BACKUP_S3_BUCKET": "data-bkt", "BACKUP_S3_ENDPOINT": "https://s3.example.invalid"}
-prim = [d for d in render("apps/base/cnpg", env2) if d.get("kind") == "ObjectStore" and d["metadata"]["name"].endswith("-primary")]
+prim = [d for p in ("apps/base/cnpg", "apps/base/forgejo-db") for d in render(p, env2) if d.get("kind") == "ObjectStore" and d["metadata"]["name"].endswith("-primary")]
 check("the primary ObjectStores read BACKUP_S3_*", prim and all(
     d["spec"]["configuration"]["endpointURL"] == "https://s3.example.invalid" and d["spec"]["configuration"]["destinationPath"].startswith("s3://data-bkt/cnpg/") for d in prim))
 

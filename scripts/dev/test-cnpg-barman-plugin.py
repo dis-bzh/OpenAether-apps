@@ -67,9 +67,36 @@ def crd_schema(docs, kind):
     raise SystemExit(f"no CRD {kind} in the render")
 
 
+# Flux Kustomizations that hold CNPG Clusters besides `cnpg` (their objects are rendered with it: the CRDs come from `cnpg`).
+EXTRA_PATHS = ("apps/base/forgejo-db",)
+UNCOVERED_OK = ("apps/base/cnpg/restore-scratch.yaml",)  # the scratch copies of the restore tests, not platform Clusters
+
+
+def platform_cluster_files():
+    """Every file under apps/base that declares a CNPG Cluster: a new one must be rendered here, or it escapes every rule below."""
+    out = {}
+    for f in sorted((REPO / "apps/base").rglob("*.yaml")):
+        try:
+            for d in yaml.safe_load_all(f.read_text()):
+                if isinstance(d, dict) and d.get("kind") == "Cluster" and str(d.get("apiVersion", "")).startswith("postgresql.cnpg.io"):
+                    out[d["metadata"]["name"]] = str(f.relative_to(REPO))
+        except yaml.YAMLError:
+            continue
+    return out
+
+
 def main(path="apps/base/cnpg"):
     docs = render(path)
+    extra = EXTRA_PATHS if path == "apps/base/cnpg" else ()
+    for p in extra:
+        docs += render(p)
     errs = []
+    if path == "apps/base/cnpg":
+        rendered = {d["metadata"]["name"] for d in docs if d["kind"] == "Cluster"}
+        for name, f in platform_cluster_files().items():
+            if name not in rendered and f not in UNCOVERED_OK:
+                errs.append(f"Cluster {name} ({f}) is declared under apps/base but rendered by none of {('apps/base/cnpg',) + EXTRA_PATHS}: "
+                            "it would escape every rule of this test")
     stores = {(d["metadata"]["namespace"], d["metadata"]["name"]): d for d in docs if d["kind"] == "ObjectStore"}
     clusters = [d for d in docs if d["kind"] == "Cluster"]
     if not clusters:

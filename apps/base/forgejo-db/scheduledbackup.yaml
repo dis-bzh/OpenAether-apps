@@ -1,0 +1,20 @@
+# The base backup of forgejo-db, through the Barman Cloud plugin: the pair of the WAL archive that delivers PITR (see
+# apps/base/cnpg/scheduledbackups.yaml for why the schedule has six fields).
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: forgejo-db-daily
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg
+spec:
+  # 03:40: the third offset (03:10 zitadel-db, 03:25 grafana-db), one base backup at a time on the shared S3 endpoint.
+  schedule: "0 40 3 * * *"
+  backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+  cluster:
+    name: forgejo-db

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Class A data (identity, dashboards, users) must not lose an acknowledged commit when a primary dies (owner rule 2026-10-22).
 
-Both CNPG Clusters ask for quorum synchronous replication with `dataDurability: required` and the failover quorum check, with room
+The three platform CNPG Clusters ask for quorum synchronous replication with `dataDurability: required` and the failover quorum check, with room
 to lose one replica without blocking writes, and the restore-test scratch Cluster must not carry any of it (a one-instance copy
 with a required standby would block every write). Static: the keys are checked against the vendored CRD; that a failover really
 refuses a replica without the acknowledged commits is the lab criteria of docs/resilience.md ("Zero-loss proof"), not proven here.
@@ -14,7 +14,8 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
-CLUSTERS = {"zitadel-db": "apps/base/cnpg/cluster.yaml", "grafana-db": "apps/base/cnpg/grafana-db-cluster.yaml"}
+CLUSTERS = {"zitadel-db": "apps/base/cnpg/cluster.yaml", "grafana-db": "apps/base/cnpg/grafana-db-cluster.yaml",
+            "forgejo-db": "apps/base/forgejo-db/cluster.yaml"}
 fails = 0
 
 

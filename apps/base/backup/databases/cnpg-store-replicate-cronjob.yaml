@@ -66,7 +66,9 @@ spec:
                   export AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
                   : "${PRIMARY_ENDPOINT:?}" "${PRIMARY_BUCKET:?}" "${PRIMARY_ACCESS_KEY:?}" "${PRIMARY_SECRET_KEY:?}"
                   : "${REPLICA_ENDPOINT:?}" "${REPLICA_BUCKET:?}" "${REPLICA_ACCESS_KEY:?}" "${REPLICA_SECRET_KEY:?}"
-                  CLUSTERS="${CLUSTERS:-zitadel-db grafana-db}"
+                  # forgejo-db is in the list although a profile without the forge has no such Cluster: an empty prefix on both stores is a
+                  # NOTE ("nothing archived yet"), never a failure.
+                  CLUSTERS="${CLUSTERS:-zitadel-db grafana-db forgejo-db}"
                   GRACE_DAYS="${REPLICA_GRACE_DAYS:-45}"
                   W="$(mktemp -d /tmp/rep.XXXXXX)"
                   P_REGION="${PRIMARY_REGION:-us-east-1}"; R_REGION="${REPLICA_REGION:-us-east-1}"

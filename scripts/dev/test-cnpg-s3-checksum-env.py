@@ -13,15 +13,15 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
-FILE = "apps/base/cnpg/objectstores.yaml"
+FILES = ("apps/base/cnpg/objectstores.yaml", "apps/base/forgejo-db/objectstores.yaml")
 WANT = {"AWS_REQUEST_CHECKSUM_CALCULATION": "when_required", "AWS_RESPONSE_CHECKSUM_VALIDATION": "when_required"}
 
 
 def main():
     bad = 0
-    stores = [d for d in yaml.safe_load_all((REPO / FILE).read_text()) if d and d.get("kind") == "ObjectStore"]
-    if len(stores) < 2:
-        print(f"FAIL {FILE}: want an ObjectStore per Cluster, found {len(stores)}"); bad += 1
+    stores = [d for f in FILES for d in yaml.safe_load_all((REPO / f).read_text()) if d and d.get("kind") == "ObjectStore"]
+    if len(stores) < 6:
+        print(f"FAIL {FILES}: want a primary and a replica ObjectStore per Cluster (3 Clusters), found {len(stores)}"); bad += 1
     for d in stores:
         env = {e["name"]: e.get("value") for e in d["spec"].get("instanceSidecarConfiguration", {}).get("env", [])}
         for k, v in WANT.items():

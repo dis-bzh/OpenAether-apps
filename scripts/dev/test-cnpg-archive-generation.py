@@ -59,8 +59,14 @@ def flux_subst(text, env):
     return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:=|:-)([^}]*))?\}", one, text)
 
 
+# `cnpg` and `forgejo-db` are two Flux Kustomizations that read the same ConfigMaps: both are rendered and substituted.
+PATHS = ("apps/base/cnpg", "apps/base/forgejo-db")
+CLUSTERS = ("zitadel-db", "grafana-db", "forgejo-db")
+
+
 def render(env):
-    out = subprocess.run(["kubectl", "kustomize", str(REPO / "apps/base/cnpg")], check=True, capture_output=True, text=True).stdout
+    out = "\n---\n".join(subprocess.run(["kubectl", "kustomize", str(REPO / p)], check=True, capture_output=True, text=True).stdout
+                         for p in PATHS)
     return [d for d in yaml.safe_load_all(flux_subst(out, env)) if d]
 
 
@@ -75,11 +81,11 @@ for env, want in (({}, ""), ({"CNPG_ARCHIVE_SUFFIX": ""}, ""), ({"CNPG_ARCHIVE_S
     stores = {d["metadata"]["name"]: d for d in docs if d["kind"] == "ObjectStore"}
     label = f"suffix {env.get('CNPG_ARCHIVE_SUFFIX', 'unset')!r}"
     check(f"{label}: both Clusters archive under <cluster>{want}",
-          all(archiver(cl[c])["parameters"].get("serverName") == c + want for c in ("zitadel-db", "grafana-db")),
+          all(archiver(cl[c])["parameters"].get("serverName") == c + want for c in CLUSTERS),
           str({c: archiver(cl[c])["parameters"] for c in cl}))
     check(f"{label}: the ObjectStore paths do not move (the plugin appends the serverName)",
           all(stores[f"{c}-{s}"]["spec"]["configuration"]["destinationPath"].endswith(f"/cnpg/{c}")
-              for c in ("zitadel-db", "grafana-db") for s in ("primary", "replica")))
+              for c in CLUSTERS for s in ("primary", "replica")))
     check(f"{label}: the ObjectStores carry no serverName (the CRD forbids it there)",
           all("serverName" not in s["spec"]["configuration"] for s in stores.values()))
 raw = subprocess.run(["kubectl", "kustomize", str(REPO / "apps/base/cnpg")], check=True, capture_output=True, text=True).stdout

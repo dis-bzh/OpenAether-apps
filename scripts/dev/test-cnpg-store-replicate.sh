@@ -41,6 +41,7 @@ echo "=== cnpg-store-replicate ==="
 run; rc=$?
 chk "first run exits 0 ($(tail -2 "$W/out" | tr '\n' ' '))" "[ $rc = 0 ]"
 chk "the replica holds every object of both clusters, byte for byte" same
+chk "forgejo-db is in the default list; with nothing archived yet it is a NOTE, not a failure (a profile without the forge)" "grep -q 'NOTE: forgejo-db: neither store holds an object yet' '$W/out' && grep -q 'forgejo-db: primary 0 objects, replica 0' '$W/out'"
 chk "the primary store only ever saw the primary key" "! grep -v 'ak=AKP' '$W/P.log' | grep -q ."
 chk "the replica store only ever saw the replica key" "! grep -v 'ak=AKR' '$W/R.log' | grep -q ."
 chk "every upload to the replica asks for server-side encryption" "! grep -E '^PUT .*ak=AKR' '$W/R.log' | grep -v 'sse=AES256' | grep -q ."

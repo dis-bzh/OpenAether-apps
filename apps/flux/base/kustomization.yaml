@@ -23,6 +23,7 @@ resources:
   - 22a-backup-identity.yaml
   - 30-observability.yaml
   - 35-identity.yaml
+  - 36-forgejo-db.yaml
   - 37-forgejo.yaml
   - 40-kyverno.yaml
   - 50-cluster-api-operator.yaml

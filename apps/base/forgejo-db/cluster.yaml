@@ -3,7 +3,8 @@
 # Dogfooding V1: the forge stores its users, issues, pull requests, metadata and LFS pointers in forgejo-db. The
 # repositories themselves are on the Forgejo volume (apps/base/forgejo), NOT here.
 # Same posture as grafana-db (apps/base/cnpg/grafana-db-cluster.yaml), copied from it: 3 instances (synchronous quorum
-# replication, any 1 of 2) on local-path storage. Three, not two: with one replica and dataDurability required, losing it
+# replication, any 1 of 2) on local-path storage. Three, not two: with one replica and dataDurability required, losing
+# it
 # would block every write. CNPG handles ALL the HA, NOT Longhorn (stacking block replication under CNPG = anti-pattern,
 # cf. grafana-db).
 # New in 0.4.0: there is no 0.3.x forgejo-db to move, so none of the upgrade steps of docs/resilience.md ("The Barman
@@ -96,7 +97,8 @@ spec:
 
   # ── PITR (Point-In-Time Recovery) ───────────────────────────────────────────
   # The Barman Cloud plugin archives WAL continuously (an RPO of minutes) and takes the base backups
-  # (scheduledbackup.yaml). Where and how is the ObjectStore `forgejo-db-primary` (objectstores.yaml); the second copy on
+  # (scheduledbackup.yaml). Where and how is the ObjectStore `forgejo-db-primary` (objectstores.yaml); the second copy
+  # on
   # the replica store is shipped by the backup brick (backup/databases, cnpg-store-replicate).
   # The WAL archive name (serverName) is the Cluster name plus the archive generation suffix: empty on an install, and
   # "-g2", "-g3"... on a cluster REBUILT from a store (task dr-restore-plan writes the ConfigMap cnpg-archive-generation

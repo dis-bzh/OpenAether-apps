@@ -56,6 +56,16 @@ single_replica:
   - workload: Deployment/kyverno/kyverno-reports-controller
     reason: it builds the policy reports from the results
     loss: policy reports are stale until it is back; no admission decision depends on them
+  - workload: Deployment/services-git/forgejo
+    reason: >-
+      the git repositories live on one ReadWriteOnce volume (longhorn-x2-rwo, two Longhorn replicas): a second pod could
+      not mount it, and Forgejo's own queues and sessions are in memory (a multi-replica forge needs ReadWriteMany,
+      Valkey and a shared object store: a later rung, not in 0.4.0)
+    loss: >-
+      no push, pull or web access to the forge while the pod is rescheduled after a node loss: the 5 minute toleration
+      plus the re-attach of the volume (UNVERIFIED, no drill has run with the forge); the volume survives the loss of a
+      node (the other Longhorn replica), the database is forgejo-db (3 instances), the cluster and Flux keep running
+      and a pod killed on a live node restarts in place
 strict_spread:
   - workload: StatefulSet/foundation-vault/openbao
     reason: >-

@@ -124,7 +124,7 @@ def check_patches():
             for c in d["spec"]["template"]["spec"]["containers"]:
                 if "memory" not in c["resources"]["limits"]:
                     out.append(f"{rel}: {d['metadata']['name']}/{c['name']} has no memory limit")
-    for rel in ("apps/base/identity/zitadel/helmrelease.yaml", "apps/base/storage/minio/minio.yaml"):
+    for rel in ("apps/base/identity/zitadel/helmrelease.yaml", "apps/base/storage/minio/minio.yaml", "apps/base/forgejo/helmrelease.yaml"):
         pr = release_values(rel)["spec"].get("postRenderers", [])
         flat = yaml.dump(pr)
         if "automountServiceAccountToken" not in flat or "value: false" not in flat:
@@ -136,7 +136,7 @@ def check_cnpg_limits():
     """Both CNPG Clusters carry spec.resources with a memory limit: CNPG copies it onto every container of the instance pod,
     the bootstrap-controller init container included (Kyverno require-limits, apps #47; lab 22 rolled zitadel-db with it)."""
     out = []
-    for rel in ("apps/base/cnpg/cluster.yaml", "apps/base/cnpg/grafana-db-cluster.yaml"):
+    for rel in ("apps/base/cnpg/cluster.yaml", "apps/base/cnpg/grafana-db-cluster.yaml", "apps/base/forgejo-db/cluster.yaml"):
         for d in docs(rel):
             if d.get("kind") == "Cluster":
                 r = d["spec"].get("resources") or {}

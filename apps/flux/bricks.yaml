@@ -89,6 +89,7 @@ descriptions:
   observability-vm-customresources: VMCluster/VMAgent/VM*Scrape
   observability-openbao: OpenBao VMServiceScrape (TLS-verified, metrics listener) and VMRule alerts
   identity: Zitadel (IAM/SSO, CNPG backend)
+  forgejo-db: Forgejo's PostgreSQL (CNPG, 3 instances, synchronous replication, Barman Cloud plugin)
   forgejo: Forgejo (self-hosted git forge, CNPG backend)
   kyverno: Kyverno (policy engine)
   kyverno-policies: OpenAether Kyverno policies

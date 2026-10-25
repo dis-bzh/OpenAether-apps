@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
-CLUSTERS = ("apps/base/cnpg/cluster.yaml", "apps/base/cnpg/grafana-db-cluster.yaml")
+CLUSTERS = ("apps/base/cnpg/cluster.yaml", "apps/base/cnpg/grafana-db-cluster.yaml", "apps/base/forgejo-db/cluster.yaml")
 KEYS = ("node.kubernetes.io/unreachable", "node.kubernetes.io/not-ready")
 LOW, HIGH = 30, 60
 

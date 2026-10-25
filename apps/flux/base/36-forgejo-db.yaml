@@ -1,0 +1,37 @@
+# Group 36 — forgejo-db (the PostgreSQL of the Forgejo git forge)
+# ──────────────────────────────────────────────────────────────────────────
+# A CNPG Cluster of 3 instances with synchronous replication, backed up through the Barman Cloud plugin, like grafana-db
+# (group 20), but its own Kustomization: a profile without the forge does not install it, and a database that is slow or
+# not Ready holds back the forge only, never `cnpg` (wait: true) or what depends on `cnpg` (identity, observability).
+# The operator, the plugin, the CRDs and the S3 credentials Secrets (cnpg-backup-s3 and its replica twin) come from
+# `cnpg`.
+# Secret forgejo-db-credentials: ESO from OpenBao secret/forgejo/db (seeded by the vault configure Job).
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: forgejo-db
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 15m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/forgejo-db
+  prune: true
+  # The same two ConfigMaps as `cnpg` (20-cnpg.yaml says why): the S3 destination of the ObjectStores, and the archive
+  # generation of a rebuilt cluster. No CRD or vendored dump in this path, so nothing in it contains a stray `${`.
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-identity
+      - kind: ConfigMap
+        name: cnpg-archive-generation
+        optional: true
+  wait: true
+  dependsOn:
+    - name: cnpg                      # the operator, the plugin, the ObjectStore CRD, cnpg-backup-s3
+    - name: external-secrets-stores   # ClusterSecretStore openbao (forgejo-db-credentials)
+    - name: platform-local-path-provisioner  # storageClass local-path-retain

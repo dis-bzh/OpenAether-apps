@@ -41,8 +41,9 @@ ALLOWLIST = REPO / "scripts/ha-allowlist.yaml"
 WORKLOADS = ("Deployment", "StatefulSet")
 CPU_BUDGET_M = 3300  # rendered Deployment/StatefulSet CPU requests, in millicores; raising it is a capacity decision
 # The pods of the CNPG Clusters (instances x (instance + Barman sidecar requests)) are not Deployments, so they were never in the
-# figure above. 6 instances (zitadel-db 3, grafana-db 3, synchronous replication needs the third) x (50 m + 50 m).
-CNPG_CPU_BUDGET_M = 600
+# figure above. 9 instances (zitadel-db 3, grafana-db 3, forgejo-db 3: synchronous replication needs the third) x (50 m + 50 m).
+# 600 m until the Forgejo brick (+300 m); the arithmetic against the roll gate is in docs/forgejo.md ("Capacity").
+CNPG_CPU_BUDGET_M = 900
 
 
 def ident(d):

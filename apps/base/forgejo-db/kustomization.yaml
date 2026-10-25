@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# OpenAether: the database of the Forgejo git forge (apps/base/forgejo), its own Flux Kustomization `forgejo-db`.
+# The Cluster, its two Barman Cloud plugin ObjectStores and its daily base backup follow grafana-db; the operator, the
+# plugin and the S3 credentials come from `cnpg` (apps/base/cnpg), which this one depends on. The ExternalSecret and
+# the Cluster are in foundation-databases, like the other two, so the network policy (networkpolicy-db-restricted.yaml,
+# rule 2c) and the backup objects find them where they expect.
+resources:
+  - externalsecret.yaml
+  - cluster.yaml
+  - objectstores.yaml
+  - scheduledbackup.yaml
