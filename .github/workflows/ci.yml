@@ -186,6 +186,11 @@ jobs:
       - name: CNPG clusters acknowledge a commit only after a replica has it, scratch copies do not inherit it (0.4.0)
         run: python3 -I scripts/dev/test-cnpg-sync-replication.py
 
+      - name: CNPG planned shutdown is bounded (smartShutdownTimeout on every Cluster, lab 27 FI)
+        run: |
+          python3 -I scripts/dev/test-cnpg-shutdown.py
+          python3 -I scripts/dev/test-cnpg-shutdown.py --selftest
+
       - name: Zitadel and Grafana recycle their database connections in minutes (rendered charts, 0.4.0)
         run: python3 -I scripts/dev/test-db-client-settings.py
 

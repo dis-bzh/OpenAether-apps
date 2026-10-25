@@ -10,3 +10,6 @@ resources:
   - cluster.yaml
   - objectstores.yaml
   - scheduledbackup.yaml
+# Every Cluster shuts down within 5 s of smart shutdown (lab 27, FI): the shared component.
+components:
+  - ../../components/cnpg-bounded-shutdown
