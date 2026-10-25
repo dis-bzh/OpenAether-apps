@@ -78,6 +78,10 @@ spec:
       # with no HA of its own → longhorn-x2-rwo. Not encrypted: repository data
       # is code; revisit for private client work.
       storageClass: longhorn-x2-rwo
+      # The daily Longhorn backup (recurringjob.yaml, RecurringJob forgejo-repos-backup-daily): Longhorn reads
+      # the group from this label on the PVC. The key must name the group of that job.
+      labels:
+        recurring-job-group.longhorn.io/oa-forgejo: enabled
 
     # Kyverno require-limits (lab 11): requests AND limits.
     resources:
