@@ -27,6 +27,7 @@ TARGETS = {
     "cert-manager/helmrelease.yaml": {"Deployment/cert-manager-cainjector": 0, "Deployment/cert-manager-webhook": 0},
     "identity/zitadel/helmrelease.yaml": {"Deployment/zitadel-login": 0},
     "observability/grafana.yaml": {"Deployment/grafana": 0},
+    "forgejo/helmrelease.yaml": {"Deployment/forgejo": 0},
 }
 PASS = FAIL = 0
 
@@ -53,6 +54,11 @@ def repo_url(name):
     sys.exit(f"no HelmRepository {name}")
 
 
+def chart_ref(chart, url):
+    """`<chart> --repo <url>`, or the single oci://<url>/<chart> reference of a HelmRepository of type oci (the Forgejo chart)."""
+    return [f"{url.rstrip('/')}/{chart}"] if url.startswith("oci://") else [chart, "--repo", url]
+
+
 def main():
     for rel, workloads in TARGETS.items():
         hr = next(d for d in yaml.safe_load_all((BASE / rel).read_text()) if d and d["kind"] == "HelmRelease")
@@ -60,8 +66,8 @@ def main():
         with tempfile.TemporaryDirectory() as tmp:
             values = Path(tmp) / "values.yaml"
             values.write_text(yaml.safe_dump(hr["spec"].get("values", {})))
-            r = subprocess.run(["helm", "template", hr["metadata"]["name"], spec["chart"], "--repo", repo_url(spec["sourceRef"]["name"]),
-                                "--version", spec["version"], "-n", hr["metadata"]["namespace"], "-f", str(values)],
+            r = subprocess.run(["helm", "template", hr["metadata"]["name"]] + chart_ref(spec["chart"], repo_url(spec["sourceRef"]["name"]))
+                               + ["--version", spec["version"], "-n", hr["metadata"]["namespace"], "-f", str(values)],
                                capture_output=True, text=True)
         if r.returncode:
             check(f"{rel}: helm template", False, r.stderr.strip()[-200:])

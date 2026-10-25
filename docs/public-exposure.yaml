@@ -34,7 +34,8 @@ routes:
     host: forge.openaether.local
     authentication: >-
       Forgejo's own: local accounts, the initial admin password comes from OpenBao; Zitadel OIDC lands at rung 3.
-      No ACL in front; the login page answers anyone.
+      Self-registration is off and sign-in is required to view anything; /metrics is not routed. No ACL in front; the
+      login page answers anyone.
     default: true
     private_admin: false
   - route: services-gateway/global-http-redirect

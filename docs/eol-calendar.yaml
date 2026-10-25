@@ -142,13 +142,14 @@ components:
 - id: forgejo
   brick: forgejo
   component: forgejo (git forge, dogfooding V1)
-  pin: 6.1.0
+  pin: 17.3.1
   file: apps/base/forgejo/helmrelease.yaml
   pattern: chart:\s*forgejo\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Forgejo chart 6.1 (appVersion unverified)
-  eol: unknown
-  note: chart from the forgejo-contrib Codeberg repository (dogfooding V1); upstream publishes no support calendar,
-    the row is re-read at every Renovate bump
+  cycle: Forgejo 15.0 (LTS; chart appVersion 15.0.10)
+  eol: '2027-07-15'
+  eol_source: https://endoflife.date/api/forgejo.json
+  note: the chart is an OCI artifact on code.forgejo.org and ships the Forgejo image of its appVersion; 2027-07-15 read on
+    endoflife.date 2026-10-25. The first version of the brick pinned chart 6.1.0 (Forgejo 7.0.3, long past its end of support)
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: vm-operator

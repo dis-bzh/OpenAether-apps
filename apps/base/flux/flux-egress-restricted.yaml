@@ -4,7 +4,8 @@
 # - github.com (GitRepository + Helm charts GitHub Pages)
 # - Helm registries: charts.jetstack.io, charts.longhorn.io, charts.min.io,
 #   blob.istio.io (redirects to istio-release.r2.istio.io), victoriametrics.github.io,
-#   grafana.github.io, grafana-community.github.io, prometheus-community.github.io, kubernetes-sigs.github.io
+#   grafana.github.io, grafana-community.github.io, prometheus-community.github.io, kubernetes-sigs.github.io,
+#   code.forgejo.org (the Forgejo chart, OCI)
 # - CoreDNS (cluster) for DNS resolution
 # - Kube-API (cluster) for Kubernetes operations
 apiVersion: cilium.io/v2
@@ -93,6 +94,14 @@ spec:
     # 9. Cluster API Operator Helm (GitHub Pages)
     - toFQDNs:
         - matchName: kubernetes-sigs.github.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # 9b. Forgejo Helm chart: an OCI artifact on code.forgejo.org (oci://code.forgejo.org/forgejo-helm/forgejo). The
+    #     registry answers the token request and serves the blobs itself (read 2026-10, anonymous pull, no redirect).
+    - toFQDNs:
+        - matchName: code.forgejo.org
       toPorts:
         - ports:
             - port: "443"

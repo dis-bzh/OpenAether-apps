@@ -27,6 +27,14 @@ def kustomize(path):
     return load_docs(r.stdout)
 
 
+def chart_ref(chart, url):
+    """The helm arguments that name a chart: `<chart> --repo <url>` for an index repository, one oci://<url>/<chart> reference
+    for an OCI one (a HelmRepository of type oci, like the Forgejo chart: its https address has no index)."""
+    if url.startswith("oci://"):
+        return ["%s/%s" % (url.rstrip("/"), chart)]
+    return [chart, "--repo", url]
+
+
 def helm_release(hr, repos):
     """The objects one HelmRelease creates: chart + values, then the post-renderer kustomize patches."""
     spec = hr["spec"]["chart"]["spec"]
@@ -42,8 +50,8 @@ def helm_release(hr, repos):
                     node = node.setdefault(k, {})
                 node.setdefault(last, "placeholder")
         (tmp / "values.yaml").write_text(yaml.safe_dump(values))
-        cmd = ["helm", "template", hr["spec"].get("releaseName", name), spec["chart"], "--repo", repos[spec["sourceRef"]["name"]],
-               "--version", str(spec["version"]), "-n", ns, "-f", str(tmp / "values.yaml"), "--include-crds=false"]
+        cmd = ["helm", "template", hr["spec"].get("releaseName", name)] + chart_ref(spec["chart"], repos[spec["sourceRef"]["name"]]) \
+            + ["--version", str(spec["version"]), "-n", ns, "-f", str(tmp / "values.yaml"), "--include-crds=false"]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode:
             raise SystemExit(f"helm template {name}: {r.stderr.strip()[-300:]}")
