@@ -313,6 +313,16 @@ spec:
         - ports:
             - port: "3000"
               protocol: TCP
+    # The Forgejo git forge (apps/base/forgejo, port 3000 of the pod): without this rule the Gateway cannot reach it
+    # and forge.openaether.local times out; the first version of the brick had the route but not this rule.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-git
+            app.kubernetes.io/name: forgejo
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: foundation-vault

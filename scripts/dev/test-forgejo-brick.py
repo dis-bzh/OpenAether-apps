@@ -17,7 +17,9 @@ broke it:
      slow forgejo-db must not hold `cnpg` (wait: true) or identity back.
   6. self-registration is off and sign-in is required to view (the route answers anyone who sets the Host header; Forgejo's
      defaults allow registration);
-  7. (with the Kyverno CLI, $KYVERNO or PATH, and helm with network for the chart) the pod the chart renders passes the platform
+  7. the Gateway's egress policy admits every namespace a route sends traffic to (the first version routed to the forge and forgot
+     the rule: the route would have timed out);
+  8. (with the Kyverno CLI, $KYVERNO or PATH, and helm with network for the chart) the pod the chart renders passes the platform
      policies except the one read-only-root-filesystem finding that is known and left open (every one is Audit).
 Static: it proves the wiring, not a cluster. Run: python3 -I scripts/dev/test-forgejo-brick.py [--selftest]
 """
@@ -52,8 +54,28 @@ def seeded(configure_text):
     return out
 
 
-def problems(configure_text, externalsecrets, helmrelease, repos, egress_text, flux, cnpg_files, route):
+def route_namespaces():
+    out = {}
+    for f in sorted((REPO / "apps/base").rglob("*.yaml")):
+        try:
+            for d in yaml.safe_load_all(f.read_text()):
+                if isinstance(d, dict) and d.get("kind") == "HTTPRoute":
+                    for r in d["spec"]["rules"]:
+                        for b in r.get("backendRefs", []):
+                            out.setdefault(d["metadata"]["namespace"], set()).add(b["name"])
+        except yaml.YAMLError:
+            continue
+    return out
+
+
+def gateway_egress_namespaces(gateway_cnp):
+    return {e["matchLabels"].get("io.kubernetes.pod.namespace") for r in gateway_cnp["spec"]["egress"] for e in r.get("toEndpoints", [])}
+
+
+def problems(configure_text, externalsecrets, helmrelease, repos, egress_text, flux, cnpg_files, route, gw_ns, routed):
     errs = []
+    for ns in sorted(set(routed) - gw_ns):
+        errs.append(f"the Gateway's egress policy (istio/networkpolicy.yaml) does not admit namespace {ns}, which an HTTPRoute sends traffic to")
     rules = route["spec"]["rules"]
     idx = [i for i, r in enumerate(rules) if any(m.get("path", {}).get("value") == "/metrics" for m in r.get("matches", []))]
     if not idx or rules[idx[0]].get("backendRefs") or idx[0] != 0:
@@ -153,12 +175,14 @@ def load():
     cnpg = [str(p.relative_to(REPO)) for p in (REPO / "apps/base/cnpg").glob("*forgejo*")]
     cnpg += [str(REPO / "apps/base/cnpg/kustomization.yaml") for _ in [0] if "forgejo" in (REPO / "apps/base/cnpg/kustomization.yaml").read_text()]
     route = next(d for d in docs("apps/base/forgejo/httproute.yaml") if d["kind"] == "HTTPRoute")
-    return (REPO / CONFIGURE).read_text(), es, hr, repos, (REPO / "apps/base/flux/flux-egress-restricted.yaml").read_text(), flux, cnpg, route
+    gw = next(d for d in docs("apps/base/istio/networkpolicy.yaml") if d["metadata"]["name"] == "openaether-gateway")
+    return ((REPO / CONFIGURE).read_text(), es, hr, repos, (REPO / "apps/base/flux/flux-egress-restricted.yaml").read_text(), flux, cnpg, route,
+            gateway_egress_namespaces(gw), route_namespaces())
 
 
 def selftest(args):
     """Each mutation of the real inputs must be caught; an unmutated copy must pass."""
-    conf, es, hr, repos, egress, flux, cnpg, route = args
+    conf, es, hr, repos, egress, flux, cnpg, route, gw_ns, routed = args
     muts = {
         "a missing forgejo/db seed": dict(conf=re.sub(r".*kv_create forgejo/db D\n", "", conf)),
         "a missing forgejo/admin seed": dict(conf=re.sub(r".*kv_create forgejo/admin D\n", "", conf)),
@@ -184,12 +208,13 @@ def selftest(args):
     muts["no /metrics rule"] = dict(route=r)
     h = copy.deepcopy(hr); h["spec"]["values"]["gitea"]["config"].pop("service")
     muts["self-registration left open"] = dict(hr=h)
+    muts["a routed namespace the Gateway may not reach"] = dict(gw_ns=gw_ns - {"services-git"})
     ok = not problems(*args)
     print(("ok   " if ok else "FAIL ") + "the real inputs pass")
     for name, m in muts.items():
-        a2 = dict(conf=conf, es=es, hr=hr, repos=repos, egress=egress, flux=flux, cnpg=cnpg, route=route)
+        a2 = dict(conf=conf, es=es, hr=hr, repos=repos, egress=egress, flux=flux, cnpg=cnpg, route=route, gw_ns=gw_ns, routed=routed)
         a2.update(m)
-        caught = bool(problems(a2["conf"], a2["es"], a2["hr"], a2["repos"], a2["egress"], a2["flux"], a2["cnpg"], a2["route"]))
+        caught = bool(problems(a2["conf"], a2["es"], a2["hr"], a2["repos"], a2["egress"], a2["flux"], a2["cnpg"], a2["route"], a2["gw_ns"], a2["routed"]))
         print(("ok   " if caught else "FAIL ") + f"caught: {name}")
         ok = ok and caught
     return ok

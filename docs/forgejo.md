@@ -53,7 +53,8 @@ Each line is a defect of the first version, fixed here and held by `scripts/dev/
 5. **The database was a 0.3.x one**: two instances, an asynchronous `barmanObjectStore` (CNPG 1.31 removes it), no tolerations, no zone
    term. It is the `grafana-db` form now. There is **no upgrade path to describe**: `forgejo-db` is new in 0.4.0, nothing of it exists on a
    0.3.x cluster, so the presync of synchronous replication before the apps ref moves (`docs/resilience.md`) does not apply to it.
-6. **Registration was open on a public route** and `/metrics` was served to the Internet.
+6. **Registration was open on a public route** and `/metrics` was served to the Internet. And the Gateway's egress policy
+   (`apps/base/istio/networkpolicy.yaml`, a whitelist of backends) did not list the forge: the route would have timed out.
 7. The init containers had no limits (Kyverno `require-limits`), the pod ran with no `runAsNonRoot`, `seccompProfile` or
    ServiceAccount of its own, the chart's helm-test Pod (`busybox:latest`) was part of the release, and the image registry
    `code.forgejo.org` was not on the Kyverno allow-list. The pod the chart renders now passes every platform policy except one (below).
