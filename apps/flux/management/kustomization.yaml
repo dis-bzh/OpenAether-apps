@@ -3,7 +3,9 @@ kind: Kustomization
 # OpenAether — Overlay CLOUD management (cluster_role=management).
 # Read by the root Kustomization (flux-bootstrap.yaml.tftpl → path: apps/flux/management).
 #
-# The full DAG inherited from ../base — everything active (kyverno included).
+# The full DAG inherited from ../base — everything active (kyverno included) EXCEPT the opt-in Forgejo git
+# forge (forgejo-db, forgejo), which the two patches below remove. To run it: apps/flux/management-forge,
+# see docs/forgejo.md.
 # Deployment order (through dependsOn):
 #   00 namespaces
 #   └─ 01 platform
@@ -15,8 +17,23 @@ kind: Kustomization
 #      └─ 21 storage
 #         └─ 30 observability ← also: cert-manager, istio, cnpg
 #      └─ 35 identity (Zitadel) ← also: cnpg, cert-manager, istio, services-gateway
-#      └─ 36 forgejo-db (CNPG, own Kustomization) ← also: cnpg, eso stores
-#         └─ 37 forgejo (git forge) ← also: eso, services-gateway, storage
+#      └─ 36 forgejo-db (CNPG, own Kustomization) ← also: cnpg, eso stores   [OPT-IN, removed here]
+#         └─ 37 forgejo (git forge) ← also: eso, services-gateway, storage   [OPT-IN, removed here]
 #   └─ 40 kyverno → kyverno-policies
 resources:
   - ../base
+patches:
+  - patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: forgejo-db
+        namespace: flux-system
+      $patch: delete
+  - patch: |-
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: forgejo
+        namespace: flux-system
+      $patch: delete

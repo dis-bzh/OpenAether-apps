@@ -19,7 +19,12 @@ broke it:
      defaults allow registration);
   7. the Gateway's egress policy admits every namespace a route sends traffic to (the first version routed to the forge and forgot
      the rule: the route would have timed out);
-  8. (with the Kyverno CLI, $KYVERNO or PATH, and helm with network for the chart) the pod the chart renders passes the platform
+  8. the brick is OPT-IN (0.4.0 release gate): `apps/flux/management` and `apps/flux/workload` do not render forgejo and forgejo-db,
+     `apps/flux/management-forge` renders exactly those two more, and the catalogue keeps the `forge` alias;
+  9. the repositories' volume has a DEFAULT daily Longhorn backup: the PVC carries the group label (persistence.labels of the
+     chart, checked on the rendered PVC when helm is available), a RecurringJob of type backup selects that group, runs daily
+     at a time no other job uses and keeps a retention, and sits in longhorn-system (the namespace Longhorn reads);
+  10. (with the Kyverno CLI, $KYVERNO or PATH, and helm with network for the chart) the pod the chart renders passes the platform
      policies except the one read-only-root-filesystem finding that is known and left open (every one is Audit).
 Static: it proves the wiring, not a cluster. Run: python3 -I scripts/dev/test-forgejo-brick.py [--selftest]
 """
@@ -63,6 +68,74 @@ def route_namespaces():
                     for r in d["spec"]["rules"]:
                         for b in r.get("backendRefs", []):
                             out.setdefault(d["metadata"]["namespace"], set()).add(b["name"])
+        except yaml.YAMLError:
+            continue
+    return out
+
+
+def kustomization_names(profile):
+    """The names of the Flux Kustomizations a profile (a kustomize overlay under apps/flux) renders."""
+    sys.path.insert(0, str(REPO / "scripts"))
+    import ha_render
+    return {d["metadata"]["name"] for d in ha_render.kustomize(REPO / "apps/flux" / profile) if d.get("kind") == "Kustomization"}
+
+
+BRICK = {"forgejo", "forgejo-db"}
+GROUP = "oa-forgejo"
+LABEL = f"recurring-job-group.longhorn.io/{GROUP}"
+
+
+def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_labels=None):
+    """profiles: {name: set of Kustomization names}; jobs: the RecurringJobs of the brick; other_crons: the schedules of the other jobs."""
+    errs = []
+    for name in ("management", "workload"):
+        if profiles[name] & BRICK:
+            errs.append(f"apps/flux/{name} renders {sorted(profiles[name] & BRICK)}: the Forgejo brick is OPT-IN, off by default")
+    if profiles["management-forge"] - profiles["management"] != BRICK:
+        errs.append("apps/flux/management-forge must render exactly forgejo and forgejo-db more than apps/flux/management")
+    if profiles["management"] - profiles["management-forge"]:
+        errs.append("apps/flux/management-forge must not remove anything apps/flux/management renders")
+    if (catalog.get("aliases") or {}).get("forge") != "forgejo":
+        errs.append("the `forge` alias of bricks.yaml (the picker's way to include the forge) is gone")
+    labels = (((hr["spec"]["values"].get("persistence") or {}).get("labels")) or {})
+    if labels.get(LABEL) != "enabled":
+        errs.append(f"the Forgejo PVC does not carry {LABEL}=enabled (persistence.labels): Longhorn would not back it up")
+    if pvc_labels is not None and pvc_labels.get(LABEL) != "enabled":
+        errs.append("the PVC the chart renders does not carry the backup group label")
+    sel = [j for j in jobs if j["spec"].get("task") == "backup" and GROUP in (j["spec"].get("groups") or [])]
+    if len(sel) != 1:
+        errs.append(f"exactly one RecurringJob of type backup must select the group {GROUP} (found {len(sel)})")
+    for j in sel:
+        sp = j["spec"]
+        if j["metadata"].get("namespace") != "longhorn-system":
+            errs.append("the RecurringJob must be in longhorn-system")
+        f = sp.get("cron", "").split()
+        if len(f) != 5 or f[2:] != ["*", "*", "*"] or not (f[0].isdigit() and f[1].isdigit()):
+            errs.append(f"the RecurringJob must run daily (a fixed minute and hour), not {sp.get('cron')!r}")
+        elif sp["cron"] in other_crons:
+            errs.append(f"the RecurringJob schedule {sp['cron']!r} collides with another job's")
+        if not isinstance(sp.get("retain"), int) or sp["retain"] < 1:
+            errs.append("the RecurringJob must keep a retention (retain >= 1)")
+    return errs
+
+
+def other_schedules():
+    """Every cron of the other jobs: the Longhorn RecurringJobs (cron), the Kubernetes CronJobs and CNPG ScheduledBackups (schedule,
+    the CNPG one with a leading seconds field, put in the 5-field form)."""
+    out = set()
+    for f in sorted((REPO / "apps/base").rglob("*.yaml")):
+        if "forgejo" in f.parts[-2] or f.stat().st_size > 400000:
+            continue
+        try:
+            for d in yaml.safe_load_all(f.read_text()):
+                if not isinstance(d, dict):
+                    continue
+                if d.get("kind") == "RecurringJob":
+                    out.add(d["spec"]["cron"])
+                elif d.get("kind") == "CronJob":
+                    out.add(d["spec"]["schedule"])
+                elif d.get("kind") == "ScheduledBackup":
+                    out.add(" ".join(d["spec"]["schedule"].split()[1:]))
         except yaml.YAMLError:
             continue
     return out
@@ -233,15 +306,72 @@ def kyverno_selftest(ky, pod):
     return ok
 
 
+def optin_inputs():
+    profiles = {n: kustomization_names(n) for n in ("management", "management-forge", "workload")}
+    catalog = yaml.safe_load((REPO / "apps/flux/bricks.yaml").read_text())
+    hr = next(d for d in docs("apps/base/forgejo/helmrelease.yaml") if d["kind"] == "HelmRelease")
+    jobs = [d for d in docs("apps/base/forgejo/recurringjob.yaml") if d["kind"] == "RecurringJob"]
+    pvc = None
+    if shutil.which("helm"):
+        sys.path.insert(0, str(REPO / "scripts"))
+        import ha_render
+        objs = ha_render.kustomize(REPO / "apps/base/forgejo")
+        repos = {d["metadata"]["name"]: d["spec"]["url"] for d in objs if d["kind"] == "HelmRepository"}
+        rel = next(d for d in objs if d["kind"] == "HelmRelease")
+        pvc = next(d for d in ha_render.helm_release(rel, repos) if d["kind"] == "PersistentVolumeClaim")["metadata"].get("labels", {})
+    return profiles, catalog, hr, jobs, other_schedules(), pvc
+
+
+def optin_selftest(inp):
+    profiles, catalog, hr, jobs, crons, pvc = inp
+    muts = {
+        "the forge back in the default management profile": dict(profiles=dict(profiles, management=profiles["management"] | BRICK)),
+        "the forge in the workload profile": dict(profiles=dict(profiles, workload=profiles["workload"] | {"forgejo"})),
+        "an opt-in profile that renders nothing more": dict(profiles=dict(profiles, **{"management-forge": profiles["management"]})),
+        "no forge alias": dict(catalog={"aliases": {}}),
+        "a PVC without the backup group label": dict(hr=_without_label(hr)),
+        "a rendered PVC without the label": dict(pvc_labels={}),
+        "no RecurringJob": dict(jobs=[]),
+        "a RecurringJob on another group": dict(jobs=[_job(jobs, groups=["other"])]),
+        "a RecurringJob that is a snapshot, not a backup": dict(jobs=[_job(jobs, task="snapshot")]),
+        "an hourly RecurringJob": dict(jobs=[_job(jobs, cron="55 * * * *")]),
+        "a RecurringJob at the time of oa-backup-daily": dict(jobs=[_job(jobs, cron="37 3 * * *")]),
+        "a RecurringJob with no retention": dict(jobs=[_job(jobs, retain=0)]),
+    }
+    ok = not optin_problems(*inp)
+    print(("ok   " if ok else "FAIL ") + "the real opt-in inputs pass")
+    for name, m in muts.items():
+        a = dict(profiles=profiles, catalog=catalog, hr=hr, jobs=jobs, other_crons=crons, pvc_labels=pvc)
+        a.update(m)
+        caught = bool(optin_problems(**a))
+        print(("ok   " if caught else "FAIL ") + f"caught: {name}")
+        ok = ok and caught
+    return ok
+
+
+def _job(jobs, **spec):
+    j = copy.deepcopy(jobs[0])
+    j["spec"].update(spec)
+    return j
+
+
+def _without_label(hr):
+    h = copy.deepcopy(hr)
+    h["spec"]["values"]["persistence"].pop("labels")
+    return h
+
+
 def main():
     args = load()
+    inp = optin_inputs()
     kerrs, kctx = kyverno_problems()
     if "--selftest" in sys.argv:
         ok = selftest(args)
+        ok = optin_selftest(inp) and ok
         if kctx:
             ok = kyverno_selftest(*kctx) and ok
         sys.exit(0 if ok else 1)
-    errs = problems(*args) + kerrs
+    errs = problems(*args) + optin_problems(*inp) + kerrs
     for e in errs:
         print("FAIL " + e)
     print(f"{len(errs)} failed" if errs else "ok   the Forgejo brick is wired to its secrets, its chart source and its own database Kustomization")
