@@ -74,14 +74,12 @@ spec:
     persistence:
       enabled: true
       size: 10Gi
-      # GOLDEN RULE (apps/base/storage/storageclasses.yaml): single-replica app
-      # with no HA of its own → longhorn-x2-rwo. Not encrypted: repository data
-      # is code; revisit for private client work.
-      storageClass: longhorn-x2-rwo
-      # The daily Longhorn backup (recurringjob.yaml, RecurringJob forgejo-repos-backup-daily): Longhorn reads
-      # the group from this label on the PVC. The key must name the group of that job.
-      labels:
-        recurring-job-group.longhorn.io/oa-forgejo: enabled
+      # GOLDEN RULE (apps/base/storage/storageclasses.yaml): single-replica app with no HA of its own → 2 Longhorn
+      # replicas, RWO. Not encrypted: repository data is code; revisit for private client work. The class is
+      # storageclass.yaml (longhorn-x2-rwo + recurringJobSelector): the daily backup (recurringjob.yaml, group
+      # oa-forgejo) selects the volume because Longhorn creates it already in that group. A label on the PVC would not
+      # reach the Longhorn volume (lab 27, FG), so there is none.
+      storageClass: longhorn-x2-rwo-forgejo
 
     # Kyverno require-limits (lab 11): requests AND limits.
     resources:
@@ -178,6 +176,25 @@ spec:
         service:
           DISABLE_REGISTRATION: true
           REQUIRE_SIGNIN_VIEW: true
+        # DURABILITY OF A PUSH (lab 27, FK: DATA LOSS). Git does not fsync loose objects by default
+        # (core.fsync defaults to
+        # `committed,-loose-object`), so a push acknowledged just before the node died was only in the page
+        # cache: after a zone
+        # power-off the repository held 75 zero-length loose objects, a branch pointing at an empty object,
+        # and every later push
+        # was refused. `core.fsync = all` syncs every component, loose objects included, before git reports success
+        # (https://git-scm.com/docs/git-config, core.fsync; Forgejo applies [git.config] as `git config`:
+        # https://forgejo.org/docs/latest/admin/config-cheat-sheet/). core.fsyncMethod is left at git's
+        # default (`fsync` on
+        # Linux): `writeout-only` and `batch` trade away part of the guarantee. The Longhorn volume has 2
+        # replicas, but that
+        # protects a node loss only for data the filesystem already wrote: a node that powers off holding
+        # the writable replica
+        # loses what was never synced. COST: every push pays the fsyncs, a push latency that is UNVERIFIED
+        # (not measured).
+        # Forgejo only sets keys: removing this line later does not unset core.fsync in git's config (docs/forgejo.md).
+        git.config:
+          core.fsync: all
         session:
           PROVIDER: memory     # V1: memory (single replica). Valkey later.
         cache:

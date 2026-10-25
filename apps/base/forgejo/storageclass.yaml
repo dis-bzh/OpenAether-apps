@@ -1,0 +1,38 @@
+# The StorageClass of the repositories' volume (FG, lab 27): longhorn-x2-rwo plus `recurringJobSelector`, so
+# Longhorn creates the
+# volume ALREADY in the group `oa-forgejo` that the daily backup (recurringjob.yaml) selects.
+#
+# Why not the PVC label (what the first version did, `persistence.labels` on the PVC): Longhorn does not copy a
+# label of the PVC
+# to its Volume. Lab 27: the Longhorn Volume carried only `recurring-job-group.longhorn.io/default`, the job logged
+# "Found 0
+# volumes with recurring job forgejo-repos-backup-daily" and the daily backup of the repositories NEVER ran, until
+# the Volume was
+# labelled by hand. `recurringJobSelector` is the StorageClass parameter Longhorn documents for exactly this ("A
+# JSON array of
+# recurring job or group specifications to attach to the volume", applied at volume creation only:
+# https://longhorn.io/docs/latest/references/storage-class-parameters/).
+#
+# Everything else is longhorn-x2-rwo (apps/base/storage/storageclasses.yaml): 2 replicas, RWO, Retain, expansion,
+# not encrypted.
+# test-forgejo-brick.py compares the two. StorageClass parameters are immutable and apply to NEW volumes only: a
+# forge volume
+# created on longhorn-x2-rwo (lab 27) keeps its class and needs the group label by hand (docs/forgejo.md); a PVC
+# cannot change class.
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-x2-rwo-forgejo
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: forgejo
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: "2"
+  staleReplicaTimeout: "30"
+  fromBackup: ""
+  recurringJobSelector: '[{"name":"oa-forgejo","isGroup":true}]'

@@ -21,14 +21,19 @@ broke it:
      the rule: the route would have timed out);
   8. the brick is OPT-IN (0.4.0 release gate): `apps/flux/management` and `apps/flux/workload` do not render forgejo and forgejo-db,
      `apps/flux/management-forge` renders exactly those two more, and the catalogue keeps the `forge` alias;
-  9. the repositories' volume has a DEFAULT daily Longhorn backup: the PVC carries the group label (persistence.labels of the
-     chart, checked on the rendered PVC when helm is available), a RecurringJob of type backup selects that group, runs daily
+  9. the repositories' volume has a DEFAULT daily Longhorn backup: the volume is created ALREADY in the group, through the
+     StorageClass `longhorn-x2-rwo-forgejo` (longhorn-x2-rwo plus `recurringJobSelector` naming the group; a label on the PVC does
+     not reach the Longhorn volume, lab 27 FG), the chart's PVC uses that class (checked on the rendered PVC when helm is
+     available), a RecurringJob of type backup selects that group, runs daily
      at a time no other job uses and keeps a retention, and sits in longhorn-system (the namespace Longhorn reads);
-  10. (with the Kyverno CLI, $KYVERNO or PATH, and helm with network for the chart) the pod the chart renders passes the platform
+  10. git fsyncs loose objects (FK, lab 27, DATA LOSS): `[git.config] core.fsync = all` is in the chart values and in the app.ini
+     sources the chart renders (when helm is available), and core.fsyncMethod is not set to a mode that gives part of it back;
+  11. (with the Kyverno CLI, $KYVERNO or PATH, and helm with network for the chart) the pod the chart renders passes the platform
      policies except the one read-only-root-filesystem finding that is known and left open (every one is Audit).
 Static: it proves the wiring, not a cluster. Run: python3 -I scripts/dev/test-forgejo-brick.py [--selftest]
 """
 import copy
+import json
 import os
 import re
 import shutil
@@ -83,9 +88,10 @@ def kustomization_names(profile):
 BRICK = {"forgejo", "forgejo-db"}
 GROUP = "oa-forgejo"
 LABEL = f"recurring-job-group.longhorn.io/{GROUP}"
+SC = "longhorn-x2-rwo-forgejo"
 
 
-def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_labels=None):
+def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_class=None, sc=None, base_sc=None, kust=None, rendered_cfg=None):
     """profiles: {name: set of Kustomization names}; jobs: the RecurringJobs of the brick; other_crons: the schedules of the other jobs."""
     errs = []
     for name in ("management", "workload"):
@@ -97,11 +103,40 @@ def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_labels=None):
         errs.append("apps/flux/management-forge must not remove anything apps/flux/management renders")
     if (catalog.get("aliases") or {}).get("forge") != "forgejo":
         errs.append("the `forge` alias of bricks.yaml (the picker's way to include the forge) is gone")
-    labels = (((hr["spec"]["values"].get("persistence") or {}).get("labels")) or {})
-    if labels.get(LABEL) != "enabled":
-        errs.append(f"the Forgejo PVC does not carry {LABEL}=enabled (persistence.labels): Longhorn would not back it up")
-    if pvc_labels is not None and pvc_labels.get(LABEL) != "enabled":
-        errs.append("the PVC the chart renders does not carry the backup group label")
+    gc = (((hr["spec"]["values"].get("gitea") or {}).get("config") or {}).get("git.config")) or {}
+    if str(gc.get("core.fsync")) != "all":
+        errs.append(f"[git.config] core.fsync must be 'all' (gitea.config.git.config in the HelmRelease), not {gc.get('core.fsync')!r}: git does not fsync loose objects by default and a node loss loses acknowledged pushes (lab 27, FK)")
+    if str(gc.get("core.fsyncMethod", "fsync")) != "fsync":
+        errs.append(f"core.fsyncMethod {gc.get('core.fsyncMethod')!r} gives back part of the guarantee: leave git's default (fsync)")
+    if rendered_cfg is not None and "core.fsync=all" not in rendered_cfg.get("git.config", ""):
+        errs.append("the app.ini sources the chart renders have no [git.config] core.fsync=all")
+    pers = hr["spec"]["values"].get("persistence") or {}
+    if pers.get("storageClass") != SC:
+        errs.append(f"the Forgejo PVC must use the StorageClass {SC} (persistence.storageClass), not {pers.get('storageClass')!r}: only that class puts the volume in the backup group")
+    if (pers.get("labels") or {}).get(LABEL):
+        errs.append("persistence.labels still relies on a PVC label for the backup group: Longhorn does not copy it to the volume (lab 27, FG)")
+    if pvc_class is not None and pvc_class != SC:
+        errs.append(f"the PVC the chart renders has storageClassName {pvc_class!r}, want {SC}")
+    if kust is not None and "storageclass.yaml" not in (kust.get("resources") or []):
+        errs.append("apps/base/forgejo/kustomization.yaml does not list storageclass.yaml: the class would not exist")
+    if sc is None or sc.get("metadata", {}).get("name") != SC:
+        errs.append(f"apps/base/forgejo/storageclass.yaml has no StorageClass {SC}")
+    else:
+        params = dict(sc.get("parameters") or {})
+        try:
+            sel_json = json.loads(params.pop("recurringJobSelector", "null"))
+        except ValueError:
+            sel_json = None
+        if sel_json != [{"name": GROUP, "isGroup": True}]:
+            errs.append(f"the StorageClass recurringJobSelector must be exactly [{{\"name\": \"{GROUP}\", \"isGroup\": true}}], not {sel_json!r}")
+        if sc.get("provisioner") != "driver.longhorn.io":
+            errs.append("the StorageClass provisioner must be driver.longhorn.io")
+        if base_sc is not None:
+            if params != (base_sc.get("parameters") or {}):
+                errs.append(f"the StorageClass parameters (besides recurringJobSelector) must be those of longhorn-x2-rwo: {params} vs {base_sc.get('parameters')}")
+            for k in ("reclaimPolicy", "allowVolumeExpansion", "volumeBindingMode"):
+                if sc.get(k) != base_sc.get(k):
+                    errs.append(f"the StorageClass {k} must be that of longhorn-x2-rwo ({base_sc.get(k)!r}), not {sc.get(k)!r}")
     sel = [j for j in jobs if j["spec"].get("task") == "backup" and GROUP in (j["spec"].get("groups") or [])]
     if len(sel) != 1:
         errs.append(f"exactly one RecurringJob of type backup must select the group {GROUP} (found {len(sel)})")
@@ -311,26 +346,43 @@ def optin_inputs():
     catalog = yaml.safe_load((REPO / "apps/flux/bricks.yaml").read_text())
     hr = next(d for d in docs("apps/base/forgejo/helmrelease.yaml") if d["kind"] == "HelmRelease")
     jobs = [d for d in docs("apps/base/forgejo/recurringjob.yaml") if d["kind"] == "RecurringJob"]
+    sc = next((d for d in docs("apps/base/forgejo/storageclass.yaml") if d["kind"] == "StorageClass"), None)
+    base_sc = next(d for d in docs("apps/base/storage/storageclasses.yaml") if d["kind"] == "StorageClass" and d["metadata"]["name"] == "longhorn-x2-rwo")
+    kust = yaml.safe_load((REPO / "apps/base/forgejo/kustomization.yaml").read_text())
     pvc = None
+    cfg = None
     if shutil.which("helm"):
         sys.path.insert(0, str(REPO / "scripts"))
         import ha_render
         objs = ha_render.kustomize(REPO / "apps/base/forgejo")
         repos = {d["metadata"]["name"]: d["spec"]["url"] for d in objs if d["kind"] == "HelmRepository"}
         rel = next(d for d in objs if d["kind"] == "HelmRelease")
-        pvc = next(d for d in ha_render.helm_release(rel, repos) if d["kind"] == "PersistentVolumeClaim")["metadata"].get("labels", {})
-    return profiles, catalog, hr, jobs, other_schedules(), pvc
+        rendered = ha_render.helm_release(rel, repos)
+        pvc = next(d for d in rendered if d["kind"] == "PersistentVolumeClaim")["spec"].get("storageClassName")
+        cfg = next(d for d in rendered if d["kind"] == "Secret" and d["metadata"]["name"].endswith("inline-config")).get("stringData", {})
+    return profiles, catalog, hr, jobs, other_schedules(), pvc, sc, base_sc, kust, cfg
 
 
 def optin_selftest(inp):
-    profiles, catalog, hr, jobs, crons, pvc = inp
+    profiles, catalog, hr, jobs, crons, pvc, sc, base_sc, kust, cfg = inp
     muts = {
         "the forge back in the default management profile": dict(profiles=dict(profiles, management=profiles["management"] | BRICK)),
         "the forge in the workload profile": dict(profiles=dict(profiles, workload=profiles["workload"] | {"forgejo"})),
         "an opt-in profile that renders nothing more": dict(profiles=dict(profiles, **{"management-forge": profiles["management"]})),
         "no forge alias": dict(catalog={"aliases": {}}),
-        "a PVC without the backup group label": dict(hr=_without_label(hr)),
-        "a rendered PVC without the label": dict(pvc_labels={}),
+        "the PVC back on the plain class (no group)": dict(hr=_with_class(hr, "longhorn-x2-rwo")),
+        "a rendered PVC on another class": dict(pvc_class="longhorn-x2-rwo"),
+        "the backup group asked of a PVC label again": dict(hr=_with_label(hr)),
+        "a StorageClass without the selector": dict(sc=_sc(sc, drop="recurringJobSelector")),
+        "a selector on another group": dict(sc=_sc(sc, recurringJobSelector='[{"name":"other","isGroup":true}]')),
+        "a selector that names a job, not a group": dict(sc=_sc(sc, recurringJobSelector='[{"name":"oa-forgejo","isGroup":false}]')),
+        "a StorageClass with one Longhorn replica": dict(sc=_sc(sc, numberOfReplicas="1")),
+        "a StorageClass left out of the kustomization": dict(kust={"resources": ["namespace.yaml"]}),
+        "no StorageClass at all": dict(sc=None),
+        "no git fsync of loose objects": dict(hr=_with_gitcfg(hr, None)),
+        "core.fsync left at the committed set": dict(hr=_with_gitcfg(hr, {"core.fsync": "committed"})),
+        "core.fsync all but writeout-only": dict(hr=_with_gitcfg(hr, {"core.fsync": "all", "core.fsyncMethod": "writeout-only"})),
+        "a rendered app.ini without core.fsync": dict(rendered_cfg={"git.config": ""}) if cfg is not None else dict(hr=_with_gitcfg(hr, None)),
         "no RecurringJob": dict(jobs=[]),
         "a RecurringJob on another group": dict(jobs=[_job(jobs, groups=["other"])]),
         "a RecurringJob that is a snapshot, not a backup": dict(jobs=[_job(jobs, task="snapshot")]),
@@ -341,7 +393,7 @@ def optin_selftest(inp):
     ok = not optin_problems(*inp)
     print(("ok   " if ok else "FAIL ") + "the real opt-in inputs pass")
     for name, m in muts.items():
-        a = dict(profiles=profiles, catalog=catalog, hr=hr, jobs=jobs, other_crons=crons, pvc_labels=pvc)
+        a = dict(profiles=profiles, catalog=catalog, hr=hr, jobs=jobs, other_crons=crons, pvc_class=pvc, sc=sc, base_sc=base_sc, kust=kust, rendered_cfg=cfg)
         a.update(m)
         caught = bool(optin_problems(**a))
         print(("ok   " if caught else "FAIL ") + f"caught: {name}")
@@ -355,10 +407,34 @@ def _job(jobs, **spec):
     return j
 
 
-def _without_label(hr):
+def _with_class(hr, name):
     h = copy.deepcopy(hr)
-    h["spec"]["values"]["persistence"].pop("labels")
+    h["spec"]["values"]["persistence"]["storageClass"] = name
     return h
+
+
+def _with_gitcfg(hr, cfg):
+    h = copy.deepcopy(hr)
+    c = h["spec"]["values"]["gitea"]["config"]
+    if cfg is None:
+        c.pop("git.config", None)
+    else:
+        c["git.config"] = cfg
+    return h
+
+
+def _with_label(hr):
+    h = copy.deepcopy(hr)
+    h["spec"]["values"]["persistence"]["labels"] = {LABEL: "enabled"}
+    return h
+
+
+def _sc(sc, drop=None, **params):
+    c = copy.deepcopy(sc)
+    if drop:
+        c["parameters"].pop(drop)
+    c["parameters"].update(params)
+    return c
 
 
 def main():

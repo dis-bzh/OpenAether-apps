@@ -1,8 +1,8 @@
 # yamllint disable rule:line-length
-# Daily Longhorn backup of the repositories' volume (the PVC of the chart: persistence.labels in helmrelease.yaml carries the group).
+# Daily Longhorn backup of the repositories' volume (the volume of the chart's PVC joins the group `oa-forgejo` through the StorageClass of storageclass.yaml).
 #
 # ON whenever the forge is on (the brick is opt-in), unlike storage/backup-target/recurringjob.yaml (oa-backup-daily), which is
-# opt-in per volume: this is its own group, `oa-forgejo`, that only the Forgejo PVC carries, so it changes no other volume. It
+# opt-in per volume: this is its own group, `oa-forgejo`, that only the volume of the Forgejo class carries, so it changes no other volume. It
 # needs the platform's Longhorn backup target (BACKUP_TARGET_URL of cluster-identity, the storage-backup-target companion);
 # without a target Longhorn has nowhere to send the backup and this job produces no backup (docs/forgejo.md).
 #
