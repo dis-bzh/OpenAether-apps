@@ -57,6 +57,8 @@ single_replica:
     reason: it builds the policy reports from the results
     loss: policy reports are stale until it is back; no admission decision depends on them
   - workload: Deployment/services-git/forgejo
+    # opt_in: absent from the default render (the brick is off by default), required in apps/flux/management-forge
+    opt_in: forge
     reason: >-
       the git repositories live on one ReadWriteOnce volume (longhorn-x2-rwo, two Longhorn replicas): a second pod could
       not mount it, and Forgejo's own queues and sessions are in memory (a multi-replica forge needs ReadWriteMany,

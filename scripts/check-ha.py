@@ -23,7 +23,10 @@ check, and so does an entry without a reason. `known_gaps` lists what is not fix
 It also prints the CPU requests of what it renders (the shipped 4 x 4 vCPU examples must stay roll-able, 3 x 4 passes with ~0.45 vCPU of margin: infra capacity gate).
 
 Static: it proves the manifests, not the scheduler. Needs kubectl, helm (network for the charts) and PyYAML.
-Usage: python3 scripts/check-ha.py [--dump FILE | --load FILE] [--cpu] | --profiles (the database profile examples, apps #157)
+Usage: python3 scripts/check-ha.py [--forge] [--dump FILE | --load FILE] [--cpu] | --profiles (the database profile examples, apps #157)
+  Without --forge or --load it audits TWO renders: the default one (apps/flux/management) against the CNPG budget of the default
+  install, and the one with the opt-in Forgejo brick (apps/flux/management-forge) against its own, higher one. --forge audits
+  that second render alone.
   --dump saves the rendered stream, --load audits a saved one without rendering (the unit tests do not need the network).
 """
 import math
@@ -41,9 +44,14 @@ ALLOWLIST = REPO / "scripts/ha-allowlist.yaml"
 WORKLOADS = ("Deployment", "StatefulSet")
 CPU_BUDGET_M = 3300  # rendered Deployment/StatefulSet CPU requests, in millicores; raising it is a capacity decision
 # The pods of the CNPG Clusters (instances x (instance + Barman sidecar requests)) are not Deployments, so they were never in the
-# figure above. 9 instances (zitadel-db 3, grafana-db 3, forgejo-db 3: synchronous replication needs the third) x (50 m + 50 m).
-# 600 m until the Forgejo brick (+300 m); the arithmetic against the roll gate is in docs/forgejo.md ("Capacity").
-CNPG_CPU_BUDGET_M = 900
+# figure above. DEFAULT render: 6 instances (zitadel-db 3, grafana-db 3: synchronous replication needs the third) x (50 m + 50 m).
+CNPG_CPU_BUDGET_M = 600
+# The render WITH the opt-in Forgejo brick (apps/flux/management-forge): + forgejo-db, 3 x (50 m + 50 m). The Forgejo brick is OFF by
+# default (0.4.0 release gate: nothing may get worse), so the default budget above is not raised; the arithmetic against the roll
+# gate is in docs/forgejo.md ("Capacity").
+CNPG_CPU_BUDGET_FORGE_M = 900
+DEFAULT_PROFILE = "apps/flux/management"
+FORGE_PROFILE = "apps/flux/management-forge"
 
 
 def ident(d):
@@ -240,8 +248,9 @@ def spreads_zone_cnpg(docs, w):
     return False
 
 
-def audit(docs, allow):
-    """Returns (errors, notes)."""
+def audit(docs, allow, opt_in_absent=False):
+    """Returns (errors, notes). opt_in_absent: the render is the default one, so an allow-list entry marked `opt_in` (a workload
+    of an opt-in brick) may name no workload; in the opt-in render it must, like every other entry."""
     errs, notes = [], []
     singles = {e["workload"]: e for e in allow.get("single_replica", [])}
     stricts = {e["workload"]: e for e in allow.get("strict_spread", [])}
@@ -255,7 +264,7 @@ def audit(docs, allow):
                 errs.append("allow-list %s %s has no reason" % (label, k))
             if label == "single_replica" and not str(e.get("loss", "")).strip():
                 errs.append("allow-list single_replica %s does not say what its loss means" % k)
-            if k not in ids:
+            if k not in ids and not (opt_in_absent and e.get("opt_in")):
                 errs.append("allow-list %s %s names no workload of the platform (renamed or removed: delete the entry)" % (label, k))
     for w in ws:
         wid, r, probs = w["id"], w["replicas"], []
@@ -311,11 +320,23 @@ def audit(docs, allow):
     return errs, notes
 
 
-def render():
+def profile_paths(profile):
+    """The spec.path of every Flux Kustomization a profile (a kustomize overlay of apps/flux) renders."""
+    from ha_render import kustomize
+    return {d["spec"]["path"] for d in kustomize(REPO / profile)
+            if d.get("kind") == "Kustomization" and d.get("spec", {}).get("path")}
+
+
+def render(forge=False):
+    """The default render (apps/flux/management), or, with forge, the same plus the opt-in Forgejo brick (apps/flux/management-forge).
+    The forge's own objects are rendered on their own and added: the helm templating of the other bricks is not paid twice."""
     from ha_render import render_platform
-    from pick import load_dag
     only = os.environ.get("HA_ONLY", "")  # a path substring: render only those bricks (development; CI renders all)
-    return render_platform(sorted({b.path for b in load_dag().values() if b.path and only in b.path}))
+    default = profile_paths(DEFAULT_PROFILE)
+    docs = render_platform(sorted(p for p in default if only in p))
+    if forge:
+        docs = docs + render_platform(sorted(p for p in profile_paths(FORGE_PROFILE) - default if only in p))
+    return docs
 
 
 def main():
@@ -328,14 +349,28 @@ def main():
             print("FAIL " + e)
         print("%d failed" % len(errs))
         sys.exit(1 if errs else 0)
-    if "--load" in args:
-        docs = [d for d in yaml.safe_load_all(Path(args[args.index("--load") + 1]).read_text()) if isinstance(d, dict)]
-    else:
-        docs = render()
-        if "--dump" in args:
-            Path(args[args.index("--dump") + 1]).write_text(yaml.safe_dump_all(docs))
     allow = yaml.safe_load(ALLOWLIST.read_text()) or {}
-    errs, notes = audit(docs, allow)
+    forge = "--forge" in args
+    if "--load" in args:
+        runs = [("loaded render", [d for d in yaml.safe_load_all(Path(args[args.index("--load") + 1]).read_text()) if isinstance(d, dict)],
+                 forge)]
+    elif forge or "--dump" in args:
+        runs = [("render with the opt-in Forgejo brick" if forge else "default render", render(forge), forge)]
+    else:  # CI: both, the default one against the unraised budget, then the opt-in one against its own
+        runs = [("default render", render(False), False), ("render with the opt-in Forgejo brick", render(True), True)]
+    if "--dump" in args:
+        Path(args[args.index("--dump") + 1]).write_text(yaml.safe_dump_all(runs[0][1]))
+    failed = 0
+    for label, docs, with_forge in runs:
+        print("== %s ==" % label)
+        failed += report(docs, allow, CNPG_CPU_BUDGET_FORGE_M if with_forge else CNPG_CPU_BUDGET_M, opt_in_absent=not with_forge)
+    print("%d failed" % failed)
+    sys.exit(1 if failed else 0)
+
+
+def report(docs, allow, cnpg_budget, opt_in_absent):
+    """Audits one render, prints it, returns the number of failures."""
+    errs, notes = audit(docs, allow, opt_in_absent)
     ws = normalise(docs)
     cpu = sum(w["cpu"] * w["replicas"] for w in ws if w["pdb"] == "external")
     for n in notes:
@@ -348,17 +383,16 @@ def main():
     print("%d workloads audited, %d single-replica listed, CPU requests of the rendered Deployments/StatefulSets %d m (budget %d m)"
           % (len(ws), len(allow.get("single_replica", [])), cpu, CPU_BUDGET_M))
     ccpu, parts = cnpg_cpu(docs)
-    print("CNPG instance pods (not in the figure above): %d m (budget %d m): %s" % (ccpu, CNPG_CPU_BUDGET_M, ", ".join(parts)))
-    if ccpu > CNPG_CPU_BUDGET_M:
+    print("CNPG instance pods (not in the figure above): %d m (budget %d m): %s" % (ccpu, cnpg_budget, ", ".join(parts)))
+    if ccpu > cnpg_budget:
         errs.append("CNPG instance CPU requests %d m exceed the budget %d m (a CNPG instance is a pod that counts in the infra "
-                    "capacity gate; raise CNPG_CPU_BUDGET_M only with the arithmetic of docs/capacity.md)" % (ccpu, CNPG_CPU_BUDGET_M))
+                    "capacity gate; raise the budget only with the arithmetic of docs/capacity.md)" % (ccpu, cnpg_budget))
     if cpu > CPU_BUDGET_M:
         errs.append("CPU requests %d m exceed the budget %d m: the shipped 4 x 4 vCPU examples must stay roll-able "
                     "(infra capacity gate, docs/capacity.md); raise CPU_BUDGET_M only with that arithmetic" % (cpu, CPU_BUDGET_M))
     for e in errs:
         print("FAIL " + e)
-    print("%d failed" % len(errs))
-    sys.exit(1 if errs else 0)
+    return len(errs)
 
 
 if __name__ == "__main__":

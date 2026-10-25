@@ -128,6 +128,13 @@ st = {"apiVersion": "barmancloud.cnpg.io/v1", "kind": "ObjectStore", "metadata":
       "spec": {"instanceSidecarConfiguration": {"resources": {"requests": {"cpu": "50m"}}}}}
 check(ha.cnpg_cpu([cs, st])[0] == 300, "CNPG instance CPU counts the sidecar of the ObjectStore: 3 x (50 + 50) m")
 check(ha.cnpg_cpu([cs])[0] == 150, "a Cluster without its ObjectStore counts the instance only")
+# the default install keeps its budgets; only the render with the opt-in Forgejo brick has the higher CNPG one, and an allow-list entry of
+# an opt-in workload may name nothing in the default render only
+check(ha.CNPG_CPU_BUDGET_M == 600 and ha.CPU_BUDGET_M == 3300, "the default budgets are 600 m (CNPG) and 3300 m (Deployments)")
+check(ha.CNPG_CPU_BUDGET_FORGE_M == 900, "the render with the forge has its own CNPG budget, 900 m")
+oi = {"single_replica": [{"workload": "Deployment/ns/gone", "reason": "r", "loss": "l", "opt_in": "forge"}]}
+check(ha.audit(good, oi, opt_in_absent=True)[0] == [] and ha.audit(good, oi)[0] != [],
+      "an opt_in allow-list entry may be absent from the default render only")
 # the database profiles (apps #157): the shipped examples pass the audit, and the audit sees a Pooler
 pl = {"apiVersion": "postgresql.cnpg.io/v1", "kind": "Pooler", "metadata": {"name": "db-pooler-rw", "namespace": "ns"},
       "spec": {"instances": 2, "cluster": {"name": "db"}, "template": {"spec": {
