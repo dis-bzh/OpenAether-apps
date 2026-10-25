@@ -18,6 +18,8 @@ CASES = [  # (scrape, namespace of the target, CNP name, port)
     ("longhorn-manager", "longhorn-system", "longhorn", "9500"),
     # the M2 verifier's exporter (a VMServiceScrape, not a pod scrape): lab 19 found vmagent's egress closed on 9101
     ("backup-verify", "foundation-databases", "backup-verify-exporter", "9101"),
+    # the Forgejo forge (a VMPodScrape in vmscrapes-pipeline.yaml; the CNP is in the forge's own brick)
+    ("forgejo", "services-git", "forgejo", "3000"),
 ]
 
 
@@ -52,7 +54,7 @@ def problems(scrapes, netpols):
 
 scrapes = [d for d in docs("observability/vm-customresources/vmscapes.yaml") + docs("observability/vm-customresources/vmscrapes-pipeline.yaml")
            if d["kind"] in ("VMPodScrape", "VMServiceScrape")]
-netpols = [d for p in ("observability/networkpolicy.yaml", "istio/networkpolicy.yaml", "storage/networkpolicy.yaml", "backup/databases/networkpolicy.yaml")
+netpols = [d for p in ("observability/networkpolicy.yaml", "istio/networkpolicy.yaml", "storage/networkpolicy.yaml", "backup/databases/networkpolicy.yaml", "forgejo/networkpolicy.yaml")
            for d in docs(p) if d["kind"] == "CiliumNetworkPolicy"]
 bad = problems(scrapes, netpols)
 for b in bad:
