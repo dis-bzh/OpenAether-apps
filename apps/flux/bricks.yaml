@@ -53,6 +53,7 @@ aliases:
   iam: identity
   sso: identity
   zitadel: identity
+  forge: forgejo
   policies: kyverno
   capi: cluster-api-providers
   management: cluster-api-providers
@@ -88,6 +89,7 @@ descriptions:
   observability-vm-customresources: VMCluster/VMAgent/VM*Scrape
   observability-openbao: OpenBao VMServiceScrape (TLS-verified, metrics listener) and VMRule alerts
   identity: Zitadel (IAM/SSO, CNPG backend)
+  forgejo: Forgejo (self-hosted git forge, CNPG backend)
   kyverno: Kyverno (policy engine)
   kyverno-policies: OpenAether Kyverno policies
   kyverno-policies-eso: Audit-only Kyverno policy, External Secrets objects outside the platform namespaces

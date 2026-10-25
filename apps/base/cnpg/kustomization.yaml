@@ -20,6 +20,8 @@ resources:
   - secret.yaml
   - grafana-db-cluster.yaml
   - grafana-db-externalsecret.yaml
+  - forgejo-db-cluster.yaml
+  - forgejo-db-externalsecret.yaml
   - backup-externalsecret.yaml
   - objectstores.yaml
   - scheduledbackups.yaml

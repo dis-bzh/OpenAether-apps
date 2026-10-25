@@ -53,6 +53,15 @@ spec:
         - ports:
             - port: "5432"
               protocol: TCP
+    # 2c. Forgejo (git forge) → the forgejo-db Postgres backend, from services-git.
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": services-git
+            "app.kubernetes.io/name": forgejo
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
     # 3+4. INTERNAL foundation-databases traffic: streaming replication between
     # instances, "join" pods (pg_basebackup of a new replica), instance-manager
     # peer (:8000), backup jobs. Selector NAMESPACE-ONLY volontaire.

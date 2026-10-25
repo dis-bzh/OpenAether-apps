@@ -61,6 +61,7 @@ the `apps/flux/management` render (37 Kustomizations) these 13 have no health ga
 - capi-clusters
 - external-secrets-stores
 - flux-egress
+- forgejo
 - foundation-vault
 - identity
 - kyverno-policies-eso
@@ -71,7 +72,7 @@ the `apps/flux/management` render (37 Kustomizations) these 13 have no health ga
 - storage-backup-target
 <!-- health-gates:end -->
 
-On a real management cluster `OpenAether-infra` adds a 13th (`openaether-platform`), absent from this repository: 13 of 37.
+On a real management cluster `OpenAether-infra` adds a 14th (`openaether-platform`), absent from this repository: 14 of 38.
 Adding or removing a `wait`/`healthChecks` changes this list; the test fails until it is updated.
 
 ## Invariant to maintain

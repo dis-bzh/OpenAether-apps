@@ -15,6 +15,7 @@ kind: Kustomization
 #      └─ 21 storage
 #         └─ 30 observability ← also: cert-manager, istio, cnpg
 #      └─ 35 identity (Zitadel) ← also: cnpg, cert-manager, istio, services-gateway
+#      └─ 37 forgejo (git forge) ← also: eso, services-gateway, storage
 #   └─ 40 kyverno → kyverno-policies
 resources:
   - ../base
