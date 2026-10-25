@@ -166,6 +166,11 @@ jobs:
       - name: "A missing or empty cluster-identity replica key does not null the ObjectStores (lab 25, D9)"
         run: python3 -I scripts/dev/test-cnpg-identity-defaults.py
 
+      - name: "The Forgejo brick: seeded secrets, OCI chart source, its own database Kustomization (0.4.0, #170)"
+        run: |
+          python3 -I scripts/dev/test-forgejo-brick.py
+          python3 -I scripts/dev/test-forgejo-brick.py --selftest
+
       - name: "The restore tests stay scratch: RBAC, quota, ObjectStores, Jobs, exporter (0.4.0 M3)"
         run: python3 -I scripts/dev/test-restore-test-brick.py
 
@@ -265,6 +270,9 @@ jobs:
           KYVERNO="$d/kyverno" ./scripts/dev/test-backup-kyverno.sh
           ./scripts/dev/test-backup-namespaces.sh
           KYVERNO="$d/kyverno" python3 -I scripts/dev/test-cnpg-barman-plugin.py
+          # The Forgejo pod the chart renders passes the platform policies (bar the known read-only-root one, 0.4.0).
+          KYVERNO="$d/kyverno" python3 -I scripts/dev/test-forgejo-brick.py
+          KYVERNO="$d/kyverno" python3 -I scripts/dev/test-forgejo-brick.py --selftest
           # The optional database profiles: render, CRD shape, guarantees, platform policies (apps #157).
           KYVERNO="$d/kyverno" python3 -I scripts/dev/test-cnpg-profiles.py
           python3 -I scripts/dev/test-cnpg-profiles.py --selftest
