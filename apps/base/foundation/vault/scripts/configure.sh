@@ -151,6 +151,15 @@ application_secrets() {
   # The restic repositories' password. Without it the backups are undecryptable the day OpenBao is lost, so an
   # operator reads it ONCE with the openaether-admin identity and escrows it (README): it is not in any log.
   d="$(P="$(rand 48 48)" jq -nc '{password:$ENV.P}')";                    D="$d" kv_create backup/restic D
+  # The Forgejo git forge (apps/base/forgejo, apps/base/forgejo-db): the database role's password (the CNPG bootstrap Secret
+  # and the app's twin both read it), the initial admin's password (Forgejo creates the account ONCE and asks for a change
+  # at the first login, passwordMode initialOnlyRequireReset; `rand` is alphanumeric, the suffix gives the chart's admin
+  # password the symbols and digits it may require), and a PLACEHOLDER for the Zitadel OIDC client: the auth source ships
+  # disabled, nothing reads these two values until an operator writes the real client id and secret over them (kv_create
+  # never overwrites). The placeholder is a fixed, public string on purpose: it protects nothing and must not look like it does.
+  d="$(P="$(rand 32 32)" jq -nc '{password:$ENV.P}')";                    D="$d" kv_create forgejo/db D
+  d="$(P="$(rand 28 28)Aa1!" jq -nc '{password:$ENV.P}')";                D="$d" kv_create forgejo/admin D
+  d='{"key":"oidc-not-configured","secret":"oidc-not-configured"}';       D="$d" kv_create forgejo/oidc D
   d=""
 }
 

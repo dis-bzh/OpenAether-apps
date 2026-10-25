@@ -247,13 +247,13 @@ ROLES="$(curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X LIST https://127.0.0.1:
 for r in backup-snapshot cert-manager-issuer external-secrets-operator openaether-admin openaether-reader openbao-bootstrap openbao-breakglass secret-seeder; do
   grep -qw "$r" <<<"$ROLES" && ok "role $r" || bad "role $r missing ($ROLES)"
 done
-for kv in grafana/admin grafana/db minio/root longhorn/encryption zitadel/db zitadel/masterkey zitadel/admin zitadel/session-cookie backup/restic; do
+for kv in grafana/admin grafana/db minio/root longhorn/encryption zitadel/db zitadel/masterkey zitadel/admin zitadel/session-cookie backup/restic forgejo/db forgejo/admin forgejo/oidc; do
   [ -n "$(bao_get "/v1/secret/data/$kv" | jq -r '.data.data | keys[0] // empty')" ] && ok "secret/$kv exists" || bad "secret/$kv missing"
 done
 CSR1="$(bao_get /v1/secret/data/pki/intermediate-csr | jq -r '.data.data.csr // empty')"
 grep -q "BEGIN CERTIFICATE REQUEST" <<<"$CSR1" && ok "the intermediate CSR is stored in secret/pki/intermediate-csr (outlives the Job's log)" || bad "no CSR in secret/pki/intermediate-csr"
 LEAK=0
-for kv in grafana/admin grafana/db minio/root longhorn/encryption zitadel/db zitadel/masterkey zitadel/admin zitadel/session-cookie backup/restic; do
+for kv in grafana/admin grafana/db minio/root longhorn/encryption zitadel/db zitadel/masterkey zitadel/admin zitadel/session-cookie backup/restic forgejo/db forgejo/admin forgejo/oidc; do
   while IFS= read -r val; do
     [ -n "$val" ] && grep -qF -- "$val" "$T/dev/configure.sh.out" && { LEAK=1; bad "the value of secret/$kv is in the output"; }
   done < <(bao_get "/v1/secret/data/$kv" | jq -r '.data.data | to_entries[] | select(.key != "username" and .key != "accessKey") | .value')
@@ -267,10 +267,20 @@ ADMINPW="$(bao_get /v1/secret/data/zitadel/admin | jq -r '.data.data.password')"
   && ok "the Zitadel first-admin password has 15+ characters and all four classes" || bad "the first-admin password would fail Zitadel's policy"
 [ "$ADMINPW" != 'Password1!' ] && ok "...and is not upstream's default" || bad "the first-admin password is the public default"
 [ "$(bao_get /v1/secret/data/zitadel/session-cookie | jq -r '.data.data.secret | length')" -ge 32 ] && ok "the Zitadel session cookie secret has 32+ characters" || bad "session cookie secret too short"
+# The Forgejo forge: the database role's password and the initial admin's, generated; the OIDC client a fixed placeholder an operator overwrites.
+[ "$(bao_get /v1/secret/data/forgejo/db | jq -r '.data.data.password | length')" = 32 ] && ok "the forgejo-db role password has 32 characters" || bad "forgejo/db password length"
+FGPW="$(bao_get /v1/secret/data/forgejo/admin | jq -r '.data.data.password')"
+[ "${#FGPW}" -ge 15 ] && [[ "$FGPW" =~ [a-z] && "$FGPW" =~ [A-Z] && "$FGPW" =~ [0-9] && "$FGPW" =~ [^a-zA-Z0-9] ]] \
+  && ok "the Forgejo initial admin password has 15+ characters and four character classes" || bad "forgejo/admin password too weak"
+[ "$(bao_get /v1/secret/data/forgejo/db | jq -r '.data.data.password')" != "$FGPW" ] && ok "...and the two Forgejo passwords differ" || bad "forgejo/db and forgejo/admin share a password"
+[ "$(bao_get /v1/secret/data/forgejo/oidc | jq -r '.data.data | [.key, .secret] | join(",")')" = "oidc-not-configured,oidc-not-configured" ] \
+  && ok "forgejo/oidc holds the public placeholder (the auth source is disabled)" || bad "forgejo/oidc is not the placeholder"
 RESTIC1="$(bao_get /v1/secret/data/backup/restic | jq -r '.data.data.password')"
+FGDB1="$(bao_get /v1/secret/data/forgejo/db | jq -r '.data.data.password')"
 echo "--- a second run changes no secret"
 run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT" && ok "second configure.sh exits 0" || bad "second configure.sh failed: $(tail -4 "$T/dev/configure.sh.out")"
 [ "$(bao_get /v1/secret/data/backup/restic | jq -r '.data.data.password')" = "$RESTIC1" ] && ok "backup/restic is unchanged" || bad "backup/restic was rotated"
+[ "$(bao_get /v1/secret/data/forgejo/db | jq -r '.data.data.password')" = "$FGDB1" ] && ok "forgejo/db is unchanged (a rotation would lock the app out of its database)" || bad "forgejo/db was rotated"
 grep -q "already present" "$T/dev/configure.sh.out" && ok "it reports the secrets as already present" || bad "no 'already present'"
 NKEYS="$(curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X LIST https://127.0.0.1:18211/v1/pki/keys | jq -r '.data.keys | length')"
 [ "$NKEYS" = 1 ] && ok "two runs, one pending PKI key (no key per sync)" || bad "pki keys after two runs: $NKEYS"
