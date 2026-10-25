@@ -1,8 +1,13 @@
 # Forgejo in 0.4.0: the git forge, the first brick of OpenAether-self (OPT-IN, off by default)
 
-Rung: **mocked, offline**. Rendered manifests, unit tests and the Kyverno CLI; the vault configure Job's seeding ran against a real
-OpenBao in a container (`test-openbao-bootstrap.sh`). **Nothing of the forge has run on a cluster**, not in 0.3.x either: the brick
-arrived in PR #173 (dogfooding V1, issue #170) after rungs 1-2 only. Not a compliance claim.
+Rung: **mocked, offline**, plus **one real run: lab 27 sitting 1 (Scaleway, 2026-10-25)**, which enabled the brick on a running cluster
+and found three defects, fixed below and UNVERIFIED on a cluster until the next lab. What lab 27 showed: the brick converged in 2 min 30 s
+from the path patch (chart pulled from `code.forgejo.org` under the restricted egress policy, `forgejo-db` 3/3 with synchronous
+replication, archiving and the replica copy), HTTPS through the load balancer and the Gateway worked (`/api/healthz` 200, registration
+refused, anonymous API 403, anonymous clone refused, `/metrics` answers 500 at the Gateway and is scraped by vmagent), the admin
+logged in and was forced to change the password, two repositories were pushed (3 s each) and cloned. The defects: the daily
+volume backup never selected the volume (FG), acknowledged pushes were lost on a zone power-off (FK, DATA LOSS), and enabling the
+brick is a hand patch (FF). Not a compliance claim.
 
 ## What is delivered
 
@@ -37,7 +42,13 @@ the Kustomizations `forgejo-db` (group 36) and `forgejo` (group 37) with a `$pat
 management one does not either. To turn it on, one of:
 
 1. **The overlay `apps/flux/management-forge`**: point the root Flux Kustomization at `./apps/flux/management-forge` instead of
-   `./apps/flux/management`. It is the full DAG of `../base` with nothing removed; the only difference with `management` is those two
+   `./apps/flux/management`. **On a running cluster this is one live patch, the supported way (FF, lab 27):**
+   `kubectl -n flux-system patch kustomizations.kustomize.toolkit.fluxcd.io openaether-platform --type merge -p '{"spec":{"path":"./apps/flux/management-forge"}}'`
+   (back: the same with `./apps/flux/management`). The path comes from the Talos inline manifest of the infra repository
+   (`path: ./apps/flux/${cluster_role}`), an object `cluster-up` never rewrites, and there is no tfvar for it: **`cluster-up` neither sets
+   nor reverts the patch and `cluster-verify` does not check it** ("not converged, not checked": a gap, the issue stays open; a cluster
+   rebuilt from the tfvars starts on the default path again). Lab 27: `forgejo-db` and `forgejo` Ready 2 min 30 s after the patch.
+   The overlay is the full DAG of `../base` with nothing removed; the only difference with `management` is those two
    Kustomizations (a test fails if it grows another).
 2. **A generated profile**: `python3 scripts/pick.py forge <the other bricks> -o apps/flux/<name>` (the closure of `forgejo` pulls in
    `cnpg`, `external-secrets`, `services-gateway`, `storage`, OpenBao and the rest of its dependencies).
@@ -112,19 +123,62 @@ quotes the figures without the forge.
 | What | Where | Protection | Not covered |
 |---|---|---|---|
 | users, issues, pull requests, settings | `forgejo-db` | no acknowledged commit lost (3 instances, synchronous), WAL and daily base backup to the primary store, copy to the replica store | the same limit as the other databases: both disks that hold an acknowledged commit lost at once |
-| the git repositories themselves | the 10 Gi Longhorn volume `longhorn-x2-rwo` | two Longhorn replicas: the volume survives the loss of a node; a **daily Longhorn backup** (below) to the platform's backup target | a restore of the volume (never run); consistency with the database (below); the unencrypted volume (the class is not LUKS) and a backup of it that nothing here encrypts |
+| the git repositories themselves | the 10 Gi Longhorn volume of the class `longhorn-x2-rwo-forgejo` (two replicas) | two Longhorn replicas: the volume survives the loss of a node, **for what git had synced** (below); `core.fsync = all` so an acknowledged push is on disk; a **daily Longhorn backup** (below) to the platform's backup target | the fsync setting and the new class are UNVERIFIED on a cluster; consistency with the database (below); the unencrypted volume (the class is not LUKS) and a backup of it that nothing here encrypts |
+
+### The durability of a push: `core.fsync = all` (FK, lab 27, DATA LOSS)
+
+Lab 27 power-cycled the zone that held the Forgejo pod (graceful provider power-off of three nodes, 300 s). A push writer that counts a
+push acknowledged only when `git push` returned 0 had 68 acknowledged pushes. Afterwards the repository on the Longhorn volume held **75
+zero-length loose object files** (of 211), the branch pointed at an empty object, every later push was refused ("object file ... is
+empty", "missing necessary objects") and a fresh clone failed; of the 68, only 64 commits were readable. The two older repositories
+(written 30 minutes before) were intact and `forgejo-db` lost nothing (10641 acknowledged, 0 missing).
+
+Cause (a hypothesis that fits every fact, not isolated by an experiment): git does not fsync loose objects by default. Its documented
+default is `core.fsync=committed,-loose-object`
+(https://github.com/git/git/blob/v2.45.0/Documentation/config/core.txt, `core.fsync`), so what a push wrote was in the page cache of
+the node when it powered off. **Change:** `gitea.config.git.config.core.fsync: all` in the HelmRelease. The chart renders it into the
+inline app.ini sources as the section `[git.config]` with `core.fsync=all` (rendered and tested), and Forgejo applies the section as
+`git config` (https://forgejo.org/docs/latest/admin/config-cheat-sheet/, "Git - Config options": "The key/value pairs in this section will
+be used as git config", "this section only performs set config"). `all` is git's aggregate option that syncs every component,
+loose objects included. `core.fsyncMethod` is not set: git's default on Linux is `fsync`, whereas `writeout-only` and `batch` give part
+of the guarantee back. **Two caveats.** Forgejo only SETS keys: removing the line later does not unset it in git's config (the cheat
+sheet says so). And the fix is a hypothesis on a cause: **UNVERIFIED on a cluster until a drill re-runs it** (the push writer in the
+zone power-off, with fsync on, then `git fsck` and a clone). **Cost, not measured:** every push now pays the fsyncs of its loose
+objects, packs, index and references, so the push latency goes up; by how much is UNVERIFIED (lab 27 measured pushes of 3 s each
+without it, through the load balancer, which is dominated by the network path).
+
+**Why Longhorn does not already cover it.** The volume has two replicas (`longhorn-x2-rwo-forgejo`), which protects against the loss of
+a node holding one replica of data the engine already has. The filesystem on the volume is mounted on the node where the pod runs, and
+what git wrote but never synced sits in that node's page cache: it has not reached the Longhorn engine, so NEITHER replica has it. A
+node or a zone that powers off while it holds the mount (and, in the drill, the writable replica too) loses exactly that tail, whatever
+the replica count. fsync is what makes the data leave the cache before the push is acknowledged; replication is what keeps it once it
+has. (This is the reading that fits the lab; the drill with fsync on is what shows it.)
 
 ### The recurring backup of the repositories' volume
 
-When the brick is on, the repositories' volume is backed up by default: the chart's `persistence.labels` puts
-`recurring-job-group.longhorn.io/oa-forgejo: enabled` on the PVC, and `RecurringJob forgejo-repos-backup-daily`
-(`apps/base/forgejo/recurringjob.yaml`, namespace `longhorn-system`, task `backup`, group `oa-forgejo`, **daily at 03:55**, **14 kept**,
-concurrency 1) selects that group. It sends the backup to the platform's Longhorn backup target, which is configured by the existing
-`backup_target_url` identity value (`BACKUP_TARGET_URL` of `cluster-identity`, the `storage-backup-target` brick). 03:55 is after the
-other jobs that touch the same link or the same data: the restic dumps (02:17 and 02:47), `oa-backup-daily` (03:37), the `forgejo-db`
-base backup (03:40); before the etcd snapshot (04:10). The group is its own, so the job changes no other volume and
-`oa-backup-daily` (opt-in, group `oa-backup`) is not involved. `test-forgejo-brick.py` fails without the label, with a job on another
-group, a non-backup job, a non-daily or colliding schedule, or no retention.
+When the brick is on, the repositories' volume is backed up by default: the volume is created **already in the group `oa-forgejo`**, and
+`RecurringJob forgejo-repos-backup-daily` (`apps/base/forgejo/recurringjob.yaml`, namespace `longhorn-system`, task `backup`, group
+`oa-forgejo`, **daily at 03:55**, **14 kept**, concurrency 1) selects that group. It sends the backup to the platform's Longhorn backup
+target, which is configured by the existing `backup_target_url` identity value (`BACKUP_TARGET_URL` of `cluster-identity`, the
+`storage-backup-target` brick). 03:55 is after the other jobs that touch the same link or the same data: the restic dumps (02:17 and
+02:47), `oa-backup-daily` (03:37), the `forgejo-db` base backup (03:40); before the etcd snapshot (04:10). The group is its own, so the job
+changes no other volume and `oa-backup-daily` (opt-in, group `oa-backup`) is not involved.
+
+**How the volume joins the group (FG, lab 27).** The first version put the label `recurring-job-group.longhorn.io/oa-forgejo: enabled`
+on the PVC (`persistence.labels`). Longhorn does not copy a PVC label to its Volume: lab 27 found the Volume with only
+`recurring-job-group.longhorn.io/default`, the job logged "Found 0 volumes with recurring job forgejo-repos-backup-daily", and the
+daily backup NEVER ran until the Volume was labelled by hand. Now `apps/base/forgejo/storageclass.yaml` defines the StorageClass
+`longhorn-x2-rwo-forgejo`: the same parameters as `longhorn-x2-rwo` (2 replicas, RWO, Retain, expansion, not encrypted; the test compares
+them) plus `recurringJobSelector: '[{"name":"oa-forgejo","isGroup":true}]'`, the parameter Longhorn documents for this ("A JSON array of
+recurring job or group specifications to attach to the volume", applied at volume creation only,
+https://longhorn.io/docs/latest/references/storage-class-parameters/). The chart's `persistence.storageClass` names it, so the volume is
+created labelled. **A forge volume created before this change keeps its class** (a PVC cannot change class, and a class cannot be edited):
+label its Longhorn Volume by hand, as lab 27 did (`kubectl -n longhorn-system label volumes.longhorn.io <volume>
+recurring-job-group.longhorn.io/oa-forgejo=enabled`), or restore it into a new PVC of the new class. `test-forgejo-brick.py` fails without
+the class, with a class that differs from `longhorn-x2-rwo`, with a selector on another group or on a job rather than a group, with a PVC on
+another class (rendered from the chart), with the PVC label used again, a job on another group, a non-backup job, a non-daily or
+colliding schedule, or no retention. **UNVERIFIED on a cluster:** that a volume created from the new class carries the label and that the
+job then selects it (lab 27 only proved the job and the restore after the manual label).
 
 What this covers: the content of the volume (the bare repositories) as of the night's snapshot, 14 of them, if the platform has a backup
 target. What it does not cover, precisely:
@@ -136,10 +190,11 @@ target. What it does not cover, precisely:
   the volume from the night's backup), they can disagree: a repository the database knows with pushes the volume lacks, or pushes on
   disk that no issue, pull request or webhook row in the database accounts for; an application-consistent copy of both needs
   `forgejo dump` (or stopping the forge) at one moment, which nothing schedules. A restored volume is crash-consistent at best.
-- **A restore of the repositories' volume has not been run on a cluster**, nor has a restore of `forgejo-db`. The documented test of the
-  volume is the opt-in `longhorn-restore-test` component (a canary volume backed up and restored weekly): it proves that a Longhorn
-  backup comes back on the platform, not that the Forgejo one does. Label propagation from the PVC to the Longhorn volume is
-  Longhorn's documented behaviour and is unverified here.
+- **A restore of the repositories' volume was run ONCE, in lab 27, by hand** (after the manual label): the 289 MB backup was restored
+  into a scratch volume through a StorageClass with `fromBackup`, a PVC and a pod; it held both repositories, `refs/heads/main` was
+  the pushed commit, `git clone` and `git fsck` were clean, and the scratch namespace and class were deleted. No restore of `forgejo-db`
+  has been exercised. The documented recurring test of a volume is the opt-in `longhorn-restore-test` component (a canary volume backed up
+  and restored weekly): it proves that a Longhorn backup comes back on the platform, not that the Forgejo one does.
 
 ## What is NOT delivered (open, each one is for an issue)
 
@@ -170,11 +225,13 @@ target. What it does not cover, precisely:
    `ContinuousArchiving`, a first base backup at 03:40 or by hand), `cnpg-store-replicate` copies its archive to the replica store.
 3. A **repository pushed through the forge** over HTTPS at `forge.openaether.local`: admin login, forced password change, create a
    repository, `git push`, `git clone`; anonymous access refused, registration refused, `/metrics` refused on the Gateway and scraped by vmagent.
-4. A **Longhorn backup of the repositories' volume** by the default job (the PVC carries `oa-forgejo`, the Longhorn volume carries it too,
-   `forgejo-repos-backup-daily` runs at 03:55 and a backup appears at the target), restored into a scratch volume and the repository cloned
+4. A **Longhorn backup of the repositories' volume** by the default job (a volume created from `longhorn-x2-rwo-forgejo` carries
+   `oa-forgejo` at once, with no manual label; `forgejo-repos-backup-daily` runs at 03:55 and a backup appears at the target), restored into a scratch volume and the repository cloned
    from it; then the **pair**: the database and the volume restored from their different instants, and what disagrees.
-5. **Node and zone loss drills with a Forgejo push writer**: how long the forge is away (the allow-list entry says unmeasured), no acknowledged
-   push lost; `forgejo-db` with a writer like `zitadel-db` in lab 23.
+5. **Node and zone loss drills with a Forgejo push writer, with `core.fsync = all`**: the SAME drill as lab 27 (the forge pod and the writable
+   replica of its volume in a zone that is powered off): no acknowledged push lost, `git fsck` clean, a fresh clone works; the push latency
+   with and without fsync; how long the forge is away (the allow-list entry says unmeasured); `forgejo-db` with a writer like `zitadel-db`
+   in lab 23.
 6. The **dogfooding V1 acceptance of #170**: OpenAether's own source hosted on the forge and used from the forge.
 7. Whether Forgejo starts with `readOnlyRootFilesystem: true`, and what the cluster says about the 3 + 1 pods on the 4-worker examples
    (`cluster-roll`'s survey: the derived 233-238% above, with the brick on).
