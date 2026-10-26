@@ -31,7 +31,10 @@ broke it:
   11. the pod is rescheduled 30 s after its node is NotReady or unreachable, not after Kubernetes' default 300 s (F-FORGE-TOL, lab 27:
      the forge was away about 8 minutes): `tolerations` in the chart values carries both keys with tolerationSeconds <= 30, and the
      Deployment the chart renders carries them (when helm is available);
-  12. (with the Kyverno CLI, $KYVERNO or PATH, and helm with network for the chart) the pod the chart renders passes the platform
+  12. forgejo-db has a base backup at enablement, not only at 03:40 (F-FORGEDB-BASE, lab 27: WAL and no base backup for up to a day, so no
+     PITR): its ScheduledBackup sets `immediate: true`, the field exists in the vendored CRD, and it is the ONLY ScheduledBackup of
+     forgejo-db (no second object that would double the daily backup);
+  13. (with the Kyverno CLI, $KYVERNO or PATH, and helm with network for the chart) the pod the chart renders passes the platform
      policies except the one read-only-root-filesystem finding that is known and left open (every one is Audit).
 Static: it proves the wiring, not a cluster. Run: python3 -I scripts/dev/test-forgejo-brick.py [--selftest]
 """
@@ -94,6 +97,27 @@ LABEL = f"recurring-job-group.longhorn.io/{GROUP}"
 SC = "longhorn-x2-rwo-forgejo"
 
 
+def crd_has_immediate():
+    """True when the vendored CNPG CRD of ScheduledBackup has spec.immediate (a boolean)."""
+    for d in docs("apps/base/cnpg/cnpg-1.30.1.yaml"):
+        if d.get("kind") == "CustomResourceDefinition" and d["metadata"]["name"] == "scheduledbackups.postgresql.cnpg.io":
+            props = d["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"]["spec"]["properties"]
+            return props.get("immediate", {}).get("type") == "boolean"
+    return False
+
+
+def basebackup_problems(sbs, crd_ok):
+    errs = []
+    mine = [d for d in sbs if (d.get("spec", {}).get("cluster") or {}).get("name") == "forgejo-db"]
+    if len(mine) != 1:
+        errs.append(f"forgejo-db must have exactly one ScheduledBackup (found {len(mine)}): a second one doubles the daily base backup")
+    elif mine[0]["spec"].get("immediate") is not True:
+        errs.append("the forgejo-db ScheduledBackup must set `immediate: true`: without it the database has WAL and no base backup until 03:40, so no point-in-time recovery for up to a day (lab 27, F-FORGEDB-BASE)")
+    if not crd_ok:
+        errs.append("the vendored CNPG CRD has no boolean spec.immediate on ScheduledBackup: the field would be rejected or ignored")
+    return errs
+
+
 def tolerations_problems(tols, where):
     errs = []
     for key in ("node.kubernetes.io/unreachable", "node.kubernetes.io/not-ready"):
@@ -103,7 +127,7 @@ def tolerations_problems(tols, where):
     return errs
 
 
-def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_class=None, sc=None, base_sc=None, kust=None, rendered_cfg=None, rendered_tols=None):
+def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_class=None, sc=None, base_sc=None, kust=None, rendered_cfg=None, rendered_tols=None, sbs=None, crd_ok=True):
     """profiles: {name: set of Kustomization names}; jobs: the RecurringJobs of the brick; other_crons: the schedules of the other jobs."""
     errs = []
     for name in ("management", "workload"):
@@ -122,6 +146,7 @@ def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_class=None, sc=
         errs.append(f"core.fsyncMethod {gc.get('core.fsyncMethod')!r} gives back part of the guarantee: leave git's default (fsync)")
     if rendered_cfg is not None and "core.fsync=all" not in rendered_cfg.get("git.config", ""):
         errs.append("the app.ini sources the chart renders have no [git.config] core.fsync=all")
+    errs += basebackup_problems(sbs if sbs is not None else [], crd_ok)
     errs += tolerations_problems(hr["spec"]["values"].get("tolerations"), "the HelmRelease values")
     if rendered_tols is not None:
         errs += tolerations_problems(rendered_tols, "the Deployment the chart renders")
@@ -377,11 +402,12 @@ def optin_inputs():
         pvc = next(d for d in rendered if d["kind"] == "PersistentVolumeClaim")["spec"].get("storageClassName")
         cfg = next(d for d in rendered if d["kind"] == "Secret" and d["metadata"]["name"].endswith("inline-config")).get("stringData", {})
         tols = next(d for d in rendered if d["kind"] == "Deployment")["spec"]["template"]["spec"].get("tolerations") or []
-    return profiles, catalog, hr, jobs, other_schedules(), pvc, sc, base_sc, kust, cfg, tols
+    sbs = [d for d in docs("apps/base/forgejo-db/scheduledbackup.yaml") if d["kind"] == "ScheduledBackup"]
+    return profiles, catalog, hr, jobs, other_schedules(), pvc, sc, base_sc, kust, cfg, tols, sbs, crd_has_immediate()
 
 
 def optin_selftest(inp):
-    profiles, catalog, hr, jobs, crons, pvc, sc, base_sc, kust, cfg, tols = inp
+    profiles, catalog, hr, jobs, crons, pvc, sc, base_sc, kust, cfg, tols, sbs, crd_ok = inp
     muts = {
         "the forge back in the default management profile": dict(profiles=dict(profiles, management=profiles["management"] | BRICK)),
         "the forge in the workload profile": dict(profiles=dict(profiles, workload=profiles["workload"] | {"forgejo"})),
@@ -404,6 +430,10 @@ def optin_selftest(inp):
         "tolerations kept at 300 s": dict(hr=_with_tols(hr, [dict(key=k, operator="Exists", effect="NoExecute", tolerationSeconds=300) for k in ("node.kubernetes.io/unreachable", "node.kubernetes.io/not-ready")])),
         "only the unreachable toleration": dict(hr=_with_tols(hr, [dict(key="node.kubernetes.io/unreachable", operator="Exists", effect="NoExecute", tolerationSeconds=30)])),
         "a rendered Deployment without the tolerations": dict(rendered_tols=[]) if tols is not None else dict(hr=_with_tols(hr, None)),
+        "no immediate base backup at enablement": dict(sbs=[_sb(sbs, immediate=False)]),
+        "immediate left out of the ScheduledBackup": dict(sbs=[_sb(sbs, drop="immediate")]),
+        "a second ScheduledBackup for forgejo-db": dict(sbs=[sbs[0], _sb(sbs, name="forgejo-db-second")]),
+        "a CRD without spec.immediate": dict(crd_ok=False),
         "no RecurringJob": dict(jobs=[]),
         "a RecurringJob on another group": dict(jobs=[_job(jobs, groups=["other"])]),
         "a RecurringJob that is a snapshot, not a backup": dict(jobs=[_job(jobs, task="snapshot")]),
@@ -414,7 +444,7 @@ def optin_selftest(inp):
     ok = not optin_problems(*inp)
     print(("ok   " if ok else "FAIL ") + "the real opt-in inputs pass")
     for name, m in muts.items():
-        a = dict(profiles=profiles, catalog=catalog, hr=hr, jobs=jobs, other_crons=crons, pvc_class=pvc, sc=sc, base_sc=base_sc, kust=kust, rendered_cfg=cfg, rendered_tols=tols)
+        a = dict(profiles=profiles, catalog=catalog, hr=hr, jobs=jobs, other_crons=crons, pvc_class=pvc, sc=sc, base_sc=base_sc, kust=kust, rendered_cfg=cfg, rendered_tols=tols, sbs=sbs, crd_ok=crd_ok)
         a.update(m)
         caught = bool(optin_problems(**a))
         print(("ok   " if caught else "FAIL ") + f"caught: {name}")
@@ -442,6 +472,16 @@ def _with_gitcfg(hr, cfg):
     else:
         c["git.config"] = cfg
     return h
+
+
+def _sb(sbs, drop=None, name=None, **spec):
+    d = copy.deepcopy(sbs[0])
+    if drop:
+        d["spec"].pop(drop, None)
+    if name:
+        d["metadata"]["name"] = name
+    d["spec"].update(spec)
+    return d
 
 
 def _with_tols(hr, tols):

@@ -10,6 +10,15 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: cnpg
 spec:
+  # `immediate: true` (spec.immediate of the ScheduledBackup CRD, vendored in apps/base/cnpg/cnpg-1.30.1.yaml: "If the first
+  # backup has to be immediately start after creation or not"): the forge is enabled on a running cluster, and without it
+  # forgejo-db archived WAL for up to a day (lab 27: nothing until 03:40) with no base backup to replay it from, so neither
+  # a point-in-time recovery nor a restore was possible for the whole first day (F-FORGEDB-BASE). It fires once, when this
+  # object is created; the daily schedule below is unchanged and is the only ScheduledBackup of forgejo-db. Not set on the
+  # zitadel-db and grafana-db objects (apps/base/cnpg/scheduledbackups.yaml): they are created together by the `cnpg`
+  # Kustomization, and two immediate backups would start at once on the one shared S3 endpoint the 15 minute offsets exist
+  # to avoid; docs/forgejo.md says so.
+  immediate: true
   # 03:40: the third offset (03:10 zitadel-db, 03:25 grafana-db), one base backup at a time on the shared S3 endpoint.
   schedule: "0 40 3 * * *"
   backupOwnerReference: self
