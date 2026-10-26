@@ -81,12 +81,13 @@ spec:
       # reach the Longhorn volume (lab 27, FG), so there is none.
       storageClass: longhorn-x2-rwo-forgejo
 
-    # FAILOVER OF THE POD (lab 27 sitting 2, F-FORGE-TOL). Kubernetes adds a 300 s not-ready / unreachable toleration to a pod
-    # that has none, so after a node or zone loss the forge pod was only evicted five minutes after its node turned NotReady:
-    # the forge was away about 8 minutes (push gap 471.8 s). The databases tolerate 30 s (apps/base/forgejo-db/cluster.yaml,
-    # the CNPG profiles); the forge gets the same, through the chart's own `tolerations` value (pod spec, rendered as given).
-    # The volume is ReadWriteOnce with two Longhorn replicas: Longhorn, not this value, refuses a second attach while the
-    # old one is held (docs/forgejo.md says what was measured and what was not).
+    # FAILOVER OF THE POD (lab 27 sitting 2, F-FORGE-TOL). Kubernetes adds a 300 s not-ready / unreachable
+    # toleration to a pod that has none, so after a node or zone loss the forge pod was only evicted five minutes
+    # after its node turned NotReady: the forge was away about 8 minutes (push gap 471.8 s). The databases tolerate
+    # 30 s (apps/base/forgejo-db/cluster.yaml, the CNPG profiles); the forge gets the same, through the chart's own
+    # `tolerations` value (pod spec, rendered as given). The volume is ReadWriteOnce with two Longhorn replicas:
+    # Longhorn, not this value, refuses a second attach while the old one is held (docs/forgejo.md says what was
+    # measured and what was not).
     tolerations:
       - key: node.kubernetes.io/unreachable
         operator: Exists
