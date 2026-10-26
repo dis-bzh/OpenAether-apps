@@ -20,6 +20,9 @@ metadata:
 spec:
   # 03:10, offset from the restic CronJobs (02:17 / 02:47) so as not to stack S3
   # writes or disk load at the same moment.
+  # `immediate: true`: one base backup when the object is CREATED, not on an update of an existing one
+  # (docs/forgejo.md, "taken at enablement"); the cron schedule is unchanged and this stays the only ScheduledBackup.
+  immediate: true
   schedule: "0 10 3 * * *"
   backupOwnerReference: self
   method: plugin
@@ -37,6 +40,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: cnpg
 spec:
+  immediate: true
   schedule: "0 25 3 * * *"
   backupOwnerReference: self
   method: plugin

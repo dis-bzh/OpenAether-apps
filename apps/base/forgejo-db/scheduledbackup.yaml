@@ -15,10 +15,8 @@ spec:
   # and without it forgejo-db archived WAL for up to a day (lab 27: nothing until 03:40) with no base backup to
   # replay it from, so neither a point-in-time recovery nor a restore was possible for the whole first day
   # (F-FORGEDB-BASE). It fires once, when this object is created; the daily schedule below is unchanged and is the
-  # only ScheduledBackup of forgejo-db. Not set on the zitadel-db and grafana-db objects
-  # (apps/base/cnpg/scheduledbackups.yaml): they are created together by the `cnpg` Kustomization, and two immediate
-  # backups would start at once on the one shared S3 endpoint the 15 minute offsets exist to avoid; docs/forgejo.md
-  # says so.
+  # only ScheduledBackup of forgejo-db. The zitadel-db, grafana-db and customer-profile objects set it too
+  # (owner decision 2026-10-26).
   immediate: true
   # 03:40: the third offset (03:10 zitadel-db, 03:25 grafana-db), one base backup at a time on the shared S3 endpoint.
   schedule: "0 40 3 * * *"

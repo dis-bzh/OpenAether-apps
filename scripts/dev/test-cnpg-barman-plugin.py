@@ -127,6 +127,16 @@ def main(path="apps/base/cnpg"):
         if d["kind"] == "ScheduledBackup":
             if d["spec"].get("method") != "plugin" or d["spec"].get("pluginConfiguration", {}).get("name") != PLUGIN:
                 errs.append(f"ScheduledBackup {d['metadata']['name']}: want method plugin with {PLUGIN}")
+    if path == "apps/base/cnpg":
+        # Every platform Cluster has ONE ScheduledBackup and it sets `immediate: true` (F-FORGEDB-BASE, owner decision 2026-10-26): without it
+        # a new Cluster archives WAL with no base backup to replay it from until its 03:xx slot. CNPG acts on it only while the object's
+        # status.lastCheckTime is empty (v1.30.1 scheduledbackup_controller.go), i.e. at creation, not when an existing object is updated.
+        for c in clusters:
+            mine = [d for d in docs if d["kind"] == "ScheduledBackup" and d["spec"].get("cluster", {}).get("name") == c["metadata"]["name"]]
+            if len(mine) != 1:
+                errs.append(f"Cluster {c['metadata']['name']}: want exactly one ScheduledBackup, got {len(mine)}")
+            elif mine[0]["spec"].get("immediate") is not True:
+                errs.append(f"ScheduledBackup {mine[0]['metadata']['name']}: must set `immediate: true` (a new Cluster has WAL and no base backup until its schedule)")
     os_schema = crd_schema(docs, "ObjectStore")["properties"]["spec"]
     for (ns, name), d in stores.items():
         e = []

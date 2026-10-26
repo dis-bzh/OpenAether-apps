@@ -192,6 +192,8 @@ def main():
         sb = by_kind(docs, "ScheduledBackup")[0]
         check(sb["spec"]["method"] == "plugin" and sb["spec"]["cluster"]["name"] == "shop-db" and len(sb["spec"]["schedule"].split()) == 6,
               "%s: a base backup through the plugin on a 6-field schedule" % p)
+        check(sb["spec"].get("immediate") is True and len(by_kind(docs, "ScheduledBackup")) == 1,
+              "%s: ONE ScheduledBackup, with immediate: true (a base backup at creation, not only at 03:40)" % p)
         prim = next(d for d in by_kind(docs, "ObjectStore") if d["metadata"]["labels"].get("openaether.io/db-store") == "primary")
         check(prim["spec"]["configuration"]["destinationPath"].endswith("/cnpg/shop-db")
               and prim["spec"]["configuration"]["wal"]["encryption"] == "AES256", "%s: archive under cnpg/<name>, server-side encryption requested" % p)

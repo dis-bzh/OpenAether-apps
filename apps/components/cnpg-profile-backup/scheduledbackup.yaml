@@ -10,6 +10,9 @@ metadata:
     openaether.io/component: database
     openaether.io/db-profile: customer
 spec:
+  # One base backup when the object is created (a new customer Cluster has WAL and no base backup until 03:40
+  # otherwise); the schedule is unchanged and this is the Cluster's only ScheduledBackup. See docs/forgejo.md.
+  immediate: true
   schedule: "0 40 3 * * *"
   backupOwnerReference: self
   method: plugin
