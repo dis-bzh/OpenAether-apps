@@ -193,7 +193,12 @@ push; rc=$?
 chk "a real etcd snapshot is pushed to both stores ($(tail -1 "$W/out"))" "[ $rc = 0 ] && grep -q 'both destinations' '$W/out'"
 chk "primary repository: one snapshot, host etcd, readable with the password" "repo '$PU' AKP bkp snapshots --host etcd | grep -q '1 snapshots'"
 chk "replica repository: one snapshot, host etcd, readable with the password" "repo '$RU' AKR bkr snapshots --host etcd | grep -q '1 snapshots'"
-chk "the stored data is not the plain snapshot (client-side encryption)" "grep -qa k1 '$ROOT/scripts/dev/testdata/etcd-snapshot-v3.6.db' && ! grep -rl -a 'k1' '$W/P/bkp/lab/etcd/data' '$W/R/bkr/lab/etcd/data' 2>/dev/null | grep -q ."
+# A marker of 24 bytes that the plain snapshot holds: a 2-byte marker ("k1") turned up by chance in the random bytes of an encrypted
+# 100 KB repository about 3 times in 4, so this check failed in CI on an intact repository. Positive control first: the marker IS in the
+# plain file, and the same search DOES find it in a copy of it (so the search can fail the way it should).
+MARK='"name":"default","clientURLs"'
+cp "$ROOT/scripts/dev/testdata/etcd-snapshot-v3.6.db" "$W/plain-control"
+chk "the stored data is not the plain snapshot (client-side encryption)" "grep -qaF '$MARK' '$ROOT/scripts/dev/testdata/etcd-snapshot-v3.6.db' && grep -rlaF '$MARK' '$W/plain-control' | grep -q . && ! grep -rlaF '$MARK' '$W/P/bkp/lab/etcd/data' '$W/R/bkr/lab/etcd/data' 2>/dev/null | grep -q ."
 chk "each store only saw its own key" "! grep -v 'ak=AKP' '$W/P.log' | grep -q . && ! grep -v 'ak=AKR' '$W/R.log' | grep -q ."
 echo "restored" >/dev/null
 mkdir -p "$W/tmp/out"; repo "$PU" AKP bkp restore latest --target /tmp/out >/dev/null
