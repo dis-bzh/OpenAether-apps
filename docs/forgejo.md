@@ -196,14 +196,22 @@ target. What it does not cover, precisely:
   has been exercised. The documented recurring test of a volume is the opt-in `longhorn-restore-test` component (a canary volume backed up
   and restored weekly): it proves that a Longhorn backup comes back on the platform, not that the Forgejo one does.
 
+## How long the forge is away after a node or zone loss (F-FORGE-TOL, lab 27 sitting 2)
+
+**Measured at Kubernetes' default toleration (lab 27, sitting 2, zone power-off, forge pod and one Longhorn replica of its volume inside the zone):** the pushes stopped at +31 s and came back about **8 minutes** after the power-off (push gap 471.8 s). The pod went NotReady at +79 s and was **not** evicted for 300 s, the default `tolerationSeconds` that Kubernetes adds to a pod with no toleration of `node.kubernetes.io/not-ready` and `unreachable`; the new pod was scheduled on another worker, Longhorn showed "Waiting for detach" (the old attachment was on the lost node) and attached the volume 20 s after the pod was scheduled, and the container started 10 s later. The databases do not wait: they tolerate 30 s. No data was lost (830 of 830 acknowledged pushes, `git fsck` clean).
+
+**Change:** the HelmRelease sets the chart's `tolerations` value to the same two tolerations as the databases, `node.kubernetes.io/unreachable` and `node.kubernetes.io/not-ready`, `NoExecute`, `tolerationSeconds: 30` (the chart renders the value into the Deployment's pod spec; `test-forgejo-brick.py` checks the value and the rendered Deployment). **Projected, NOT measured:** NotReady at +80 s, eviction 30 s later, then the lab's 20 s attach and 10 s start: the forge back in about 2.5 to 3 minutes instead of 8. That figure assumes the attach takes as long as it did once; the drill with the 30 s toleration has not been run.
+
+**The volume.** It is ReadWriteOnce with two Longhorn replicas, so the new pod can only start once Longhorn has released the attachment of the lost node. In the one drill it did so by itself, 20 s after the replacement was scheduled. What is **not** known: whether that holds when the node is partitioned rather than powered off (the old pod keeps running on the other side, and the old and the new attachment would both claim the volume; Longhorn's own guard against a double attach is what stands between them, and its behaviour on a partition was not drilled), and what Longhorn's setting `node-down-pod-deletion-policy` is on the cluster (the repository does not set it; its default is to delete nothing, which concerns pods stuck Terminating, not the ReplicaSet's replacement of a Deployment pod: read it with `kubectl -n longhorn-system get settings.longhorn.io node-down-pod-deletion-policy`). A shorter toleration makes the window in which a partitioned node's pod and its replacement could overlap start 4.5 minutes earlier; it is the same class of risk the databases accept with 30 s, and a Deployment with `strategy: Recreate` does not change what happens on an eviction.
+
 ## What is NOT delivered (open, each one is for an issue)
 
 - SSH (git over SSH needs a Gateway `TCPRoute`; git is HTTPS only), OIDC login with Zitadel (rung 3: the client registration, `identity`
   in `dependsOn`, in-cluster resolution of `*.openaether.local`, enabling the commented `gitea.oauth` block), a mail relay (#174) and a
   status page (#175, out of scope here).
 - A second Forgejo replica (needs ReadWriteMany, Valkey for sessions and cache, a shared object store), so the forge is a single replica
-  listed in `scripts/ha-allowlist.yaml`: while its pod is rescheduled after a node loss there is **no push, pull or web access** (the 5
-  minute toleration plus the re-attach of the volume: unmeasured); the cluster and Flux keep running.
+  listed in `scripts/ha-allowlist.yaml`: while its pod is rescheduled after a node loss there is **no push, pull or web access** (about 8 minutes
+  measured with Kubernetes' 300 s default toleration; with the 30 s toleration the pod now carries, about 2.5 to 3 minutes projected, UNVERIFIED: see "How long the forge is away"); the cluster and Flux keep running.
 - Image **digest pinning** (the image is the chart's `appVersion` tag, `15.0.10-rootless`, bumped with the chart).
 - **Backups**: the proof that the repositories' volume restores and an application-consistent copy of it with the database (above), and `forgejo-db` in the rest of the backup brick: the restic `pg_dump` (`cronjob.yaml`),
   the canary, the restore tests (`restore_cnpg.py`) and the verifier (`barman_check.py`) still know two databases. The WAL archive and the
@@ -230,7 +238,7 @@ target. What it does not cover, precisely:
    from it; then the **pair**: the database and the volume restored from their different instants, and what disagrees.
 5. **Node and zone loss drills with a Forgejo push writer, with `core.fsync = all`**: the SAME drill as lab 27 (the forge pod and the writable
    replica of its volume in a zone that is powered off): no acknowledged push lost, `git fsck` clean, a fresh clone works; the push latency
-   with and without fsync; how long the forge is away (the allow-list entry says unmeasured); `forgejo-db` with a writer like `zitadel-db`
+   with and without fsync; how long the forge is away with the 30 s toleration (projected 2.5 to 3 minutes against the 8 measured at 300 s), and once with a partition instead of a power-off; `forgejo-db` with a writer like `zitadel-db`
    in lab 23.
 6. The **dogfooding V1 acceptance of #170**: OpenAether's own source hosted on the forge and used from the forge.
 7. Whether Forgejo starts with `readOnlyRootFilesystem: true`, and what the cluster says about the 3 + 1 pods on the 4-worker examples

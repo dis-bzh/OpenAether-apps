@@ -64,8 +64,10 @@ single_replica:
       not mount it, and Forgejo's own queues and sessions are in memory (a multi-replica forge needs ReadWriteMany,
       Valkey and a shared object store: a later rung, not in 0.4.0)
     loss: >-
-      no push, pull or web access to the forge while the pod is rescheduled after a node loss: the 5 minute toleration
-      plus the re-attach of the volume (UNVERIFIED, no drill has run with the forge); the volume survives the loss of a
+      no push, pull or web access to the forge while the pod is rescheduled after a node loss: measured about 8 minutes
+      at Kubernetes' default 300 s toleration (lab 27); the pod now tolerates not-ready and unreachable for 30 s, so the
+      wait is the 30 s plus the re-attach of the volume, about 2.5 to 3 minutes projected (UNVERIFIED: that drill has not
+      run); the volume survives the loss of a
       node (the other Longhorn replica), the database is forgejo-db (3 instances), the cluster and Flux keep running
       and a pod killed on a live node restarts in place
 strict_spread:

@@ -28,7 +28,10 @@ broke it:
      at a time no other job uses and keeps a retention, and sits in longhorn-system (the namespace Longhorn reads);
   10. git fsyncs loose objects (FK, lab 27, DATA LOSS): `[git.config] core.fsync = all` is in the chart values and in the app.ini
      sources the chart renders (when helm is available), and core.fsyncMethod is not set to a mode that gives part of it back;
-  11. (with the Kyverno CLI, $KYVERNO or PATH, and helm with network for the chart) the pod the chart renders passes the platform
+  11. the pod is rescheduled 30 s after its node is NotReady or unreachable, not after Kubernetes' default 300 s (F-FORGE-TOL, lab 27:
+     the forge was away about 8 minutes): `tolerations` in the chart values carries both keys with tolerationSeconds <= 30, and the
+     Deployment the chart renders carries them (when helm is available);
+  12. (with the Kyverno CLI, $KYVERNO or PATH, and helm with network for the chart) the pod the chart renders passes the platform
      policies except the one read-only-root-filesystem finding that is known and left open (every one is Audit).
 Static: it proves the wiring, not a cluster. Run: python3 -I scripts/dev/test-forgejo-brick.py [--selftest]
 """
@@ -91,7 +94,16 @@ LABEL = f"recurring-job-group.longhorn.io/{GROUP}"
 SC = "longhorn-x2-rwo-forgejo"
 
 
-def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_class=None, sc=None, base_sc=None, kust=None, rendered_cfg=None):
+def tolerations_problems(tols, where):
+    errs = []
+    for key in ("node.kubernetes.io/unreachable", "node.kubernetes.io/not-ready"):
+        t = [x for x in (tols or []) if x.get("key") == key and x.get("effect") in (None, "NoExecute")]
+        if len(t) != 1 or t[0].get("operator", "Equal") != "Exists" or not isinstance(t[0].get("tolerationSeconds"), int) or t[0]["tolerationSeconds"] > 30:
+            errs.append(f"{where}: a NoExecute toleration of {key} with tolerationSeconds <= 30 is missing (Kubernetes' default is 300 s: the forge was away about 8 minutes after a node loss, lab 27 F-FORGE-TOL), found {t}")
+    return errs
+
+
+def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_class=None, sc=None, base_sc=None, kust=None, rendered_cfg=None, rendered_tols=None):
     """profiles: {name: set of Kustomization names}; jobs: the RecurringJobs of the brick; other_crons: the schedules of the other jobs."""
     errs = []
     for name in ("management", "workload"):
@@ -110,6 +122,9 @@ def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_class=None, sc=
         errs.append(f"core.fsyncMethod {gc.get('core.fsyncMethod')!r} gives back part of the guarantee: leave git's default (fsync)")
     if rendered_cfg is not None and "core.fsync=all" not in rendered_cfg.get("git.config", ""):
         errs.append("the app.ini sources the chart renders have no [git.config] core.fsync=all")
+    errs += tolerations_problems(hr["spec"]["values"].get("tolerations"), "the HelmRelease values")
+    if rendered_tols is not None:
+        errs += tolerations_problems(rendered_tols, "the Deployment the chart renders")
     pers = hr["spec"]["values"].get("persistence") or {}
     if pers.get("storageClass") != SC:
         errs.append(f"the Forgejo PVC must use the StorageClass {SC} (persistence.storageClass), not {pers.get('storageClass')!r}: only that class puts the volume in the backup group")
@@ -351,6 +366,7 @@ def optin_inputs():
     kust = yaml.safe_load((REPO / "apps/base/forgejo/kustomization.yaml").read_text())
     pvc = None
     cfg = None
+    tols = None
     if shutil.which("helm"):
         sys.path.insert(0, str(REPO / "scripts"))
         import ha_render
@@ -360,11 +376,12 @@ def optin_inputs():
         rendered = ha_render.helm_release(rel, repos)
         pvc = next(d for d in rendered if d["kind"] == "PersistentVolumeClaim")["spec"].get("storageClassName")
         cfg = next(d for d in rendered if d["kind"] == "Secret" and d["metadata"]["name"].endswith("inline-config")).get("stringData", {})
-    return profiles, catalog, hr, jobs, other_schedules(), pvc, sc, base_sc, kust, cfg
+        tols = next(d for d in rendered if d["kind"] == "Deployment")["spec"]["template"]["spec"].get("tolerations") or []
+    return profiles, catalog, hr, jobs, other_schedules(), pvc, sc, base_sc, kust, cfg, tols
 
 
 def optin_selftest(inp):
-    profiles, catalog, hr, jobs, crons, pvc, sc, base_sc, kust, cfg = inp
+    profiles, catalog, hr, jobs, crons, pvc, sc, base_sc, kust, cfg, tols = inp
     muts = {
         "the forge back in the default management profile": dict(profiles=dict(profiles, management=profiles["management"] | BRICK)),
         "the forge in the workload profile": dict(profiles=dict(profiles, workload=profiles["workload"] | {"forgejo"})),
@@ -383,6 +400,10 @@ def optin_selftest(inp):
         "core.fsync left at the committed set": dict(hr=_with_gitcfg(hr, {"core.fsync": "committed"})),
         "core.fsync all but writeout-only": dict(hr=_with_gitcfg(hr, {"core.fsync": "all", "core.fsyncMethod": "writeout-only"})),
         "a rendered app.ini without core.fsync": dict(rendered_cfg={"git.config": ""}) if cfg is not None else dict(hr=_with_gitcfg(hr, None)),
+        "no toleration: Kubernetes' 300 s default": dict(hr=_with_tols(hr, None)),
+        "tolerations kept at 300 s": dict(hr=_with_tols(hr, [dict(key=k, operator="Exists", effect="NoExecute", tolerationSeconds=300) for k in ("node.kubernetes.io/unreachable", "node.kubernetes.io/not-ready")])),
+        "only the unreachable toleration": dict(hr=_with_tols(hr, [dict(key="node.kubernetes.io/unreachable", operator="Exists", effect="NoExecute", tolerationSeconds=30)])),
+        "a rendered Deployment without the tolerations": dict(rendered_tols=[]) if tols is not None else dict(hr=_with_tols(hr, None)),
         "no RecurringJob": dict(jobs=[]),
         "a RecurringJob on another group": dict(jobs=[_job(jobs, groups=["other"])]),
         "a RecurringJob that is a snapshot, not a backup": dict(jobs=[_job(jobs, task="snapshot")]),
@@ -393,7 +414,7 @@ def optin_selftest(inp):
     ok = not optin_problems(*inp)
     print(("ok   " if ok else "FAIL ") + "the real opt-in inputs pass")
     for name, m in muts.items():
-        a = dict(profiles=profiles, catalog=catalog, hr=hr, jobs=jobs, other_crons=crons, pvc_class=pvc, sc=sc, base_sc=base_sc, kust=kust, rendered_cfg=cfg)
+        a = dict(profiles=profiles, catalog=catalog, hr=hr, jobs=jobs, other_crons=crons, pvc_class=pvc, sc=sc, base_sc=base_sc, kust=kust, rendered_cfg=cfg, rendered_tols=tols)
         a.update(m)
         caught = bool(optin_problems(**a))
         print(("ok   " if caught else "FAIL ") + f"caught: {name}")
@@ -420,6 +441,15 @@ def _with_gitcfg(hr, cfg):
         c.pop("git.config", None)
     else:
         c["git.config"] = cfg
+    return h
+
+
+def _with_tols(hr, tols):
+    h = copy.deepcopy(hr)
+    if tols is None:
+        h["spec"]["values"].pop("tolerations", None)
+    else:
+        h["spec"]["values"]["tolerations"] = tols
     return h
 
 
