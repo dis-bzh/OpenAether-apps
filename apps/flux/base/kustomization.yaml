@@ -19,6 +19,7 @@ resources:
   - 21-storage.yaml
   - 21b-istio-authz-storage.yaml
   - 21c-longhorn-backup-target.yaml
+  - 21d-longhorn-settings.yaml
   - 22-backup.yaml
   - 22a-backup-identity.yaml
   - 30-observability.yaml

@@ -59,7 +59,7 @@ To enable a profile: point the root Flux Kustomization at its path
 ## Health gates
 
 A Kustomization without `wait: true` or `healthChecks` is "Ready" as soon as its objects are applied, not when they work. In
-the `apps/flux/management` render (39 Kustomizations) these 14 have no health gate:
+the `apps/flux/management` render (40 Kustomizations) these 14 have no health gate:
 
 <!-- health-gates:begin (pinned by scripts/dev/test-flux-health-gates.sh) -->
 - backup-databases

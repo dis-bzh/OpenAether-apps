@@ -202,6 +202,9 @@ jobs:
       - name: "Longhorn values are keys the pinned chart reads, and its remediation stays off (#115, #134)"
         run: python3 -I scripts/dev/test-longhorn-values.py
 
+      - name: "Longhorn node-down-pod-deletion-policy reaches fresh and upgraded clusters (lab 27 sitting 3)"
+        run: python3 -I scripts/dev/test-longhorn-node-down-policy.py
+
       - name: "VictoriaMetrics images are pinned and the operator values are chart keys (#117)"
         run: python3 -I scripts/dev/test-vm-pins.py
 

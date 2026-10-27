@@ -95,6 +95,13 @@ spec:
       # `cluster-identity` ConfigMap and the credentials from OpenBao.
       # kubelet path Talos
       kubernetesClusterAutoscalerEnabled: false
+      # What Longhorn does with a StatefulSet/Deployment pod stuck on a node that is down (default do-nothing: the
+      # volume stays attached
+      # to the lost node and the replacement pod waits for it). Fresh installs read it here; an UPGRADED cluster gets
+      # the same value from the
+      # Setting object of apps/base/storage/settings (Flux, Kustomization storage-settings), which explains why both
+      # exist. Keep them equal.
+      nodeDownPodDeletionPolicy: delete-both-statefulset-and-deployment-pod
     longhornManager:
       tolerations: []
       nodeSelector: {}
