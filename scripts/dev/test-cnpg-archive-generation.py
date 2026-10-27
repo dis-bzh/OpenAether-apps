@@ -181,6 +181,34 @@ def run_main(objs, suffix=None, clusters="zitadel-db"):
     return [l.split("\t") for l in buf.getvalue().splitlines()]
 
 
+# The default list names forgejo-db (lab 27 part B, D13: the forge's database was never verified): with the forge off its archive is
+# empty and reads "skip", with the forge on its damage is a finding like the others'.
+dflt = {}
+archive(dflt, "cnpg/zitadel-db/zitadel-db/")
+archive(dflt, "cnpg/grafana-db/grafana-db/")
+def run_default(objs):
+    saved = dict(os.environ)
+    env = {"NOW": str(NOW), "PRIMARY_ENDPOINT": "http://p", "PRIMARY_BUCKET": "b", "PRIMARY_ACCESS_KEY": "a", "PRIMARY_SECRET_KEY": "s"}
+    os.environ.clear(); os.environ.update(env)
+    client, bc.client = bc.client, (lambda *a, **k: FakeS3(objs))
+    buf = io.StringIO()
+    try:
+        with redirect_stdout(buf):
+            bc.main()
+    finally:
+        os.environ.clear(); os.environ.update(saved); bc.client = client
+    return [l.split("\t") for l in buf.getvalue().splitlines()]
+rows = run_default(dflt)
+check("no CLUSTERS given: the verifier reads zitadel-db, grafana-db AND forgejo-db", [r[4].split(":")[0] for r in rows] == ["zitadel-db", "grafana-db", "forgejo-db"], str(rows))
+check("…a forge that is off (no archive) is a skip, the other two pass", [r[2] for r in rows] == ["1", "1", "skip"], str(rows))
+with_forge = dict(dflt)
+archive(with_forge, "cnpg/forgejo-db/forgejo-db/")
+check("…a forge that is on is verified like the others", [r[2] for r in run_default(with_forge)] == ["1", "1", "1"], str(run_default(with_forge)))
+broken = dict(with_forge)
+del broken["cnpg/forgejo-db/forgejo-db/wals/0000000100000000/000000010000000000000002.gz"]
+rows = run_default(broken)
+check("…and a hole in forgejo-db's WAL is a finding of forgejo-db, not hidden by the others", [r[2] for r in rows] == ["1", "1", "0"] and "forgejo-db" in rows[2][4], str(rows))
+
 OLD = "cnpg/zitadel-db/zitadel-db/"
 NEW = "cnpg/zitadel-db/zitadel-db-g2/"
 only_old = {}

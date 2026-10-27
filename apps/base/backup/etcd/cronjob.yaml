@@ -47,7 +47,10 @@ spec:
         spec:
           serviceAccountName: etcd-snapshot
           automountServiceAccountToken: false
-          restartPolicy: OnFailure
+          # Never, not OnFailure: with OnFailure the Job controller deletes the pod when the backoff limit is reached, and the
+          # log that says why the backup failed goes with it (lab 27 part B, D13: a table the dump role could not read, no pod,
+          # no log). With Never every failed attempt stays as a Failed pod, up to failedJobsHistoryLimit Jobs.
+          restartPolicy: Never
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000

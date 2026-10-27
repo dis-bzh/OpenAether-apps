@@ -219,7 +219,9 @@ def main():
                                                e.get(f"{tag}_REGION", "us-east-1")), e[f"{tag}_BUCKET"])
     grace = int(e.get("REPLICA_LAG_GRACE_S", str(2 * 3600)))
     suffix = e.get("CNPG_ARCHIVE_SUFFIX", "").strip()
-    for server in e.get("CLUSTERS", "zitadel-db grafana-db").split():
+    # forgejo-db is in the default list although a profile without the forge has no such Cluster, as in the store copy job: an empty
+    # archive is "skip" ("empty archive"), never a failure, and collect.py keeps a skip on every store a skip (lab 27 part B, D13).
+    for server in e.get("CLUSTERS", "zitadel-db grafana-db forgejo-db").split():
         for name, st in stores.items():
             try:
                 status, age, msg = check_cluster(st, "cnpg", server, now, archive=server + suffix)

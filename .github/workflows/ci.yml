@@ -371,6 +371,10 @@ jobs:
           # The pg_restore tests are the main check: a skipped part must not pass.
           ! grep -q 'SKIPPED' backup-checks.out
 
+      # A failed backup Job leaves its pod and its log (restartPolicy Never): the nightly dump once failed with neither (lab 27 part B, D13).
+      - name: "A failed backup Job keeps the pod and the log that say why"
+        run: python3 -I scripts/dev/test-backup-job-logs.py
+
       - name: The S3 rights probe of a dedicated backup key names a missing right (stub aws)
         run: ./scripts/dev/test-backup-key-rights.sh
 
