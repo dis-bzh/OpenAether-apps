@@ -36,6 +36,12 @@ broke it:
      forgejo-db (no second object that would double the daily backup);
   13. (with the Kyverno CLI, $KYVERNO or PATH, and helm with network for the chart) the pod the chart renders passes the platform
      policies except the one read-only-root-filesystem finding that is known and left open (every one is Audit).
+  14. the forge volume is mounted with `dirsync` (lab 27 FK2, an acknowledged ref update lost at the instant of a power-off): the
+     StorageClass longhorn-x2-rwo-forgejo carries `mountOptions: [dirsync]` (and Longhorn formats ext4, its default fsType);
+  15. stale git locks are removed before the app starts (lab 27 FK2/s5q): an init container `clean-stale-git-locks`, FIRST in the pod,
+     on the main container's image, non-root, restricted securityContext, requests and limits, mounting only the data volume; its
+     script is RUN against a temporary tree (old and fresh locks, ref locks and not, index.lock, symlinks, other directories) and
+     removes exactly the old ref/packed-refs/HEAD/config/shallow locks of bare repositories, logs paths and never contents, exits 0.
 Static: it proves the wiring, not a cluster. Run: python3 -I scripts/dev/test-forgejo-brick.py [--selftest]
 """
 import copy
@@ -127,7 +133,132 @@ def tolerations_problems(tols, where):
     return errs
 
 
-def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_class=None, sc=None, base_sc=None, kust=None, rendered_cfg=None, rendered_tols=None, sbs=None, crd_ok=True):
+CLEANER = "clean-stale-git-locks"
+OLD_LOCKS = ["alice/r.git/refs/heads/old.lock", "alice/r.git/refs/heads/feat/deep/old.lock", "alice/r.git/refs/tags/t.lock",
+             "alice/r.git/packed-refs.lock", "alice/r.git/HEAD.lock", "alice/r.git/config.lock", "alice/r.git/shallow.lock"]
+KEPT = ["alice/r.git/refs/heads/fresh.lock",      # younger than the limit: a live git process may hold it
+        "alice/r.git/index.lock",                  # not a bare repository's lock
+        "alice/r.git/objects/pack/tmp.lock",       # objects are not in the list
+        "alice/r.git/hooks/x.lock", "alice/r.git/refs/heads/main", "alice/r.git/packed-refs",
+        "stray.lock", "alice/stray.lock", "bob/wt/index.lock"]
+
+
+def cleaner_container(hr):
+    for pr in hr["spec"].get("postRenderers", []):
+        for p in pr.get("kustomize", {}).get("patches", []):
+            if CLEANER in p.get("patch", ""):
+                ops = yaml.safe_load(p["patch"])
+                return p, ops
+    return None, None
+
+
+def cleaner_problems(hr, rendered=None, flux_forgejo=None):
+    """rendered: (initContainers, main image) of the Deployment the chart renders with the post-renderer applied (needs helm)."""
+    errs = []
+    p, ops = cleaner_container(hr)
+    if not ops:
+        return [f"no post-renderer patch adds the init container {CLEANER}: stale git locks block a branch for good (lab 27 FK2)"]
+    if p.get("target", {}).get("kind") != "Deployment":
+        errs.append(f"{CLEANER}: the patch must target the Deployment")
+    op = ops[0]
+    c = op.get("value") or {}
+    if op.get("op") != "add" or op.get("path") != "/spec/template/spec/initContainers/0":
+        errs.append(f"{CLEANER}: must be added FIRST in initContainers (path /spec/template/spec/initContainers/0), not {op.get('path')!r}")
+    if c.get("name") != CLEANER:
+        errs.append(f"the init container must be named {CLEANER}")
+    sc = c.get("securityContext") or {}
+    if sc.get("allowPrivilegeEscalation") is not False or sc.get("privileged") is not False or (sc.get("capabilities") or {}).get("drop") != ["ALL"]:
+        errs.append(f"{CLEANER}: securityContext must be allowPrivilegeEscalation false, privileged false, drop ALL (as the chart's init containers)")
+    if sc.get("runAsUser") in (0, "0") or sc.get("runAsNonRoot") is False:
+        errs.append(f"{CLEANER}: must not run as root")
+    res = c.get("resources") or {}
+    for part in ("requests", "limits"):
+        for k in ("cpu", "memory"):
+            if not (res.get(part) or {}).get(k):
+                errs.append(f"{CLEANER}: resources.{part}.{k} is missing (Kyverno require-limits reads initContainers)")
+    mounts = c.get("volumeMounts") or []
+    if [(m.get("name"), m.get("mountPath")) for m in mounts] != [("data", "/data")] or any(m.get("readOnly") for m in mounts):
+        errs.append(f"{CLEANER}: must mount exactly the data volume at /data, writable (and nothing else)")
+    env = {e["name"]: e.get("value") for e in c.get("env") or []}
+    if env.get("REPOS_ROOT") != "/data/git/gitea-repositories":
+        errs.append(f"{CLEANER}: REPOS_ROOT must be the [repository] ROOT the chart renders (/data/git/gitea-repositories), not {env.get('REPOS_ROOT')!r}")
+    if not (env.get("LOCK_MIN_AGE_MIN", "").isdigit() and int(env["LOCK_MIN_AGE_MIN"]) >= 2):
+        errs.append(f"{CLEANER}: LOCK_MIN_AGE_MIN must be a number of minutes >= 2 (a lock younger than that may be a live push)")
+    if flux_forgejo is not None and (flux_forgejo.get("spec") or {}).get("postBuild"):
+        errs.append("the forgejo Kustomization has a postBuild: Flux would substitute the ${...} of the cleaner's shell script")
+    if rendered is not None:
+        inits, main_image = rendered
+        if not inits or inits[0].get("name") != CLEANER:
+            errs.append(f"the Deployment the chart renders does not start with the init container {CLEANER}")
+        elif inits[0].get("image") != main_image:
+            errs.append(f"{CLEANER} runs {inits[0].get('image')}, the main container {main_image}: the same image (one pull, same user and filesystem)")
+    elif c.get("image") is None:
+        errs.append(f"{CLEANER} has no image")
+    errs += cleaner_script_problems(c)
+    return errs
+
+
+def cleaner_script_problems(c):
+    """RUN the script on a temporary tree."""
+    import time
+    errs = []
+    args = c.get("args") or []
+    if c.get("command") != ["/bin/sh", "-c"] or len(args) != 1:
+        return [f"{CLEANER}: command must be [/bin/sh, -c] with the script as the one argument"]
+    env0 = {e["name"]: e.get("value") for e in c.get("env") or []}
+    with tempfile.TemporaryDirectory() as t:
+        root = Path(t) / "repos"
+        old = time.time() - 600
+        for rel in OLD_LOCKS + KEPT:
+            f = root / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("0123456789abcdef-SECRET-CONTENT\n")
+            if rel != "alice/r.git/refs/heads/fresh.lock":
+                os.utime(f, (old, old))
+        (root / "alice/r.git/refs/heads/link.lock").symlink_to(root / "alice/r.git/refs/heads/main")
+        (root / "alice/r.git/refs/heads/dir.lock").mkdir()
+        os.utime(root / "alice/r.git/refs/heads/dir.lock", (old, old))
+        env = dict(os.environ, REPOS_ROOT=str(root), LOCK_MIN_AGE_MIN=env0.get("LOCK_MIN_AGE_MIN", "5"))
+        r = subprocess.run(["/bin/sh", "-c", args[0]], capture_output=True, text=True, env=env)
+        out = r.stdout + r.stderr
+        if r.returncode:
+            errs.append(f"{CLEANER} script exits {r.returncode}, it must always exit 0")
+        for rel in OLD_LOCKS:
+            if (root / rel).exists():
+                errs.append(f"{CLEANER} left the old lock {rel}")
+            elif rel not in out:
+                errs.append(f"{CLEANER} removed {rel} without logging it")
+        for rel in KEPT:
+            if not (root / rel).exists():
+                errs.append(f"{CLEANER} removed {rel}, which it must keep")
+        if not (root / "alice/r.git/refs/heads/link.lock").is_symlink():
+            errs.append(f"{CLEANER} removed a symlink named *.lock")
+        if not (root / "alice/r.git/refs/heads/dir.lock").is_dir():
+            errs.append(f"{CLEANER} removed a directory named *.lock")
+        if "SECRET-CONTENT" in out:
+            errs.append(f"{CLEANER} printed the contents of a file")
+        # a missing repositories directory and a directory it cannot write to both end with exit 0
+        r = subprocess.run(["/bin/sh", "-c", args[0]], capture_output=True, text=True, env=dict(env, REPOS_ROOT=str(Path(t) / "absent")))
+        if r.returncode:
+            errs.append(f"{CLEANER} script exits {r.returncode} when the repositories directory does not exist (first start)")
+        for rel in OLD_LOCKS:
+            f = root / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("x")
+            os.utime(f, (old, old))
+        locked = root / "alice/r.git/refs/heads"
+        locked.chmod(0o555)
+        try:
+            if os.geteuid() != 0:
+                r = subprocess.run(["/bin/sh", "-c", args[0]], capture_output=True, text=True, env=env)
+                if r.returncode:
+                    errs.append(f"{CLEANER} script exits {r.returncode} when a lock cannot be removed: a cleanup that cannot run must not stop the forge")
+        finally:
+            locked.chmod(0o755)
+    return errs
+
+
+def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_class=None, sc=None, base_sc=None, kust=None, rendered_cfg=None, rendered_tols=None, sbs=None, crd_ok=True, rendered_inits=None, flux_forgejo=None):
     """profiles: {name: set of Kustomization names}; jobs: the RecurringJobs of the brick; other_crons: the schedules of the other jobs."""
     errs = []
     for name in ("management", "workload"):
@@ -177,6 +308,13 @@ def optin_problems(profiles, catalog, hr, jobs, other_crons, pvc_class=None, sc=
             for k in ("reclaimPolicy", "allowVolumeExpansion", "volumeBindingMode"):
                 if sc.get(k) != base_sc.get(k):
                     errs.append(f"the StorageClass {k} must be that of longhorn-x2-rwo ({base_sc.get(k)!r}), not {sc.get(k)!r}")
+        if "dirsync" not in (sc.get("mountOptions") or []):
+            errs.append("the StorageClass longhorn-x2-rwo-forgejo must carry mountOptions: [dirsync] (the ref rename of a push must reach the disk, lab 27 FK2)")
+        elif len(sc["mountOptions"]) != 1:
+            errs.append(f"the StorageClass mountOptions must be exactly [dirsync], not {sc['mountOptions']!r}: every other option is untested here")
+        if (sc.get("parameters") or {}).get("fsType", "ext4") != "ext4":
+            errs.append("dirsync is an ext4 mount option here: the StorageClass fsType must stay ext4 (Longhorn's default)")
+    errs += cleaner_problems(hr, rendered_inits, flux_forgejo)
     sel = [j for j in jobs if j["spec"].get("task") == "backup" and GROUP in (j["spec"].get("groups") or [])]
     if len(sel) != 1:
         errs.append(f"exactly one RecurringJob of type backup must select the group {GROUP} (found {len(sel)})")
@@ -392,6 +530,7 @@ def optin_inputs():
     pvc = None
     cfg = None
     tols = None
+    inits = None
     if shutil.which("helm"):
         sys.path.insert(0, str(REPO / "scripts"))
         import ha_render
@@ -402,12 +541,15 @@ def optin_inputs():
         pvc = next(d for d in rendered if d["kind"] == "PersistentVolumeClaim")["spec"].get("storageClassName")
         cfg = next(d for d in rendered if d["kind"] == "Secret" and d["metadata"]["name"].endswith("inline-config")).get("stringData", {})
         tols = next(d for d in rendered if d["kind"] == "Deployment")["spec"]["template"]["spec"].get("tolerations") or []
+        dep = next(d for d in rendered if d["kind"] == "Deployment")["spec"]["template"]["spec"]
+        inits = (dep.get("initContainers") or [], dep["containers"][0]["image"])
     sbs = [d for d in docs("apps/base/forgejo-db/scheduledbackup.yaml") if d["kind"] == "ScheduledBackup"]
-    return profiles, catalog, hr, jobs, other_schedules(), pvc, sc, base_sc, kust, cfg, tols, sbs, crd_has_immediate()
+    ffj = next(d for d in docs("apps/flux/base/37-forgejo.yaml") if d["kind"] == "Kustomization")
+    return profiles, catalog, hr, jobs, other_schedules(), pvc, sc, base_sc, kust, cfg, tols, sbs, crd_has_immediate(), inits, ffj
 
 
 def optin_selftest(inp):
-    profiles, catalog, hr, jobs, crons, pvc, sc, base_sc, kust, cfg, tols, sbs, crd_ok = inp
+    profiles, catalog, hr, jobs, crons, pvc, sc, base_sc, kust, cfg, tols, sbs, crd_ok, inits, ffj = inp
     muts = {
         "the forge back in the default management profile": dict(profiles=dict(profiles, management=profiles["management"] | BRICK)),
         "the forge in the workload profile": dict(profiles=dict(profiles, workload=profiles["workload"] | {"forgejo"})),
@@ -434,6 +576,27 @@ def optin_selftest(inp):
         "immediate left out of the ScheduledBackup": dict(sbs=[_sb(sbs, drop="immediate")]),
         "a second ScheduledBackup for forgejo-db": dict(sbs=[sbs[0], _sb(sbs, name="forgejo-db-second")]),
         "a CRD without spec.immediate": dict(crd_ok=False),
+        "no dirsync mount option": dict(sc=_sc_mount(sc, None)),
+        "mount options sync instead of dirsync": dict(sc=_sc_mount(sc, ["sync"])),
+        "dirsync with another option": dict(sc=_sc_mount(sc, ["dirsync", "noatime"])),
+        "a StorageClass on xfs": dict(sc=_sc(sc, fsType="xfs")),
+        "no lock cleaner": dict(hr=_cleaner(hr, drop=True)),
+        "a lock cleaner added last, not first": dict(hr=_cleaner(hr, path="/spec/template/spec/initContainers/-")),
+        "a lock cleaner without resource limits": dict(hr=_cleaner(hr, set_=("resources", {"requests": {"cpu": "1m", "memory": "1Mi"}}))),
+        "a lock cleaner running as root": dict(hr=_cleaner(hr, set_=("securityContext", {"allowPrivilegeEscalation": False, "privileged": False, "capabilities": {"drop": ["ALL"]}, "runAsUser": 0}))),
+        "a lock cleaner that may escalate": dict(hr=_cleaner(hr, set_=("securityContext", {"allowPrivilegeEscalation": True, "privileged": False, "capabilities": {"drop": ["ALL"]}}))),
+        "a lock cleaner on the wrong directory": dict(hr=_cleaner(hr, set_=("env", [{"name": "REPOS_ROOT", "value": "/data"}, {"name": "LOCK_MIN_AGE_MIN", "value": "5"}]))),
+        "a lock cleaner with no age limit": dict(hr=_cleaner(hr, replace=(' -mmin "+$MIN"', ""))),
+        "a lock cleaner with a 0 minute limit": dict(hr=_cleaner(hr, set_=("env", [{"name": "REPOS_ROOT", "value": "/data/git/gitea-repositories"}, {"name": "LOCK_MIN_AGE_MIN", "value": "0"}]))),
+        "a lock cleaner that removes every lock": dict(hr=_cleaner(hr, replace=("*) continue ;;", "*) ;;"))),
+        "a lock cleaner that removes index.lock too": dict(hr=_cleaner(hr, replace=("*) continue ;;", "*/*.git/index.lock) ;;\n*) continue ;;"))),
+        "a lock cleaner that ignores packed-refs.lock": dict(hr=_cleaner(hr, replace=("*/*.git/packed-refs.lock | ", ""))),
+        "a lock cleaner that follows symlinks": dict(hr=_cleaner(hr, replace=("find \"$ROOT\" -type f", "find -L \"$ROOT\""))),
+        "a lock cleaner that stays silent": dict(hr=_cleaner(hr, replace=('echo "clean-stale-git-locks: removed $rel (older than $MIN min)"', ":"))),
+        "a lock cleaner that prints the contents": dict(hr=_cleaner(hr, replace=('if rm -f -- "$f"; then', 'cat "$f"; if rm -f -- "$f"; then'))),
+        "a lock cleaner that fails the start": dict(hr=_cleaner(hr, replace=("done\nexit 0", "done\nexit 1"))),
+        "a lock cleaner on a postBuild Kustomization": dict(flux_forgejo={"spec": {"postBuild": {"substituteFrom": []}}}),
+        "a lock cleaner on another image than the app": dict(rendered_inits=([dict(inits[0][0], image="docker.io/library/busybox:1")] + inits[0][1:], inits[1])) if inits else dict(hr=_cleaner(hr, drop=True)),
         "no RecurringJob": dict(jobs=[]),
         "a RecurringJob on another group": dict(jobs=[_job(jobs, groups=["other"])]),
         "a RecurringJob that is a snapshot, not a backup": dict(jobs=[_job(jobs, task="snapshot")]),
@@ -444,7 +607,7 @@ def optin_selftest(inp):
     ok = not optin_problems(*inp)
     print(("ok   " if ok else "FAIL ") + "the real opt-in inputs pass")
     for name, m in muts.items():
-        a = dict(profiles=profiles, catalog=catalog, hr=hr, jobs=jobs, other_crons=crons, pvc_class=pvc, sc=sc, base_sc=base_sc, kust=kust, rendered_cfg=cfg, rendered_tols=tols, sbs=sbs, crd_ok=crd_ok)
+        a = dict(profiles=profiles, catalog=catalog, hr=hr, jobs=jobs, other_crons=crons, pvc_class=pvc, sc=sc, base_sc=base_sc, kust=kust, rendered_cfg=cfg, rendered_tols=tols, sbs=sbs, crd_ok=crd_ok, rendered_inits=inits, flux_forgejo=ffj)
         a.update(m)
         caught = bool(optin_problems(**a))
         print(("ok   " if caught else "FAIL ") + f"caught: {name}")
@@ -496,6 +659,35 @@ def _with_tols(hr, tols):
 def _with_label(hr):
     h = copy.deepcopy(hr)
     h["spec"]["values"]["persistence"]["labels"] = {LABEL: "enabled"}
+    return h
+
+
+def _sc_mount(sc, opts):
+    c = copy.deepcopy(sc)
+    if opts is None:
+        c.pop("mountOptions", None)
+    else:
+        c["mountOptions"] = opts
+    return c
+
+
+def _cleaner(hr, drop=False, path=None, set_=None, replace=None):
+    h = copy.deepcopy(hr)
+    pats = h["spec"]["postRenderers"][0]["kustomize"]["patches"]
+    i = next(k for k, p in enumerate(pats) if CLEANER in p["patch"])
+    if drop:
+        pats.pop(i)
+        return h
+    ops = yaml.safe_load(pats[i]["patch"])
+    if path:
+        ops[0]["path"] = path
+    if set_:
+        ops[0]["value"][set_[0]] = set_[1]
+    if replace:
+        a = ops[0]["value"]["args"][0]
+        assert replace[0] in a, replace[0]
+        ops[0]["value"]["args"][0] = a.replace(*replace)
+    pats[i]["patch"] = yaml.safe_dump(ops)
     return h
 
 

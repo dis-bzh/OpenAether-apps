@@ -63,6 +63,84 @@ spec:
               - op: add
                 path: /spec/template/spec/automountServiceAccountToken
                 value: false
+          # STALE GIT LOCKS (lab 27 sitting 3, FK2). A push interrupted by a node loss leaves
+          # `refs/heads/<branch>.lock` in the bare
+          # repository, git never removes it by itself, and every later push to that branch is refused ("reference
+          # already exists")
+          # until someone deletes the file: seen for 10 minutes in the drill, for good in principle. This init
+          # container runs BEFORE
+          # the app starts (the pod is the only replica, the volume is ReadWriteOnce, so no git process of Forgejo is
+          # running on
+          # it) and removes the lock files of BARE repositories that are older than LOCK_MIN_AGE_MIN minutes:
+          # `refs/**/*.lock`,
+          # `packed-refs.lock`, `HEAD.lock`, `config.lock`, `shallow.lock`. Never `index.lock` (a worktree's, not a
+          # bare repository's), never
+          # anything that is not a regular file, never outside the repositories directory ([repository] ROOT of the
+          # app.ini the chart
+          # renders, /data/git/gitea-repositories). It logs the path of each file it removes, never its contents, and
+          # always exits 0:
+          # a cleanup that cannot run must not keep the forge from starting. The image is the main container's (pulled
+          # once, same
+          # non-root user 1000, same restricted securityContext and limits as the chart's own init containers);
+          # test-forgejo-brick.py pins that equality and runs this very script against a temporary tree.
+          # WHAT IT DOES NOT FIX: an update that git ACKNOWLEDGED and the volume then lost (the rename lock -> ref was
+          # not durable, 1 of 59
+          # in the drill). That is the `dirsync` mount of the StorageClass (storageclass.yaml), UNVERIFIED until the
+          # next drill.
+          - target:
+              kind: Deployment
+            patch: |-
+              - op: add
+                path: /spec/template/spec/initContainers/0
+                value:
+                  name: clean-stale-git-locks
+                  image: code.forgejo.org/forgejo/forgejo:15.0.10-rootless
+                  imagePullPolicy: IfNotPresent
+                  command: ["/bin/sh", "-c"]
+                  args:
+                    - |
+                      set -u
+                      ROOT="${REPOS_ROOT:-/data/git/gitea-repositories}"
+                      MIN="${LOCK_MIN_AGE_MIN:-5}"
+                      if [ ! -d "$ROOT" ]; then
+                        echo "clean-stale-git-locks: no $ROOT yet, nothing to clean"
+                        exit 0
+                      fi
+                      find "$ROOT" -type f -name '*.lock' -mmin "+$MIN" 2>/dev/null | while IFS= read -r f; do
+                        rel="${f#"$ROOT"/}"
+                        case "$rel" in
+                          */*.git/refs/*.lock) ;;
+                          */*.git/packed-refs.lock | */*.git/HEAD.lock) ;;
+                          */*.git/config.lock | */*.git/shallow.lock) ;;
+                          *) continue ;;
+                        esac
+                        if rm -f -- "$f"; then
+                          echo "clean-stale-git-locks: removed $rel (older than $MIN min)"
+                        else
+                          echo "clean-stale-git-locks: could not remove $rel"
+                        fi
+                      done
+                      exit 0
+                  env:
+                    - name: REPOS_ROOT
+                      value: /data/git/gitea-repositories
+                    - name: LOCK_MIN_AGE_MIN
+                      value: "5"
+                  volumeMounts:
+                    - name: data
+                      mountPath: /data
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    privileged: false
+                    capabilities:
+                      drop: ["ALL"]
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 128Mi
+                    limits:
+                      cpu: 500m
+                      memory: 256Mi
   values:
     replicaCount: 1
 

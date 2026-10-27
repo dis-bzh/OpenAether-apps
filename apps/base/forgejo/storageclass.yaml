@@ -13,6 +13,30 @@
 # recurring job or group specifications to attach to the volume", applied at volume creation only:
 # https://longhorn.io/docs/latest/references/storage-class-parameters/).
 #
+# `mountOptions: [dirsync]` (lab 27 sitting 3, FK2): in the zone power-off drill ONE acknowledged push (the 59th) was
+# not on the branch:
+# `refs/heads/<branch>.lock` held its id while the ref held the previous one, i.e. git's rename of the lock onto the
+# ref had been
+# acknowledged and was not durable (git fsyncs the files with core.fsync=all, not the DIRECTORY entry the rename
+# changes).
+# ext4's `dirsync` makes directory updates synchronous (mount(8), "dirsync":
+# https://man7.org/linux/man-pages/man8/mount.8.html),
+# which is the only knob here that reaches that rename. Longhorn formats ext4 by default (fsType, "Supported
+# filesystems are ext4 and
+# xfs": https://longhorn.io/docs/1.12.0/references/storage-class-parameters/) and the Kubernetes StorageClass
+# mountOptions are passed
+# to the CSI driver as the mount flags of the volume
+# (https://kubernetes.io/docs/concepts/storage/storage-classes/#mount-options).
+# UNVERIFIED: that Longhorn's node plugin applies the flag (read /proc/mounts on the node: it must list dirsync), that
+# it closes the
+# window (the next zone-loss drill with a push writer: acknowledged vs present), and its cost (every directory update
+# waits for the disk:
+# pushes, branch creation and repository creation get slower; NOT measured). It applies to volumes created AFTER the
+# class is updated:
+# a forge volume that exists keeps its mount (mountOptions are not immutable on a StorageClass, but a PV already
+# provisioned does not
+# change; docs/forgejo.md says how to move one).
+#
 # Everything else is longhorn-x2-rwo (apps/base/storage/storageclasses.yaml): 2 replicas, RWO, Retain, expansion,
 # not encrypted.
 # test-forgejo-brick.py compares the two. StorageClass parameters are immutable and apply to NEW volumes only: a
@@ -31,6 +55,8 @@ provisioner: driver.longhorn.io
 allowVolumeExpansion: true
 reclaimPolicy: Retain
 volumeBindingMode: Immediate
+mountOptions:
+  - dirsync
 parameters:
   numberOfReplicas: "2"
   staleReplicaTimeout: "30"
