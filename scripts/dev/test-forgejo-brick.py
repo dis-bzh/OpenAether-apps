@@ -38,10 +38,13 @@ broke it:
      policies except the one read-only-root-filesystem finding that is known and left open (every one is Audit).
   14. the forge volume is mounted with `dirsync` (lab 27 FK2, an acknowledged ref update lost at the instant of a power-off): the
      StorageClass longhorn-x2-rwo-forgejo carries `mountOptions: [dirsync]` (and Longhorn formats ext4, its default fsType);
-  15. stale git locks are removed before the app starts (lab 27 FK2/s5q): an init container `clean-stale-git-locks`, FIRST in the pod,
-     on the main container's image, non-root, restricted securityContext, requests and limits, mounting only the data volume; its
-     script is RUN against a temporary tree (old and fresh locks, ref locks and not, index.lock, symlinks, other directories) and
-     removes exactly the old ref/packed-refs/HEAD/config/shallow locks of bare repositories, logs paths and never contents, exits 0.
+  15. stale git locks are removed before the app starts (lab 27 FK2/s5q, F-LOCKAGE): an init container `clean-stale-git-locks`, FIRST in the
+     pod, ANY age (LOCK_MIN_AGE_MIN 0: the Deployment is Recreate and the volume RWO, so no git process runs on it), and a sidecar
+     `sweep-stale-git-locks` that looks again every 60 s for locks older than 10 minutes (a restart of the main container does not run
+     an init container). Both on the main container's image, non-root, restricted securityContext, requests and limits, mounting only
+     the data volume; both are the SAME script, RUN against a temporary tree (old and fresh locks, ref locks and not, index.lock,
+     symlinks, other directories): the init removes every ref/packed-refs/HEAD/config/shallow lock, the sweeper only the old ones; both
+     log paths and never contents, exit 0, and the sweeper stops on TERM at once and refuses an age that is not a number.
 Static: it proves the wiring, not a cluster. Run: python3 -I scripts/dev/test-forgejo-brick.py [--selftest]
 """
 import copy
@@ -134,113 +137,149 @@ def tolerations_problems(tols, where):
 
 
 CLEANER = "clean-stale-git-locks"
+SWEEPER = "sweep-stale-git-locks"
 OLD_LOCKS = ["alice/r.git/refs/heads/old.lock", "alice/r.git/refs/heads/feat/deep/old.lock", "alice/r.git/refs/tags/t.lock",
              "alice/r.git/packed-refs.lock", "alice/r.git/HEAD.lock", "alice/r.git/config.lock", "alice/r.git/shallow.lock"]
-KEPT = ["alice/r.git/refs/heads/fresh.lock",      # younger than the limit: a live git process may hold it
-        "alice/r.git/index.lock",                  # not a bare repository's lock
+FRESH_LOCK = "alice/r.git/refs/heads/fresh.lock"   # younger than the sweeper's limit: a live git process may hold it
+KEPT = ["alice/r.git/index.lock",                  # not a bare repository's lock
         "alice/r.git/objects/pack/tmp.lock",       # objects are not in the list
         "alice/r.git/hooks/x.lock", "alice/r.git/refs/heads/main", "alice/r.git/packed-refs",
         "stray.lock", "alice/stray.lock", "bob/wt/index.lock"]
 
 
-def cleaner_container(hr):
+def cleaner_container(hr, name=CLEANER):
     for pr in hr["spec"].get("postRenderers", []):
         for p in pr.get("kustomize", {}).get("patches", []):
-            if CLEANER in p.get("patch", ""):
+            if f"name: {name}" in p.get("patch", ""):
                 ops = yaml.safe_load(p["patch"])
                 return p, ops
     return None, None
 
 
 def cleaner_problems(hr, rendered=None, flux_forgejo=None):
-    """rendered: (initContainers, main image) of the Deployment the chart renders with the post-renderer applied (needs helm)."""
+    """rendered: (initContainers, main image, containers, strategy type) of the Deployment the chart renders with the post-renderer applied (needs helm)."""
     errs = []
-    p, ops = cleaner_container(hr)
-    if not ops:
-        return [f"no post-renderer patch adds the init container {CLEANER}: stale git locks block a branch for good (lab 27 FK2)"]
-    if p.get("target", {}).get("kind") != "Deployment":
-        errs.append(f"{CLEANER}: the patch must target the Deployment")
-    op = ops[0]
-    c = op.get("value") or {}
-    if op.get("op") != "add" or op.get("path") != "/spec/template/spec/initContainers/0":
-        errs.append(f"{CLEANER}: must be added FIRST in initContainers (path /spec/template/spec/initContainers/0), not {op.get('path')!r}")
-    if c.get("name") != CLEANER:
-        errs.append(f"the init container must be named {CLEANER}")
-    sc = c.get("securityContext") or {}
-    if sc.get("allowPrivilegeEscalation") is not False or sc.get("privileged") is not False or (sc.get("capabilities") or {}).get("drop") != ["ALL"]:
-        errs.append(f"{CLEANER}: securityContext must be allowPrivilegeEscalation false, privileged false, drop ALL (as the chart's init containers)")
-    if sc.get("runAsUser") in (0, "0") or sc.get("runAsNonRoot") is False:
-        errs.append(f"{CLEANER}: must not run as root")
-    res = c.get("resources") or {}
-    for part in ("requests", "limits"):
-        for k in ("cpu", "memory"):
-            if not (res.get(part) or {}).get(k):
-                errs.append(f"{CLEANER}: resources.{part}.{k} is missing (Kyverno require-limits reads initContainers)")
-    mounts = c.get("volumeMounts") or []
-    if [(m.get("name"), m.get("mountPath")) for m in mounts] != [("data", "/data")] or any(m.get("readOnly") for m in mounts):
-        errs.append(f"{CLEANER}: must mount exactly the data volume at /data, writable (and nothing else)")
-    env = {e["name"]: e.get("value") for e in c.get("env") or []}
-    if env.get("REPOS_ROOT") != "/data/git/gitea-repositories":
-        errs.append(f"{CLEANER}: REPOS_ROOT must be the [repository] ROOT the chart renders (/data/git/gitea-repositories), not {env.get('REPOS_ROOT')!r}")
-    if not (env.get("LOCK_MIN_AGE_MIN", "").isdigit() and int(env["LOCK_MIN_AGE_MIN"]) >= 2):
-        errs.append(f"{CLEANER}: LOCK_MIN_AGE_MIN must be a number of minutes >= 2 (a lock younger than that may be a live push)")
+    scripts = {}
+    for name, path, kind in ((CLEANER, "/spec/template/spec/initContainers/0", "init"), (SWEEPER, "/spec/template/spec/containers/-", "sweep")):
+        p, ops = cleaner_container(hr, name)
+        if not ops:
+            errs.append(f"no post-renderer patch adds the {'init container' if kind == 'init' else 'sidecar'} {name}: stale git locks block a branch (lab 27 FK2, F-LOCKAGE)")
+            continue
+        if p.get("target", {}).get("kind") != "Deployment":
+            errs.append(f"{name}: the patch must target the Deployment")
+        op = ops[0]
+        c = op.get("value") or {}
+        if op.get("op") != "add" or op.get("path") != path:
+            errs.append(f"{name}: must be added at {path}, not {op.get('path')!r}" + (" (FIRST in initContainers)" if kind == "init" else ""))
+        if c.get("name") != name:
+            errs.append(f"the container must be named {name}")
+        sc = c.get("securityContext") or {}
+        if sc.get("allowPrivilegeEscalation") is not False or sc.get("privileged") is not False or (sc.get("capabilities") or {}).get("drop") != ["ALL"]:
+            errs.append(f"{name}: securityContext must be allowPrivilegeEscalation false, privileged false, drop ALL (as the chart's init containers)")
+        if sc.get("runAsUser") in (0, "0") or sc.get("runAsNonRoot") is False:
+            errs.append(f"{name}: must not run as root")
+        res = c.get("resources") or {}
+        for part in ("requests", "limits"):
+            for k in ("cpu", "memory"):
+                if not (res.get(part) or {}).get(k):
+                    errs.append(f"{name}: resources.{part}.{k} is missing (Kyverno require-limits reads initContainers)")
+        mounts = c.get("volumeMounts") or []
+        if [(m.get("name"), m.get("mountPath")) for m in mounts] != [("data", "/data")] or any(m.get("readOnly") for m in mounts):
+            errs.append(f"{name}: must mount exactly the data volume at /data, writable (and nothing else)")
+        env = {e["name"]: e.get("value") for e in c.get("env") or []}
+        if env.get("REPOS_ROOT") != "/data/git/gitea-repositories":
+            errs.append(f"{name}: REPOS_ROOT must be the [repository] ROOT the chart renders (/data/git/gitea-repositories), not {env.get('REPOS_ROOT')!r}")
+        if kind == "init":
+            if env.get("LOCK_MIN_AGE_MIN") != "0" or env.get("SWEEP_EVERY_S") not in (None, "0"):
+                errs.append(f"{name}: LOCK_MIN_AGE_MIN must be \"0\" and it must not loop: at pod start no git process runs on the volume (Recreate, RWO), so a lock of any age is stale; a 5 minute limit left a branch blocked for 9 minutes (lab 27 sitting 4)")
+        else:
+            if not (env.get("LOCK_MIN_AGE_MIN", "").isdigit() and int(env["LOCK_MIN_AGE_MIN"]) >= 10):
+                errs.append(f"{name}: LOCK_MIN_AGE_MIN must be a number of minutes >= 10: the forge is RUNNING, and a lock younger than Forgejo's git timeout (360 s) may be a live push")
+            if not (env.get("SWEEP_EVERY_S", "").isdigit() and 10 <= int(env["SWEEP_EVERY_S"]) <= 600):
+                errs.append(f"{name}: SWEEP_EVERY_S must be 10 to 600 seconds")
+            if env.get("CLEANER_NAME") != SWEEPER:
+                errs.append(f"{name}: CLEANER_NAME must be {SWEEPER} so its log lines say which cleaner removed a lock")
+        if c.get("image") is None:
+            errs.append(f"{name} has no image")
+        scripts[kind] = c
     if flux_forgejo is not None and (flux_forgejo.get("spec") or {}).get("postBuild"):
-        errs.append("the forgejo Kustomization has a postBuild: Flux would substitute the ${...} of the cleaner's shell script")
+        errs.append("the forgejo Kustomization has a postBuild: Flux would substitute the ${...} of the cleaners' shell script")
+    if len(scripts) == 2 and scripts["init"].get("args") != scripts["sweep"].get("args"):
+        errs.append("the init container and the sidecar must carry the SAME script (the age and the loop are their environment)")
     if rendered is not None:
-        inits, main_image = rendered
+        inits, main_image, containers, strategy = rendered
         if not inits or inits[0].get("name") != CLEANER:
             errs.append(f"the Deployment the chart renders does not start with the init container {CLEANER}")
         elif inits[0].get("image") != main_image:
             errs.append(f"{CLEANER} runs {inits[0].get('image')}, the main container {main_image}: the same image (one pull, same user and filesystem)")
-    elif c.get("image") is None:
-        errs.append(f"{CLEANER} has no image")
-    errs += cleaner_script_problems(c)
+        sw = [x for x in containers if x.get("name") == SWEEPER]
+        if len(sw) != 1:
+            errs.append(f"the Deployment the chart renders has {len(sw)} containers named {SWEEPER}, want 1")
+        elif sw[0].get("image") != main_image:
+            errs.append(f"{SWEEPER} runs {sw[0].get('image')}, the main container {main_image}: the same image")
+        if strategy != "Recreate":
+            errs.append(f"the Deployment strategy is {strategy!r}: {CLEANER} removes locks of ANY age because Recreate stops the old pod before the new one exists; with another strategy a live push could hold one")
+    for kind, c in scripts.items():
+        errs += cleaner_script_problems(c, kind)
     return errs
 
 
-def cleaner_script_problems(c):
-    """RUN the script on a temporary tree."""
+def cleaner_script_problems(c, kind):
+    """RUN the script on a temporary tree. kind init: every lock goes; kind sweep: only the old ones, and it loops."""
     import time
     errs = []
+    name = c.get("name")
     args = c.get("args") or []
     if c.get("command") != ["/bin/sh", "-c"] or len(args) != 1:
-        return [f"{CLEANER}: command must be [/bin/sh, -c] with the script as the one argument"]
+        return [f"{name}: command must be [/bin/sh, -c] with the script as the one argument"]
     env0 = {e["name"]: e.get("value") for e in c.get("env") or []}
+    once = dict(env0, SWEEP_EVERY_S="0")   # one pass, whatever the loop setting
     with tempfile.TemporaryDirectory() as t:
         root = Path(t) / "repos"
-        old = time.time() - 600
-        for rel in OLD_LOCKS + KEPT:
+        old = time.time() - 1200
+        for rel in OLD_LOCKS + KEPT + [FRESH_LOCK]:
             f = root / rel
             f.parent.mkdir(parents=True, exist_ok=True)
             f.write_text("0123456789abcdef-SECRET-CONTENT\n")
-            if rel != "alice/r.git/refs/heads/fresh.lock":
+            if rel != FRESH_LOCK:
                 os.utime(f, (old, old))
+        soon = time.time() - 180   # three minutes: stale at pod start, possibly live in a running forge
+        os.utime(root / FRESH_LOCK, (soon, soon))
         (root / "alice/r.git/refs/heads/link.lock").symlink_to(root / "alice/r.git/refs/heads/main")
         (root / "alice/r.git/refs/heads/dir.lock").mkdir()
         os.utime(root / "alice/r.git/refs/heads/dir.lock", (old, old))
-        env = dict(os.environ, REPOS_ROOT=str(root), LOCK_MIN_AGE_MIN=env0.get("LOCK_MIN_AGE_MIN", "5"))
-        r = subprocess.run(["/bin/sh", "-c", args[0]], capture_output=True, text=True, env=env)
+        env = dict(os.environ, REPOS_ROOT=str(root), **{k: v for k, v in once.items() if k != "REPOS_ROOT"})
+        r = subprocess.run(["/bin/sh", "-c", args[0]], capture_output=True, text=True, env=env, timeout=30)
         out = r.stdout + r.stderr
         if r.returncode:
-            errs.append(f"{CLEANER} script exits {r.returncode}, it must always exit 0")
+            errs.append(f"{name} script exits {r.returncode}, it must always exit 0")
         for rel in OLD_LOCKS:
             if (root / rel).exists():
-                errs.append(f"{CLEANER} left the old lock {rel}")
+                errs.append(f"{name} left the old lock {rel}")
             elif rel not in out:
-                errs.append(f"{CLEANER} removed {rel} without logging it")
+                errs.append(f"{name} removed {rel} without logging it")
+        if kind == "init" and (root / FRESH_LOCK).exists():
+            errs.append(f"{name} left a 3 minute old lock: at pod start nothing holds it, and the 5 minute limit blocked a branch for 9 minutes (lab 27 sitting 4)")
+        if kind == "sweep" and not (root / FRESH_LOCK).exists():
+            errs.append(f"{name} removed a 3 minute old lock in a RUNNING forge: it may be a live push")
         for rel in KEPT:
             if not (root / rel).exists():
-                errs.append(f"{CLEANER} removed {rel}, which it must keep")
+                errs.append(f"{name} removed {rel}, which it must keep")
         if not (root / "alice/r.git/refs/heads/link.lock").is_symlink():
-            errs.append(f"{CLEANER} removed a symlink named *.lock")
+            errs.append(f"{name} removed a symlink named *.lock")
         if not (root / "alice/r.git/refs/heads/dir.lock").is_dir():
-            errs.append(f"{CLEANER} removed a directory named *.lock")
+            errs.append(f"{name} removed a directory named *.lock")
         if "SECRET-CONTENT" in out:
-            errs.append(f"{CLEANER} printed the contents of a file")
+            errs.append(f"{name} printed the contents of a file")
+        # an age that is not a number removes nothing (a garbled setting must not turn a sweeper into a deleter)
+        (root / FRESH_LOCK).write_text("x")
+        r = subprocess.run(["/bin/sh", "-c", args[0]], capture_output=True, text=True, env=dict(env, LOCK_MIN_AGE_MIN="ten"), timeout=30)
+        if r.returncode or not (root / FRESH_LOCK).exists():
+            errs.append(f"{name}: an age that is not a number must remove nothing and exit 0 (rc {r.returncode})")
         # a missing repositories directory and a directory it cannot write to both end with exit 0
-        r = subprocess.run(["/bin/sh", "-c", args[0]], capture_output=True, text=True, env=dict(env, REPOS_ROOT=str(Path(t) / "absent")))
+        r = subprocess.run(["/bin/sh", "-c", args[0]], capture_output=True, text=True, env=dict(env, REPOS_ROOT=str(Path(t) / "absent")), timeout=30)
         if r.returncode:
-            errs.append(f"{CLEANER} script exits {r.returncode} when the repositories directory does not exist (first start)")
+            errs.append(f"{name} script exits {r.returncode} when the repositories directory does not exist (first start)")
         for rel in OLD_LOCKS:
             f = root / rel
             f.parent.mkdir(parents=True, exist_ok=True)
@@ -250,11 +289,33 @@ def cleaner_script_problems(c):
         locked.chmod(0o555)
         try:
             if os.geteuid() != 0:
-                r = subprocess.run(["/bin/sh", "-c", args[0]], capture_output=True, text=True, env=env)
+                r = subprocess.run(["/bin/sh", "-c", args[0]], capture_output=True, text=True, env=env, timeout=30)
                 if r.returncode:
-                    errs.append(f"{CLEANER} script exits {r.returncode} when a lock cannot be removed: a cleanup that cannot run must not stop the forge")
+                    errs.append(f"{name} script exits {r.returncode} when a lock cannot be removed: a cleanup that cannot run must not stop the forge")
         finally:
             locked.chmod(0o755)
+        if kind == "sweep":
+            # the loop: a second pass finds a lock that turned old since the first, and TERM ends it at once (a pod must not wait out the sleep)
+            (root / "later.git").mkdir()
+            proc = subprocess.Popen(["/bin/sh", "-c", args[0]], env=dict(env, SWEEP_EVERY_S="1"), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            time.sleep(0.5)
+            lk = root / "alice/r.git/refs/heads/late.lock"
+            lk.write_text("x")
+            os.utime(lk, (old, old))
+            deadline = time.time() + 6
+            while lk.exists() and time.time() < deadline:
+                time.sleep(0.2)
+            if lk.exists():
+                errs.append(f"{name} did not look again: a lock that turned old after the first pass is still there")
+            t0 = time.time()
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+                if proc.returncode != 0 or time.time() - t0 > 3:
+                    errs.append(f"{name} ended with {proc.returncode} {time.time() - t0:.1f} s after TERM: it must exit 0 at once")
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                errs.append(f"{name} ignores TERM: the pod would wait out its termination grace period")
     return errs
 
 
@@ -542,7 +603,7 @@ def optin_inputs():
         cfg = next(d for d in rendered if d["kind"] == "Secret" and d["metadata"]["name"].endswith("inline-config")).get("stringData", {})
         tols = next(d for d in rendered if d["kind"] == "Deployment")["spec"]["template"]["spec"].get("tolerations") or []
         dep = next(d for d in rendered if d["kind"] == "Deployment")["spec"]["template"]["spec"]
-        inits = (dep.get("initContainers") or [], dep["containers"][0]["image"])
+        inits = (dep.get("initContainers") or [], dep["containers"][0]["image"], dep["containers"], (next(d for d in rendered if d["kind"] == "Deployment")["spec"].get("strategy") or {}).get("type"))
     sbs = [d for d in docs("apps/base/forgejo-db/scheduledbackup.yaml") if d["kind"] == "ScheduledBackup"]
     ffj = next(d for d in docs("apps/flux/base/37-forgejo.yaml") if d["kind"] == "Kustomization")
     return profiles, catalog, hr, jobs, other_schedules(), pvc, sc, base_sc, kust, cfg, tols, sbs, crd_has_immediate(), inits, ffj
@@ -581,22 +642,37 @@ def optin_selftest(inp):
         "dirsync with another option": dict(sc=_sc_mount(sc, ["dirsync", "noatime"])),
         "a StorageClass on xfs": dict(sc=_sc(sc, fsType="xfs")),
         "no lock cleaner": dict(hr=_cleaner(hr, drop=True)),
+        "no sweeper sidecar": dict(hr=_cleaner(hr, drop=True, name=SWEEPER)),
         "a lock cleaner added last, not first": dict(hr=_cleaner(hr, path="/spec/template/spec/initContainers/-")),
+        "a sweeper added as an init container": dict(hr=_cleaner(hr, name=SWEEPER, path="/spec/template/spec/initContainers/0")),
         "a lock cleaner without resource limits": dict(hr=_cleaner(hr, set_=("resources", {"requests": {"cpu": "1m", "memory": "1Mi"}}))),
+        "a sweeper without resource limits": dict(hr=_cleaner(hr, name=SWEEPER, set_=("resources", {"requests": {"cpu": "1m", "memory": "1Mi"}}))),
         "a lock cleaner running as root": dict(hr=_cleaner(hr, set_=("securityContext", {"allowPrivilegeEscalation": False, "privileged": False, "capabilities": {"drop": ["ALL"]}, "runAsUser": 0}))),
-        "a lock cleaner that may escalate": dict(hr=_cleaner(hr, set_=("securityContext", {"allowPrivilegeEscalation": True, "privileged": False, "capabilities": {"drop": ["ALL"]}}))),
-        "a lock cleaner on the wrong directory": dict(hr=_cleaner(hr, set_=("env", [{"name": "REPOS_ROOT", "value": "/data"}, {"name": "LOCK_MIN_AGE_MIN", "value": "5"}]))),
-        "a lock cleaner with no age limit": dict(hr=_cleaner(hr, replace=(' -mmin "+$MIN"', ""))),
-        "a lock cleaner with a 0 minute limit": dict(hr=_cleaner(hr, set_=("env", [{"name": "REPOS_ROOT", "value": "/data/git/gitea-repositories"}, {"name": "LOCK_MIN_AGE_MIN", "value": "0"}]))),
-        "a lock cleaner that removes every lock": dict(hr=_cleaner(hr, replace=("*) continue ;;", "*) ;;"))),
-        "a lock cleaner that removes index.lock too": dict(hr=_cleaner(hr, replace=("*) continue ;;", "*/*.git/index.lock) ;;\n*) continue ;;"))),
-        "a lock cleaner that ignores packed-refs.lock": dict(hr=_cleaner(hr, replace=("*/*.git/packed-refs.lock | ", ""))),
-        "a lock cleaner that follows symlinks": dict(hr=_cleaner(hr, replace=("find \"$ROOT\" -type f", "find -L \"$ROOT\""))),
-        "a lock cleaner that stays silent": dict(hr=_cleaner(hr, replace=('echo "clean-stale-git-locks: removed $rel (older than $MIN min)"', ":"))),
-        "a lock cleaner that prints the contents": dict(hr=_cleaner(hr, replace=('if rm -f -- "$f"; then', 'cat "$f"; if rm -f -- "$f"; then'))),
-        "a lock cleaner that fails the start": dict(hr=_cleaner(hr, replace=("done\nexit 0", "done\nexit 1"))),
+        "a sweeper that may escalate": dict(hr=_cleaner(hr, name=SWEEPER, set_=("securityContext", {"allowPrivilegeEscalation": True, "privileged": False, "capabilities": {"drop": ["ALL"]}}))),
+        "a lock cleaner on the wrong directory": dict(hr=_cleaner(hr, set_=("env", [{"name": "REPOS_ROOT", "value": "/data"}, {"name": "LOCK_MIN_AGE_MIN", "value": "0"}]))),
+        "an init cleaner back at the 5 minute limit (F-LOCKAGE)": dict(hr=_cleaner(hr, set_=("env", _env("5")))),
+        "an init cleaner that loops": dict(hr=_cleaner(hr, set_=("env", _env("0", SWEEP_EVERY_S="60")))),
+        "a sweeper with a 2 minute limit": dict(hr=_cleaner(hr, name=SWEEPER, set_=("env", _env("2", CLEANER_NAME=SWEEPER, SWEEP_EVERY_S="60")))),
+        "a sweeper with no age limit": dict(hr=_cleaner(hr, name=SWEEPER, set_=("env", _env("0", CLEANER_NAME=SWEEPER, SWEEP_EVERY_S="60")))),
+        "a sweeper that does not loop": dict(hr=_cleaner(hr, name=SWEEPER, set_=("env", _env("10", CLEANER_NAME=SWEEPER)))),
+        "a sweeper that loops every second": dict(hr=_cleaner(hr, name=SWEEPER, set_=("env", _env("10", CLEANER_NAME=SWEEPER, SWEEP_EVERY_S="1")))),
+        "a sweeper that logs under the init container's name": dict(hr=_cleaner(hr, name=SWEEPER, set_=("env", _env("10", SWEEP_EVERY_S="60")))),
+        "the two scripts drifting apart": dict(hr=_cleaner(hr, name=SWEEPER, replace=("exit 0\n", "exit 0\n# drift\n"))),
+        "a lock cleaner with no age limit for the sweeper": dict(hr=_both(hr, replace=(' [ "$MIN" -gt 0 ] &&', " false &&"))),
+        "a lock cleaner that removes every lock": dict(hr=_both(hr, replace=("*) continue ;;", "*) ;;"))),
+        "a lock cleaner that removes index.lock too": dict(hr=_both(hr, replace=("*) continue ;;", "*/*.git/index.lock) ;;\n*) continue ;;"))),
+        "a lock cleaner that ignores packed-refs.lock": dict(hr=_both(hr, replace=("*/*.git/packed-refs.lock | ", ""))),
+        "a lock cleaner that follows symlinks": dict(hr=_both(hr, replace=("find \"$ROOT\" -type f", "find -L \"$ROOT\""))),
+        "a lock cleaner that stays silent": dict(hr=_both(hr, replace=('echo "$NAME: removed $rel (age limit $MIN min)"', ":"))),
+        "a lock cleaner that prints the contents": dict(hr=_both(hr, replace=('if rm -f -- "$f"; then', 'cat "$f"; if rm -f -- "$f"; then'))),
+        "a lock cleaner that fails the start": dict(hr=_both(hr, replace=("sweep\nif", "sweep\nexit 1\nif"))),
+        "a lock cleaner that takes a garbled age for zero": dict(hr=_both(hr, replace=('"" | *[!0-9]*)', "x)"))),
+        "a sweeper that ignores TERM": dict(hr=_both(hr, replace=("trap 'exit 0' TERM INT", "trap '' TERM INT"))),
+        "a sweeper that sleeps in the foreground": dict(hr=_both(hr, replace=('sleep "$EVERY" &\n', 'sleep "$EVERY"\n'))),
         "a lock cleaner on a postBuild Kustomization": dict(flux_forgejo={"spec": {"postBuild": {"substituteFrom": []}}}),
-        "a lock cleaner on another image than the app": dict(rendered_inits=([dict(inits[0][0], image="docker.io/library/busybox:1")] + inits[0][1:], inits[1])) if inits else dict(hr=_cleaner(hr, drop=True)),
+        "a lock cleaner on another image than the app": dict(rendered_inits=([dict(inits[0][0], image="docker.io/library/busybox:1")] + inits[0][1:],) + inits[1:]) if inits else dict(hr=_cleaner(hr, drop=True)),
+        "a sweeper on another image than the app": dict(rendered_inits=(inits[0], inits[1], [dict(c, image="docker.io/library/busybox:1") if c["name"] == SWEEPER else c for c in inits[2]], inits[3])) if inits else dict(hr=_cleaner(hr, drop=True, name=SWEEPER)),
+        "a Deployment on a rolling update, where an old pod may still push": dict(rendered_inits=inits[:3] + ("RollingUpdate",)) if inits else dict(hr=_cleaner(hr, drop=True)),
         "no RecurringJob": dict(jobs=[]),
         "a RecurringJob on another group": dict(jobs=[_job(jobs, groups=["other"])]),
         "a RecurringJob that is a snapshot, not a backup": dict(jobs=[_job(jobs, task="snapshot")]),
@@ -671,10 +747,10 @@ def _sc_mount(sc, opts):
     return c
 
 
-def _cleaner(hr, drop=False, path=None, set_=None, replace=None):
+def _cleaner(hr, drop=False, path=None, set_=None, replace=None, name=CLEANER):
     h = copy.deepcopy(hr)
     pats = h["spec"]["postRenderers"][0]["kustomize"]["patches"]
-    i = next(k for k, p in enumerate(pats) if CLEANER in p["patch"])
+    i = next(k for k, p in enumerate(pats) if f"name: {name}" in p["patch"])
     if drop:
         pats.pop(i)
         return h
@@ -689,6 +765,16 @@ def _cleaner(hr, drop=False, path=None, set_=None, replace=None):
         ops[0]["value"]["args"][0] = a.replace(*replace)
     pats[i]["patch"] = yaml.safe_dump(ops)
     return h
+
+
+def _env(init_min="0", **extra):
+    e = [{"name": "REPOS_ROOT", "value": "/data/git/gitea-repositories"}, {"name": "LOCK_MIN_AGE_MIN", "value": init_min}]
+    return e + [{"name": k, "value": v} for k, v in extra.items()]
+
+
+def _both(hr, **kw):
+    """The same change to the script of BOTH cleaners, which the test insists are one text."""
+    return _cleaner(_cleaner(hr, name=SWEEPER, **kw), **kw)
 
 
 def _sc(sc, drop=None, **params):

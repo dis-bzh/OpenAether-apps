@@ -63,30 +63,38 @@ spec:
               - op: add
                 path: /spec/template/spec/automountServiceAccountToken
                 value: false
-          # STALE GIT LOCKS (lab 27 sitting 3, FK2). A push interrupted by a node loss leaves
-          # `refs/heads/<branch>.lock` in the bare
-          # repository, git never removes it by itself, and every later push to that branch is refused ("reference
-          # already exists")
-          # until someone deletes the file: seen for 10 minutes in the drill, for good in principle. This init
-          # container runs BEFORE
-          # the app starts (the pod is the only replica, the volume is ReadWriteOnce, so no git process of Forgejo is
-          # running on
-          # it) and removes the lock files of BARE repositories that are older than LOCK_MIN_AGE_MIN minutes:
-          # `refs/**/*.lock`,
-          # `packed-refs.lock`, `HEAD.lock`, `config.lock`, `shallow.lock`. Never `index.lock` (a worktree's, not a
-          # bare repository's), never
-          # anything that is not a regular file, never outside the repositories directory ([repository] ROOT of the
-          # app.ini the chart
-          # renders, /data/git/gitea-repositories). It logs the path of each file it removes, never its contents, and
-          # always exits 0:
-          # a cleanup that cannot run must not keep the forge from starting. The image is the main container's (pulled
-          # once, same
-          # non-root user 1000, same restricted securityContext and limits as the chart's own init containers);
-          # test-forgejo-brick.py pins that equality and runs this very script against a temporary tree.
-          # WHAT IT DOES NOT FIX: an update that git ACKNOWLEDGED and the volume then lost (the rename lock -> ref was
-          # not durable, 1 of 59
-          # in the drill). That is the `dirsync` mount of the StorageClass (storageclass.yaml), UNVERIFIED until the
-          # next drill.
+          # STALE GIT LOCKS (lab 27 sitting 3 FK2, sitting 4 b3c F-LOCKAGE). A push interrupted by a node loss or a
+          # crash leaves `refs/heads/<branch>.lock` in the bare repository, git never removes it by itself, and
+          # every later push to that branch is refused ("reference already exists") until someone deletes the file:
+          # seen for 10 minutes in the drill, for good in principle. Two cleaners, one script, two ages. It removes
+          # the lock files of BARE repositories: `refs/**/*.lock`, `packed-refs.lock`, `HEAD.lock`, `config.lock`,
+          # `shallow.lock`. Never `index.lock` (a worktree's, not a bare repository's), never anything that is not a
+          # regular file, never outside the repositories directory ([repository] ROOT of the app.ini the chart
+          # renders, /data/git/gitea-repositories). It logs the path of each file it removes, never its contents,
+          # and a cleanup that cannot run must not keep the forge from starting. The image is the main container's
+          # (pulled once, same non-root user 1000, same restricted securityContext, requests and limits).
+          # test-forgejo-brick.py pins that equality, runs this very script against a temporary tree and pins that the
+          # two copies below are the same text.
+          #
+          # 1. INIT CONTAINER, FIRST in the pod, ANY AGE (LOCK_MIN_AGE_MIN 0). Sitting 4 (OVH): the new pod started
+          # 2 minutes after a hard power loss, the old cleaner only took locks older than 5 minutes and left the
+          # branch blocked for 9. At this point NO git process of Forgejo is running on the volume, which is what
+          # makes age irrelevant: the Deployment strategy is Recreate (the chart's default, pinned by the brick test
+          # on the rendered Deployment), the old pod's containers are stopped before the new pod exists, and the
+          # volume is ReadWriteOnce with Longhorn refusing a second attach while the old one is held, so a pod on a
+          # partitioned node cannot write to it any more. Any lock found here is stale.
+          #
+          # 2. SIDECAR, EVERY 60 s, LOCKS OLDER THAN 10 MINUTES. An init container does not run again when only the
+          # MAIN container restarts (an OOM kill, a crash): its git children die with it and leave their locks, and
+          # nothing looked again. A running forge CAN hold a live lock, so this one never removes a young one. A ref
+          # lock lives for the milliseconds of one ref update; Forgejo ends its git commands after [git.timeout]
+          # DEFAULT = 360 s; 10 minutes is beyond both. If a git process were nevertheless stalled that long on a
+          # failing disk, deleting its lock makes its final rename fail, which is an error to the client of that
+          # push and not a corrupt ref (the age is looked at again right before each removal). UNVERIFIED on a
+          # cluster: the next lab must kill the main container mid-push.
+          #
+          # WHAT NEITHER FIXES: an update that git ACKNOWLEDGED and the volume then lost (the rename lock -> ref was
+          # not durable, 1 of 59 in the drill). That is the `dirsync` mount of the StorageClass (storageclass.yaml).
           - target:
               kind: Deployment
             patch: |-
@@ -100,32 +108,53 @@ spec:
                   args:
                     - |
                       set -u
+                      NAME="${CLEANER_NAME:-clean-stale-git-locks}"
                       ROOT="${REPOS_ROOT:-/data/git/gitea-repositories}"
-                      MIN="${LOCK_MIN_AGE_MIN:-5}"
-                      if [ ! -d "$ROOT" ]; then
-                        echo "clean-stale-git-locks: no $ROOT yet, nothing to clean"
-                        exit 0
-                      fi
-                      find "$ROOT" -type f -name '*.lock' -mmin "+$MIN" 2>/dev/null | while IFS= read -r f; do
-                        rel="${f#"$ROOT"/}"
-                        case "$rel" in
-                          */*.git/refs/*.lock) ;;
-                          */*.git/packed-refs.lock | */*.git/HEAD.lock) ;;
-                          */*.git/config.lock | */*.git/shallow.lock) ;;
-                          *) continue ;;
-                        esac
-                        if rm -f -- "$f"; then
-                          echo "clean-stale-git-locks: removed $rel (older than $MIN min)"
-                        else
-                          echo "clean-stale-git-locks: could not remove $rel"
+                      MIN="${LOCK_MIN_AGE_MIN:-0}"
+                      EVERY="${SWEEP_EVERY_S:-0}"
+                      case "$MIN$EVERY" in
+                        "" | *[!0-9]*)
+                          echo "$NAME: LOCK_MIN_AGE_MIN and SWEEP_EVERY_S must be numbers, nothing removed"
+                          exit 0 ;;
+                      esac
+                      sweep() {
+                        if [ ! -d "$ROOT" ]; then
+                          echo "$NAME: no $ROOT yet, nothing to clean"
+                          return 0
                         fi
-                      done
+                        find "$ROOT" -type f -name '*.lock' 2>/dev/null | while IFS= read -r f; do
+                          rel="${f#"$ROOT"/}"
+                          case "$rel" in
+                            */*.git/refs/*.lock) ;;
+                            */*.git/packed-refs.lock | */*.git/HEAD.lock) ;;
+                            */*.git/config.lock | */*.git/shallow.lock) ;;
+                            *) continue ;;
+                          esac
+                          if [ "$MIN" -gt 0 ] && [ -z "$(find "$f" -type f -mmin "+$MIN" 2>/dev/null)" ]; then
+                            continue
+                          fi
+                          if rm -f -- "$f"; then
+                            echo "$NAME: removed $rel (age limit $MIN min)"
+                          else
+                            echo "$NAME: could not remove $rel"
+                          fi
+                        done
+                      }
+                      sweep
+                      if [ "$EVERY" -gt 0 ]; then
+                        trap 'exit 0' TERM INT
+                        while :; do
+                          sleep "$EVERY" &
+                          wait $!
+                          sweep
+                        done
+                      fi
                       exit 0
                   env:
                     - name: REPOS_ROOT
                       value: /data/git/gitea-repositories
                     - name: LOCK_MIN_AGE_MIN
-                      value: "5"
+                      value: "0"
                   volumeMounts:
                     - name: data
                       mountPath: /data
@@ -141,6 +170,89 @@ spec:
                     limits:
                       cpu: 500m
                       memory: 256Mi
+          - target:
+              kind: Deployment
+            patch: |-
+              - op: add
+                path: /spec/template/spec/containers/-
+                value:
+                  name: sweep-stale-git-locks
+                  image: code.forgejo.org/forgejo/forgejo:15.0.10-rootless
+                  imagePullPolicy: IfNotPresent
+                  command: ["/bin/sh", "-c"]
+                  args:
+                    - |
+                      set -u
+                      NAME="${CLEANER_NAME:-clean-stale-git-locks}"
+                      ROOT="${REPOS_ROOT:-/data/git/gitea-repositories}"
+                      MIN="${LOCK_MIN_AGE_MIN:-0}"
+                      EVERY="${SWEEP_EVERY_S:-0}"
+                      case "$MIN$EVERY" in
+                        "" | *[!0-9]*)
+                          echo "$NAME: LOCK_MIN_AGE_MIN and SWEEP_EVERY_S must be numbers, nothing removed"
+                          exit 0 ;;
+                      esac
+                      sweep() {
+                        if [ ! -d "$ROOT" ]; then
+                          echo "$NAME: no $ROOT yet, nothing to clean"
+                          return 0
+                        fi
+                        find "$ROOT" -type f -name '*.lock' 2>/dev/null | while IFS= read -r f; do
+                          rel="${f#"$ROOT"/}"
+                          case "$rel" in
+                            */*.git/refs/*.lock) ;;
+                            */*.git/packed-refs.lock | */*.git/HEAD.lock) ;;
+                            */*.git/config.lock | */*.git/shallow.lock) ;;
+                            *) continue ;;
+                          esac
+                          if [ "$MIN" -gt 0 ] && [ -z "$(find "$f" -type f -mmin "+$MIN" 2>/dev/null)" ]; then
+                            continue
+                          fi
+                          if rm -f -- "$f"; then
+                            echo "$NAME: removed $rel (age limit $MIN min)"
+                          else
+                            echo "$NAME: could not remove $rel"
+                          fi
+                        done
+                      }
+                      sweep
+                      if [ "$EVERY" -gt 0 ]; then
+                        trap 'exit 0' TERM INT
+                        while :; do
+                          sleep "$EVERY" &
+                          wait $!
+                          sweep
+                        done
+                      fi
+                      exit 0
+                  env:
+                    - name: REPOS_ROOT
+                      value: /data/git/gitea-repositories
+                    - name: CLEANER_NAME
+                      value: sweep-stale-git-locks
+                    - name: LOCK_MIN_AGE_MIN
+                      value: "10"
+                    - name: SWEEP_EVERY_S
+                      value: "60"
+                  volumeMounts:
+                    - name: data
+                      mountPath: /data
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    privileged: false
+                    capabilities:
+                      drop: ["ALL"]
+                  resources:
+                    requests:
+                      cpu: 10m
+                      memory: 32Mi
+                    limits:
+                      cpu: 100m
+                      memory: 64Mi
+              # `kubectl logs` and `exec` on the Deployment keep going to the forge, not to the sweeper.
+              - op: add
+                path: /spec/template/metadata/annotations/kubectl.kubernetes.io~1default-container
+                value: forgejo
   values:
     replicaCount: 1
 
