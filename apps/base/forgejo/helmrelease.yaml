@@ -122,7 +122,9 @@ spec:
                           echo "$NAME: no $ROOT yet, nothing to clean"
                           return 0
                         fi
-                        find "$ROOT" -type f -name '*.lock' 2>/dev/null | while IFS= read -r f; do
+                        # objects/ holds nearly every file and no lock this script may remove: not walked.
+                        find "$ROOT" -type d -name objects -prune -o -type f -name '*.lock' -print 2>/dev/null |
+                        while IFS= read -r f; do
                           rel="${f#"$ROOT"/}"
                           case "$rel" in
                             */*.git/refs/*.lock) ;;
@@ -197,7 +199,9 @@ spec:
                           echo "$NAME: no $ROOT yet, nothing to clean"
                           return 0
                         fi
-                        find "$ROOT" -type f -name '*.lock' 2>/dev/null | while IFS= read -r f; do
+                        # objects/ holds nearly every file and no lock this script may remove: not walked.
+                        find "$ROOT" -type d -name objects -prune -o -type f -name '*.lock' -print 2>/dev/null |
+                        while IFS= read -r f; do
                           rel="${f#"$ROOT"/}"
                           case "$rel" in
                             */*.git/refs/*.lock) ;;

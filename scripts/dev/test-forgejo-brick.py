@@ -662,7 +662,7 @@ def optin_selftest(inp):
         "a lock cleaner that removes every lock": dict(hr=_both(hr, replace=("*) continue ;;", "*) ;;"))),
         "a lock cleaner that removes index.lock too": dict(hr=_both(hr, replace=("*) continue ;;", "*/*.git/index.lock) ;;\n*) continue ;;"))),
         "a lock cleaner that ignores packed-refs.lock": dict(hr=_both(hr, replace=("*/*.git/packed-refs.lock | ", ""))),
-        "a lock cleaner that follows symlinks": dict(hr=_both(hr, replace=("find \"$ROOT\" -type f", "find -L \"$ROOT\""))),
+        "a lock cleaner that follows symlinks": dict(hr=_both(hr, replace=("find \"$ROOT\" -type d", "find -L \"$ROOT\" -type d"))),
         "a lock cleaner that stays silent": dict(hr=_both(hr, replace=('echo "$NAME: removed $rel (age limit $MIN min)"', ":"))),
         "a lock cleaner that prints the contents": dict(hr=_both(hr, replace=('if rm -f -- "$f"; then', 'cat "$f"; if rm -f -- "$f"; then'))),
         "a lock cleaner that fails the start": dict(hr=_both(hr, replace=("sweep\nif", "sweep\nexit 1\nif"))),
