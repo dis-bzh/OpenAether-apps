@@ -112,6 +112,7 @@ echo "=== healthy: every dataset verified on both stores ==="
 run_all
 for ds in openbao cnpg-dump etcd cnpg longhorn; do chk "$ds: oa_backup_verify_ok 1 ($(grep -h "$ds/" "$W/s3.out" | head -2 | tr '\n' ' ' | cut -c1-150))" "[ \"\$(okv $ds)\" = 1 ]"; done
 chk "the grafana-db archive without a base backup is skipped, not failed" "grep -q 'grafana-db' '$W/res/cnpg.tsv' && grep -P 'grafana-db' '$W/res/cnpg.tsv' | grep -qP '\tskip\t'"
+chk "forgejo-db is read by default (lab 27 part B, D13) and, with no forge, its empty archive is a skip on both stores, not a failure" "grep -P '^cnpg\tprimary\tskip\t.*forgejo-db' '$W/res/cnpg.tsv' | grep -q . && grep -P '^cnpg\treplica\tskip\t.*forgejo-db' '$W/res/cnpg.tsv' | grep -q ."
 chk "last success is set for every dataset" "[ -n \"\$(lastok openbao)\" ] && [ -n \"\$(lastok cnpg)\" ] && [ -n \"\$(lastok etcd)\" ]"
 chk "the exposition holds the series of the contract and nothing without a dataset label but the run time" \
   "grep -c '^oa_backup_verify_' '$W/kube/metrics' | grep -qv '^0\$' && ! grep -E '^oa_backup_verify_(ok|last_success_timestamp_seconds)[^{]' '$W/kube/metrics'"
