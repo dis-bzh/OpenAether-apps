@@ -81,12 +81,12 @@ pdb_exception:
       is only preferred, so a drain of a node holding two of them would wait forever under minAvailable 2.
       A drain that takes two at once rejects pushes (replication factor 2) until one returns; Alloy
       retries (lab 15c: 301 of 301 lines kept over a 240 s outage).
-# critical_path: the components every request or every cluster operation needs, PINNED. Each is checked against the rendered
-# manifests: at least `min_replicas`, and a zone term next to the hostname one (the generic rules above already demand a hostname
-# spread and exactly one allowed disruption from every workload with two replicas or more). A change that lowers a number,
-# drops a zone term or moves one of them to `single_replica` fails scripts/check-ha.py (and its unit test). Not in this render and
-# pinned elsewhere: the Gateway pods (scripts/dev/test-gateway-ha.py), CoreDNS and the Cilium operator (OpenAether-infra, Talos
-# inline manifests). `why` says what breaks without it.
+# critical_path: the components every request or every cluster operation needs, PINNED. Each is checked against the
+# rendered manifests: at least `min_replicas`, and a zone term next to the hostname one (the generic rules above
+# already demand a hostname spread and exactly one allowed disruption from every workload with two replicas or more).
+# A change that lowers a number, drops a zone term or moves one of them to `single_replica` fails scripts/check-ha.py
+# (and its unit test). Not in this render and pinned elsewhere: the Gateway pods (scripts/dev/test-gateway-ha.py),
+# CoreDNS and the Cilium operator (OpenAether-infra, Talos inline manifests). `why` says what breaks without it.
 critical_path:
   - workload: Deployment/cert-manager/cert-manager
     min_replicas: 2
