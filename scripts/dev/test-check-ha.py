@@ -150,6 +150,21 @@ check(errs([pl2, ppdb]) != [], "a Pooler without a spread is caught")
 check(ha.profile_cpu([pl, ppdb]) == 200, "profile CPU counts the pooler pods: 2 x 100 m")
 pe, plines = ha.audit_profiles(__import__("ha_render").kustomize)
 check(pe == [] and len(plines) == 3, "the shipped light, standard and ha examples pass the HA audit within their CPU budgets %s" % pe)
+# critical_path pins (0.4.0 critical-path audit): replicas and a zone term, as errors
+zone_c = {"maxSkew": 1, "topologyKey": ha.ZONE, "whenUnsatisfiable": "ScheduleAnyway", "labelSelector": {"matchLabels": L}}
+host_c = {"maxSkew": 1, "topologyKey": ha.HOST, "whenUnsatisfiable": "ScheduleAnyway", "labelSelector": {"matchLabels": L}}
+cp = {"critical_path": [{"workload": "Deployment/ns/web", "min_replicas": 2, "why": "w"}]}
+zoned = [dep(topologySpreadConstraints=[host_c, zone_c]), pdb(maxUnavailable=1)]
+check(errs(zoned, **cp) == [], "a critical-path workload with 2 replicas, a host and a zone term passes")
+check(any("no zone spread" in e for e in errs(good, **cp)), "a critical-path workload without a zone term is caught (a warning for the others)")
+check(errs(good) == [], "...and the same workload is not an error when it is not pinned")
+check(any("the pin is 3" in e for e in errs(zoned, critical_path=[{"workload": "Deployment/ns/web", "min_replicas": 3, "why": "w"}])),
+      "a critical-path workload below its pinned replicas is caught")
+check(any("the pin is 2" in e for e in errs([dep(1)], critical_path=cp["critical_path"], single_replica=[
+    {"workload": "Deployment/ns/web", "reason": "r", "loss": "l"}])), "moving a pinned workload to single_replica is caught")
+check(any("names no workload" in e for e in errs(zoned, critical_path=[{"workload": "Deployment/ns/gone", "min_replicas": 2, "why": "w"}])),
+      "a pin on a workload that no longer exists is caught")
+check(any("no why" in e for e in errs(zoned, critical_path=[{"workload": "Deployment/ns/web", "min_replicas": 2}])), "a pin without a why is caught")
 # the real allow-list
 real = yaml.safe_load((REPO / "scripts/ha-allowlist.yaml").read_text())
 check(all(str(e.get("reason", "")).strip() for k in ("single_replica", "strict_spread", "known_gaps") for e in real.get(k) or []),
@@ -157,5 +172,10 @@ check(all(str(e.get("reason", "")).strip() for k in ("single_replica", "strict_s
 check(all(str(e.get("loss", "")).strip() for e in real["single_replica"]), "every single_replica entry says what its loss means")
 check(not set(e["workload"] for e in real["single_replica"]) & set(e["workload"] for e in real.get("known_gaps") or []),
       "no workload is both single_replica and a known gap")
+check(all(str(e.get("why", "")).strip() and e["min_replicas"] >= 2 for e in real["critical_path"]),
+      "every critical_path pin has a why and at least 2 replicas")
+need = ("kyverno-admission-controller", "istiod", "cnpg-controller-manager", "barman-cloud", "openbao", "zitadel-db", "cert-manager-webhook",
+        "external-secrets-webhook", "metrics-server", "loki", "alertmanager")
+check(all(any(n in e["workload"] for e in real["critical_path"]) for n in need), "the pins cover the admission, mesh, database, secrets and alert paths")
 print("%d failed" % fails)
 sys.exit(1 if fails else 0)

@@ -420,8 +420,8 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ### GatewayReplicasLow
 
-- Check: `kubectl -n services-gateway get pods -o wide` (are both on one node? the spread policy), HPA events.
-- Do: Free capacity so the second replica schedules; check the spread Kyverno policy.
+- Check: `kubectl -n services-gateway get pods -o wide` (which one is Pending, which node or zone is lost or cordoned?), `kubectl -n services-gateway describe pod <pending>` (the spread is hard: "didn't match pod topology spread constraints" means no room in the zone or on the node that would keep the skew at 1), HPA events.
+- Do: Free capacity on the node or zone named by the event, or bring the lost node back (`cluster-node-recover`); check the spread Kyverno policy `spread-gateway-pods`. Two of three still serve meanwhile.
 
 ### GatewayMetricsAbsent
 

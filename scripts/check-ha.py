@@ -17,6 +17,9 @@ VMAlert, VMAlertmanager or CNPG Cluster) asserts:
 
   6. (warning only) when replicas >= 2: a zone term (topology.kubernetes.io/zone) next to the hostname one; the list of workloads
      without one is printed as `warn:` lines and a coverage line (apps #155, lab 21: both replicas can sit in one zone).
+  7. the `critical_path` list of scripts/ha-allowlist.yaml PINS the components every request or every cluster operation needs: at
+     least the listed replicas, and a zone term next to the hostname one (an error here, a warning for the others). Lowering a
+     number, dropping a zone term or moving one of them to `single_replica` fails the check instead of passing quietly.
 
 The allow-list cannot rot: an entry for a workload that is no longer single-replica, or that no longer exists, fails the
 check, and so does an entry without a reason. `known_gaps` lists what is not fixed yet and must shrink to nothing.
@@ -266,6 +269,20 @@ def audit(docs, allow, opt_in_absent=False):
                 errs.append("allow-list single_replica %s does not say what its loss means" % k)
             if k not in ids and not (opt_in_absent and e.get("opt_in")):
                 errs.append("allow-list %s %s names no workload of the platform (renamed or removed: delete the entry)" % (label, k))
+    by_id = {w["id"]: w for w in ws}
+    for e in allow.get("critical_path", []):
+        k = e["workload"]
+        w = by_id.get(k)
+        if not str(e.get("why", "")).strip():
+            errs.append("allow-list critical_path %s has no why (what breaks on the critical path without it)" % k)
+        if w is None:
+            if not (opt_in_absent and e.get("opt_in")):
+                errs.append("allow-list critical_path %s names no workload of the platform (renamed or removed: delete the entry)" % k)
+            continue
+        if w["replicas"] < e["min_replicas"]:
+            errs.append("critical path: %s has %d replica(s), the pin is %d (%s)" % (k, w["replicas"], e["min_replicas"], e.get("why", "")))
+        if w["replicas"] >= 2 and not spreads(w, ZONE) and not (k.startswith("Cluster/") and spreads_zone_cnpg(docs, w)):
+            errs.append("critical path: %s has no zone spread: all its replicas can sit in one zone (%s)" % (k, e.get("why", "")))
     for w in ws:
         wid, r, probs = w["id"], w["replicas"], []
         if r < 2:

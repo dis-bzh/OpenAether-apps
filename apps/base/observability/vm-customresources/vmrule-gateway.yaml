@@ -73,17 +73,18 @@ spec:
 
         - alert: GatewayReplicasLow
           expr: |
-            kube_deployment_status_replicas_available{namespace="services-gateway", deployment="openaether-gateway-istio"} < 2
+            kube_deployment_status_replicas_available{namespace="services-gateway", deployment="openaether-gateway-istio"} < 3
           for: 5m
           labels:
             severity: warning
             component: gateway
           annotations:
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#gatewayreplicaslow"
-            summary: "The gateway runs on fewer than 2 replicas: the next node loss is an outage"
+            summary: "The gateway runs on fewer than 3 replicas: it has lost its margin"
             description: >-
-              The HPA minimum is 2 so a single node loss does not cut the public path (lab 15c). Below it, one
-              replica carries everything.
+              The HPA minimum is 3 (0.4.0), one pod per zone, so a single node or zone loss leaves two serving and the
+              public path is not cut (lab 15c). Below 3 for 5 minutes a pod is Pending (no room on a node or in a zone
+              of the hard spread) or on a lost node; at 1 the next loss is an outage.
 
         - alert: GatewayMetricsAbsent
           expr: |
