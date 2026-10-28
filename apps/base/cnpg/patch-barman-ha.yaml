@@ -29,9 +29,18 @@ spec:
   template:
     spec:
       topologySpreadConstraints:
+        # HARD on the node (lab 27 part C, E4): the soft rule put both pods on one node twice, and a partition of that
+        # node blocked the failover of a primary for 204 s (target 75 s) because the operator found no plugin. With
+        # `nodeTaintsPolicy: Honor` a cordoned, NotReady or control-plane node is not an empty domain, so a drain or a
+        # lost node still finds a place for the replacement (2 pods on {1,0} of the 2 usable nodes); only a cluster
+        # with a single usable node, or no capacity, leaves the second pod Pending instead of stacking it (the first
+        # keeps serving, WorkloadReplicasBelowDesired fires). A pod that is already running keeps its place: the
+        # rebalance step (OpenAether-infra `cluster-rebalance`, run by cluster-up, cluster-roll and replace) puts a
+        # stacked pair back. The zone term stays soft (a lost zone must not block a pod).
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway
+          whenUnsatisfiable: DoNotSchedule
+          nodeTaintsPolicy: Honor
           labelSelector:
             matchLabels:
               app: barman-cloud

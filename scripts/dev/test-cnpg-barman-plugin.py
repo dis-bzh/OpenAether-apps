@@ -183,6 +183,14 @@ def main(path="apps/base/cnpg"):
         keys = {t["topologyKey"] for t in pod.get("topologySpreadConstraints", [])}
         if keys != {"kubernetes.io/hostname", "topology.kubernetes.io/zone"}:
             errs.append(f"plugin: spread over hostname and zone, got {sorted(keys)}")
+        # lab 27 part C (E4): the soft spread stacked both pods on one node twice and a partition of it blocked a failover 204 s.
+        host = [t for t in pod.get("topologySpreadConstraints", []) if t["topologyKey"] == "kubernetes.io/hostname"]
+        if not host or any(t.get("whenUnsatisfiable") != "DoNotSchedule" or t.get("nodeTaintsPolicy") != "Honor"
+                           or t.get("maxSkew") != 1 for t in host):
+            errs.append("plugin: the hostname spread must be hard (DoNotSchedule, maxSkew 1, nodeTaintsPolicy Honor), E4")
+        zone = [t for t in pod.get("topologySpreadConstraints", []) if t["topologyKey"] == "topology.kubernetes.io/zone"]
+        if any(t.get("whenUnsatisfiable") != "ScheduleAnyway" for t in zone):
+            errs.append("plugin: the zone term stays soft (a lost zone must not block a pod)")
         secs = {t["key"]: t.get("tolerationSeconds") for t in pod.get("tolerations", [])}
         if secs.get("node.kubernetes.io/unreachable") != 30 or secs.get("node.kubernetes.io/not-ready") != 30:
             errs.append("plugin: 30 s tolerations on unreachable and not-ready, like the database pods")
