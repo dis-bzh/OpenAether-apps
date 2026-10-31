@@ -80,8 +80,48 @@ belong to. What follows has no skill of its own yet.
   Expected empty archive"), the `ContinuousArchiving` condition stays `False` with `ContinuousArchivingFailing`, and no WAL
   leaves the cluster. It happens when a lab or a rebuild reuses the bucket (and the `cnpg/<cluster>` path) of an earlier cluster.
   Either bootstrap the new cluster from that archive (recovery), or give it a NEW `serverName`: the DR chain does it (generation suffix `-g2`,
-  `cnpg-archive-generation`, apps #153, README of the backup brick; fixed offline, UNVERIFIED on a cluster), or, once you are sure you do not need it, remove that path
+  `cnpg-archive-generation`, apps #153, README of the backup brick; seen on a cluster in lab 28B, where the chain rebuilt `zitadel-db` and `grafana-db` as `-g2`), or, once you are sure you do not need it, remove that path
   from the bucket. Do not change `serverName` of a running cluster by hand: the history before the change stays in the old path. Seen on a Scaleway lab that reused its bucket (105 objects under `cnpg/`).
+  The next entry is what such a cluster does at its first failover.
+
+- **A Cluster created on an archive path that holds another database's WAL looks healthy, then never finishes its first failover** (lab 28B/28C,
+  I25; observed on Scaleway with CloudNativePG 1.30.1, Barman Cloud plugin 0.15.1, PostgreSQL 18.6; a cluster-side mitigation is planned for 0.4.1).
+  *Symptom.* `ContinuousArchiving` is `False` from the first minute (`unexpected failure invoking barman-cloud-wal-archive: exit status 1`) while
+  the Cluster reports `Cluster in healthy state` and replicates, so nothing is visible. After the loss of the primary the Cluster stays in
+  `Failing over` until a person acts: the operator logs `There is a switchover or a failover in progress, waiting for the operation to complete`
+  every second, the old node coming back changes nothing, and the target's `postgres` log repeats `WAL file is from different database system:
+  WAL file database system identifier is ..., pg_control database system identifier is ...` and `waiting for WAL to become available at 0/...`.
+  *Cause.* The archive path of the Cluster's `serverName` (`cnpg/<cluster>/<serverName>`) holds WAL of ANOTHER database system, for example a
+  Cluster re-created by hand in the same bucket with the same `serverName`. When the primary is lost the standbys fall back to `restore_command`,
+  which fetches the foreign segment of the same name and REPLACES their valid copy in `pg_wal`; the elected target promotes, PostgreSQL PANICs
+  on the foreign segment (`PANIC: WAL file is from different database system`), its container restarts and can never replay again. The operator
+  1.30.1 waits for its target with no timeout and no re-election. It is not a zone-loss defect: the same Cluster failed over once its path was emptied.
+  *See it before a failure.* Every Cluster that has backups must print `True`:
+  ```
+  kubectl get clusters.postgresql.cnpg.io -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\t"}{.status.conditions[?(@.type=="ContinuousArchiving")].status}{"\n"}{end}'
+  ```
+  `cluster-verify` reads the platform's Clusters in `foundation-databases` only, not the Clusters of your database profiles, and `CnpgWalArchiveFailing`
+  fires about 25 minutes after archiving starts failing (10 minutes of window, then `for: 15m`): a young Cluster is silent, so read the condition
+  yourself after creating one.
+  *Prevent.* Give every incarnation of a Cluster a NEW `serverName` (the `archiveServerName` value of a database profile, `<name>-g2`, see
+  `docs/database-profiles.md`) or an EMPTY archive path, and never create a Cluster over a path that holds files; the DR chain already rebuilds on a
+  new generation. On a Cluster already running, delete the foreign objects from its path (once you are sure nobody needs them): in lab 28C,
+  deleting the 25 foreign objects of a versioned bucket (delete markers) turned `ContinuousArchiving` to `True` within 20 seconds.
+  *Release.* Once the old primary's node is back, put `status.targetPrimary` back on the CURRENT primary (the fields `kubectl cnpg promote` sets):
+  ```
+  CUR=$(kubectl -n <ns> get cluster.postgresql.cnpg.io <name> -o jsonpath='{.status.currentPrimary}')
+  kubectl -n <ns> patch cluster.postgresql.cnpg.io <name> --subresource=status --type=merge \
+    -p "{\"status\":{\"targetPrimary\":\"$CUR\",\"targetPrimaryTimestamp\":\"$(date -u +%FT%T.%6NZ)\",\"phase\":\"Switchover in progress\"}}"
+  ```
+  The operator drops the failover and re-creates the old primary's pod on its own volume; it is primary again on the SAME timeline, nobody is
+  promoted, and the Cluster was healthy 25 and 31 seconds later in the lab (2 drills). The two other drills were released with a target that was not an
+  active instance, and the operator logged `Wrong target primary, the chosen one is not active or not present`. It works because the old primary's
+  disk survived a graceful power-off; if that disk is lost for good, the standbys' last WAL is the foreign copy and the last acknowledged commits
+  may exist nowhere (reasoned from the overwritten segments, NOT tested).
+  *Evidence.* Polluted path: the failover stuck in 4 of 4 (lab 28B once, 28C three times; Cluster age 7 to 64 minutes, with and without a plugin
+  pod in the lost zone; nothing recovered by itself in 22 min 20 s and 25 min 32 s, nor in the 10 minutes of two more). Healthy path: 0 stuck in 19
+  comparable zone power-offs (DB write gap 59-86 s in the 14 of lab 28C, 62-90 s in the 5 earlier ones; zone target 150 s). The same Cluster with its
+  path emptied failed over in 4 of 4 (59.2-70.0 s). No acknowledged commit was lost and there was no split brain in any of these drills. One lab, one provider.
 
 - **With the Barman Cloud plugin, the S3 settings live in the ObjectStore, not in the Cluster** (offline findings, not yet seen on a
   cluster). The boto3 process is the plugin's sidecar, so the Outscale checksum variables belong to the ObjectStore's
