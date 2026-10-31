@@ -267,7 +267,7 @@ optional ConfigMap `cnpg-archive-generation` in `flux-system` that the infra `dr
 | DR chain `--db-source pitr` | the PREVIOUS generation (the dead cluster's path) |
 
 A recovery by hand of a point in time before a rebuild names the old path in `externalClusters` (`serverName: zitadel-db`, or `zitadel-db-g2` after a second rebuild); one after it, the new one. The old path is never written again and is not retained or pruned by the new
-server name's 30-day policy: delete it yourself once the recovery window has passed. UNVERIFIED on a cluster (offline tests: `test-cnpg-archive-generation.py`, `test-cnpg-store-replicate.sh`); the pass criteria of the next drill are in the infra `docs/disaster-recovery.md`.
+server name's 30-day policy: delete it yourself once the recovery window has passed. **Generation `-g2` was seen on a cluster** (lab 28B, step S9, Scaleway, 2026-10-30: after a destroy and a rebuild from the replica store, the `generation` step found generation 1 and the chain rebuilt `zitadel-db` and `grafana-db` as `-g2`; the PITR recovery Clusters came up healthy and the seed rows came back with the same md5 as before the disaster). Still UNVERIFIED on a cluster: a third generation (`-g3`), a point in time recovered by hand from the old path, and the 30-day policy on the old path (offline tests: `test-cnpg-archive-generation.py`, `test-cnpg-store-replicate.sh`); the pass criteria of the next drill are in the infra `docs/disaster-recovery.md`.
 
 ## Scheduled etcd snapshot
 
