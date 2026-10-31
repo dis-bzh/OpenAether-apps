@@ -109,6 +109,12 @@ spec:
               - services-observability-audit
             names:
               - "alloy-audit-*"
+        # audit-sink-shipper (opt-in component audit-log-sink, infra #318): same read-only audit directory.
+        - resources:
+            namespaces:
+              - services-observability-audit-sink
+            names:
+              - "audit-sink-shipper-*"
         - resources:
             namespaces:
               - istio-system

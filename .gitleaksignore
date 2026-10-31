@@ -5,6 +5,9 @@
 65b6690b54fb69afb6f1bdde783e1452786237c9:scripts/dev/test-local-docker-lane.sh:private-key:41
 
 # apps/base/cnpg/barman-cloud-plugin-0.15.1.yaml, line 967: a Secret of the UPSTREAM Barman Cloud plugin manifest whose data is the base64 of
-# the sidecar IMAGE NAME (ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.15.1), not a credential. The file is not on main: it is in the
-# history of the unmerged 0.4.0 branches, which `gitleaks git` scans with every remote branch, so every pull request would fail without this line.
+# the sidecar IMAGE NAME (SIDECAR_IMAGE = ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.15.1), not a credential. The rule
+# kubernetes-secret-yaml flags any Secret data of high entropy. This is the commit-independent form of the fingerprint (path:rule:line, no
+# sha), so it survives a squash or rebase merge, and it is as narrow as a fingerprint can be: that file, that rule, that line. A new plugin
+# version is a new file name, so the next one has to be looked at by a person. scripts/dev/test-gitleaksignore.sh proves it silences this
+# one finding and no other.
 apps/base/cnpg/barman-cloud-plugin-0.15.1.yaml:kubernetes-secret-yaml:967

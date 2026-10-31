@@ -1,6 +1,7 @@
 # Behaviour tests of alert rules, run by scripts/dev/test-vmrules.sh with vmalert-tool (rules.yaml is the built
 # VMRules, restricted to the groups tested here). vmalert-tool starts its clock at 2000-01-01T00:00:00Z
 # (946684800), which is the "created" value of the series below. Rung: mocked/static, synthetic series only.
+# yamllint disable rule:line-length
 rule_files:
   - rules-under-test.yaml
 evaluation_interval: 10m
@@ -93,6 +94,7 @@ tests:
           - exp_labels: {severity: warning, component: kyverno}
             exp_annotations:
               summary: "No Kyverno policy result is reported: violation alerts are blind"
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#kyvernometricsabsent"
               description: "The kyverno CiliumNetworkPolicy must accept vmagent on :8000; kubectl get cpol."
   - name: Kyverno deployed and reporting
     interval: 10m
@@ -174,6 +176,7 @@ tests:
           - exp_labels: {instance: cp-b, severity: critical, component: logging}
             exp_annotations:
               summary: "No Kubernetes API audit line read on cp-b for 15 min"
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#k8sauditlogsilent"
               description: >-
                 kubectl -n services-observability-audit logs ds/alloy-audit (permission denied? file missing?), then
                 talosctl -n <control plane> ls /var/log/audit/kube. The audit trail is not reaching Loki.
@@ -227,6 +230,7 @@ tests:
                severity: warning, component: flux}
             exp_annotations:
               summary: "Flux HelmRelease grafana is not Ready"
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#fluxobjectnotready"
               description: >-
                 flux get all -A, then kubectl describe HelmRelease
                 -n services-observability grafana. Objects that depend on it wait too.
@@ -235,7 +239,7 @@ tests:
     interval: 1m
     input_series:
       # yamllint disable-line rule:line-length
-      - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability", name="alloy-audit", ready="True", suspended="true"}'
+      - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability-audit", name="alloy-audit", ready="True", suspended="true"}'
         values: '1+0x1600'
       # yamllint disable-line rule:line-length
       - series: 'gotk_resource_info{customresource_kind="HelmRelease", exported_namespace="services-observability", name="grafana", ready="True", suspended="true"}'
@@ -249,6 +253,7 @@ tests:
                severity: warning, component: flux}
             exp_annotations:
               summary: "Flux HelmRelease grafana has been suspended for 24 h"
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#fluxobjectsuspended"
               description: "flux resume ... when the operation is over."
   # A rejected signature is named at once (infra #337); a verified or unverified-because-off source does not alert.
   - name: Flux source with a rejected signature alerts, a verified one does not
@@ -274,6 +279,7 @@ tests:
               {exported_namespace: flux-system, name: openaether, severity: critical, component: flux}
             exp_annotations:
               summary: "Flux rejected the commit of GitRepository openaether: unsigned or unknown signer"
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#fluxsourcenotverified"
               description: >-
                 kubectl describe gitrepository -n flux-system openaether
                 (condition SourceVerified), then git log --show-signature on the branch. Sign the push with a
@@ -298,6 +304,7 @@ tests:
           - exp_labels: {cnpg_io_cluster: grafana-db, severity: critical, component: backup}
             exp_annotations:
               summary: "CNPG grafana-db: WAL archiving fails"
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgwalarchivefailing"
               description: >-
                 barman cannot write to the object store (credentials, endpoint, egress).
                 kubectl logs -n foundation-databases <primary-pod> -c postgres | grep -i archiv.
@@ -325,3 +332,972 @@ tests:
       - {eval_time: 26m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
       - {eval_time: 30m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
       - {eval_time: 45m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
+  - name: the CNPG archive copy is stale after an hour without a success
+    interval: 10m
+    input_series:
+      - series: >-
+          kube_cronjob_status_last_successful_time{namespace="foundation-databases", cronjob="cnpg-store-replicate"}
+        values: '946684800+0x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: CnpgStoreReplicationStale
+        exp_alerts: []
+      - eval_time: 3h
+        alertname: CnpgStoreReplicationStale
+        exp_alerts:
+          - exp_labels:
+              {namespace: foundation-databases, cronjob: cnpg-store-replicate, severity: warning, component: backup}
+            exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+                cnpgstorereplicationstale"
+              summary: "The CNPG archive was not copied to the replica store for over an hour"
+              description: >-
+                cnpg-store-replicate runs every 15 minutes. Past an hour the replica store is behind by more than its
+                stated RPO. Look at the last Jobs of the CronJob in foundation-databases.
+  - name: a store that fails verification is named
+    interval: 10m
+    input_series:
+      - series: 'oa_backup_verify_store_ok{dataset="cnpg", store="replica"}'
+        values: '1 0+0x30'
+      - series: 'oa_backup_verify_store_ok{dataset="cnpg", store="primary"}'
+        values: '1+0x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: BackupStoreVerificationFailed
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: BackupStoreVerificationFailed
+        exp_alerts:
+          - exp_labels:
+              {dataset: cnpg, store: replica, severity: critical, component: backup}
+            exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+                backupstoreverificationfailed"
+              summary: "The cnpg backup failed verification on the replica store"
+              description: >-
+                A copy that cannot be read is no copy. The verifier log says what: kubectl logs -n foundation-databases
+                job/<latest backup-verify job> -c collect (stage 3 prints PASS or FAIL per dataset and store).
+
+  # --- alert delivery (0.4.0 M1). Synthetic Alertmanager counters; the real names are UNVERIFIED until a lab. ---
+  - name: delivery probe fires in its two windows only
+    interval: 10m
+    input_series: []
+    alert_rule_test:
+      - {eval_time: 5h50m, alertname: AlertDeliveryProbe, exp_alerts: []}
+      - eval_time: 6h
+        alertname: AlertDeliveryProbe
+        exp_alerts:
+          - exp_labels: {severity: none, component: alerting, probe: delivery}
+            exp_annotations: &probe_annotations
+              summary: "Scheduled alert delivery test"
+              description: "Twice a day. Receiving it in chat proves vmalert, Alertmanager and the receiver."
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alertdeliveryprobe"
+      - {eval_time: 6h10m, alertname: AlertDeliveryProbe, exp_alerts: []}
+      - {eval_time: 12h, alertname: AlertDeliveryProbe, exp_alerts: []}
+      - eval_time: 18h
+        alertname: AlertDeliveryProbe
+        exp_alerts:
+          - exp_labels: {severity: none, component: alerting, probe: delivery}
+            exp_annotations: *probe_annotations
+  - name: probe fired and the chat notification succeeded
+    interval: 10m
+    input_series:
+      - series: 'ALERTS{alertname="AlertDeliveryProbe", alertstate="firing"}'
+        values: '_x36 1 _x100'
+      - series: 'alertmanager_notification_requests_total{integration="slack"}'
+        values: '0+0x36 1+0x100'
+    alert_rule_test:
+      - {eval_time: 8h, alertname: AlertDeliveryNotAcknowledged, exp_alerts: []}
+  - name: probe fired and every chat attempt failed
+    interval: 10m
+    input_series:
+      - series: 'ALERTS{alertname="AlertDeliveryProbe", alertstate="firing"}'
+        values: '_x36 1 _x100'
+      - series: 'alertmanager_notification_requests_total{integration="slack"}'
+        values: '0+0x36 3+0x100'
+      - series: 'alertmanager_notification_requests_failed_total{integration="slack"}'
+        values: '0+0x36 3+0x100'
+    alert_rule_test:
+      - {eval_time: 6h10m, alertname: AlertDeliveryNotAcknowledged, exp_alerts: []}   # inside the for: 20m
+      - eval_time: 8h
+        alertname: AlertDeliveryNotAcknowledged
+        exp_alerts:
+          - exp_labels: {severity: critical, component: alerting}
+            exp_annotations:
+              summary: "The scheduled alert delivery test was not acknowledged by the chat receiver"
+              description: >-
+                While this fires, Alertmanager stops the heartbeat on purpose, so the external dead-man's-switch
+                pages you by its own channel.
+              runbook_url: >-
+                https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alertdeliverynotacknowledged
+  - name: no probe yet, no verdict (a cluster younger than its first window)
+    interval: 10m
+    input_series:
+      - series: 'alertmanager_notification_requests_total{integration="slack"}'
+        values: '0+0x100'
+    alert_rule_test:
+      - {eval_time: 5h, alertname: AlertDeliveryNotAcknowledged, exp_alerts: []}
+  - name: vmalert cannot reach Alertmanager
+    interval: 10m
+    input_series:
+      - series: 'vmalert_alerts_send_errors_total{addr="http://alertmanager:9093"}'
+        values: '0+2x20'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: VMAlertNotifierErrors, exp_alerts: []}
+      - eval_time: 1h
+        alertname: VMAlertNotifierErrors
+        exp_alerts:
+          - exp_labels: {addr: "http://alertmanager:9093", severity: critical, component: alerting}
+            exp_annotations:
+              summary: "VMAlert cannot hand alerts to Alertmanager (http://alertmanager:9093)"
+              description: >-
+                Every alert evaluated here is lost on its way to Alertmanager. Check the Alertmanager pod, the Service
+                and the vmalert egress policy.
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+                vmalertnotifiererrors"
+  - name: Alertmanager gone
+    interval: 10m
+    input_series:
+      - series: 'up{job="other"}'
+        values: '1+0x20'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: AlertmanagerAbsent, exp_alerts: []}
+      - eval_time: 30m
+        alertname: AlertmanagerAbsent
+        exp_alerts:
+          - exp_labels: {severity: critical, component: alerting}
+            exp_annotations:
+              summary: "Alertmanager is not scraped or not running: no alert can leave the cluster"
+              description: >-
+                The heartbeat stops with it, so an external dead-man's-switch (if configured) pages you.
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alertmanagerabsent"
+
+  # --- RED / USE / storage (0.4.0 M1). Synthetic series only: metric names and labels are UNVERIFIED on a cluster. ---
+  - name: gateway 5xx at 5 percent burns the budget fast
+    interval: 1m
+    input_series:
+      - series: 'istio_requests_total{namespace="services-gateway", response_code="200"}'
+        values: '0+95x400'
+      - series: 'istio_requests_total{namespace="services-gateway", response_code="503"}'
+        values: '0+5x400'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: GatewayErrorBudgetBurnFast
+        exp_alerts:
+          - exp_labels: {severity: critical, component: gateway}
+  - name: gateway 5xx at 0.05 percent is inside the budget
+    interval: 1m
+    input_series:
+      - series: 'istio_requests_total{namespace="services-gateway", response_code="200"}'
+        values: '0+1999x400'
+      - series: 'istio_requests_total{namespace="services-gateway", response_code="503"}'
+        values: '0+1x400'
+    alert_rule_test:
+      - {eval_time: 90m, alertname: GatewayErrorBudgetBurnFast, exp_alerts: []}
+      - {eval_time: 7h, alertname: GatewayErrorBudgetBurnSlow, exp_alerts: []}
+  - name: all errors but almost no traffic does not page
+    interval: 1m
+    input_series:
+      - series: 'istio_requests_total{namespace="services-gateway", response_code="503"}'
+        values: '0+1x400'
+    alert_rule_test:
+      - {eval_time: 90m, alertname: GatewayErrorBudgetBurnFast, exp_alerts: []}
+  - name: gateway p99 above two seconds
+    interval: 1m
+    input_series:
+      - series: 'istio_request_duration_milliseconds_bucket{namespace="services-gateway", le="100"}'
+        values: '0+0x60'
+      - series: 'istio_request_duration_milliseconds_bucket{namespace="services-gateway", le="5000"}'
+        values: '0+600x60'
+      - series: 'istio_request_duration_milliseconds_bucket{namespace="services-gateway", le="+Inf"}'
+        values: '0+600x60'
+      - series: 'istio_requests_total{namespace="services-gateway", response_code="200"}'
+        values: '0+600x60'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: GatewayLatencyP99High, exp_alerts: []}
+      - eval_time: 30m
+        alertname: GatewayLatencyP99High
+        exp_alerts:
+          - exp_labels: {severity: warning, component: gateway}
+  - name: an OOM kill needs a recent restart, not only a remembered reason
+    interval: 1m
+    input_series:
+      - series: >-
+          kube_pod_container_status_last_terminated_reason{namespace="a", pod="p", container="c", reason="OOMKilled"}
+        values: '1x60'
+      - series: 'kube_pod_container_status_restarts_total{namespace="a", pod="p", container="c"}'
+        values: '3x30 4x30'
+      - series: >-
+          kube_pod_container_status_last_terminated_reason{namespace="a", pod="old", container="c", reason="OOMKilled"}
+        values: '1x60'
+      - series: 'kube_pod_container_status_restarts_total{namespace="a", pod="old", container="c"}'
+        values: '7x60'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: ContainerOOMKilled
+        exp_alerts:
+          - exp_labels: {namespace: a, pod: p, container: c, severity: warning, component: workload}
+  - name: node IO pressure sustained
+    interval: 1m
+    input_series:
+      - series: 'node_pressure_io_stalled_seconds_total{instance="n1"}'
+        values: '0+30x60'
+      - series: 'node_pressure_io_stalled_seconds_total{instance="n2"}'
+        values: '0+3x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: NodeIoPressure
+        exp_alerts:
+          - exp_labels: {instance: n1, severity: warning, component: node}
+  - name: a suspended HelmRelease does not raise FluxReconciliationStalled, a stuck live one does
+    interval: 10m
+    input_series:
+      - series: 'process_start_time_seconds{job="services-observability/flux", pod="old"}'
+        values: '0x40'
+      - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="alloy-audit", namespace="obs-audit", pod="old"}'
+        values: '5x40'
+      - series: >-
+          gotk_resource_info{customresource_kind="HelmRelease", name="alloy-audit",
+          exported_namespace="obs-audit", namespace="obs", suspended="true"}
+        values: '1x40'
+      - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="stuck", namespace="x", pod="old"}'
+        values: '5x40'
+      - series: >-
+          gotk_resource_info{customresource_kind="HelmRelease", name="stuck", exported_namespace="x",
+          namespace="obs", suspended="false"}
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: FluxReconciliationStalled
+        exp_alerts:
+          - exp_labels: {kind: HelmRelease, name: stuck, namespace: x, pod: old, severity: critical}
+  # Lab 22: after a node loss the helm-controller was replaced. The counters of the DEAD pod stay in the 150 minute window as flat series,
+  # so `increase()` is 0 for them and seven 1 h HelmReleases fired this critical alert 19 minutes later although nothing was stalled; a
+  # controller younger than the window has flat or single-sample counters as well. Only a controller that is alive and older than the window is judged.
+  - name: a replaced flux controller does not raise FluxReconciliationStalled (dead pod series, young pod)
+    interval: 10m
+    input_series:
+      - series: 'process_start_time_seconds{job="services-observability/flux", pod="dead"}'
+        values: '5x18'
+      - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="idle", namespace="x", pod="dead"}'
+        values: '3x18'
+      - series: 'process_start_time_seconds{job="services-observability/flux", pod="young"}'
+        values: '14400x40'
+      - series: 'gotk_reconcile_duration_seconds_count{kind="HelmRelease", name="idle", namespace="x", pod="young"}'
+        values: '_x24 1x16'
+    alert_rule_test:
+      - {eval_time: 270m, alertname: FluxReconciliationStalled, exp_alerts: []}
+  - name: Longhorn degraded for 30 minutes
+    # The real shape (Longhorn 1.12.1, lab 19): one series per state, 1 for the current state.
+    interval: 1m
+    input_series:
+      - {series: 'longhorn_volume_robustness{volume="v1", node="n1", state="healthy"}', values: '1x10 0x80'}
+      - {series: 'longhorn_volume_robustness{volume="v1", node="n1", state="degraded"}', values: '0x10 1x80'}
+      - {series: 'longhorn_volume_robustness{volume="v1", node="n1", state="faulted"}', values: '0x90'}
+      - {series: 'longhorn_volume_robustness{volume="v2", node="n1", state="healthy"}', values: '1x90'}
+      - {series: 'longhorn_volume_robustness{volume="v2", node="n1", state="degraded"}', values: '0x90'}
+      - {series: 'longhorn_volume_robustness{volume="v2", node="n1", state="faulted"}', values: '0x90'}
+    alert_rule_test:
+      - {eval_time: 25m, alertname: LonghornVolumeDegraded, exp_alerts: []}
+      - eval_time: 60m
+        alertname: LonghornVolumeDegraded
+        exp_alerts:
+          - exp_labels: {volume: v1, severity: warning, component: storage}
+      - {eval_time: 60m, alertname: LonghornVolumeFaulted, exp_alerts: []}
+  - name: Longhorn faulted for 5 minutes
+    interval: 1m
+    input_series:
+      - {series: 'longhorn_volume_robustness{volume="v3", node="n1", state="healthy"}', values: '1x5 0x50'}
+      - {series: 'longhorn_volume_robustness{volume="v3", node="n1", state="faulted"}', values: '0x5 1x50'}
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: LonghornVolumeFaulted
+        exp_alerts:
+          - exp_labels: {volume: v3, severity: critical, component: storage}
+  - name: a PDB that allows no disruption by design is not reported
+    interval: 1m
+    input_series:
+      - series: >-
+          kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="foundation-databases",
+          poddisruptionbudget="zitadel-db-primary"}
+        values: '0x90'
+      - series: >-
+          kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="longhorn-system",
+          poddisruptionbudget="instance-manager-abc"}
+        values: '0x90'
+      - series: >-
+          kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="a", poddisruptionbudget="web"}
+        values: '0x90'
+    alert_rule_test:
+      - eval_time: 80m
+        alertname: PdbBlocksDisruption
+        exp_alerts:
+          - exp_labels: {namespace: a, poddisruptionbudget: web, severity: warning, component: workload}
+  - name: Longhorn blind rule only where Longhorn is installed
+    interval: 1m
+    input_series:
+      - series: 'kube_storageclass_info{storageclass="longhorn", provisioner="driver.longhorn.io"}'
+        values: '1x90'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: LonghornMetricsAbsent
+        exp_alerts:
+          - exp_labels: {severity: warning, component: storage}
+  - name: no Longhorn, no blind alert
+    interval: 1m
+    input_series:
+      - series: 'kube_storageclass_info{storageclass="local-path", provisioner="rancher.io/local-path"}'
+        values: '1x90'
+    alert_rule_test:
+      - {eval_time: 45m, alertname: LonghornMetricsAbsent, exp_alerts: []}
+
+  # --- backup signals and CNPG health (0.4.0 M1). Synthetic series. RestoreTestNotSucceeding has no case: it shares the
+  # expression of BackupNotSucceededRecently (other selector, 37 d) and a 40 d timeline makes vmalert-tool crawl. ---
+  - name: backup succeeded 10 hours ago
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-vault", cronjob="openbao-snapshot"}'
+        values: '946684800+0x400'
+      - series: 'kube_cronjob_status_last_successful_time{namespace="foundation-vault", cronjob="openbao-snapshot"}'
+        values: '946684800+0x400'
+    alert_rule_test:
+      - {eval_time: 10h, alertname: BackupNotSucceededRecently, exp_alerts: []}
+      - eval_time: 40h   # the same timestamp is now 40 h old: the schedule alone would not have said so
+        alertname: BackupNotSucceededRecently
+        exp_alerts:
+          - exp_labels: {namespace: foundation-vault, cronjob: openbao-snapshot, severity: critical, component: backup}
+  - name: a failed restore-test Job is not a failed backup Job (lab 20, the name starts like cnpg-dump)
+    interval: 1m
+    input_series:
+      - series: 'kube_job_status_failed{namespace="foundation-databases", job_name="cnpg-dump-load-restore-test-29875250"}'
+        values: '1x60'
+      - series: 'kube_job_status_failed{namespace="foundation-databases", job_name="cnpg-dump-29875250"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: BackupJobFailed
+        exp_alerts:
+          - exp_labels: {namespace: foundation-databases, job_name: cnpg-dump-29875250, severity: critical, component: backup}
+  - name: the etcd snapshot CronJob is watched for staleness too (lab 20)
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="etcd-snapshot"}'
+        values: '946684800+0x400'
+      - series: 'kube_cronjob_status_last_successful_time{namespace="foundation-databases", cronjob="etcd-snapshot"}'
+        values: '946684800+0x400'
+    alert_rule_test:
+      - {eval_time: 10h, alertname: BackupNotSucceededRecently, exp_alerts: []}
+      - eval_time: 40h
+        alertname: BackupNotSucceededRecently
+        exp_alerts:
+          - exp_labels: {namespace: foundation-databases, cronjob: etcd-snapshot, severity: critical, component: backup}
+  - name: backup never succeeded since the CronJob was created
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-dump"}'
+        values: '946684800+0x400'
+    alert_rule_test:
+      - {eval_time: 20h, alertname: BackupNotSucceededRecently, exp_alerts: []}   # a new cluster, first run not due yet
+      - eval_time: 40h
+        alertname: BackupNotSucceededRecently
+        exp_alerts:
+          - exp_labels: {namespace: foundation-databases, cronjob: cnpg-dump, severity: critical, component: backup}
+  - name: verifier contract is silent without a verifier and loud with a failed one
+    interval: 10m
+    input_series:
+      - series: 'oa_backup_verify_ok{dataset="cnpg"}'
+        values: '1x10 0x300'
+      - series: 'oa_backup_verify_last_success_timestamp_seconds{dataset="cnpg"}'
+        values: '946684800+0x310'
+    alert_rule_test:
+      - {eval_time: 1h, alertname: BackupVerificationFailed, exp_alerts: []}
+      - eval_time: 5h
+        alertname: BackupVerificationFailed
+        exp_alerts:
+          - exp_labels: {dataset: cnpg, severity: critical, component: backup}
+      - eval_time: 40h
+        alertname: BackupVerificationStale
+        exp_alerts:
+          - exp_labels: {dataset: cnpg, severity: warning, component: backup}
+  - name: CNPG replica lag and a replica that stopped streaming
+    interval: 1m
+    input_series:
+      - series: 'cnpg_pg_replication_lag{cnpg_io_cluster="db", pod="db-2"}'
+        values: '0+10x60'
+      - series: 'cnpg_pg_replication_lag{cnpg_io_cluster="db", pod="db-1"}'
+        values: '0x60'
+      - series: 'cnpg_pg_replication_in_recovery{cnpg_io_cluster="db", pod="db-2"}'
+        values: '1x60'
+      - series: 'cnpg_pg_replication_is_wal_receiver_up{cnpg_io_cluster="db", pod="db-2"}'
+        values: '1x20 0x40'
+      - series: 'cnpg_pg_replication_in_recovery{cnpg_io_cluster="db", pod="db-1"}'
+        values: '0x60'
+      - series: 'cnpg_pg_replication_is_wal_receiver_up{cnpg_io_cluster="db", pod="db-1"}'
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: CnpgReplicationLagHigh
+        exp_alerts:
+          - exp_labels: {cnpg_io_cluster: db, pod: db-2, severity: warning, component: database}
+      - eval_time: 40m
+        alertname: CnpgReplicaNotStreaming
+        exp_alerts:
+          - exp_labels: {cnpg_io_cluster: db, pod: db-2, severity: warning, component: database}
+  - name: CNPG primary without a streaming replica blocks synchronous commits (zero-loss rule)
+    interval: 1m
+    input_series:
+      - series: 'cnpg_pg_replication_streaming_replicas{cnpg_io_cluster="db", pod="db-1"}'
+        values: '2x10 0x40 1x30'      # both replicas gone at 11 min, one back at 52 min (the file evaluates every 10 min)
+      - series: 'cnpg_pg_replication_in_recovery{cnpg_io_cluster="db", pod="db-1"}'
+        values: '0x80'
+      - series: 'cnpg_pg_replication_streaming_replicas{cnpg_io_cluster="db", pod="db-2"}'
+        values: '0x80'                # a replica never streams to anyone: not a primary, never counted
+      - series: 'cnpg_pg_replication_in_recovery{cnpg_io_cluster="db", pod="db-2"}'
+        values: '1x80'
+      - series: 'cnpg_pg_replication_streaming_replicas{cnpg_io_cluster="ok", pod="ok-1"}'
+        values: '1x80'                # one replica is enough (number 1)
+      - series: 'cnpg_pg_replication_in_recovery{cnpg_io_cluster="ok", pod="ok-1"}'
+        values: '0x80'
+      - series: 'cnpg_collector_sync_replicas{cnpg_io_cluster="db", pod="db-1", value="expected"}'
+        values: '1x80'                # db asks for one synchronous replica
+      - series: 'cnpg_collector_sync_replicas{cnpg_io_cluster="ok", pod="ok-1", value="expected"}'
+        values: '1x80'
+      - series: 'cnpg_pg_replication_streaming_replicas{cnpg_io_cluster="light", pod="light-1"}'
+        values: '0x80'                # a single instance with nothing to replicate to (profile light): never an alert
+      - series: 'cnpg_pg_replication_in_recovery{cnpg_io_cluster="light", pod="light-1"}'
+        values: '0x80'
+      - series: 'cnpg_collector_sync_replicas{cnpg_io_cluster="light", pod="light-1", value="expected"}'
+        values: '0x80'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: CnpgSyncReplicaMissing, exp_alerts: []}
+      - eval_time: 40m
+        alertname: CnpgSyncReplicaMissing
+        exp_alerts:
+          - exp_labels: {cnpg_io_cluster: db, severity: critical, component: database}
+      - {eval_time: 70m, alertname: CnpgSyncReplicaMissing, exp_alerts: []}
+  - name: CNPG instance that left the exporters (lab 19)
+    interval: 1m
+    input_series:
+      - series: 'cnpg_collector_up{cnpg_io_cluster="db", pod="db-1"}'
+        values: '1x180'
+      - series: 'cnpg_collector_up{cnpg_io_cluster="db", pod="db-2"}'
+        values: '1x180'
+      - series: 'cnpg_collector_up{cnpg_io_cluster="db", pod="db-3"}'
+        values: '1x60 _x120'     # killed at 60 min, never back
+      - series: 'cnpg_collector_up{cnpg_io_cluster="gone", pod="gone-1"}'
+        values: '1x60 _x120'     # the whole cluster leaves
+      - series: 'cnpg_collector_up{cnpg_io_cluster="blip", pod="blip-1"}'
+        values: '1x180'
+      - series: 'cnpg_collector_up{cnpg_io_cluster="blip", pod="blip-2"}'
+        values: '1x60 _x4 1x116'  # back within 5 min: nothing
+    alert_rule_test:
+      - {eval_time: 50m, alertname: CnpgInstanceMissing, exp_alerts: []}
+      - eval_time: 100m
+        alertname: CnpgInstanceMissing
+        exp_alerts:
+          - exp_labels: {cnpg_io_cluster: db, severity: warning, component: database}
+          - exp_labels: {cnpg_io_cluster: gone, severity: warning, component: database}
+  - name: a Pod busy in its init containers is not Pending too long (lab 19)
+    interval: 1m
+    input_series:
+      - series: 'kube_pod_status_phase{namespace="foundation-databases", pod="backup-verify-1", phase="Pending"}'
+        values: '1x60'
+      - series: 'kube_pod_init_container_status_running{namespace="foundation-databases", pod="backup-verify-1", container="restic-stage"}'
+        values: '1x60'
+      - series: 'kube_pod_status_phase{namespace="apps", pod="stuck", phase="Pending"}'
+        values: '1x60'
+      - series: 'kube_pod_init_container_status_running{namespace="apps", pod="stuck", container="init"}'
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: PodPendingTooLong
+        exp_alerts:
+          - exp_labels: {namespace: apps, pod: stuck, severity: warning, component: workload}
+  - name: a Pending pod that fits nowhere does not inflate the CPU requests ratio (lab 19)
+    interval: 1m
+    input_series:
+      - series: 'kube_node_status_allocatable{resource="cpu", node="n1"}'
+        values: '4x120'
+      - series: 'kube_pod_container_resource_requests{resource="cpu", namespace="a", pod="run", container="c", node="n1"}'
+        values: '1x120'
+      - series: 'kube_pod_status_phase{namespace="a", pod="run", phase="Running"}'
+        values: '1x120'
+      - series: 'kube_pod_container_resource_requests{resource="cpu", namespace="a", pod="huge", container="c", node=""}'
+        values: '64x120'
+      - series: 'kube_pod_status_phase{namespace="a", pod="huge", phase="Running"}'
+        values: '0x120'
+      - series: 'kube_pod_status_phase{namespace="a", pod="huge", phase="Pending"}'
+        values: '1x120'
+    alert_rule_test:
+      - {eval_time: 90m, alertname: ClusterCpuRequestsHigh, exp_alerts: []}
+  - name: the CPU requests ratio still fires on Running pods
+    interval: 1m
+    input_series:
+      - series: 'kube_node_status_allocatable{resource="cpu", node="n1"}'
+        values: '4x120'
+      - series: 'kube_pod_container_resource_requests{resource="cpu", namespace="a", pod="run", container="c", node="n1"}'
+        values: '3.8x120'
+      - series: 'kube_pod_status_phase{namespace="a", pod="run", phase="Running"}'
+        values: '1x120'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: ClusterCpuRequestsHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, component: capacity}
+            exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#clustercpurequestshigh"
+              summary: "CPU requests reach 95% of what the nodes offer"
+              description: "Little room to reschedule after a node loss (a shipped example once ran at 172 % on two workers). Requests of Running pods only: a Pending pod that fits nowhere (lab 19: one 64-CPU pod gave a ratio of 3.1) and finished pods are left out. PodPendingTooLong owns the pods that cannot be placed."
+  - name: AlertDeliveryFailing clears 15 min after the last failed attempt, not one hour (lab 19)
+    interval: 1m
+    input_series:
+      - series: 'alertmanager_notification_requests_failed_total{integration="slack"}'
+        values: '0+1x10 10x80'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: AlertDeliveryFailing
+        exp_alerts:
+          - exp_labels: {integration: slack, severity: warning, component: alerting}
+            exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alertdeliveryfailing"
+              summary: "Alertmanager failed to deliver a notification (slack)"
+              description: "The receiver refused or did not answer. This alert may itself not reach you through that receiver: read it in Alertmanager or Grafana."
+      - {eval_time: 40m, alertname: AlertDeliveryFailing, exp_alerts: []}
+  - name: Loki compactor stopped applying retention
+    interval: 10m
+    input_series:
+      - series: 'loki_compactor_apply_retention_last_successful_run_timestamp_seconds{pod="loki-0"}'
+        values: '946684800+600x6 _x300'   # advances for an hour, then the series stops moving (stale)
+      - series: 'loki_compactor_apply_retention_last_successful_run_timestamp_seconds{pod="loki-1"}'
+        values: '946684800+0x300'
+    alert_rule_test:
+      - {eval_time: 1h, alertname: LokiRetentionNotSwept, exp_alerts: []}
+      - eval_time: 4h
+        alertname: LokiRetentionNotSwept
+        exp_alerts:
+          - exp_labels: {severity: warning, component: logging}
+
+  # --- restore tests (0.4.0 M3). Synthetic series; the labels are those of restore_cnpg.py. Timestamps are written as offsets
+  # from the clock's start so that a 10-day-old pass needs a 3-hour timeline. ---
+  - name: a failed restore test of one store alerts, a passing one does not, a recovery that took 20 minutes is slow
+    interval: 10m
+    input_series:
+      - series: 'oa_restore_test_ok{kind="cnpg",dataset="zitadel-db",store="replica",mode="latest"}'
+        values: '1x6 0x30'
+      - series: 'oa_restore_test_ok{kind="cnpg",dataset="zitadel-db",store="primary",mode="latest"}'
+        values: '1x40'
+      - series: 'oa_restore_test_recovery_seconds{kind="cnpg",dataset="zitadel-db",store="replica",mode="latest"}'
+        values: '1200x40'
+      - series: 'oa_restore_test_recovery_seconds{kind="cnpg",dataset="zitadel-db",store="primary",mode="latest"}'
+        values: '60x40'
+    alert_rule_test:
+      - {eval_time: 50m, alertname: RestoreTestFailed, exp_alerts: []}
+      - eval_time: 2h
+        alertname: RestoreTestFailed
+        exp_alerts:
+          - exp_labels: {kind: cnpg, dataset: zitadel-db, store: replica, mode: latest, severity: critical, component: backup}
+      - eval_time: 3h
+        alertname: RestoreRecoverySlow
+        exp_alerts:
+          - exp_labels: {kind: cnpg, dataset: zitadel-db, store: replica, mode: latest, severity: warning, component: backup}
+  - name: a daily restore test with no pass for 3 days and a weekly one with none for 10 days are stale
+    interval: 10m
+    input_series:
+      # daily: passed 2 days ago (fine), 3.5 days ago (stale); weekly: passed 8 days ago (fine), 10.4 days ago (stale)
+      - series: 'oa_restore_test_last_success_timestamp_seconds{kind="cnpg",dataset="zitadel-db",store="primary",mode="latest"}'
+        values: '946512000+0x30'
+      - series: 'oa_restore_test_last_success_timestamp_seconds{kind="cnpg",dataset="grafana-db",store="replica",mode="latest"}'
+        values: '946382400+0x30'
+      - series: 'oa_restore_test_last_success_timestamp_seconds{kind="cnpg",dataset="zitadel-db",store="replica",mode="pitr"}'
+        values: '945993600+0x30'
+      - series: 'oa_restore_test_last_success_timestamp_seconds{kind="cnpg",dataset="grafana-db",store="replica",mode="pitr"}'
+        values: '945784800+0x30'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: RestoreTestNoRecentPass
+        exp_alerts:
+          - exp_labels: {kind: cnpg, dataset: grafana-db, store: replica, mode: latest, severity: warning, component: backup}
+          - exp_labels: {kind: cnpg, dataset: grafana-db, store: replica, mode: pitr, severity: warning, component: backup}
+  - name: a CronJob older than three days that never reported alerts
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}'
+        values: '946384800+0x30'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: RestoreTestNeverReported
+        exp_alerts:
+          - exp_labels: {kind: cnpg, severity: warning, component: backup}
+  - name: a reporting restore test is not a never-reported one
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}'
+        values: '946384800+0x30'
+      - series: 'oa_restore_test_last_run_timestamp_seconds{kind="cnpg",dataset="grafana-db",store="primary",mode="latest"}'
+        values: '946684800+0x30'
+    alert_rule_test:
+      - {eval_time: 3h, alertname: RestoreTestNeverReported, exp_alerts: []}
+  - name: a young CronJob without result is quiet
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}'
+        values: '946681200+0x30'
+    alert_rule_test:
+      - {eval_time: 3h, alertname: RestoreTestNeverReported, exp_alerts: []}
+  - name: a scratch pod that stays 3 hours and a canary writer that stopped
+    interval: 10m
+    input_series:
+      - series: 'kube_pod_status_phase{namespace="backup-restore-test", pod="rt-x-1", phase="Running"}'
+        values: '1x60'
+      - series: 'kube_cronjob_status_last_successful_time{namespace="foundation-databases", cronjob="cnpg-canary"}'
+        values: '946684800+0x100'
+    alert_rule_test:
+      - {eval_time: 2h, alertname: RestoreScratchLeftover, exp_alerts: []}
+      - eval_time: 4h
+        alertname: RestoreScratchLeftover
+        exp_alerts:
+          - exp_labels: {severity: warning, component: backup}
+      - {eval_time: 20m, alertname: CnpgCanaryNotWriting, exp_alerts: []}
+      - eval_time: 2h
+        alertname: CnpgCanaryNotWriting
+        exp_alerts:
+          - exp_labels: {severity: warning, component: backup}
+  - name: the Longhorn restore test never reported while its CronJob is older than ten days, and its canary writer stopped
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-storage", cronjob="longhorn-restore-test"}'
+        values: '945820800+0x30'
+      - series: 'kube_cronjob_status_last_successful_time{namespace="foundation-storage", cronjob="longhorn-canary"}'
+        values: '946684800+0x100'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: LonghornRestoreTestNeverReported
+        exp_alerts:
+          - exp_labels: {kind: longhorn, severity: warning, component: backup}
+      - {eval_time: 20m, alertname: LonghornCanaryNotWriting, exp_alerts: []}
+      - eval_time: 6h
+        alertname: LonghornCanaryNotWriting
+        exp_alerts:
+          - exp_labels: {severity: warning, component: backup}
+  - name: without the Longhorn component the Longhorn alerts are silent
+    interval: 10m
+    input_series:
+      - series: 'up{job="x"}'
+        values: '1x30'
+    alert_rule_test:
+      - {eval_time: 3h, alertname: LonghornRestoreTestNeverReported, exp_alerts: []}
+      - {eval_time: 3h, alertname: LonghornCanaryNotWriting, exp_alerts: []}
+  # --- 0.4.0 M4: loss of capacity. Synthetic series; the thresholds come from lab 15c (docs/resilience.md).
+  - name: a node whose kubelet is silent for longer than a reboot is unreachable, a short silence is not
+    interval: 1m
+    input_series:
+      - series: 'kube_node_status_condition{node="w1", condition="Ready", status="unknown"}'
+        values: '1x30'
+      - series: 'kube_node_status_condition{node="w2", condition="Ready", status="unknown"}'
+        values: '1 1 1 0x27'   # a reboot: silent for two minutes
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: NodeUnreachable
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: NodeUnreachable
+        exp_alerts:
+          - exp_labels: {node: w1, condition: Ready, status: unknown, severity: critical}
+  - name: a node whose kubelet is not scraped is reported whether or not kube-state-metrics sees it, and a reboot is not
+    interval: 1m
+    input_series:
+      - series: 'up{job="services-observability/kubelet", node="w1"}'
+        values: '1x5 0x25'
+      - series: 'up{job="services-observability/kubelet", node="w2"}'
+        values: '1x5 0x25'
+      - series: 'kube_node_status_condition{node="w2", condition="Ready", status="unknown"}'
+        values: '1x30'
+      - series: 'up{job="services-observability/kubelet", node="w3"}'
+        values: '1 1 1 0 0 1x25'   # a reboot
+    alert_rule_test:
+      - {eval_time: 7m, alertname: NodeScrapeDown, exp_alerts: []}
+      - eval_time: 20m
+        alertname: NodeScrapeDown
+        exp_alerts:
+          - exp_labels: {node: w1, job: services-observability/kubelet, severity: critical, component: node}
+          - exp_labels: {node: w2, job: services-observability/kubelet, severity: critical, component: node}
+  - name: a control plane missing from etcd is reported, and a one-node control plane is not
+    interval: 1m
+    input_series:
+      - series: 'up{job="etcd", instance="cp-0"}'
+        values: '1x30'
+      - series: 'up{job="etcd", instance="cp-1"}'
+        values: '1x30'
+      - series: 'up{job="etcd", instance="cp-2"}'
+        values: '0x30'
+      - series: 'kube_node_role{node="cp-0", role="control-plane"}'
+        values: '1x30'
+      - series: 'kube_node_role{node="cp-1", role="control-plane"}'
+        values: '1x30'
+      - series: 'kube_node_role{node="cp-2", role="control-plane"}'
+        values: '1x30'
+    alert_rule_test:
+      - {eval_time: 2m, alertname: ControlPlaneMemberMissing, exp_alerts: []}
+      - eval_time: 10m
+        alertname: ControlPlaneMemberMissing
+        exp_alerts:
+          - exp_labels: {severity: critical, component: control-plane}
+  - name: a single control plane that is up is not a member missing
+    interval: 1m
+    input_series:
+      - series: 'up{job="etcd", instance="cp-0"}'
+        values: '1x30'
+      - series: 'kube_node_role{node="cp-0", role="control-plane"}'
+        values: '1x30'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: ControlPlaneMemberMissing, exp_alerts: []}
+  - name: a zone none of whose kubelets answers is lost, a zone with one answering kubelet is not
+    interval: 1m
+    input_series:
+      - series: 'up{job="services-observability/kubelet", node="w1", topology_kubernetes_io_zone="zone-a"}'
+        values: '1x4 0x26'
+      - series: 'up{job="services-observability/kubelet", node="w2", topology_kubernetes_io_zone="zone-b"}'
+        values: '1x4 0x26'
+      - series: 'up{job="services-observability/kubelet", node="w3", topology_kubernetes_io_zone="zone-b"}'
+        values: '1x30'
+      - series: 'up{job="services-observability/kubelet", node="w4", topology_kubernetes_io_zone="zone-c"}'
+        values: '1 1 1 0 0 1x25'   # a reboot
+    alert_rule_test:
+      - {eval_time: 3m, alertname: FailureDomainLost, exp_alerts: []}
+      - eval_time: 20m
+        alertname: FailureDomainLost
+        exp_alerts:
+          - exp_labels: {topology_kubernetes_io_zone: zone-a, severity: critical, component: failure-domain}
+  - name: a Deployment short of replicas for longer than a reschedule is reported
+    interval: 1m
+    input_series:
+      - series: 'kube_deployment_spec_replicas{namespace="services-identity", deployment="zitadel"}'
+        values: '2x40'
+      - series: 'kube_deployment_status_replicas_available{namespace="services-identity", deployment="zitadel"}'
+        values: '1x40'
+      - series: 'kube_deployment_spec_replicas{namespace="services-identity", deployment="zitadel-login"}'
+        values: '2x40'
+      - series: 'kube_deployment_status_replicas_available{namespace="services-identity", deployment="zitadel-login"}'
+        values: '1 1 1 2x37'   # back within the toleration
+    alert_rule_test:
+      - {eval_time: 5m, alertname: WorkloadReplicasBelowDesired, exp_alerts: []}
+      - eval_time: 30m
+        alertname: WorkloadReplicasBelowDesired
+        exp_alerts:
+          - exp_labels: {namespace: services-identity, deployment: zitadel, severity: warning, component: workload}
+  - name: the workers cannot absorb the loss of the biggest one when their requests exceed the rest
+    interval: 1m
+    input_series:
+      - series: 'kube_node_role{node="cp-0", role="control-plane"}'
+        values: '1x60'
+      - series: 'kube_node_status_allocatable{node="cp-0", resource="cpu"}'
+        values: '4x60'
+      - series: 'kube_node_status_allocatable{node="w1", resource="cpu"}'
+        values: '4x60'
+      - series: 'kube_node_status_allocatable{node="w2", resource="cpu"}'
+        values: '4x60'
+      - series: 'kube_node_status_allocatable{node="w3", resource="cpu"}'
+        values: '4x60'
+      - series: 'kube_pod_container_resource_requests{node="w1", namespace="a", pod="p1", resource="cpu"}'
+        values: '5x60'
+      - series: 'kube_pod_container_resource_requests{node="w2", namespace="a", pod="p2", resource="cpu"}'
+        values: '4x60'
+      - series: 'kube_pod_status_phase{namespace="a", pod="p1", phase="Running"}'
+        values: '1x60'
+      - series: 'kube_pod_status_phase{namespace="a", pod="p2", phase="Running"}'
+        values: '1x60'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: ClusterCannotLoseWorker, exp_alerts: []}
+      - eval_time: 45m
+        alertname: ClusterCannotLoseWorker
+        exp_alerts:
+          - exp_labels: {severity: warning, component: capacity}
+  - name: Alertmanager replicas that see fewer peers than there are replicas
+    interval: 1m
+    input_series:
+      - series: 'alertmanager_cluster_members{pod="vmalertmanager-alertmanager-0"}'
+        values: '2x10 1x40'
+      - series: 'kube_statefulset_replicas{namespace="services-observability", statefulset="vmalertmanager-alertmanager"}'
+        values: '2x50'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: AlertmanagerClusterDegraded, exp_alerts: []}
+      - eval_time: 40m
+        alertname: AlertmanagerClusterDegraded
+        exp_alerts:
+          - exp_labels: {severity: warning, component: alerting}
+  - name: a lost Alertmanager replica is reported although the survivor still counts two members
+    interval: 1m
+    input_series:
+      - series: 'alertmanager_cluster_members{pod="vmalertmanager-alertmanager-1"}'
+        values: '2x50'
+      - series: 'up{job="vmalertmanager-alertmanager", pod="vmalertmanager-alertmanager-1"}'
+        values: '1x50'
+      - series: 'up{job="vmalertmanager-alertmanager", pod="vmalertmanager-alertmanager-0"}'
+        values: '1x10 _x40'
+      - series: 'kube_statefulset_replicas{namespace="services-observability", statefulset="vmalertmanager-alertmanager"}'
+        values: '2x50'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: AlertmanagerClusterDegraded, exp_alerts: []}
+      - eval_time: 40m
+        alertname: AlertmanagerClusterDegraded
+        exp_alerts:
+          - exp_labels: {severity: warning, component: alerting}
+  - name: OpenBao with two unsealed replicas of three is reported, with three it is not
+    interval: 1m
+    input_series:
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-0"}'
+        values: '1x30'
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-1"}'
+        values: '1x30'
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-2"}'
+        values: '1x5 0x25'
+      - series: 'kube_statefulset_replicas{namespace="foundation-vault", statefulset="openbao"}'
+        values: '3x30'
+    alert_rule_test:
+      - {eval_time: 4m, alertname: OpenBaoReplicasMissing, exp_alerts: []}
+      - eval_time: 20m
+        alertname: OpenBaoReplicasMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, component: openbao}
+  - name: a node counted twice by kube-state-metrics is reported, one series per node is not
+    interval: 1m
+    input_series:
+      - series: 'kube_node_info{node="w1", pod="ksm-a"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="w1", pod="ksm-b"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="w2"}'
+        values: '1x40'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: KubeStateMetricsDuplicated, exp_alerts: []}
+      - eval_time: 30m
+        alertname: KubeStateMetricsDuplicated
+        exp_alerts:
+          - exp_labels: {severity: warning, component: monitoring}
+  - name: one series per node, from two merged kube-state-metrics pods, is not reported
+    interval: 1m
+    input_series:
+      - series: 'kube_node_info{node="w1"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="w2"}'
+        values: '1x40'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: KubeStateMetricsDuplicated, exp_alerts: []}
+  # --- Audit sink (infra #318, opt-in component audit-log-sink). Synthetic series; never fired on a cluster.
+  - name: audit sink - a node that stops delivering, then the store down, then the check gone
+    interval: 1m
+    input_series:
+      # cp-1 keeps delivering (age stays small); cp-2 stops after 10 minutes (the age grows 60 s per minute from then on).
+      - series: 'oa_audit_sink_last_object_age_seconds{sink="primary", node="cp-1"}'
+        values: '60+0x120'
+      - series: 'oa_audit_sink_last_object_age_seconds{sink="primary", node="cp-2"}'
+        values: '60+0x10 120+60x110'
+      - series: 'kube_node_info{node="cp-1"}'
+        values: '1+0x120'
+      - series: 'kube_node_info{node="cp-2"}'
+        values: '1+0x120'
+      # the store answers for 30 minutes, then the list call fails; the check keeps running (its timestamp advances)
+      - series: 'oa_audit_sink_ok{sink="primary"}'
+        values: '1+0x30 0+0x90'
+      - series: 'oa_audit_sink_last_check_timestamp_seconds{sink="primary"}'
+        values: '946684800+60x120'
+      - series: 'oa_audit_sink_nodes{sink="primary"}'
+        values: '2+0x120'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: AuditSinkStale
+        exp_alerts: []
+      - eval_time: 40m   # cp-2 silent for 30 minutes: age 120 + 60 x 30 = 1920 s, over 20 minutes for more than 5
+        alertname: AuditSinkStale
+        exp_alerts:
+          - exp_labels: {sink: primary, node: cp-2, severity: critical, component: audit-sink}
+            exp_annotations: &stale_annotations
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#auditsinkstale"
+              summary: "No audit log reached the primary sink from cp-2 for 20 minutes"
+              description: >-
+                The newest object of node cp-2 in the primary sink is older than 20 minutes (the shipper sends every
+                5). Its audit file is the only copy until delivery resumes. Runbook: docs/runbooks.md.
+      - eval_time: 33m   # the list call failed at minute 30: the five minutes of "for" are not over yet
+        alertname: AuditSinkDown
+        exp_alerts: []
+      - eval_time: 55m   # the first evaluation that saw ok = 0 was at 40 m (the test evaluates every 10 m), plus the 5 m of "for"
+        alertname: AuditSinkDown
+        exp_alerts:
+          - exp_labels: {sink: primary, severity: critical, component: audit-sink}
+            exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#auditsinkdown"
+              summary: "The audit sink cannot be reached (primary)"
+              description: >-
+                audit-sink-check could not list the primary sink, or has not checked for 15 minutes. The shipper cannot deliver either, so
+                the audit log is accumulating only in the apiserver's own rotated files on the control planes, which the apiserver
+                deletes by its own rotation: this is a clock. Runbook: docs/runbooks.md.
+      - eval_time: 30m
+        alertname: AuditSinkEmpty
+        exp_alerts: []
+  - name: audit sink - the check hangs (ok stays 1 but it stops checking), and an empty sink
+    interval: 1m
+    input_series:
+      - series: 'oa_audit_sink_ok{sink="primary"}'
+        values: '1+0x120'
+      # the timestamp stops advancing at minute 10
+      - series: 'oa_audit_sink_last_check_timestamp_seconds{sink="primary"}'
+        values: '946684800+60x10 946685400+0x110'
+      - series: 'oa_audit_sink_nodes{sink="secondary"}'
+        values: '0+0x120'
+      - series: 'oa_audit_sink_ok{sink="secondary"}'
+        values: '1+0x120'
+      - series: 'oa_audit_sink_last_check_timestamp_seconds{sink="secondary"}'
+        values: '946684800+60x120'
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: AuditSinkDown
+        exp_alerts:
+          - exp_labels: {sink: primary, severity: critical, component: audit-sink}
+            exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#auditsinkdown"
+              summary: "The audit sink cannot be reached (primary)"
+              description: >-
+                audit-sink-check could not list the primary sink, or has not checked for 15 minutes. The shipper cannot deliver either, so
+                the audit log is accumulating only in the apiserver's own rotated files on the control planes, which the apiserver
+                deletes by its own rotation: this is a clock. Runbook: docs/runbooks.md.
+      - eval_time: 45m
+        alertname: AuditSinkEmpty
+        exp_alerts:
+          - exp_labels: {sink: secondary, severity: critical, component: audit-sink}
+            exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#auditsinkempty"
+              summary: "The secondary audit sink is reachable but empty"
+              description: >-
+                The check lists the sink fine and finds no node in it 30 minutes after it started. The shipper has never delivered.
+                Runbook: docs/runbooks.md.
+  - name: audit sink - a shipper not ready on a control plane, and the check absent
+    interval: 1m
+    input_series:
+      - series: 'kube_daemonset_status_desired_number_scheduled{namespace="services-observability-audit-sink", daemonset="audit-sink-shipper"}'
+        values: '3+0x60'
+      - series: 'kube_daemonset_status_number_ready{namespace="services-observability-audit-sink", daemonset="audit-sink-shipper"}'
+        values: '3+0x5 2+0x55'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AuditSinkShipperUnavailable
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: AuditSinkShipperUnavailable
+        exp_alerts:
+          - exp_labels: {namespace: services-observability-audit-sink, daemonset: audit-sink-shipper, severity: critical, component: audit-sink}
+            exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#auditsinkshipperunavailable"
+              summary: "audit-sink-shipper has a control plane without a running shipper"
+              description: >-
+                audit-sink-shipper is not ready on every control plane for 15 minutes. kubectl -n services-observability-audit-sink get pods
+                -o wide; logs of the failing pod. Runbook: docs/runbooks.md.
+      - eval_time: 30m
+        alertname: AuditSinkCheckAbsent
+        exp_alerts:
+          - exp_labels: {severity: critical, component: audit-sink}
+            exp_annotations:
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#auditsinkcheckabsent"
+              summary: "No audit sink delivery check is reporting"
+              description: >-
+                oa_audit_sink_ok has no series for 15 minutes: audit-sink-check is down or not scraped, so a stopped sink would not be seen.
+                Runbook: docs/runbooks.md.

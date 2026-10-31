@@ -62,6 +62,12 @@ spec:
               - services-observability-audit
             names:
               - "alloy-audit-*"
+        # The audit-sink shipper adds DAC_READ_SEARCH alone, for the same file (opt-in component audit-log-sink).
+        - resources:
+            namespaces:
+              - services-observability-audit-sink
+            names:
+              - "audit-sink-shipper-*"
       validate:
         failureAction: Audit
         failureActionOverrides:

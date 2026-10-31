@@ -1,14 +1,27 @@
-# Spread the Istio Gateway pods over the nodes. Istio 1.24 builds the Gateway's Deployment itself and offers no way
-# to set
-# scheduling on it (the Gateway API `infrastructure.parametersRef` is in the CRDs but istiod 1.24 does not read it),
-# and the
-# kube-scheduler's default scoring put both replicas on one node in lab 15c: one node loss or drain then cut the ingress
-# although the HPA keeps two replicas and the PDB lets one be evicted. This MUTATES the pod at creation. Soft on purpose
-# (ScheduleAnyway + preferred anti-affinity): a cluster with one worker must still run both pods. Pods already
-# running keep
-# their placement until they are recreated (`kubectl -n services-gateway rollout restart deployment
-# openaether-gateway-istio`).
-# Not a validation: it has no failure action and is not part of the Enforce switch.
+# Place and terminate the Istio Gateway pods (0.4.0, owner decision 2026-10-28: externalTrafficPolicy stays Cluster,
+# the Gateway runs 3 replicas spread over nodes AND zones, and a planned drain must not drop connections behind the
+# cloud load balancer). Istio builds the Gateway's Deployment itself. Istio 1.24 offered no way to set scheduling on
+# it (`infrastructure.parametersRef` was in the CRDs but istiod 1.24 did not read it). Istio 1.31 does read it (a
+# ConfigMap whose `deployment` key is a strategic-merge overlay); that route is NOT adopted yet, this mutation stays
+# until a lab shows the overlay does the same job. The kube-scheduler's default scoring put both replicas on one node
+# in lab 15c: one node loss or drain then cut the ingress although the HPA keeps replicas and the PDB lets one be
+# evicted. This MUTATES the pod at creation.
+#
+# Spread: HARD (DoNotSchedule, maxSkew 1) on the node and on the zone, with nodeTaintsPolicy Honor. Honor is what
+# makes a hard rule safe: a cordoned, NotReady or control-plane node (taints the Gateway does not tolerate) is not
+# counted as an empty domain, so a drain, a lost zone and a rolling update's surge pod still find a place (3 pods on
+# {1,1,1}: the 4th goes to {2,1,1}, skew 1). A cluster with one worker or one zone has one domain: the rule is then
+# always met and all pods run there. A node that is full leaves a pod Pending instead of stacking it
+# (WorkloadReplicasBelowDesired fires; the others keep serving). Pods already running keep their placement until they
+# are recreated (`kubectl -n services-gateway rollout restart deployment openaether-gateway-istio`). UNVERIFIED on a
+# cluster.
+#
+# Drain: a pod that is deleted (drain, roll) first sleeps PRESTOP seconds (the endpoint removal reaches Cilium and the
+# load balancer's next check), then pilot-agent keeps Envoy serving for TERMINATION_DRAIN_DURATION_SECONDS before it
+# stops it. The drain duration must exceed what the cloud load balancer needs to drop a member: check every 5 s, 3
+# checks, twice (5 x 3 x 2 = 30 s), so 45 s; terminationGracePeriodSeconds covers preStop + drain with a margin (5 +
+# 45 + 10 = 60). The values are pinned by test-gateway-ha.py. Not a validation: it has no failure action and is not
+# part of the Enforce switch.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -20,8 +33,10 @@ metadata:
     policies.kyverno.io/severity: medium
     policies.kyverno.io/subject: Pod
     policies.kyverno.io/description: >-
-      Adds a topologySpreadConstraint and a preferred pod anti-affinity on kubernetes.io/hostname to the pods of the
-      openaether-gateway Gateway, unless the pod already sets them.
+      Adds a hard topologySpreadConstraint on kubernetes.io/hostname and on topology.kubernetes.io/zone
+      (nodeTaintsPolicy Honor) and a preferred pod anti-affinity on the hostname to the pods of the
+      openaether-gateway Gateway, unless the pod already sets them; and the drain settings (preStop sleep,
+      TERMINATION_DRAIN_DURATION_SECONDS, terminationGracePeriodSeconds).
 spec:
   background: false
   rules:
@@ -41,10 +56,31 @@ spec:
       mutate:
         patchStrategicMerge:
           spec:
+            # The API server defaults this field to 30 before the webhook runs, so "add if absent" would
+            # never apply: set it.
+            terminationGracePeriodSeconds: 60
+            containers:
+              - name: istio-proxy
+                env:
+                  - name: TERMINATION_DRAIN_DURATION_SECONDS
+                    value: "45"
+                lifecycle:
+                  preStop:
+                    sleep:
+                      seconds: 5
             +(topologySpreadConstraints):
               - maxSkew: 1
                 topologyKey: kubernetes.io/hostname
-                whenUnsatisfiable: ScheduleAnyway
+                whenUnsatisfiable: DoNotSchedule
+                nodeTaintsPolicy: Honor
+                labelSelector:
+                  matchLabels:
+                    gateway.networking.k8s.io/gateway-name: openaether-gateway
+              # Zone too (apps #155, lab 21; hard since 0.4.0): the 3 pods sit in 3 zones when there are 3.
+              - maxSkew: 1
+                topologyKey: topology.kubernetes.io/zone
+                whenUnsatisfiable: DoNotSchedule
+                nodeTaintsPolicy: Honor
                 labelSelector:
                   matchLabels:
                     gateway.networking.k8s.io/gateway-name: openaether-gateway

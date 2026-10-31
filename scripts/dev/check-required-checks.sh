@@ -18,6 +18,7 @@
 #   check-required-checks.sh --self-test     # offline, task test-scripts
 #   check-required-checks.sh <owner> <repo> [--ref <commit>] [--tolerate-unreadable-bypass]
 #                            [--strict-main] [--rulesets-dir <dir>] [--no-sandbox]
+#                            [--informational-checks <file>]
 #                                            # live, GITHUB_TOKEN/GH_TOKEN if set
 set -euo pipefail
 
@@ -107,7 +108,7 @@ def last_merged_pr(api, repo):
     return best
 
 
-def check_required(api, repo, ref, out):
+def check_required(api, repo, ref, out, informational=frozenset()):
     rules = [r for _, page in pages(api, f"/repos/{repo}/rules/branches/{BRANCH}?per_page=100") for r in page]
     contexts = [c for r in rules if r.get("type") == "required_status_checks"
                 for c in r["parameters"]["required_status_checks"]]
@@ -141,10 +142,20 @@ def check_required(api, repo, ref, out):
     for name, _ in sorted(required - set(reported)):
         problems.append(f"required but not reported by GitHub Actions: {name}")
     # Any app counts: a check nobody declared is what #122 is about, whoever posts it.
+    # INFORMATIONAL checks are declared on purpose as running without being required (the maintainer's decision, kept
+    # in a file); a declared name that is required, or that no longer reports, is a stale declaration.
+    for name in sorted(informational):
+        if any(n == name for n, _ in required):
+            problems.append(f"declared informational but required: {name}")
+        elif not any(n == name for n, _ in reported):
+            problems.append(f"declared informational but not reported: {name}")
     for key in sorted(set(reported) - required, key=str):
+        if key[0] in informational and key[1] == ACTIONS_APP:
+            continue
         problems.append(f"reported but not required: {key[0]}"
                         + ("" if key[1] == ACTIONS_APP else f" (from app {reported[key]}, id {key[1]})"))
-    return problems, f"{len(required)} required, all and only what reported ({len(runs)} check runs)"
+    extra = f", {len(informational)} declared informational" if informational else ""
+    return problems, f"{len(required)} required{extra}, all and only what reported ({len(runs)} check runs)"
 
 
 def check_tags(api, repo, tolerate_unreadable_bypass, out):
@@ -293,9 +304,9 @@ def check_environment(api, repo, out):
 
 
 def run(api, repo, ref=None, tolerate_unreadable_bypass=False, strict_main=False, committed=None, out=print,
-        check_sandbox=True):
+        check_sandbox=True, informational=frozenset()):
     worst = 0
-    checks = (("required checks", lambda: check_required(api, repo, ref, out)),
+    checks = (("required checks", lambda: check_required(api, repo, ref, out, informational)),
               ("tag protection", lambda: check_tags(api, repo, tolerate_unreadable_bypass, out)),
               ("main branch", lambda: check_main(api, repo, strict_main, tolerate_unreadable_bypass, out)),
               ("rulesets as code", lambda: check_rulesets_as_code(api, repo, committed, out)),
@@ -363,6 +374,16 @@ def self_test(fixture):
         ("... and the tag ruleset's empty bypass list is read, not assumed", None, {}, 0, "no bypass actors"),
         ("an extra check reports (CodeQL-shaped)", lambda a: add_run(a, "Analyze (actions)"), {}, 1,
          "reported but not required: Analyze (actions)\n"),
+        ("an extra check declared informational is not a difference", lambda a: add_run(a, "Analyze (actions)"),
+         {"informational": frozenset({"Analyze (actions)"})}, 0, "1 declared informational"),
+        ("... without the declaration it is (the list is what turns it green)", lambda a: add_run(a, "Analyze (actions)"),
+         {}, 1, "reported but not required: Analyze (actions)"),
+        ("a declared informational check from another app still differs", lambda a: add_run(a, "Analyze (actions)", 999),
+         {"informational": frozenset({"Analyze (actions)"})}, 1, "reported but not required: Analyze (actions) (from app"),
+        ("a declared informational check that no longer reports", None,
+         {"informational": frozenset({"Gone"})}, 1, "declared informational but not reported: Gone"),
+        ("a declared informational check that is required", None,
+         {"informational": frozenset({"Lint & Format"})}, 1, "declared informational but required: Lint & Format"),
         ("a required name reported by another app", lambda a: add_run(a, "Lint & Format", 999), {}, 1,
          "reported but not required: Lint & Format (from app other-app"),
         ("a required check does not report", drop_run, {}, 1, "required but not reported by GitHub Actions: Analyze"),
@@ -540,6 +561,9 @@ def main(fixture, argv):
     p.add_argument("--no-sandbox", action="store_true",
                    help="do not look for the `sandbox` environment (a repository with no cloud workflow, like "
                         "OpenAether-apps)")
+    p.add_argument("--informational-checks", default=".github/informational-checks.txt",
+                   help="a file naming (one per line, # comments) the checks that run on purpose without being "
+                        "required; skipped when absent")
     p.add_argument("--rulesets-dir", default=".github/rulesets",
                    help="the committed rulesets (<name>.json each) to compare with GitHub; skipped when absent")
     a = p.parse_args(argv)
@@ -550,11 +574,15 @@ def main(fixture, argv):
             if f.endswith(".json"):
                 doc = json.load(open(os.path.join(a.rulesets_dir, f)))
                 committed[doc.get("name") or f[:-5]] = doc
+    informational = frozenset()
+    if os.path.isfile(a.informational_checks):
+        informational = frozenset(l.strip() for l in open(a.informational_checks)
+                                  if l.strip() and not l.lstrip().startswith("#"))
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     if not token:
         print("⚠ no GITHUB_TOKEN/GH_TOKEN: 60 requests an hour per IP", file=sys.stderr)
     code = run(LiveAPI(token), f"{a.owner}/{a.repo}", a.ref, a.tolerate_unreadable_bypass, a.strict_main, committed,
-               check_sandbox=not a.no_sandbox)
+               check_sandbox=not a.no_sandbox, informational=informational)
     print({0: "OK", 1: "DIFFERS from what GitHub enforces", 2: "NOT VERIFIABLE"}[code])
     return code
 

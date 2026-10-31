@@ -36,20 +36,62 @@ The two ephemeral-container policies flip with two rules (an Audit rule that exc
 override at all: Kyverno 1.19.1 admitted a privileged `kubectl debug` with a warning in a labelled namespace when an override was used (lab 12), while a
 `namespaceSelector` in `match` plus the rule-level `failureAction` denies it (the subresource does not honour `failureActionOverrides` either).
 
+## Why the default is Audit, and how to switch one namespace
+
+Decision (maintainer, 2026-10-21, issue #37): the Pod policies stay in **Audit by default** and Enforce is switched on **per namespace** with a label.
+Reasons:
+
+- A wrong Enforce is an outage, and it shows late. PSA and Kyverno judge a pod when it is created, so a pod admitted long ago is judged again only when
+  it is rescheduled (a node reboot, a Talos upgrade). The `disallow-root-user` incident and the External Secrets failure of 2026-08 both appeared on the
+  second scheduling, not the first.
+- The report must be clean first. At the time of the decision a real cluster showed 82 results for `require-security-context` (container-level
+  `securityContext` missing in chart pods), 5 for `restrict-privileged` (ztunnel `hostPath`, exemption since fixed) and 0 for `restrict-image-registries`.
+  On a live cluster whose policies were upgraded in place, results for pods that are now exempt stayed in the report for at least 40 minutes (a fresh
+  cluster did not list them), so "zero" has to be read on a fresh or refreshed report.
+- The webhook of a Pod policy is `failurePolicy: Fail` and the vendored install runs one admission replica (see "A Kyverno outage" below).
+
+What the labs proved: the label mechanism denies on real clusters. Lab 15A (OVH): a hostNetwork pod was admitted with a warning under the old spec-level
+spelling and denied once the rule-level spelling was applied. Lab 16 (Scaleway and OVH, fresh install): the five Enforce policies and the
+ephemeral-container denials behaved as written, the shipped default untouched. Lab 21 (Scaleway) recorded no per-policy violation count, and neither did
+lab 16, so the only counts quoted here are the ones above. Not proven: an Enforce label kept through a node roll on a cluster (the gate below).
+
+Steps to switch a namespace, policy by policy (order in the next section):
+
+1. Check the namespace is not on the never-label list (section "When to flip") and that the PolicyReports for this (policy, namespace) pair show zero
+   `fail` after one release and one node reboot (the `kubectl get polr` command below).
+2. Label: `kubectl label ns <namespace> kyverno.openaether.io/enforce-<policy>=true` (the label names are in the table above). In git, put the label on
+   the Namespace manifest.
+3. Watch the Events of the namespace and `kyverno_policy_results_total{rule_result="fail"}`, then reschedule one pod of each workload
+   (`kubectl rollout restart`) and, on a lab, reboot a node.
+4. Roll back at once with `kubectl label ns <namespace> kyverno.openaether.io/enforce-<policy>-` (or revert the commit).
+
+The Audit noise that remains (what a flip would still hit) is tracked in apps #47: the next lab lists the remaining violations per policy and
+namespace on an idle cluster, then fixes or exempts them.
+
 ## What Audit reported on a fresh cluster (lab 11, Scaleway, after an install and two worker reboots)
 
 `require-limits` 46 fails, `require-ro-rootfs` 29, `require-security-context` (`check-run-as-non-root`) 3, nothing for the other
 policies. Fixed since (rendered-chart test `scripts/dev/test-chart-limits.py`): the memory limit of Alloy and its config-reloaders,
 cert-manager's webhook and cainjector, the Zitadel login and its `wait-for-zitadel` init container, Grafana's dashboard sidecar.
-Left, and why (do not flip `require-limits` or `require-ro-rootfs` to Enforce in these namespaces before they are done):
+Lab 22 (Scaleway, idle healthy cluster, the reports of the pods that exist, lab namespaces left out): `require-ro-rootfs` 14 -> 0 (all six VictoriaMetrics components and the operator's `config-reloader` / `config-init`),
+`require-limits` 13 -> 2, every other policy 0. Per policy and namespace, before (apps 71f2496) / after:
+
+| Policy | Namespace | Before | After |
+|---|---|---|---|
+| `require-ro-rootfs` | `services-observability` | 14 | 0 |
+| `require-limits` | `services-observability` | 8 | 2 |
+| `require-limits` | `foundation-databases` | 3 | 0 |
+| `require-limits` | `services-identity` | 2 | 0 on a running cluster (2 at each install) |
+
+What the changes were: `readOnlyRootFilesystem` on the flat `securityContext` of the VictoriaMetrics CRs, a 64Mi memory limit on the operator's own sidecar and init container (patched by name), `spec.resources` on `zitadel-db` (request 50m / 256Mi, memory limit 1Gi,
+from 255Mi measured; Flux rolled the instances with a 12 s write gap). Left, and why (do not flip `require-limits` to Enforce in these namespaces before they are done):
 
 | Workload | Policy | Why it stays |
 |---|---|---|
-| `zitadel-db` | `require-limits` (`postgres`, `bootstrap-controller`) | `zitadel-db` has no `spec.resources`; adding it rolls every instance and a limit below the working set kills Postgres: a cluster exercise |
-| `vmagent`, `vmalert`, `vmalertmanager`, `vminsert`, `vmselect`, `vmstorage` and their `config-reloader` / `config-init` | `require-limits`, `require-ro-rootfs` | operator-managed pods: the limits come from the CR (set for the main containers; not for the reloaders), and the read-only root filesystem needs the operator's volume layout checked per component |
-| `grafana-sc-dashboard`, `alertmanager` | `require-ro-rootfs` | not tried with a read-only root filesystem; the sidecar writes its dashboards to an emptyDir, which would need confirming |
+| `vmalert` (2 pods), init container `config-init` | `require-limits` | the operator appends a patch of a VMAlert's init container instead of merging it: the Deployment is refused (duplicate init container name, lab 22) |
+| `zitadel-init` and `zitadel-setup` Job pods | `require-limits` | one-shot Job pods at install; the chart exposes no resources for them and the peak of the 110 s setup Job is not measured |
 | `alloy-audit` | `require-security-context` (`runAsNonRoot`) | root by design: the apiserver writes the audit file 0600 for its own user (exempt by name in `restrict-capabilities`, not here) |
-| `zitadel-setup` Job | `require-limits` | one-shot Job pods that finished; the chart exposes no resources for them |
+| `grafana-sc-dashboard`, `alertmanager` | `require-ro-rootfs` | no violation seen in lab 22 (the grafana sidecar is covered by the earlier fix, alertmanager by the flat block above) |
 
 ## When to flip, in this order
 

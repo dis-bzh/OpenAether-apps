@@ -55,10 +55,53 @@ spec:
     startupapicheck:
       enabled: false
     replicaCount: 2
+    # Two replicas on two different workers and a budget that lets a drain take one at a time (0.4.0 M4): a lost worker
+    # must not stop certificate issuing or the webhook (scripts/check-ha.py). ScheduleAnyway: with one worker left the
+    # second replica still starts.
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: cert-manager
+            app.kubernetes.io/instance: cert-manager
+            app.kubernetes.io/component: controller
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: cert-manager
+            app.kubernetes.io/instance: cert-manager
+            app.kubernetes.io/component: controller
+    podDisruptionBudget:
+      enabled: true
+      maxUnavailable: 1
     # The top-level `resources` below is the controller's only: the webhook and the cainjector read their own key
     # (lab 11: both ran with no memory limit). Measured 9-62 Mi (webhook), 60-80 Mi (cainjector, which caches).
     webhook:
       replicaCount: 2
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: webhook
+              app.kubernetes.io/instance: cert-manager
+              app.kubernetes.io/component: webhook
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: webhook
+              app.kubernetes.io/instance: cert-manager
+              app.kubernetes.io/component: webhook
+      podDisruptionBudget:
+        enabled: true
+        maxUnavailable: 1
       containerSecurityContext: *csc
       resources:
         limits:
@@ -69,6 +112,26 @@ spec:
           memory: 32Mi
     cainjector:
       replicaCount: 2
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: cainjector
+              app.kubernetes.io/instance: cert-manager
+              app.kubernetes.io/component: cainjector
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: cainjector
+              app.kubernetes.io/instance: cert-manager
+              app.kubernetes.io/component: cainjector
+      podDisruptionBudget:
+        enabled: true
+        maxUnavailable: 1
       containerSecurityContext: *csc
       resources:
         limits:

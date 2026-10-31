@@ -1,0 +1,332 @@
+# Where each metric read by an alert comes from, and how sure we are it exists. Checked by test-alert-metrics.py.
+#   status existing   : read by a rule that predates 0.4.0 M1 (`task check-alerts` of the labs found series for all of
+#                       them but kube_job_failed and kubelet_volume_stats_*, quiet by design: docs/detection.md), or
+#                       exported by code shipped in the repo (oa_backup_verify_*, the M2 verifier: no lab read them).
+#   status UNVERIFIED : added by M1/M3, never read on a cluster. Lab 19 (2026-10-20) read the M1 ones but
+#                       longhorn_backup_state; lab 20 (Scaleway + OVH replica store, 2026-10-20) read that one,
+#                       kube_pod_init_container_status_running and the four oa_restore_test_* series. None is left.
+#   source            : the scrape that must exist (SCRAPES in the test), or `scrape` for `up`.
+ALERTS:
+  source: vmalert
+  status: existing
+alertmanager_build_info:
+  source: alertmanager
+  status: existing
+alertmanager_config_last_reload_successful:
+  source: alertmanager
+  status: existing
+alertmanager_cluster_members:
+  source: alertmanager
+  status: existing
+alertmanager_notification_requests_failed_total:
+  source: alertmanager
+  status: existing
+alertmanager_notification_requests_total:
+  source: alertmanager
+  status: existing
+certmanager_certificate_expiration_timestamp_seconds:
+  source: cert-manager
+  status: existing
+certmanager_certificate_ready_status:
+  source: cert-manager
+  status: existing
+cilium_drop_count_total:
+  source: cilium
+  status: existing
+cilium_endpoint_regenerations_total:
+  source: cilium
+  status: existing
+cilium_policy_change_total:
+  source: cilium
+  status: existing
+cnpg_collector_last_available_backup_timestamp:
+  source: cnpg
+  status: existing
+cnpg_collector_last_failed_backup_timestamp:
+  source: cnpg
+  status: existing
+cnpg_collector_pg_wal:
+  source: cnpg
+  status: existing
+cnpg_collector_sync_replicas:
+  source: cnpg
+  status: existing
+cnpg_collector_up:
+  source: cnpg
+  status: existing
+cnpg_pg_replication_in_recovery:
+  source: cnpg
+  status: existing
+cnpg_pg_replication_is_wal_receiver_up:
+  source: cnpg
+  status: existing
+cnpg_pg_replication_lag:
+  source: cnpg
+  status: existing
+cnpg_pg_replication_streaming_replicas:
+  source: cnpg
+  status: UNVERIFIED
+cnpg_pg_stat_archiver_archived_count:
+  source: cnpg
+  status: existing
+cnpg_pg_stat_archiver_failed_count:
+  source: cnpg
+  status: existing
+container_cpu_cfs_periods_total:
+  source: cadvisor
+  status: existing
+container_cpu_cfs_throttled_periods_total:
+  source: cadvisor
+  status: existing
+envoy_server_live:
+  source: istio-gateway
+  status: existing
+etcd_server_has_leader:
+  source: etcd
+  status: existing
+etcd_server_leader_changes_seen_total:
+  source: etcd
+  status: existing
+gotk_reconcile_duration_seconds_count:
+  source: flux
+  status: existing
+gotk_resource_info:
+  source: kube-state-metrics
+  status: existing
+grafana_http_request_duration_seconds_count:
+  source: grafana
+  status: existing
+istio_request_duration_milliseconds_bucket:
+  source: istio-gateway
+  status: existing
+istio_requests_total:
+  source: istio-gateway
+  status: existing
+kube_cronjob_created:
+  source: kube-state-metrics
+  status: existing
+kube_cronjob_info:
+  source: kube-state-metrics
+  status: existing
+kube_cronjob_spec_suspend:
+  source: kube-state-metrics
+  status: existing
+kube_cronjob_status_last_schedule_time:
+  source: kube-state-metrics
+  status: existing
+kube_cronjob_status_last_successful_time:
+  source: kube-state-metrics
+  status: existing
+kube_daemonset_status_desired_number_scheduled:
+  source: kube-state-metrics
+  status: existing
+kube_daemonset_status_number_ready:
+  source: kube-state-metrics
+  status: existing
+kube_deployment_spec_replicas:
+  source: kube-state-metrics
+  status: existing
+kube_deployment_status_replicas_available:
+  source: kube-state-metrics
+  status: existing
+kube_job_failed:
+  source: kube-state-metrics
+  status: existing
+kube_job_status_failed:
+  source: kube-state-metrics
+  status: existing
+kube_node_info:
+  source: kube-state-metrics
+  status: existing
+kube_node_role:
+  source: kube-state-metrics
+  status: existing
+kube_node_status_allocatable:
+  source: kube-state-metrics
+  status: existing
+kube_node_status_condition:
+  source: kube-state-metrics
+  status: existing
+kube_pod_container_resource_requests:
+  source: kube-state-metrics
+  status: existing
+kube_pod_container_status_last_terminated_reason:
+  source: kube-state-metrics
+  status: existing
+kube_pod_container_status_restarts_total:
+  source: kube-state-metrics
+  status: existing
+kube_pod_init_container_status_running:
+  source: kube-state-metrics
+  status: existing
+kube_pod_owner:
+  source: kube-state-metrics
+  status: existing
+kube_pod_status_phase:
+  source: kube-state-metrics
+  status: existing
+kube_poddisruptionbudget_status_pod_disruptions_allowed:
+  source: kube-state-metrics
+  status: existing
+kube_statefulset_replicas:
+  source: kube-state-metrics
+  status: existing
+kube_statefulset_status_replicas_ready:
+  source: kube-state-metrics
+  status: existing
+kube_storageclass_info:
+  source: kube-state-metrics
+  status: existing
+kubelet_volume_stats_available_bytes:
+  source: kubelet
+  status: existing
+kubelet_volume_stats_capacity_bytes:
+  source: kubelet
+  status: existing
+kyverno_policy_results_total:
+  source: kyverno
+  status: existing
+loki_compactor_apply_retention_last_successful_run_timestamp_seconds:
+  source: loki
+  status: existing
+loki_discarded_samples_total:
+  source: loki
+  status: existing
+loki_distributor_bytes_received_total:
+  source: loki
+  status: existing
+loki_request_duration_seconds_count:
+  source: loki
+  status: existing
+loki_source_file_read_lines_total:
+  source: alloy
+  status: existing
+loki_write_dropped_entries_total:
+  source: alloy
+  status: existing
+loki_write_sent_entries_total:
+  source: alloy
+  status: existing
+longhorn_backup_state:
+  source: longhorn
+  status: existing
+longhorn_disk_capacity_bytes:
+  source: longhorn
+  status: existing
+longhorn_disk_usage_bytes:
+  source: longhorn
+  status: existing
+longhorn_node_status:
+  source: longhorn
+  status: existing
+longhorn_volume_robustness:
+  source: longhorn
+  status: existing
+node_disk_io_time_seconds_total:
+  source: node-exporter
+  status: existing
+node_disk_read_time_seconds_total:
+  source: node-exporter
+  status: existing
+node_disk_reads_completed_total:
+  source: node-exporter
+  status: existing
+node_disk_write_time_seconds_total:
+  source: node-exporter
+  status: existing
+node_disk_writes_completed_total:
+  source: node-exporter
+  status: existing
+node_filesystem_avail_bytes:
+  source: node-exporter
+  status: existing
+node_filesystem_size_bytes:
+  source: node-exporter
+  status: existing
+node_memory_MemAvailable_bytes:
+  source: node-exporter
+  status: existing
+node_memory_MemTotal_bytes:
+  source: node-exporter
+  status: existing
+node_network_receive_errs_total:
+  source: node-exporter
+  status: existing
+node_network_transmit_errs_total:
+  source: node-exporter
+  status: existing
+node_pressure_io_stalled_seconds_total:
+  source: node-exporter
+  status: existing
+node_pressure_memory_stalled_seconds_total:
+  source: node-exporter
+  status: existing
+node_timex_offset_seconds:
+  source: node-exporter
+  status: existing
+node_timex_sync_status:
+  source: node-exporter
+  status: existing
+oa_audit_sink_last_check_timestamp_seconds:
+  source: audit-sink
+  status: UNVERIFIED
+oa_audit_sink_last_object_age_seconds:
+  source: audit-sink
+  status: UNVERIFIED
+oa_audit_sink_nodes:
+  source: audit-sink
+  status: UNVERIFIED
+oa_audit_sink_ok:
+  source: audit-sink
+  status: UNVERIFIED
+oa_backup_verify_last_success_timestamp_seconds:
+  source: backup-verify
+  status: existing
+oa_backup_verify_ok:
+  source: backup-verify
+  status: existing
+oa_backup_verify_store_ok:
+  source: backup-verify
+  status: existing
+oa_restore_test_last_run_timestamp_seconds:
+  source: backup-verify
+  status: existing
+oa_restore_test_last_success_timestamp_seconds:
+  source: backup-verify
+  status: existing
+oa_restore_test_ok:
+  source: backup-verify
+  status: existing
+oa_restore_test_recovery_seconds:
+  source: backup-verify
+  status: existing
+process_start_time_seconds:
+  source: flux
+  status: UNVERIFIED
+up:
+  source: scrape
+  status: existing
+vault_autopilot_failure_tolerance:
+  source: openbao
+  status: existing
+vault_core_active:
+  source: openbao
+  status: existing
+vault_core_unsealed:
+  source: openbao
+  status: existing
+vault_raft_storage_stats_applied_index:
+  source: openbao
+  status: existing
+vault_raft_storage_stats_commit_index:
+  source: openbao
+  status: existing
+vmalert_alerts_send_errors_total:
+  source: vmalert
+  status: existing
+vmalert_execution_errors_total:
+  source: vmalert
+  status: existing
+vmalert_remotewrite_errors_total:
+  source: vmalert
+  status: existing

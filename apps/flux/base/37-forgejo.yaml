@@ -2,7 +2,8 @@
 # ──────────────────────────────────────────────────────────────────────────
 # Self-hosted git forge: OpenAether hosting its own code, on its own stack —
 # the first dogfooding brick of OpenAether-self. Postgres backend = CNPG
-# forgejo-db (group 20). Secrets (DB password, initial admin, OIDC client)
+# forgejo-db (group 36, its own Kustomization: wait: true, so the chart is installed against a database that exists).
+# Secrets (DB password, initial admin, OIDC client)
 # through ESO/OpenBao (group 12). Exposed through the Istio Gateway (group 14c).
 # services-git is OUT of the mesh (L3/L4 CiliumNetworkPolicy instead, cf.
 # identity, group 35). Storage: longhorn-x2-rwo for the repository PVC
@@ -28,7 +29,7 @@ spec:
   prune: true
   wait: false
   dependsOn:
-    - name: cnpg               # backend Postgres forgejo-db
+    - name: forgejo-db         # backend Postgres (Ready = the Cluster is Ready), and through it cnpg
     - name: external-secrets   # DB password + initial admin + OIDC client
     - name: services-gateway   # HTTPRoute → openaether-gateway
     - name: storage            # longhorn-x2-rwo (repository PVC)

@@ -1,0 +1,187 @@
+# Workloads of the platform bricks that are NOT highly available, and why (scripts/check-ha.py reads this).
+# single_replica : one replica on purpose. `reason` says why it is acceptable, `loss` what its loss means for a
+#                  customer and for the operator. A pod on a node that dies is rescheduled only after the 5 minute
+#                  not-ready/unreachable toleration of Kubernetes (docs/resilience.md), so "loss" counts that time.
+# strict_spread  : a required hostname anti-affinity or hard spread with more than 2 replicas, on purpose.
+# pdb_exception  : a budget that deliberately allows other than one disruption, with the reason.
+# known_gaps     : NOT fixed yet. Each entry is a bug to close; the list must be empty at release.
+# Not audited here, because the pods do not exist in the rendered manifests: the Gateway pods (an Istio Deployment made
+# from the Gateway object, checked by scripts/dev/test-gateway-ha.py) and the Longhorn CSI sidecars (made by
+# longhorn-driver-deployer).
+single_replica:
+  - workload: Deployment/foundation-databases/backup-verify-exporter
+    reason: >-
+      a stateless exporter of the backup verification results; a second copy would export every series
+      twice
+    loss: >-
+      the oa_backup_verify_* series stop; BackupVerifierStale fires after its window; backups and
+      databases are untouched
+  - workload: Deployment/orc-system/orc-controller-manager
+    reason: >-
+      the OpenStack resource controller of the optional CAPI brick, idle unless a child cluster on
+      OpenStack changes
+    loss: >-
+      no change to the OpenStack resources of a child cluster until it is back; the child clusters keep
+      running
+  - workload: Deployment/capi-operator-system/capi-operator-cluster-api-operator
+    reason: the operator of the optional CAPI brick; the providers it installs run on their own
+    loss: no install or upgrade of CAPI providers until it is back; existing child clusters keep running
+  - workload: Deployment/local-path-storage/local-path-provisioner
+    reason: it only creates and deletes the host directories of local-path volumes
+    loss: a NEW local-path PVC stays Pending until it is back; existing volumes and their pods are untouched
+  - workload: Deployment/services-observability/victoria-metrics-operator
+    reason: the operator works through a leader lease, a second replica would only wait for it
+    loss: >-
+      changes to VM custom resources are not reconciled until it is back; the running VictoriaMetrics pods
+      are untouched
+  - workload: Deployment/longhorn-system/longhorn-driver-deployer
+    reason: it deploys the CSI sidecars once and then idles
+    loss: nothing while the CSI sidecars run; they are restarted only at a Longhorn upgrade
+  - workload: Deployment/longhorn-system/longhorn-ui
+    reason: only the web UI; volumes, replicas and the CSI sidecars do not depend on it
+    loss: >-
+      the Longhorn web UI is unavailable until it is rescheduled; kubectl and the Longhorn CRDs keep
+      working
+  - workload: Deployment/foundation-pki-management/external-secrets-cert-controller
+    reason: it rotates the webhook serving certificate, which stays valid for months
+    loss: no rotation of the ESO webhook certificate while it is away; secrets keep syncing
+  - workload: Deployment/kyverno/kyverno-background-controller
+    reason: background scans and mutate-existing; none of them is on a request path
+    loss: >-
+      background policy reports and mutate-existing are delayed; admission is served by the admission
+      controller
+  - workload: Deployment/kyverno/kyverno-cleanup-controller
+    reason: it runs the cleanup policies on a schedule
+    loss: scheduled cleanups are delayed
+  - workload: Deployment/kyverno/kyverno-reports-controller
+    reason: it builds the policy reports from the results
+    loss: policy reports are stale until it is back; no admission decision depends on them
+  - workload: Deployment/services-git/forgejo
+    # opt_in: absent from the default render (the brick is off by default), required in apps/flux/management-forge
+    opt_in: forge
+    reason: >-
+      the git repositories live on one ReadWriteOnce volume (longhorn-x2-rwo, two Longhorn replicas): a second pod could
+      not mount it, and Forgejo's own queues and sessions are in memory (a multi-replica forge needs ReadWriteMany,
+      Valkey and a shared object store: a later rung, not in 0.4.0)
+    loss: >-
+      no push, pull or web access to the forge while the pod is rescheduled after a node loss: measured about 8 minutes
+      at Kubernetes' default 300 s toleration (lab 27); the pod now tolerates not-ready and unreachable for 30 s, so the
+      wait is the 30 s plus the re-attach of the volume, about 2.5 to 3 minutes projected (UNVERIFIED: that drill has
+      not run); the volume survives the loss of a node (the other Longhorn replica), the database is forgejo-db
+      (3 instances), the cluster and Flux keep running and a pod killed on a live node restarts in place
+strict_spread:
+  - workload: StatefulSet/foundation-vault/openbao
+    reason: >-
+      raft members must sit on three different workers, each with its own local-path volume; test-openbao-
+      spread.py proves the rest
+pdb_exception:
+  - workload: StatefulSet/services-observability/loki
+    reason: >-
+      minAvailable 1 on purpose (loki.yaml): the three replicas sit on local-path volumes and the spread
+      is only preferred, so a drain of a node holding two of them would wait forever under minAvailable 2.
+      A drain that takes two at once rejects pushes (replication factor 2) until one returns; Alloy
+      retries (lab 15c: 301 of 301 lines kept over a 240 s outage).
+# critical_path: the components every request or every cluster operation needs, PINNED. Each is checked against the
+# rendered manifests: at least `min_replicas`, and a zone term next to the hostname one (the generic rules above
+# already demand a hostname spread and exactly one allowed disruption from every workload with two replicas or more).
+# A change that lowers a number, drops a zone term or moves one of them to `single_replica` fails scripts/check-ha.py
+# (and its unit test). Not in this render and pinned elsewhere: the Gateway pods (scripts/dev/test-gateway-ha.py),
+# CoreDNS and the Cilium operator (OpenAether-infra, Talos inline manifests). `why` says what breaks without it.
+critical_path:
+  - workload: Deployment/cert-manager/cert-manager
+    min_replicas: 2
+    why: >-
+      issues and renews every certificate, including the Gateway's
+  - workload: Deployment/cert-manager/cert-manager-webhook
+    min_replicas: 2
+    why: >-
+      its validating webhook sits on the creation of every Certificate and Issuer
+  - workload: Deployment/cert-manager/cert-manager-cainjector
+    min_replicas: 2
+    why: >-
+      injects the CA bundles the webhooks need
+  - workload: Deployment/foundation-service-mesh/istiod
+    min_replicas: 2
+    why: >-
+      xDS for the Gateway and the ambient mesh: new pods and config changes need it
+  - workload: Deployment/kyverno/kyverno-admission-controller
+    min_replicas: 2
+    why: >-
+      its webhooks sit on the creation of every pod: one replica blocks the API while it is away
+  - workload: Deployment/cnpg-system/cnpg-controller-manager
+    min_replicas: 2
+    why: >-
+      decides a database failover
+  - workload: Deployment/cnpg-system/barman-cloud
+    min_replicas: 2
+    why: >-
+      the WAL archiving path of every CNPG instance; one pod made a zone loss last 388-402 s (lab 25 D3)
+  - workload: Deployment/foundation-pki-management/external-secrets
+    min_replicas: 2
+    why: >-
+      syncs every secret the platform reads
+  - workload: Deployment/foundation-pki-management/external-secrets-webhook
+    min_replicas: 2
+    why: >-
+      its webhook validates every ExternalSecret and SecretStore
+  - workload: Deployment/kube-system/metrics-server
+    min_replicas: 2
+    why: >-
+      the Gateway's HPA reads it; a missing APIService blocks the namespace controller
+  - workload: Deployment/services-identity/zitadel
+    min_replicas: 2
+    why: >-
+      every login
+  - workload: Deployment/services-identity/zitadel-login
+    min_replicas: 2
+    why: >-
+      the login UI of every login
+  - workload: Deployment/services-observability/grafana
+    min_replicas: 2
+    why: >-
+      the dashboards and the alert UI
+  - workload: StatefulSet/foundation-vault/openbao
+    min_replicas: 3
+    why: >-
+      the raft quorum of the secrets store: 3 members survive the loss of one
+  - workload: StatefulSet/services-observability/loki
+    min_replicas: 3
+    why: >-
+      replication factor 2 needs three ingesters to lose one
+  - workload: Cluster/foundation-databases/zitadel-db
+    min_replicas: 3
+    why: >-
+      synchronous quorum replication (zero acknowledged commit lost) needs three instances
+  - workload: Cluster/foundation-databases/grafana-db
+    min_replicas: 3
+    why: >-
+      synchronous quorum replication (zero acknowledged commit lost) needs three instances
+  - workload: VMCluster/services-observability/victoria-metrics#vminsert
+    min_replicas: 2
+    why: >-
+      metrics ingestion
+  - workload: VMCluster/services-observability/victoria-metrics#vmselect
+    min_replicas: 2
+    why: >-
+      metrics queries, alert evaluation
+  - workload: VMCluster/services-observability/victoria-metrics#vmstorage
+    min_replicas: 2
+    why: >-
+      replication factor 2 of the metrics
+  - workload: VMAgent/services-observability/vmagent#vmagent
+    min_replicas: 2
+    why: >-
+      the scrape of the whole cluster
+  - workload: VMAlert/services-observability/vmalert#vmalert
+    min_replicas: 2
+    why: >-
+      the evaluation of the alert rules
+  - workload: VMAlertmanager/services-observability/alertmanager#vmalertmanager
+    min_replicas: 2
+    why: >-
+      the delivery of every alert, including the one about a lost worker
+  - workload: Deployment/services-observability/kube-state-metrics
+    min_replicas: 2
+    why: >-
+      workload-level alerts such as WorkloadReplicasBelowDesired
+known_gaps: []

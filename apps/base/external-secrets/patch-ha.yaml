@@ -1,0 +1,54 @@
+# High availability of the ESO controller and webhook (0.4.0 M4, scripts/check-ha.py). Two replicas on two workers
+# each: a lost worker must not stop secret sync (5 minutes of toleration otherwise) or block the creation of an
+# ExternalSecret (the webhook is on that path). The controller needs leader election to run twice: the flag is not in
+# the vendored args (kustomization.yaml adds it). Spread is ScheduleAnyway so that one worker left still runs both.
+# The cert-controller stays single (scripts/ha-allowlist.yaml).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-secrets
+  namespace: external-secrets
+spec:
+  replicas: 2
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: external-secrets
+              app.kubernetes.io/instance: external-secrets
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: external-secrets
+              app.kubernetes.io/instance: external-secrets
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-secrets-webhook
+  namespace: external-secrets
+spec:
+  replicas: 2
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: external-secrets-webhook
+              app.kubernetes.io/instance: external-secrets
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: external-secrets-webhook
+              app.kubernetes.io/instance: external-secrets

@@ -49,8 +49,10 @@ spec:
                 kyverno.openaether.io/enforce-restrict-image-registries: "true"
         message: >-
           Image registry not allowed. Allowed: the organisations this platform runs, on ghcr.io (cloudnative-pg,
-          external-secrets, fluxcd, kyverno, zitadel), reg.kyverno.io (kyverno), quay.io (cilium, jetstack, kiwigrid,
-          orc, prometheus, prometheus-operator), all of registry.k8s.io and, on Docker Hub, istio, rancher, kiwigrid,
+          external-secrets, fluxcd, kyverno, zitadel, and siderolabs/talosctl alone: the etcd snapshot Job),
+          code.forgejo.org (forgejo: the git forge),
+          reg.kyverno.io (kyverno), quay.io (cilium, jetstack, kiwigrid, orc, prometheus, prometheus-operator), all of
+          registry.k8s.io and, on Docker Hub, istio, rancher, kiwigrid,
           grafana, victoriametrics, restic, openbao, alpine, prom and wait4x, plus registry.hub.docker.com/outscale (the
           CAPI Outscale provider). Docker Hub images are written either as docker.io/<org>/<image> or as the short
           <org>/<image> the VictoriaMetrics operator uses. The list is the image inventory of the DAG
@@ -59,7 +61,7 @@ spec:
         pattern:
           spec:
             containers:
-            - image: "ghcr.io/cloudnative-pg/* | ghcr.io/external-secrets/* | ghcr.io/fluxcd/* | ghcr.io/kyverno/* | reg.kyverno.io/kyverno/* | ghcr.io/zitadel/* | quay.io/cilium/* | quay.io/jetstack/* | quay.io/kiwigrid/* | quay.io/orc/* | quay.io/prometheus/* | quay.io/prometheus-operator/* | registry.k8s.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | docker.io/grafana/* | docker.io/victoriametrics/* | docker.io/restic/* | docker.io/openbao/* | docker.io/alpine/* | docker.io/prom/* | docker.io/wait4x/* | registry.hub.docker.com/outscale/* | istio/* | rancher/* | kiwigrid/* | grafana/* | victoriametrics/* | restic/* | openbao/* | alpine/* | prom/* | wait4x/*"  # yamllint disable-line rule:line-length
+            - image: "ghcr.io/cloudnative-pg/* | ghcr.io/external-secrets/* | ghcr.io/fluxcd/* | ghcr.io/kyverno/* | reg.kyverno.io/kyverno/* | ghcr.io/zitadel/* | code.forgejo.org/forgejo/* | ghcr.io/siderolabs/talosctl:* | quay.io/cilium/* | quay.io/jetstack/* | quay.io/kiwigrid/* | quay.io/orc/* | quay.io/prometheus/* | quay.io/prometheus-operator/* | registry.k8s.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | docker.io/grafana/* | docker.io/victoriametrics/* | docker.io/restic/* | docker.io/openbao/* | docker.io/alpine/* | docker.io/prom/* | docker.io/wait4x/* | registry.hub.docker.com/outscale/* | istio/* | rancher/* | kiwigrid/* | grafana/* | victoriametrics/* | restic/* | openbao/* | alpine/* | prom/* | wait4x/*"  # yamllint disable-line rule:line-length
             # Conditional anchor: initContainers is optional (#47).
             =(initContainers):
-            - image: "ghcr.io/cloudnative-pg/* | ghcr.io/external-secrets/* | ghcr.io/fluxcd/* | ghcr.io/kyverno/* | reg.kyverno.io/kyverno/* | ghcr.io/zitadel/* | quay.io/cilium/* | quay.io/jetstack/* | quay.io/kiwigrid/* | quay.io/orc/* | quay.io/prometheus/* | quay.io/prometheus-operator/* | registry.k8s.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | docker.io/grafana/* | docker.io/victoriametrics/* | docker.io/restic/* | docker.io/openbao/* | docker.io/alpine/* | docker.io/prom/* | docker.io/wait4x/* | registry.hub.docker.com/outscale/* | istio/* | rancher/* | kiwigrid/* | grafana/* | victoriametrics/* | restic/* | openbao/* | alpine/* | prom/* | wait4x/*"  # yamllint disable-line rule:line-length
+            - image: "ghcr.io/cloudnative-pg/* | ghcr.io/external-secrets/* | ghcr.io/fluxcd/* | ghcr.io/kyverno/* | reg.kyverno.io/kyverno/* | ghcr.io/zitadel/* | code.forgejo.org/forgejo/* | ghcr.io/siderolabs/talosctl:* | quay.io/cilium/* | quay.io/jetstack/* | quay.io/kiwigrid/* | quay.io/orc/* | quay.io/prometheus/* | quay.io/prometheus-operator/* | registry.k8s.io/* | docker.io/istio/* | docker.io/rancher/* | docker.io/kiwigrid/* | docker.io/grafana/* | docker.io/victoriametrics/* | docker.io/restic/* | docker.io/openbao/* | docker.io/alpine/* | docker.io/prom/* | docker.io/wait4x/* | registry.hub.docker.com/outscale/* | istio/* | rancher/* | kiwigrid/* | grafana/* | victoriametrics/* | restic/* | openbao/* | alpine/* | prom/* | wait4x/*"  # yamllint disable-line rule:line-length

@@ -1,6 +1,6 @@
 # BASE backups, the indispensable complement to WAL archiving.
 #
-# `barmanObjectStore` archives WAL continuously, but a WAL can only be replayed
+# The Barman Cloud plugin archives WAL continuously, but a WAL can only be replayed
 # from a base backup: without these ScheduledBackups the destination fills up
 # with unusable archives. It is the pair that delivers PITR.
 #
@@ -20,8 +20,14 @@ metadata:
 spec:
   # 03:10, offset from the restic CronJobs (02:17 / 02:47) so as not to stack S3
   # writes or disk load at the same moment.
+  # `immediate: true`: one base backup when the object is CREATED, not on an update of an existing one
+  # (docs/forgejo.md, "taken at enablement"); the cron schedule is unchanged and this stays the only ScheduledBackup.
+  immediate: true
   schedule: "0 10 3 * * *"
   backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
   cluster:
     name: zitadel-db
 ---
@@ -34,23 +40,11 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: cnpg
 spec:
+  immediate: true
   schedule: "0 25 3 * * *"
   backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
   cluster:
     name: grafana-db
----
-apiVersion: postgresql.cnpg.io/v1
-kind: ScheduledBackup
-metadata:
-  name: forgejo-db-daily
-  namespace: foundation-databases
-  labels:
-    openaether.io/managed: "true"
-    openaether.io/component: cnpg
-spec:
-  # 03:40 — third offset (03:10 zitadel-db, 03:25 grafana-db): one base
-  # backup at a time on the shared S3 endpoint.
-  schedule: "0 40 3 * * *"
-  backupOwnerReference: self
-  cluster:
-    name: forgejo-db

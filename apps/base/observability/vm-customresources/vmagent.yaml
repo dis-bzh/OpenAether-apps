@@ -116,12 +116,25 @@ spec:
   # Kyverno reads the container level (#47). The operator copies this flat block onto every container
   # (pod and container fields share it: spec.securityContext, not containerSecurityContext).
   # runAsUser is explicit because these images run as root and runAsNonRoot alone makes the container fail to start.
+  # The operator's own sidecar and init container: it sets no memory limit (Kyverno require-limits, #47).
+  # Patched by name.
+  containers:
+    - name: config-reloader
+      resources:
+        requests: {cpu: 5m, memory: 16Mi}
+        limits: {memory: 64Mi}
+  initContainers:
+    - name: config-init
+      resources:
+        requests: {cpu: 5m, memory: 16Mi}
+        limits: {memory: 64Mi}
   securityContext:
     runAsUser: 65534
     runAsGroup: 65534
     fsGroup: 65534
     runAsNonRoot: true
     allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
@@ -150,6 +163,12 @@ spec:
               matchLabels:
                 app.kubernetes.io/name: vmagent
             topologyKey: kubernetes.io/hostname
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: vmagent
+            topologyKey: topology.kubernetes.io/zone
   # Select every VMServiceScrape/VMNodeScrape in the cluster.
   selectAllByDefault: true
   podDisruptionBudget:

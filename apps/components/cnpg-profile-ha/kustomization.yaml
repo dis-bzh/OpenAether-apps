@@ -1,0 +1,12 @@
+# OPT-IN, off by default: referenced by no brick and no profile. See docs/database-profiles.md (chooser, limits,
+# values).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - cluster.yaml
+components:
+  - ../cnpg-profile-common
+  - ../cnpg-profile-backup
+  - ../cnpg-profile-backup-replica
+  - ../cnpg-profile-pooler
+  - ../cnpg-profile-values

@@ -1,0 +1,43 @@
+# A planned shutdown of a PostgreSQL instance is bounded at 5 s of smart shutdown (lab 27, FI). ONE place for every
+# CNPG Cluster
+# of the platform: the bricks cnpg (zitadel-db, grafana-db) and forgejo-db list this component, and so does cnpg-
+# profile-common
+# (every database profile).
+#
+# WHY. CloudNativePG stops an instance with a CHECKPOINT, then a SMART shutdown that waits for the clients to leave
+# "for up to
+# `.spec.smartShutdownTimeout` seconds" (default 180), then a FAST shutdown that disconnects them, all within
+# `.spec.stopDelay`
+# (default 1800): https://raw.githubusercontent.com/cloudnative-pg/cloudnative-
+# pg/v1.30.1/docs/src/instance_manager.md. With the
+# Zitadel pool connected, the in-place restart of the primary that the Barman plugin sidecar forces (the operator
+# recreates the
+# primary in place, `primaryUpdateMethod: switchover` does not apply to it) stayed in smart shutdown for the whole
+# 180 s: a
+# 206.4 s write gap on the platform, against the 17-22 s measured on a lab without clients. 5 s keeps a short window
+# for sessions
+# that are about to end and then disconnects the rest; the restart itself took 7-17 s in lab 27, so the expected gap
+# is about
+# 12-25 s, inside the 30 s class. UNVERIFIED on a cluster until the next lab.
+#
+# NO RESTART NEEDED to apply it: the instance manager reads the value from its cached Cluster object at shutdown
+# (cloudnative-pg pkg/management/postgres/instance.go, TryShuttingDownSmartFast), not from the pod spec. The presync
+# of the
+# infra repository (cnpg-presync) sets the same value on the live 0.3.x Clusters BEFORE the apps ref moves, so the
+# restart that
+# the move forces is already short; keep the two numbers equal (test-cnpg-shutdown.py checks this side, test-cnpg-
+# presync.sh the
+# other).
+#
+# COST. A planned restart, drain or shutdown disconnects clients after 5 s instead of waiting up to 180 s for them
+# to leave: a
+# transaction still open then is aborted (committed work is not lost; the pooler and the client retry rules apply, see
+# docs/database-failover-clients.md). 0 would skip the smart phase altogether.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target: {group: postgresql.cnpg.io, kind: Cluster}
+    patch: |-
+      - op: add
+        path: /spec/smartShutdownTimeout
+        value: 5

@@ -53,6 +53,7 @@
   ignorePaths: [
     "apps/base/kyverno/kyverno-1.19.1.yaml",
     "apps/base/cnpg/cnpg-1.30.1.yaml",
+    "apps/base/cnpg/barman-cloud-plugin-0.15.1.yaml",
     "apps/base/external-secrets/install.yaml",
     "apps/base/orc/install.yaml",
     "apps/base/platform/gateway-api/standard-install.yaml",
@@ -109,6 +110,14 @@
       labels: ["dependencies", "vendored-manifest"],
       prBodyNotes: ["⚠️ This only bumps the tracking comment/label. Re-download the upstream manifest and replace the file per the kustomization.yaml's own 'To upgrade:' / 'Regenerate:' note before merging."],
     },
+    {
+      // Minor and major bumps stay manual (apps #96): the Gateway API CRDs follow the release the pinned Istio is built
+      // against (v1.6.0 for Istio 1.31, go.mod), not the latest. Patch releases still come as PRs.
+      description: "Gateway API CRDs move to a new minor only with the Istio release that supports it (apps #96).",
+      matchPackageNames: ["kubernetes-sigs/gateway-api"],
+      matchUpdateTypes: ["major", "minor"],
+      enabled: false,
+    },
   ],
 
   customManagers: [
@@ -142,6 +151,16 @@
       ],
       datasourceTemplate: "github-releases",
       depNameTemplate: "cloudnative-pg/cloudnative-pg",
+    },
+    {
+      customType: "regex",
+      description: "CNPG Barman Cloud plugin: vendored dump, same short-form 'vendored from vX' comment.",
+      fileMatch: ["^apps/base/cnpg/kustomization\\.yaml$"],
+      matchStrings: [
+        "barman-cloud-plugin-[0-9.]+\\.yaml\\s+#\\s*vendored from (?<currentValue>v[0-9.]+)",
+      ],
+      datasourceTemplate: "github-releases",
+      depNameTemplate: "cloudnative-pg/plugin-barman-cloud",
     },
     {
       customType: "regex",
@@ -193,12 +212,22 @@
     {
       customType: "regex",
       description: "CNPG Cluster's own Postgres engine image — self-authored, single value, safe to bump directly (unlike the vendored operator dump above).",
-      fileMatch: ["^apps/base/cnpg/cluster\\.yaml$"],
+      fileMatch: ["^apps/base/cnpg/cluster\\.yaml$", "^apps/components/cnpg-profile-[a-z]+/cluster\\.yaml$"],
       matchStrings: [
         "imageName:\\s*ghcr\\.io/cloudnative-pg/postgresql:(?<currentValue>[0-9.]+)",
       ],
       datasourceTemplate: "docker",
       depNameTemplate: "ghcr.io/cloudnative-pg/postgresql",
+    },
+    {
+      customType: "regex",
+      description: "PgBouncer image of the ha database profile's Pooler (apps #157).",
+      fileMatch: ["^apps/components/cnpg-profile-pooler/pooler\\.yaml$"],
+      matchStrings: [
+        "image:\\s*ghcr\\.io/cloudnative-pg/pgbouncer:(?<currentValue>[0-9.]+)",
+      ],
+      datasourceTemplate: "docker",
+      depNameTemplate: "ghcr.io/cloudnative-pg/pgbouncer",
     },
     {
       customType: "regex",

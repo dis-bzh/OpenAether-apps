@@ -1,0 +1,29 @@
+# yamllint disable rule:line-length
+# Daily Longhorn backup of the repositories' volume (the volume of the chart's PVC joins the group `oa-forgejo` through the StorageClass of storageclass.yaml).
+#
+# ON whenever the forge is on (the brick is opt-in), unlike storage/backup-target/recurringjob.yaml (oa-backup-daily), which is
+# opt-in per volume: this is its own group, `oa-forgejo`, that only the volume of the Forgejo class carries, so it changes no other volume. It
+# needs the platform's Longhorn backup target (BACKUP_TARGET_URL of cluster-identity, the storage-backup-target companion);
+# without a target Longhorn has nowhere to send the backup and this job produces no backup (docs/forgejo.md).
+#
+# 03:55: after oa-backup-daily (03:37) and the forgejo-db base backup (03:40, ScheduledBackup), before the etcd snapshot (04:10).
+# The database and the volume are NOT backed up at the same instant: docs/forgejo.md says what that means for a restore.
+# The RecurringJob lives in longhorn-system, the namespace Longhorn reads; the CRD comes with the `storage` brick, which `forgejo`
+# depends on.
+---
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: forgejo-repos-backup-daily
+  namespace: longhorn-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: forgejo
+spec:
+  name: forgejo-repos-backup-daily
+  task: backup
+  groups:
+    - oa-forgejo
+  cron: "55 3 * * *"
+  retain: 14
+  concurrency: 1

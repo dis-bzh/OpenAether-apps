@@ -1,0 +1,43 @@
+# What Longhorn does with a StatefulSet or Deployment pod stuck on a node that is down. The default, `do-nothing`, is
+# the Kubernetes
+# behaviour: the pod of the lost node stays Terminating, its ReadWriteOnce volume stays attached to it, and the
+# replacement pod waits
+# in ContainerCreating ("FailedAttachVolume: Waiting for detach") until the node comes back. Lab 27 sitting 3
+# (Scaleway, ONE lab): the
+# forge (one RWO Longhorn volume) was away 372 s on a zone power-off and 341 s on a partition with the default, 128 s
+# on the same
+# partition with this value set by hand. `delete-both-statefulset-and-deployment-pod` makes Longhorn force delete
+# those pods so that
+# the volume is detached and the replacement starts elsewhere
+# (https://longhorn.io/docs/1.12.0/high-availability/node-failure/).
+#
+# WHY A Setting OBJECT AS WELL AS THE HELM VALUE (longhorn.yaml, defaultSettings.nodeDownPodDeletionPolicy, the SAME
+# value). The chart's
+# `defaultSettings` only fill the `longhorn-default-setting` ConfigMap; the documentation says the ConfigMap
+# customises the defaults
+# "while installing or upgrading", it does not say that an upgrade rewrites a Setting that already exists, and the
+# owner's reading is
+# that it does not (an upgraded 0.3.x cluster would keep `do-nothing`). The Setting object is what the setting
+# controller applies
+# (the object IS the setting; `kubectl edit settings.longhorn.io` and the UI edit it) and Flux reconciles it
+# declaratively on
+# fresh AND upgraded clusters. Both carry the same value on purpose, so that if the manager does re-sync the ConfigMap
+# over an
+# existing object the two agree. Change both together (scripts/dev/test-longhorn-node-down-policy.py fails if they
+# differ).
+#
+# Side effects to measure, not assumed: it force deletes StatefulSet AND Deployment pods of a down node for every
+# workload on a Longhorn
+# volume. In the shipped bricks that is the forge and the opt-in restore-test canary (a grep of the StorageClasses
+# used by apps/base);
+# user workloads on the longhorn-* classes are concerned too. docs/resilience.md, "Longhorn:
+# node-down-pod-deletion-policy".
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: node-down-pod-deletion-policy
+  namespace: longhorn-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+value: delete-both-statefulset-and-deployment-pod

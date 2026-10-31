@@ -16,3 +16,6 @@ metadata:
     openaether.io/component: backup
 data:
   CLUSTER_NAME: ${CLUSTER_NAME}
+  # Suffix of the CNPG archive serverName ("" on an install, "-g2" on a cluster rebuilt by the DR chain);
+  # see cnpg/cluster.yaml.
+  CNPG_ARCHIVE_SUFFIX: "${CNPG_ARCHIVE_SUFFIX:=}"

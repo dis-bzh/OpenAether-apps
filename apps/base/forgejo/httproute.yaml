@@ -20,6 +20,13 @@ spec:
   hostnames:
     - "forge.openaether.local"
   rules:
+    # /metrics (gitea.metrics.enabled, scraped in-cluster by vmagent on :3000) is NOT served to the Internet: it answers
+    # without authentication and lists the forge's counters. A rule with no backendRefs makes the Gateway answer 500 to
+    # it (Gateway API: "no valid backends"); the more specific match wins over `/`. UNVERIFIED on a cluster.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /metrics
     - matches:
         - path:
             type: PathPrefix

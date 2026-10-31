@@ -1,0 +1,7 @@
+# Checks that run on every pull request on purpose and are NOT required (maintainer decision, apps #141, 2026-10-21).
+# scripts/dev/check-required-checks.sh reads this list: a name here that is required, or no longer reports, is a difference.
+# One job name per line; the other check runs must all be required, bound to the GitHub Actions app.
+Commit messages
+Pipeline audit
+OpenBao bootstrap
+Zitadel and Grafana authentication

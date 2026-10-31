@@ -1,0 +1,82 @@
+# yamllint disable rule:line-length
+# The scratch Clusters of the restore tests (apps/base/backup/databases/restore) are the one thing the platform creates by
+# recovering a backup. This policy keeps them scratch: an `rt-` or restore-test Cluster outside the scratch namespace is
+# refused (a restore can never land on a live database namespace), and inside it a Cluster must recover, have one
+# instance, and never archive or take backups (a copy that archived would write into the store it was restored from).
+# Enforce, but failurePolicy Ignore: a Kyverno outage must not block the live Clusters; the script, the ServiceAccount's
+# RBAC (scratch namespace only) and scripts/dev/test-restore-test-cnpg.py hold the same line.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-restore-test-clusters
+  annotations:
+    policies.kyverno.io/title: Restore-test Clusters stay scratch
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Cluster
+    policies.kyverno.io/description: >-
+      A CNPG Cluster named rt-* or labelled openaether.io/restore-test only exists in backup-restore-test, recovers a
+      backup into one instance, and neither archives WAL nor takes backups.
+spec:
+  validationFailureAction: Enforce
+  failurePolicy: Ignore
+  background: false
+  rules:
+    - name: scratch-clusters-only-in-the-scratch-namespace
+      match:
+        any:
+          - resources:
+              kinds:
+                - postgresql.cnpg.io/v1/Cluster
+              operations: [CREATE, UPDATE]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - backup-restore-test
+      preconditions:
+        any:
+          - key: "{{ request.object.metadata.labels.\"openaether.io/restore-test\" || '' }}"
+            operator: Equals
+            value: "true"
+          - key: "{{ starts_with(request.object.metadata.name, 'rt-') }}"
+            operator: Equals
+            value: true
+      validate:
+        message: "A restore-test Cluster (rt-* or labelled openaether.io/restore-test) may only exist in backup-restore-test."
+        deny: {}
+    - name: scratch-clusters-recover-and-never-archive
+      match:
+        any:
+          - resources:
+              kinds:
+                - postgresql.cnpg.io/v1/Cluster
+              namespaces:
+                - backup-restore-test
+              operations: [CREATE, UPDATE]
+      validate:
+        message: >-
+          In backup-restore-test a Cluster is named rt-*, recovers (bootstrap.recovery), has one instance, and has no
+          WAL-archiving plugin, no backup section, no synchronous replication and no scheduled backup.
+        deny:
+          conditions:
+            any:
+              - key: "{{ starts_with(request.object.metadata.name, 'rt-') }}"
+                operator: Equals
+                value: false
+              - key: "{{ length(keys(request.object.spec.bootstrap.recovery || `{}`)) }}"
+                operator: Equals
+                value: 0
+              - key: "{{ request.object.spec.instances || `1` }}"
+                operator: NotEquals
+                value: 1
+              - key: "{{ length(request.object.spec.plugins[?isWALArchiver == `true`] || `[]`) }}"
+                operator: GreaterThan
+                value: 0
+              - key: "{{ length(keys(request.object.spec.backup || `{}`)) }}"
+                operator: GreaterThan
+                value: 0
+              # A synchronous setting copied from a live Cluster would block every write of a one-instance copy.
+              - key: "{{ length(keys(request.object.spec.postgresql.synchronous || `{}`)) }}"
+                operator: GreaterThan
+                value: 0

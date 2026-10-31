@@ -53,3 +53,24 @@ spec:
     - name: external-secrets-stores
     - name: cnpg                     # <cluster>-app Secrets + the instances to dump
     - name: backup-databases-identity  # CLUSTER_NAME ConfigMap (repository prefix)
+---
+# The scheduled etcd snapshot. Its own Kustomization: the talos.dev ServiceAccount kind exists only where the control
+# planes enable the Talos API access from Kubernetes (infra variable etcd_snapshot_api_access); where it does not, this
+# one stays not ready and nothing else in the backup group is held back.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: backup-etcd
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/backup/etcd
+  prune: true
+  wait: false
+  dependsOn:
+    - name: backup-databases  # backup-restic-env, cluster-identity, the cnpg-dump ServiceAccount

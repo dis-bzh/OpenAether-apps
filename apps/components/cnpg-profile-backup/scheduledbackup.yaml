@@ -1,0 +1,22 @@
+# BASE backups, the complement of WAL archiving (a WAL replays only from a base backup). The CNPG `schedule` has a
+# leading
+# SECONDS field (6 fields). 03:40, after the platform's own Clusters (03:10, 03:25).
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: NAME-daily
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database
+    openaether.io/db-profile: customer
+spec:
+  # One base backup when the object is created (a new customer Cluster has WAL and no base backup until 03:40
+  # otherwise); the schedule is unchanged and this is the Cluster's only ScheduledBackup. See docs/forgejo.md.
+  immediate: true
+  schedule: "0 40 3 * * *"
+  backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+  cluster:
+    name: NAME

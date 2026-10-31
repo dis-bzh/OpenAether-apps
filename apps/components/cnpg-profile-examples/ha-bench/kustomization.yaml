@@ -1,0 +1,9 @@
+# The ha example with the opt-in benchmark and zero-loss Jobs added (docs/database-profiles.md, "Measure it"): the
+# bench component
+# comes AFTER the profile in the list.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../ha
+components:
+  - ../../cnpg-profile-bench

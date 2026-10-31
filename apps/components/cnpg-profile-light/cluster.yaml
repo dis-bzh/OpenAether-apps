@@ -1,0 +1,58 @@
+# Profile light: ONE instance, no replication, no backup, no pooler. For development, tests and data you can lose.
+# Limit, stated up front: a node loss, a drain or an upgrade restart IS downtime, and with node-local storage the
+# data is
+# unreachable until that node returns (lost with its disk). enablePDB is false so that a drain is not blocked by the
+# only pod.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: NAME
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database
+    openaether.io/db-profile: light
+spec:
+  instances: 1
+  enablePDB: false
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6
+  # No superuser over the network: the application uses its owner; CNPG keeps the postgres password out of reach.
+  enableSuperuserAccess: false
+  primaryUpdateStrategy: unsupervised
+  # Replicas first, then a switchover, instead of restarting the only writer in place (see apps/base/cnpg/cluster.yaml).
+  primaryUpdateMethod: switchover
+  storage:
+    storageClass: STORAGE_CLASS
+    size: SIZE
+  bootstrap:
+    initdb:
+      database: DATABASE
+      owner: OWNER
+      secret:
+        name: NAME-credentials
+  resources:
+    requests: {cpu: CPU_REQUEST, memory: MEMORY}
+    limits: {cpu: CPU_LIMIT, memory: MEMORY}
+  monitoring:
+    enablePodMonitor: false
+  postgresql:
+    parameters:
+      password_encryption: scram-sha-256
+    # TLS and SCRAM only: a TCP connection without TLS is refused before authentication, then every other one needs
+    # SCRAM.
+    pg_hba:
+      - hostnossl all all all reject
+      - hostssl all all all scram-sha-256
+  # Spread preferences kept so that raising `instances` later (toward standard) places the new instance elsewhere.
+  # No short
+  # toleration: the only instance has nowhere to fail over to, and its node-local volume ties it to its node.
+  affinity:
+    podAntiAffinityType: preferred
+    topologyKey: kubernetes.io/hostname
+    additionalPodAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: topology.kubernetes.io/zone
+            labelSelector:
+              matchLabels:
+                cnpg.io/cluster: NAME

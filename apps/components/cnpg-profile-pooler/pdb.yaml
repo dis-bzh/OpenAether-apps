@@ -1,0 +1,14 @@
+# One pooler pod can be disturbed at a time (scripts/check-ha.py): a drain moves them one by one.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: NAME-pooler-rw
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database
+    openaether.io/db-profile: ha
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      cnpg.io/poolerName: NAME-pooler-rw

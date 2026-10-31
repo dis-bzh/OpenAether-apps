@@ -25,6 +25,8 @@ FLIPPABLE = ["restrict-privileged", "restrict-capabilities", "restrict-capabilit
 LABEL_OF = {"restrict-capabilities-ephemeral": "restrict-capabilities", "restrict-privileged-ephemeral": "restrict-privileged"}
 ALREADY_ENFORCE = {"disallow-root-user", "disallow-default-namespace"}
 ALWAYS_AUDIT = {"require-ro-rootfs"}
+# Matches CNPG Clusters, not Pods; Enforce with failurePolicy Ignore (a Kyverno outage must not block the live Clusters).
+CLUSTER_GUARD = {"restrict-restore-test-clusters"}
 PASS = FAIL = 0
 
 
@@ -39,6 +41,17 @@ r = subprocess.run(["kubectl", "kustomize", str(REPO / "apps/base/kyverno-polici
 if r.returncode:
     sys.exit(f"kubectl kustomize failed: {r.stderr}")
 pol = {d["metadata"]["name"]: d for d in yaml.safe_load_all(r.stdout) if d}
+# The Cluster guard lives in its own brick: Kyverno compiles a policy against the kinds it resolves when the policy is created,
+# so it must be created after the CNPG CRDs exist (lab 20: created earlier it admitted an rt-x Cluster until it was touched).
+r2 = subprocess.run(["kubectl", "kustomize", str(REPO / "apps/base/kyverno-policies-cnpg")], capture_output=True, text=True)
+if r2.returncode:
+    sys.exit(f"kubectl kustomize failed: {r2.stderr}")
+guard = {d["metadata"]["name"]: d for d in yaml.safe_load_all(r2.stdout) if d}
+check("the Cluster guard is NOT in the brick that Kyverno loads before the CNPG CRDs exist", not (CLUSTER_GUARD & set(pol)), sorted(pol))
+pol.update(guard)
+ks = {d["metadata"]["name"]: d for d in yaml.safe_load_all((REPO / "apps/flux/base/40-kyverno.yaml").read_text()) if d}
+check("its Kustomization waits for cnpg and for kyverno-policies",
+      {x["name"] for x in ks["kyverno-policies-cnpg"]["spec"]["dependsOn"]} == {"cnpg", "kyverno-policies"})
 
 for name in FLIPPABLE:
     spec = pol[name]["spec"]
@@ -91,7 +104,11 @@ check("the two policies that already enforce are untouched",
 MUTATIONS = {"spread-gateway-pods"}
 check("the mutation policies have no validate rule",
       all("validate" not in r and "mutate" in r for n in MUTATIONS for r in pol[n]["spec"]["rules"]))
-check("no other policy exists unlisted", set(pol) - MUTATIONS == set(FLIPPABLE) | ALREADY_ENFORCE | ALWAYS_AUDIT, sorted(pol))
+check("the Cluster guard enforces, ignores a Kyverno outage, and matches Clusters only",
+      all(pol[n]["spec"]["validationFailureAction"] == "Enforce" and pol[n]["spec"].get("failurePolicy") == "Ignore"
+          and all(k == "postgresql.cnpg.io/v1/Cluster" for r in pol[n]["spec"]["rules"] for b in r["match"]["any"] for k in b["resources"]["kinds"])
+          for n in CLUSTER_GUARD))
+check("no other policy exists unlisted", set(pol) - MUTATIONS == set(FLIPPABLE) | ALREADY_ENFORCE | ALWAYS_AUDIT | CLUSTER_GUARD, sorted(pol))
 
 # Default off: nothing shipped labels a namespace for Enforce (policies and docs excluded: they spell the label).
 hits = [str(p.relative_to(REPO)) for p in (REPO / "apps").rglob("*.yaml")

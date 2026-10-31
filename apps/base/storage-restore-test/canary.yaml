@@ -1,0 +1,76 @@
+# yamllint disable rule:line-length
+# The canary volume and its hourly writer: 24 files of 64 KiB, each a function of its generation number (scripts/canary_volume.py).
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oa-canary
+  namespace: foundation-storage
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn-oa-canary
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: longhorn-canary
+  namespace: foundation-storage
+  labels:
+    app: longhorn-canary
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+spec:
+  schedule: "7 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            app: longhorn-canary
+            openaether.io/component: storage
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: data
+              persistentVolumeClaim: { claimName: oa-canary }
+            - name: scripts
+              configMap: { name: longhorn-restore-scripts }
+          containers:
+            - name: write
+              image: docker.io/alpine/k8s:1.36.5
+              command: ["python3", "/scripts/canary_volume.py", "write", "/data/canary"]
+              env:
+                - { name: PYTHONDONTWRITEBYTECODE, value: "1" }
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: data, mountPath: /data }
+                - { name: scripts, mountPath: /scripts, readOnly: true }
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits: { cpu: 200m, memory: 128Mi }

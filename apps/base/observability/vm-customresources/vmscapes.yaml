@@ -79,6 +79,17 @@ spec:
       # (verified locally 2026-07-29: this is why BackupJobFailed, which selects
       # namespace=~"foundation-.*", could never have fired).
       honorLabels: true
+      # Two kube-state-metrics pods export the SAME series (apps #156). What tells them apart is dropped so that
+      # VMCluster deduplicates them (-dedup.minScrapeInterval, vmcluster.yaml) and no sum() or count() doubles:
+      # the target label `pod` (a series that names a pod keeps its own, honorLabels) and, on the scraped series
+      # only, `instance`. `up` is not touched by metricRelabelConfigs, so each pod keeps its own `up` series.
+      relabelConfigs:
+        - action: replace
+          targetLabel: pod
+          replacement: ""
+      metricRelabelConfigs:
+        - action: labeldrop
+          regex: instance
 
 # ── node-exporter ──────────────────────────────────────────────────
 ---
@@ -181,6 +192,51 @@ spec:
   podMetricsEndpoints:
     # Both the agent and the operator name the port `prometheus`.
     - port: prometheus
+      path: /metrics
+
+# Gateway Envoy (RED: istio_requests_total, istio_request_duration_milliseconds), scraped on :15090
+# The gateway pods are plain Envoy (outside ambient): the Istio telemetry filters publish on :15090. UNVERIFIED on a
+# cluster (port name, path and that the istio_* series exist): the first lab reads `up` and `istio_requests_total`.
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: istio-gateway
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmagent-scrapes
+spec:
+  selector:
+    matchLabels:
+      service.istio.io/canonical-name: openaether-gateway-istio
+  namespaceSelector:
+    matchNames:
+      - services-gateway
+  podMetricsEndpoints:
+    - port: http-envoy-prom
+      path: /stats/prometheus
+
+# ── Longhorn managers (volume robustness, disks, backups) ──────────────────────────────────────────────────────────
+# One manager per node serves :9500/metrics. UNVERIFIED on a cluster (port name `manager`, metric names).
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: longhorn-manager
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmagent-scrapes
+spec:
+  selector:
+    matchLabels:
+      app: longhorn-manager
+  namespaceSelector:
+    matchNames:
+      - longhorn-system
+  podMetricsEndpoints:
+    - port: manager
       path: /metrics
 
 # ── etcd (control-plane nodes) ─────────────────────────────────────
@@ -297,3 +353,28 @@ spec:
       # without letting a runaway target fill the 512 MiB of vmagent. This scrape only; no sampleLimit (no series
       # count was measured).
       max_scrape_size: 32MiB
+
+# ── backup verifier ────────────────────────────────────────────────
+# oa_backup_verify_* (apps/base/backup/databases/verify-*.yaml). The Service lives in foundation-databases; this object
+# is here because the VMServiceScrape CRD exists only where the observability brick does.
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: backup-verify
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmagent-scrapes
+spec:
+  selector:
+    matchLabels:
+      app: backup-verify-exporter
+  namespaceSelector:
+    matchNames:
+      - foundation-databases
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 60s
+      scrapeTimeout: 10s
