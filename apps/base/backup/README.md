@@ -322,6 +322,10 @@ Jobs (restic needs to write its lock files); a read-only pair is a follow-up.
   `BackupTarget` CR laid down by the `storage-backup-target` brick from `BACKUP_TARGET_URL`. With no URL published, Longhorn keeps
   no volume backups (see `storage/longhorn.yaml`).
 - **Alerting**: `BackupJobFailed` and the neighbouring rules are in `observability/vm-customresources/vmrule-backup.yaml` (Job
-  failure, CronJob that no longer fires).
+  failure, CronJob that no longer fires). `CnpgBackupFailed` and `CnpgBackupStale` (the barman base backups) read the Barman Cloud
+  plugin's `barman_cloud_cloudnative_pg_io_last_available_backup_timestamp` and `..._last_failed_backup_timestamp` as well as the CNPG
+  collector's `cnpg_collector_last_*_backup_timestamp`, each the largest of the two: for a backup done by the plugin (all of
+  them) the collector reports `last_available` = 0 (lab 28E, measured), so on the collector alone one failed backup kept the
+  alert up for good and the stale alert could never arm (`docs/monitoring-0.4.md`).
 - **Object lock** (immutability against a compromised credential) is not configured by this repository: a stolen S3 key can
   delete the repositories. Enabling it, with the retention it implies, is a bucket decision on the infra side.

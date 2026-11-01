@@ -151,10 +151,21 @@ spec:
               kubectl logs -n foundation-databases <primary-pod> -c postgres | grep -i archiv.
 
         # 7) The last base backup failed more recently than the last success.
+        #    Every backup of the platform goes through the Barman Cloud PLUGIN, and for those the CNPG collector
+        #    reports last_available = 0 (and a real last_failed): read from the collector alone, ONE failed backup
+        #    kept this rule true for good, the next success never raising the zero above it (lab 28E, 2026-11-01:
+        #    zitadel-db, a failure at 01:59Z, a success at 03:10Z, the alert still true). The plugin exports the
+        #    real values as barman_cloud_cloudnative_pg_io_*, same cnpg scrape, same cnpg_io_cluster label. Each
+        #    side takes the LARGEST of the two names (union, then max), so a Cluster whose backups only the
+        #    collector reports works too.
         - alert: CnpgBackupFailed
           expr: |
-            max by (cnpg_io_cluster) (cnpg_collector_last_failed_backup_timestamp)
-              > max by (cnpg_io_cluster) (cnpg_collector_last_available_backup_timestamp)
+            max by (cnpg_io_cluster) (union(
+              cnpg_collector_last_failed_backup_timestamp,
+              barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp))
+              > max by (cnpg_io_cluster) (union(
+                cnpg_collector_last_available_backup_timestamp,
+                barman_cloud_cloudnative_pg_io_last_available_backup_timestamp))
           for: 10m
           labels:
             severity: warning
@@ -165,11 +176,17 @@ spec:
             description: "kubectl get backup -n foundation-databases; kubectl describe backup <name>."
 
         # 8) No base backup for 48 h although the schedule is daily (03:10 / 03:25). A cluster that never had one
-        #    reports 0 and is left out; the first success arms the rule.
+        #    reports 0 and is left out; the first success arms the rule. Same two names as rule 7: for a plugin backup
+        #    the collector's value is 0, so on the collector alone this rule could NEVER arm (lab 28E: the plugin
+        #    reported 3 Clusters at 33 to 64 minutes of age, the collector 0).
         - alert: CnpgBackupStale
           expr: |
-            max by (cnpg_io_cluster) (cnpg_collector_last_available_backup_timestamp) > 0
-              and time() - max by (cnpg_io_cluster) (cnpg_collector_last_available_backup_timestamp) > 48 * 3600
+            max by (cnpg_io_cluster) (union(
+              cnpg_collector_last_available_backup_timestamp,
+              barman_cloud_cloudnative_pg_io_last_available_backup_timestamp)) > 0
+              and time() - max by (cnpg_io_cluster) (union(
+                cnpg_collector_last_available_backup_timestamp,
+                barman_cloud_cloudnative_pg_io_last_available_backup_timestamp)) > 48 * 3600
           for: 1h
           labels:
             severity: warning

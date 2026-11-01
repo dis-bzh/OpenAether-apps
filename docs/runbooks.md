@@ -80,12 +80,14 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 ### CnpgBackupFailed
 
 - Check: `kubectl -n <ns> get backup` and the failed Backup's `.status.error`.
-- Do: Fix the S3 access, then create a new `Backup` object for the cluster.
+- Do: Fix the S3 access, then create a new `Backup` object for the cluster. The alert stays up until a later base backup completes.
+- Reads (lab 28E): per Cluster, the largest of the CNPG collector's `cnpg_collector_last_failed_backup_timestamp` and the Barman Cloud plugin's `barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp`, against the largest of the two `..._last_available_backup_timestamp`. For a plugin backup (all of them) the collector's `last_available` is 0, so the alert reads the plugin's series too; on the collector alone, one failed backup kept it up for good.
 
 ### CnpgBackupStale
 
 - Check: `kubectl -n <ns> get scheduledbackup,backup`.
 - Do: Check the ScheduledBackup is not suspended and the last Backup completed; run one by hand.
+- Reads (lab 28E): per Cluster, the largest of `cnpg_collector_last_available_backup_timestamp` and `barman_cloud_cloudnative_pg_io_last_available_backup_timestamp`; a Cluster whose values are 0 never had a base backup and is left out until the first one. The collector's value is 0 for a plugin backup (the plugin's was 33 to 64 minutes old on three Clusters), so on the collector alone this alert could never arm.
 
 ### CnpgMetricsAbsent
 

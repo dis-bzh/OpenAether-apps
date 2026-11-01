@@ -2,6 +2,8 @@
 #   status existing   : read by a rule that predates 0.4.0 M1 (`task check-alerts` of the labs found series for all of
 #                       them but kube_job_failed and kubelet_volume_stats_*, quiet by design: docs/detection.md), or
 #                       exported by code shipped in the repo (oa_backup_verify_*, the M2 verifier: no lab read them).
+#                       Also existing: metrics a lab read on a cluster since (the two barman_cloud_* ones, lab 28E,
+#                       2026-11-01: 9 series each for 3 Clusters x 3 pods, from the live store).
 #   status UNVERIFIED : added by M1/M3, never read on a cluster. Lab 19 (2026-10-20) read the M1 ones but
 #                       longhorn_backup_state; lab 20 (Scaleway + OVH replica store, 2026-10-20) read that one,
 #                       kube_pod_init_container_status_running and the four oa_restore_test_* series. None is left.
@@ -23,6 +25,12 @@ alertmanager_notification_requests_failed_total:
   status: existing
 alertmanager_notification_requests_total:
   source: alertmanager
+  status: existing
+barman_cloud_cloudnative_pg_io_last_available_backup_timestamp:
+  source: cnpg
+  status: existing
+barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp:
+  source: cnpg
   status: existing
 certmanager_certificate_expiration_timestamp_seconds:
   source: cert-manager
