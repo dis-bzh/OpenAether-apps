@@ -1,0 +1,116 @@
+# The values mechanism of the database profiles (docs/database-profiles.md). A profile's templates carry the placeholder
+# NAME (the application name); the replacements fill it, and the other values, from the ConfigMap `db-profile-
+# values` that the
+# customer's overlay generates (a profile's example/ shows it). A placeholder nothing replaces stays upper-case, which
+# Kubernetes refuses as a name: an unfilled template cannot be applied by mistake.
+# Listed LAST in a profile: a replacement only reaches what the components before it have already added. Delimiter
+# "-" and index 0 swap the first segment; the bucket path and the OpenBao key
+# are split on "/" because the name sits in the middle. Backup, replica and pooler components carry the replacements
+# of their own fields.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+replacements:
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.namespace}
+    targets:
+      - select: {labelSelector: openaether.io/db-profile}
+        fieldPaths:
+          - metadata.namespace
+        options: {create: true}
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.name}
+    targets:
+      - select: {kind: Cluster}
+        fieldPaths:
+          - metadata.name
+        options: {delimiter: "-", index: 0}
+      - select: {kind: Cluster}
+        fieldPaths:
+          - spec.bootstrap.initdb.secret.name
+        options: {delimiter: "-", index: 0}
+      - select: {kind: Cluster}
+        fieldPaths:
+          - spec.affinity.additionalPodAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution.0.podAffinityTerm.labelSelector.matchLabels.[cnpg.io/cluster]
+        options: {delimiter: "-", index: 0}
+      - select: {kind: VMPodScrape}
+        fieldPaths:
+          - metadata.name
+          - spec.selector.matchLabels.[cnpg.io/cluster]
+        options: {delimiter: "-", index: 0}
+      - select: {kind: ExternalSecret}
+        fieldPaths:
+          - metadata.name
+        options: {delimiter: "-", index: 0}
+      - select: {kind: ExternalSecret}
+        fieldPaths:
+          - spec.target.name
+        options: {delimiter: "-", index: 0}
+      - select: {kind: ExternalSecret}
+        fieldPaths:
+          - spec.data.0.remoteRef.key
+        options: {delimiter: "/", index: 1}
+      - select: {kind: CiliumNetworkPolicy}
+        fieldPaths:
+          - metadata.name
+        options: {delimiter: "-", index: 0}
+      - select: {kind: CiliumNetworkPolicy, labelSelector: "openaether.io/db-netpol=database"}
+        fieldPaths:
+          - spec.endpointSelector.matchLabels.[cnpg.io/cluster]
+        options: {delimiter: "-", index: 0}
+      - select: {kind: CiliumNetworkPolicy, labelSelector: "openaether.io/db-netpol=database"}
+        fieldPaths:
+          - spec.ingress.1.fromEndpoints.0.matchLabels.[cnpg.io/cluster]
+        options: {delimiter: "-", index: 0}
+      - select: {kind: CiliumNetworkPolicy, labelSelector: "openaether.io/db-netpol=database"}
+        fieldPaths:
+          - spec.egress.3.toEndpoints.0.matchLabels.[cnpg.io/cluster]
+        options: {delimiter: "-", index: 0}
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.database}
+    targets:
+      - select: {kind: Cluster}
+        fieldPaths:
+          - spec.bootstrap.initdb.database
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.owner}
+    targets:
+      - select: {kind: Cluster}
+        fieldPaths:
+          - spec.bootstrap.initdb.owner
+      - select: {kind: ExternalSecret, labelSelector: "openaether.io/db-secret=credentials"}
+        fieldPaths:
+          - spec.target.template.data.username
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.storageClass}
+    targets:
+      - select: {kind: Cluster}
+        fieldPaths:
+          - spec.storage.storageClass
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.size}
+    targets:
+      - select: {kind: Cluster}
+        fieldPaths:
+          - spec.storage.size
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.cpuRequest}
+    targets:
+      - select: {kind: Cluster}
+        fieldPaths:
+          - spec.resources.requests.cpu
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.cpuLimit}
+    targets:
+      - select: {kind: Cluster}
+        fieldPaths:
+          - spec.resources.limits.cpu
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.memory}
+    targets:
+      - select: {kind: Cluster}
+        fieldPaths:
+          - spec.resources.requests.memory
+      - select: {kind: Cluster}
+        fieldPaths:
+          - spec.resources.limits.memory
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.clientNamespace}
+    targets:
+      - select: {kind: CiliumNetworkPolicy}
+        fieldPaths:
+          - spec.ingress.0.fromEndpoints.0.matchLabels.[k8s:io.kubernetes.pod.namespace]
+  - source: {kind: ConfigMap, name: db-profile-values, fieldPath: data.clientApp}
+    targets:
+      - select: {kind: CiliumNetworkPolicy}
+        fieldPaths:
+          - spec.ingress.0.fromEndpoints.0.matchLabels.[k8s:app.kubernetes.io/name]

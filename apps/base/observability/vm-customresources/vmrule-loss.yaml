@@ -1,0 +1,129 @@
+# Loss of capacity: a node, a control plane, a zone or a replica is gone (0.4.0 M4).
+#
+# The management cluster does not heal its nodes (OpenTofu built them, OpenTofu rebuilds them): these alerts say that
+# a human has to act, and each runbook names the command (docs/runbooks.md, "Loss of capacity"). Thresholds come from
+# lab 15c: a worker reboot is Ready again in 85 s, a control plane in 92-115 s, a powered-off worker 41 s after power
+# on; Kubernetes evicts the pods of a dead node only after 5 minutes. So 3 minutes is longer than any reboot and
+# 15 minutes is longer than a reschedule. kube_node_role and the zone label of kube_node_labels have not been read on
+# a cluster (scripts/dev/alert-metrics.yaml).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: loss-of-capacity-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: loss-of-capacity
+spec:
+  groups:
+    # 30 s, not 1 m: the evaluation lag is part of the 4-7 minutes the first page took in lab 21 (apps #156); the `for`
+    # windows stay (a CP reboot is 92-115 s, the up == 0 span of a rebooting node is about as long).
+    - name: openaether-loss
+      interval: 30s
+      rules:
+        # One control plane gone: the API and etcd still work with two of three, but one more loss stops the cluster.
+        - alert: ControlPlaneMemberMissing
+          expr: |
+            ((count(up{job=~".*etcd.*"} == 1) or vector(0)) < on() count(kube_node_role{role="control-plane"}))
+              and on() (count(kube_node_role{role="control-plane"}) >= 3)
+          for: 3m
+          labels:
+            severity: critical
+            component: control-plane
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              controlplanemembermissing"
+            summary: "A control plane is missing: etcd answers on fewer members than there are control-plane nodes"
+            description: >-
+              The cluster still has quorum with two of three, one more loss stops it. Run, from the OpenAether-infra
+              checkout: task cluster-node-state PROVIDER=<provider> NODE=<node>, then task cluster-node-recover or
+              task cluster-replace-node. Do not roll or upgrade meanwhile.
+
+        # The same loss seen WITHOUT kube-state-metrics, and sooner. Lab 21 (kube-state-metrics was ONE pod then): a
+        # worker powered off for 5 minutes with the pod on it gave no node alert until the pod was re-created, and even
+        # with it alive the Ready condition is seen about 80 s after the loss (up == 0 is seen at 1 min 51 s,
+        # NodeUnreachable only pending at 3 min 43 s). Two pods now (apps #156), but this one still fires on the kubelet
+        # scrape alone, up == 0 for 3 minutes, and a node loss is paged twice: this alert first, NodeUnreachable later.
+        - alert: NodeScrapeDown
+          expr: |
+            up{job="services-observability/kubelet"} == 0
+          for: 3m
+          labels:
+            severity: critical
+            component: node
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodescrapedown"
+            summary: "Node {{ $labels.node }}: its kubelet is not scraped for 3 min (kube-state-metrics may be blind)"
+            description: >-
+              The kubelet of {{ $labels.node }} does not answer the scrape (NodeUnreachable comes later, from the Ready
+              condition). Same procedure as NodeUnreachable: task cluster-node-state PROVIDER=<provider>
+              NODE={{ $labels.node }} (OpenAether-infra), then task cluster-node-recover or task cluster-replace-node.
+              Do not roll or upgrade meanwhile.
+
+        # A failure domain (zone) none of whose kubelets answers the scrape. Built on the kubelet scrape (the zone label
+        # is copied from the Node by the VMNodeScrape) and NOT on kube-state-metrics: lab 21 showed kube-state-metrics,
+        # then one pod, blind while it sat in the lost zone, and a Ready condition that is seen 80 s after the loss
+        # plus the scrape lag, which did not fit the 3 minutes the drill asks for.
+        - alert: FailureDomainLost
+          expr: |
+            count by (topology_kubernetes_io_zone)
+              (up{job="services-observability/kubelet", topology_kubernetes_io_zone!=""})
+              unless on (topology_kubernetes_io_zone)
+            count by (topology_kubernetes_io_zone)
+              (up{job="services-observability/kubelet", topology_kubernetes_io_zone!=""} == 1)
+          # No `for`: the condition is "no kubelet of the zone answers", which a blip does not produce, and the first
+          # drill measured 3 min 11 s from power-off to firing with `for: 1m` (the 3 minutes of the criterion).
+          labels:
+            severity: critical
+            component: failure-domain
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#failuredomainlost"
+            summary: "Zone {{ $labels.topology_kubernetes_io_zone }}: no kubelet answers"
+            description: >-
+              No node of the zone answers the kubelet scrape: a provider incident in that zone, or a power-off.
+              Check the provider status first, then task failure-domain-check PROVIDER=<provider> from the
+              OpenAether-infra checkout. Do not replace the nodes of a zone that the provider says is down.
+
+        # Pods missing against what their Deployment or StatefulSet asks for: a reschedule that does not happen.
+        - alert: WorkloadReplicasBelowDesired
+          expr: |
+            (kube_deployment_spec_replicas{namespace=~"(foundation|services)-.*|kube-system|kyverno|cnpg-system|cert-manager"}
+              - kube_deployment_status_replicas_available > 0)
+            or
+            (kube_statefulset_replicas{namespace=~"(foundation|services)-.*|kube-system|kyverno|cnpg-system|cert-manager"}
+              - kube_statefulset_status_replicas_ready > 0)
+          for: 15m
+          labels:
+            severity: warning
+            component: workload
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              workloadreplicasbelowdesired"
+            summary: >-
+              {{ $labels.namespace }}/{{ $labels.deployment }}{{ $labels.statefulset }}: {{ $value }} replica(s) short
+            description: >-
+              Longer than the 5 minute eviction toleration plus a reschedule: the pod is Pending (capacity, a volume
+              pinned to a dead node) or its node is gone. kubectl -n {{ $labels.namespace }} get pods -o wide, then
+              kubectl describe the Pending one. If a node is dead: task cluster-replace-node.
+
+        # The cluster could not absorb the loss of its biggest worker: the next loss is an outage and the roll gate
+        # refuses.
+        - alert: ClusterCannotLoseWorker
+          expr: |
+            sum(kube_pod_container_resource_requests{resource="cpu"}
+                  unless on (node) kube_node_role{role="control-plane"}
+                  and on (namespace, pod) (kube_pod_status_phase{phase="Running"} == 1))
+              > (sum(kube_node_status_allocatable{resource="cpu"}
+                    unless on (node) kube_node_role{role="control-plane"})
+                  - max(kube_node_status_allocatable{resource="cpu"}
+                    unless on (node) kube_node_role{role="control-plane"}))
+          for: 30m
+          labels:
+            severity: warning
+            component: capacity
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#clustercannotloseworker"
+            summary: "The CPU requests of the workers do not fit on the workers left after losing the biggest one"
+            description: >-
+              A worker loss would leave pods Pending, and task cluster-roll refuses to start (its capacity gate). Add a
+              worker (grow-nodes in OpenAether-infra) or lower requests. Sizing: docs/capacity.md in OpenAether-infra.

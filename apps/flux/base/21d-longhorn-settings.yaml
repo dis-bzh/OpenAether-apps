@@ -1,0 +1,30 @@
+# Group 21d — Longhorn Setting objects the platform owns (apps/base/storage/settings).
+#
+# WHY IT IS SEPARATE FROM THE `storage` BRICK
+#   The Setting CRD is installed by the longhorn HelmRelease of `storage`; applied in the same Kustomization the first
+# apply would fail
+#   on the missing kind. And, unlike 21c, it needs no secret store and no substitution, so it is present whenever
+# `storage` is.
+#
+# WHAT IT DELIVERS
+#   `node-down-pod-deletion-policy` to a cluster that was installed before the value existed: the chart's
+# defaultSettings reach a
+#   fresh install, this object reaches an upgraded one (the file explains why both exist).
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: storage-settings
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/storage/settings
+  prune: true
+  wait: true
+  dependsOn:
+    - name: storage                  # CRD Setting + namespace longhorn-system

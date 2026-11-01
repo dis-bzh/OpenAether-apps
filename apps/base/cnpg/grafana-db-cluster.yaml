@@ -2,7 +2,8 @@
 # ──────────────────────────────────────────────────────────────────
 # Grafana HA (2 replicas) requires a shared DB backend for the session,
 # dashboards, users and alerts.
-# PostgreSQL CNPG: 2 instances (streaming replication) on local-path storage.
+# PostgreSQL CNPG: 3 instances (synchronous quorum replication, any 1 of 2) on local-path storage. Three, not two: with
+# one replica and dataDurability required, losing it would block every write.
 # CNPG handles ALL the HA (transaction-aware WAL replication + failover).
 # Stacking Longhorn (block replication, blind to transactions) = anti-pattern:
 # amplification and concurrent double failover (the cause of the "faulted" volumes, 06/2026),
@@ -23,7 +24,7 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintC"
     openaether.io/component: grafana-db
 spec:
-  instances: 2
+  instances: 3
   imageName: ghcr.io/cloudnative-pg/postgresql:16.15
   primaryUpdateStrategy: unsupervised
   # See cluster.yaml: replicas first, then a switchover, instead of restarting the only writer in place.
@@ -31,7 +32,7 @@ spec:
   storage:
     # local-path-retain: node-local storage, immediate mount (no CSI
     # attach/detach), Retain (data kept if the PVC is deleted).
-    # HA comes from the 2 CNPG instances, not from the storage.
+    # HA comes from the 3 CNPG instances, not from the storage.
     storageClass: local-path-retain
     size: 5Gi
   # Connexion Grafana: user grafana, base grafana.
@@ -49,53 +50,58 @@ spec:
     limits:
       cpu: 500m
       memory: 512Mi
-  # barman-cloud (boto3) against an S3 store that rejects the trailing checksum newer boto3 sends by default
-  # ("PutObject: trailing checksum is not supported", measured on Outscale OOS: continuous archiving False and
-  # every Backup stuck "running"). Send checksums only where the API requires them; harmless on stores that accept both.
-  env:
-    - name: AWS_REQUEST_CHECKSUM_CALCULATION
-      value: when_required
-    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
-      value: when_required
+
+  # Class A data (dashboards, users, alert rules, sessions): same durability as zitadel-db, see cluster.yaml.
+  postgresql:
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: required
+      failoverQuorum: true
 
   affinity:
     # CNPG AffinityConfiguration (not the standard K8s type)
     podAntiAffinityType: preferred
     topologyKey: kubernetes.io/hostname
+    # Lab 21: both grafana-db instances and both CNPG operators landed in ONE zone (hostname spread only), so losing
+    # that zone took the whole database. A second, zone-level preference keeps the instances in different zones when
+    # the cluster has them; it never blocks scheduling (a lost zone leaves fewer zones than instances).
+    additionalPodAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: topology.kubernetes.io/zone
+            labelSelector:
+              matchLabels:
+                cnpg.io/cluster: grafana-db
+    # Lab 21: a primary on a lost node was failed over only when the TaintManager evicted its pod, after the default
+    # 300 s toleration (write gaps of 328 and 333 s, target 30 s, apps #154). 30 s is the liveness probe of the instance
+    # manager (period 10 s x 3 failures): an isolated-but-alive primary shuts itself down by then, so the evicted pod
+    # and the promoted replica do not both take writes. Docs: docs/resilience.md.
+    tolerations:
+      - key: node.kubernetes.io/unreachable
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
   monitoring:
     enablePodMonitor: false
 
   # ── PITR (Point-In-Time Recovery) ───────────────────────────────────────────
-  # Before: the only net was the backup brick's daily `pg_dump`, i.e. a 24 h
-  # RPO. barmanObjectStore archives WAL continuously → an RPO of a few minutes,
-  # and restoration to a precise point in time.
-  #
-  # `${BACKUP_S3_*}` comes from the `cluster-identity` ConfigMap — laid down by
-  # the management's own bootstrap, or (gitception children) by
-  # child-gitops/gitrepository.yaml's ${CHILD_BACKUP_S3_*} substitution.
-  # ⚠️ NOT optional in practice: found live 2026-07-30 that an unset
-  # BACKUP_S3_ENDPOINT doesn't degrade to "" here (unlike destinationPath,
-  # where the empty substitution lands inside a larger string) — endpointURL's
-  # entire value IS the substitution, so it renders as YAML `null` and CNPG's
-  # CRD rejects the whole Cluster at dry-run. Any profile picking cnpg needs
-  # real values from its cluster-identity source.
-  #
-  # The path includes the database name: both clusters share the bucket without
-  # stepping on each other, like the restic repositories.
-  backup:
-    retentionPolicy: "30d"
-    barmanObjectStore:
-      destinationPath: "s3://${BACKUP_S3_BUCKET:=}/cnpg/grafana-db"
-      endpointURL: "${BACKUP_S3_ENDPOINT:=}"
-      s3Credentials:
-        accessKeyId:
-          name: cnpg-backup-s3
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: cnpg-backup-s3
-          key: ACCESS_SECRET_KEY
-      wal:
-        # WAL are bulky and S3 storage is billed by volume.
-        compression: gzip
-      data:
-        compression: gzip
+  # The Barman Cloud plugin archives WAL continuously (an RPO of minutes) and takes the base backups
+  # (scheduledbackups.yaml). Where and how is the ObjectStore `grafana-db-primary` (objectstores.yaml); the second copy
+  # on the replica store is shipped by the backup brick (backup/databases, cnpg-store-replicate).
+  # The WAL archive name (serverName) is the Cluster name plus the archive generation suffix: empty on an install,
+  # and "-g2", "-g3"... on a cluster REBUILT from a store (task dr-restore-plan writes the ConfigMap
+  # cnpg-archive-generation in flux-system, Flux substitutes it here). A rebuilt cluster must not archive into the
+  # dead one's path: barman refuses a non-empty archive ("Expected empty archive", issue #153). Never edit this by
+  # hand on a running cluster; docs/traps.md.
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: grafana-db-primary
+        serverName: "grafana-db${CNPG_ARCHIVE_SUFFIX:=}"

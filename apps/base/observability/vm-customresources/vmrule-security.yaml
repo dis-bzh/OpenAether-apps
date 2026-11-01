@@ -36,6 +36,7 @@ spec:
             severity: warning
             component: kyverno
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#kyvernopolicyviolation"
             summary: "Kyverno policy {{ $labels.policy_name }} failed in {{ $labels.resource_namespace }}"
             description: >-
               An object created in the last 15 min breaks the policy (blocked if Enforce, admitted if Audit).
@@ -52,6 +53,7 @@ spec:
             severity: critical
             component: kyverno
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#kyvernoadmissiondown"
             summary: "Kyverno admission controller has no available replica"
             description: "kubectl -n kyverno get pods; kubectl -n kyverno describe deploy kyverno-admission-controller."
 
@@ -64,6 +66,8 @@ spec:
             severity: warning
             component: kyverno
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              kyvernocontrollernotready"
             summary: "Kyverno {{ $labels.deployment }} has fewer available replicas than wanted"
 
         # 3) The metrics themselves are gone: a Kyverno that evaluates nothing, or a scrape the NetworkPolicy drops.
@@ -78,6 +82,7 @@ spec:
             severity: warning
             component: kyverno
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#kyvernometricsabsent"
             summary: "No Kyverno policy result is reported: violation alerts are blind"
             description: "The kyverno CiliumNetworkPolicy must accept vmagent on :8000; kubectl get cpol."
 
@@ -101,6 +106,7 @@ spec:
             severity: warning
             component: flux
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#fluxobjectnotready"
             summary: "Flux {{ $labels.customresource_kind }} {{ $labels.name }} is not Ready"
             description: >-
               flux get all -A, then kubectl describe {{ $labels.customresource_kind }}
@@ -123,6 +129,7 @@ spec:
             severity: critical
             component: flux
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#fluxsourcenotverified"
             summary: "Flux rejected the commit of GitRepository {{ $labels.name }}: unsigned or unknown signer"
             description: >-
               kubectl describe gitrepository -n {{ $labels.exported_namespace }} {{ $labels.name }}
@@ -140,7 +147,7 @@ spec:
               gotk_resource_info{suspended="true"}
               unless on (customresource_kind, exported_namespace, name)
               gotk_resource_info{
-                customresource_kind="HelmRelease", exported_namespace="services-observability", name="alloy-audit"
+                customresource_kind="HelmRelease", exported_namespace="services-observability-audit", name="alloy-audit"
               }
             ) == 1
           for: 24h
@@ -148,6 +155,7 @@ spec:
             severity: warning
             component: flux
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#fluxobjectsuspended"
             summary: "Flux {{ $labels.customresource_kind }} {{ $labels.name }} has been suspended for 24 h"
             description: "flux resume ... when the operation is over."
 
@@ -160,5 +168,6 @@ spec:
             severity: warning
             component: flux
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#fluxstatemetricsabsent"
             summary: "No Flux object state is exported: Flux failure alerts are blind"
             description: "kubectl -n services-observability logs deploy/kube-state-metrics | grep -i forbidden."

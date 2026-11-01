@@ -1,0 +1,100 @@
+# yamllint disable rule:line-length
+# audit-sink-check: lists the sink every 5 minutes with the shipper's own key pair and exports oa_audit_sink_ok{sink} and, per control-plane
+# node, oa_audit_sink_last_object_age_seconds{sink,node} (the LastModified of the newest snapshot object: no decryption, no password).
+# That is DELIVERY, not integrity: scripts/ops/audit-sink-check.sh of the infra repository proves the sequence. Same pattern as the backup
+# verifier's exporter (python3 and the AWS CLI of the alpine/k8s image). The optional second sink's Secret is mounted when it exists.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audit-sink-check
+  namespace: services-observability-audit-sink
+  labels:
+    app: audit-sink-check
+    openaether.io/component: audit-sink
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: audit-sink-check }
+  template:
+    metadata:
+      labels:
+        app: audit-sink-check
+        openaether.io/component: audit-sink
+    spec:
+      serviceAccountName: audit-sink-check
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: { type: RuntimeDefault }
+      volumes:
+        - name: scripts
+          configMap: { name: audit-sink-scripts, defaultMode: 0555 }
+        # Only what listing needs: the repository password (RESTIC_PASSWORD) is NOT projected into this pod.
+        - name: creds-primary
+          secret:
+            secretName: audit-sink-credentials
+            items:
+            - { key: ENDPOINT, path: ENDPOINT }
+            - { key: BUCKET, path: BUCKET }
+            - { key: PREFIX, path: PREFIX }
+            - { key: AWS_DEFAULT_REGION, path: AWS_DEFAULT_REGION }
+            - { key: AWS_ACCESS_KEY_ID, path: AWS_ACCESS_KEY_ID }
+            - { key: AWS_SECRET_ACCESS_KEY, path: AWS_SECRET_ACCESS_KEY }
+        - name: creds-secondary
+          secret:
+            secretName: audit-sink-secondary-credentials
+            optional: true
+            items:
+            - { key: ENDPOINT, path: ENDPOINT }
+            - { key: BUCKET, path: BUCKET }
+            - { key: PREFIX, path: PREFIX }
+            - { key: AWS_DEFAULT_REGION, path: AWS_DEFAULT_REGION }
+            - { key: AWS_ACCESS_KEY_ID, path: AWS_ACCESS_KEY_ID }
+            - { key: AWS_SECRET_ACCESS_KEY, path: AWS_SECRET_ACCESS_KEY }
+        - name: tmp
+          emptyDir: { sizeLimit: 32Mi }
+      containers:
+        - name: check
+          image: docker.io/alpine/k8s:1.36.5
+          command: ["python3", "-B", "/scripts/check.py"]
+          env:
+            - { name: PYTHONDONTWRITEBYTECODE, value: "1" }
+            - { name: HOME, value: /tmp }
+            - { name: CHECK_INTERVAL, value: "300" }
+            - { name: LISTEN_PORT, value: "9101" }
+          ports:
+            - { name: metrics, containerPort: 9101, protocol: TCP }
+          readinessProbe:
+            httpGet: { path: /metrics, port: metrics }
+            periodSeconds: 30
+          securityContext:
+            capabilities: { drop: ["ALL"] }
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts, readOnly: true }
+            - { name: creds-primary, mountPath: /creds/primary, readOnly: true }
+            - { name: creds-secondary, mountPath: /creds/secondary, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            requests: { cpu: 10m, memory: 48Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: audit-sink-check
+  namespace: services-observability-audit-sink
+  labels:
+    app: audit-sink-check
+    openaether.io/component: audit-sink
+spec:
+  selector: { app: audit-sink-check }
+  ports:
+    - { name: metrics, port: 9101, targetPort: metrics, protocol: TCP }

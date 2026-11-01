@@ -1,0 +1,44 @@
+# The pooler pods: the application in on 5432, out only to the instances of its Cluster (and DNS, the API server for the
+# secrets the operator's pooler controller watches). Rule 0 has the same shape as in the database policy (same
+# replacement).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: NAME-pooler
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database
+    openaether.io/db-profile: ha
+    openaether.io/db-netpol: pooler
+spec:
+  description: "PgBouncer of one customer database: its application in, its Cluster out"
+  endpointSelector:
+    matchLabels:
+      cnpg.io/poolerName: NAME-pooler-rw
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": CLIENT_NAMESPACE
+            "k8s:app.kubernetes.io/name": CLIENT_APP
+      toPorts:
+        - ports: [{port: "5432", protocol: TCP}]
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports: [{port: "53", protocol: UDP}, {port: "53", protocol: TCP}]
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: NAME
+      toPorts:
+        - ports: [{port: "5432", protocol: TCP}]
+    - toServices:
+        - k8sService: {serviceName: kubernetes, namespace: default}
+      toPorts:
+        - ports: [{port: "443", protocol: TCP}]
+    - toEntities: [kube-apiserver]

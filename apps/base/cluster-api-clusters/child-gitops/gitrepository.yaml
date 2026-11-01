@@ -13,7 +13,7 @@
 #                      prefix of its restic repositories
 #   ${CHILD_BACKUP_S3_BUCKET} / ${CHILD_BACKUP_S3_ENDPOINT} — REQUIRED if the
 #                      child picks the cnpg brick. Found live (2026-07-30,
-#                      edge-2): CNPG's Cluster.spec.backup.barmanObjectStore.
+#                      edge-2): CNPG's Barman Cloud plugin ObjectStore (cnpg/objectstores.yaml).
 #                      endpointURL is written as `"${BACKUP_S3_ENDPOINT:=}"` —
 #                      the WHOLE field is just the substitution, and when the
 #                      variable resolves to an EMPTY string (undefined, no
@@ -60,6 +60,10 @@ data:
   CLUSTER_NAME: ${CHILD_NAME}
   BACKUP_S3_BUCKET: ${CHILD_BACKUP_S3_BUCKET}
   BACKUP_S3_ENDPOINT: ${CHILD_BACKUP_S3_ENDPOINT}
+  # The replica store of the CNPG archive (objectstores.yaml *-replica); optional. Unset, the child gets the
+  # placeholders the ObjectStores default to (empty would render as YAML null, see above), never a real store.
+  BACKUP_REPLICA_S3_BUCKET: ${CHILD_BACKUP_REPLICA_S3_BUCKET:=replica-not-set}
+  BACKUP_REPLICA_S3_ENDPOINT: ${CHILD_BACKUP_REPLICA_S3_ENDPOINT:=https://replica-not-set.invalid}
   BACKUP_TARGET_URL: ${CHILD_BACKUP_TARGET_URL}
 ---
 apiVersion: source.toolkit.fluxcd.io/v1

@@ -6,5 +6,9 @@ path "secret/data/backup/s3-replica"                      { capabilities = ["cre
 path "secret/data/observability/loki-s3"                  { capabilities = ["create"] }
 path "secret/data/observability/alertmanager-slack"       { capabilities = ["create"] }
 path "secret/data/observability/alertmanager-deadmansswitch" { capabilities = ["create"] }
+# The audit sink (opt-in, infra #318): seed-openbao.sh writes these two only when audit_sink_placement is on. Two exact paths, create only.
+path "secret/data/audit/sink"                             { capabilities = ["create"] }
+path "secret/data/audit/sink-secondary"                   { capabilities = ["create"] }
 path "secret/metadata/backup/*"        { capabilities = ["read"] }
+path "secret/metadata/audit/*"         { capabilities = ["read"] }
 path "secret/metadata/observability/*" { capabilities = ["read"] }

@@ -5,3 +5,4 @@ resources:
   - externalsecret.yaml
   - settings.yaml
   - recurringjob.yaml
+  - verify-rbac.yaml

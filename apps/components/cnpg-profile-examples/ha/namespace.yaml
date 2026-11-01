@@ -1,0 +1,11 @@
+# restricted PSA like foundation-databases; NOT in the ambient mesh (ztunnel takes over the kubelet probes of the
+# instance manager,
+# see apps/base/cnpg/namespace.yaml). Skip this file if the application's namespace exists.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

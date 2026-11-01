@@ -1,0 +1,24 @@
+# The metrics of THIS database for the platform vmagent (lab 23: a profile in another namespace was not scraped at all,
+# so cnpg_pg_replication_streaming_replicas did not exist for it and CnpgSyncReplicaMissing, CnpgInstanceMissing and the
+# other database alerts could never fire). The platform's own scrape (`cnpg` in services-observability) names
+# foundation-databases only; a customer namespace brings its own object. vmagent selects scrape objects in every
+# namespace; the database policy of this component already admits it on 9187. The exporter listens on the port named
+# `metrics` (enablePodMonitor is false: no Prometheus Operator CRDs here).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: NAME
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database
+    openaether.io/db-profile: customer
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: NAME
+      cnpg.io/podRole: instance
+  podTargetLabels:
+    - cnpg.io/cluster
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics

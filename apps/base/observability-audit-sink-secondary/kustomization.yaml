@@ -1,0 +1,15 @@
+# yamllint disable rule:line-length
+# OPT-IN (apps/flux/components/audit-log-sink-secondary, on top of audit-log-sink): the second sink's shipper, for audit_sink_placement = both.
+# It reuses the namespace, the ServiceAccount and the scripts of ../observability-audit-sink (its Kustomization depends on that one); the delivery
+# check already lists the second sink when this Secret exists, and the network policy for its host is in ../observability-audit-sink-policy.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - externalsecret.yaml
+  - shipper.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      openaether.io/managed: "true"

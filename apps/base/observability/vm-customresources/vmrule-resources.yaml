@@ -1,0 +1,190 @@
+# yamllint disable rule:line-length
+# USE for nodes and containers (0.4.0 M1): saturation that kills a workload before any fill-up alert fires. Metrics: kube-state-metrics,
+# node-exporter (PSI, disk), cAdvisor. Rung: static + synthetic series. UNVERIFIED on a cluster: the PSI series (the
+# kernel must expose /proc/pressure; Talos), the cAdvisor throttling series and the disk device names (docs/detection.md).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: resource-alerts
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: resources
+spec:
+  groups:
+    - name: openaether-resources
+      interval: 1m
+      rules:
+        - alert: ContainerOOMKilled
+          expr: |
+            sum by (namespace, pod, container) (kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}) > 0
+            and on (namespace, pod, container)
+            (increase(kube_pod_container_status_restarts_total[10m]) > 0)
+          labels:
+            severity: warning
+            component: workload
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#containeroomkilled"
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) was OOM-killed"
+            description: >-
+              The container exceeded its memory limit and restarted in the last 10 minutes.
+
+        - alert: ContainerCpuThrottled
+          expr: |
+            sum by (namespace, pod, container) (rate(container_cpu_cfs_throttled_periods_total{container!=""}[5m]))
+              / sum by (namespace, pod, container) (rate(container_cpu_cfs_periods_total{container!=""}[5m])) > 0.5
+            and on (namespace, pod, container)
+            (sum by (namespace, pod, container) (rate(container_cpu_cfs_periods_total{container!=""}[5m])) > 1)
+          for: 30m
+          labels:
+            severity: info
+            component: workload
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#containercputhrottled"
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) is CPU-throttled over half of its periods"
+            description: >-
+              The CPU limit throttles the container for 30 minutes: latency rises with no node being busy.
+
+        - alert: NodeIoPressure
+          expr: |
+            rate(node_pressure_io_stalled_seconds_total[5m]) > 0.15
+          for: 10m
+          labels:
+            severity: warning
+            component: node
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodeiopressure"
+            summary: "Node {{ $labels.instance }}: all tasks stalled on I/O over 15 % of the time"
+            description: >-
+              Pressure stall information: the disk cannot keep up, the cause of the Outscale gp2 node losses
+              (infra #376). Fires before pods fail.
+
+        - alert: NodeMemoryPressureStall
+          expr: |
+            rate(node_pressure_memory_stalled_seconds_total[5m]) > 0.1
+          for: 10m
+          labels:
+            severity: warning
+            component: node
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodememorypressurestall"
+            summary: "Node {{ $labels.instance }}: all tasks stalled on memory over 10 % of the time"
+            description: >-
+              The node reclaims memory constantly: the next step is evictions and OOM kills.
+
+        - alert: NodeDiskBusy
+          expr: |
+            rate(node_disk_io_time_seconds_total{device!~"loop.*|ram.*|sr.*|dm-.*"}[5m]) > 0.9
+          for: 15m
+          labels:
+            severity: warning
+            component: node
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodediskbusy"
+            summary: "Node {{ $labels.instance }}: disk {{ $labels.device }} busy over 90 % of the time"
+            description: >-
+              The device is saturated (utilisation, not throughput).
+
+        - alert: NodeDiskLatencyHigh
+          expr: |
+            (
+              (rate(node_disk_read_time_seconds_total{device!~"loop.*|ram.*|sr.*|dm-.*"}[5m]) + rate(node_disk_write_time_seconds_total{device!~"loop.*|ram.*|sr.*|dm-.*"}[5m]))
+              / (rate(node_disk_reads_completed_total{device!~"loop.*|ram.*|sr.*|dm-.*"}[5m]) + rate(node_disk_writes_completed_total{device!~"loop.*|ram.*|sr.*|dm-.*"}[5m]))
+            ) > 0.1
+            and (rate(node_disk_reads_completed_total{device!~"loop.*|ram.*|sr.*|dm-.*"}[5m]) + rate(node_disk_writes_completed_total{device!~"loop.*|ram.*|sr.*|dm-.*"}[5m]) > 5)
+          for: 15m
+          labels:
+            severity: warning
+            component: node
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodedisklatencyhigh"
+            summary: "Node {{ $labels.instance }}: disk {{ $labels.device }} answers in over 100 ms on average"
+            description: >-
+              Average I/O latency above 100 ms with real traffic: etcd and databases suffer first.
+
+        - alert: NodeMemoryLow
+          expr: |
+            node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+          for: 15m
+          labels:
+            severity: warning
+            component: node
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodememorylow"
+            summary: "Node {{ $labels.instance }}: less than 10 % memory available"
+            description: >-
+              Available memory (including reclaimable caches) is below 10 % for 15 minutes.
+
+        - alert: NodeNetworkErrors
+          expr: |
+            sum by (instance, device) (rate(node_network_receive_errs_total{device!~"lo|veth.*|lxc.*|cilium.*"}[5m]) + rate(node_network_transmit_errs_total{device!~"lo|veth.*|lxc.*|cilium.*"}[5m])) > 1
+          for: 15m
+          labels:
+            severity: warning
+            component: node
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#nodenetworkerrors"
+            summary: "Node {{ $labels.instance }}: interface {{ $labels.device }} reports network errors"
+            description: >-
+              More than one receive or transmit error per second for 15 minutes (not drops by policy).
+
+        - alert: PodPendingTooLong
+          expr: |
+            max by (namespace, pod) (kube_pod_status_phase{phase="Pending"}) == 1
+            unless on (namespace, pod) max by (namespace, pod) (kube_pod_init_container_status_running == 1)
+          for: 15m
+          labels:
+            severity: warning
+            component: workload
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#podpendingtoolong"
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} has been Pending for 15 min"
+            description: >-
+              Not scheduled (capacity, affinity, volume) or stuck pulling its image. A Pod is `Pending` while its init containers run
+              (the backup and verifier Jobs): those are left out, a long init step is the Job's own deadline to catch.
+
+        - alert: PdbBlocksDisruption
+          expr: |
+            kube_poddisruptionbudget_status_pod_disruptions_allowed{poddisruptionbudget!~".+-primary|instance-manager-.+"} == 0
+          for: 1h
+          labels:
+            severity: warning
+            component: workload
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#pdbblocksdisruption"
+            summary: "PodDisruptionBudget {{ $labels.namespace }}/{{ $labels.poddisruptionbudget }} allows no disruption"
+            description: >-
+              A node drain (an upgrade roll) would hang on this workload. Not watched, because they allow no disruption by design on a
+              healthy cluster (lab 19 saw them fire after 1 h): the CNPG `<cluster>-primary` budgets (one primary, minAvailable 1) and the
+              Longhorn `instance-manager-*` budgets (while a volume is attached).
+
+        - alert: ClusterCpuRequestsHigh
+          expr: |
+            sum(kube_pod_container_resource_requests{resource="cpu"} and on (namespace, pod) (kube_pod_status_phase{phase="Running"} == 1))
+            / sum(kube_node_status_allocatable{resource="cpu"}) > 0.9
+          for: 30m
+          labels:
+            severity: warning
+            component: capacity
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#clustercpurequestshigh"
+            summary: "CPU requests reach {{ $value | humanizePercentage }} of what the nodes offer"
+            description: >-
+              Little room to reschedule after a node loss (a shipped example once ran at 172 % on two workers).
+              Requests of Running pods only: a Pending pod that fits nowhere (lab 19: one 64-CPU pod gave a ratio of 3.1) and finished
+              pods are left out. PodPendingTooLong owns the pods that cannot be placed.
+
+        - alert: ClusterMemoryRequestsHigh
+          expr: |
+            sum(kube_pod_container_resource_requests{resource="memory"} and on (namespace, pod) (kube_pod_status_phase{phase="Running"} == 1))
+            / sum(kube_node_status_allocatable{resource="memory"}) > 0.9
+          for: 30m
+          labels:
+            severity: warning
+            component: capacity
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              clustermemoryrequestshigh"
+            summary: "Memory requests reach {{ $value | humanizePercentage }} of what the nodes offer"
+            description: >-
+              Same as ClusterCpuRequestsHigh for memory.

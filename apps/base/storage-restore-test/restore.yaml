@@ -1,0 +1,231 @@
+# yamllint disable rule:line-length
+# The weekly Longhorn restore test (scripts/restore_longhorn.py) and exactly the rights it needs: Longhorn Volumes in longhorn-system
+# (create, read, delete: the restored copy), the backups to read; pods in the scratch namespace; the canary PVC to find the volume; one
+# ConfigMap of foundation-databases for the metrics. Name ends in -restore-test: the M1 alert RestoreTestNotSucceeding watches it too.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: longhorn-restore-test
+  namespace: foundation-storage
+  labels:
+    app: longhorn-restore-test
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: longhorn-restore-test
+  namespace: longhorn-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+rules:
+  - apiGroups: ["longhorn.io"]
+    resources: ["backups", "backupvolumes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["longhorn.io"]
+    resources: ["volumes"]
+    verbs: ["get", "create", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: longhorn-restore-test
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: longhorn-restore-test
+  namespace: foundation-storage
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    resourceNames: ["oa-canary"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: longhorn-restore-test
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["oa-restore-test-metrics"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: longhorn-restore-test
+  namespace: longhorn-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: longhorn-restore-test }
+subjects:
+  - { kind: ServiceAccount, name: longhorn-restore-test, namespace: foundation-storage }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: longhorn-restore-test
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: longhorn-restore-test }
+subjects:
+  - { kind: ServiceAccount, name: longhorn-restore-test, namespace: foundation-storage }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: longhorn-restore-test
+  namespace: foundation-storage
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: longhorn-restore-test }
+subjects:
+  - { kind: ServiceAccount, name: longhorn-restore-test, namespace: foundation-storage }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: longhorn-restore-test
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: longhorn-restore-test }
+subjects:
+  - { kind: ServiceAccount, name: longhorn-restore-test, namespace: foundation-storage }
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn-restore-test
+  namespace: foundation-storage
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+spec:
+  description: "Longhorn restore test: egress DNS + kube-apiserver"
+  endpointSelector:
+    matchLabels:
+      app: longhorn-restore-test
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: longhorn-restore-test
+  namespace: foundation-storage
+  labels:
+    app: longhorn-restore-test
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+spec:
+  schedule: "20 7 * * 0"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 3000
+      template:
+        metadata:
+          labels:
+            app: longhorn-restore-test
+            openaether.io/component: storage
+        spec:
+          serviceAccountName: longhorn-restore-test
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 360
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: scripts
+              configMap: { name: longhorn-restore-scripts }
+            - name: tmp
+              emptyDir: { sizeLimit: 16Mi }
+            - name: token
+              projected:
+                sources:
+                  - serviceAccountToken: { path: token, expirationSeconds: 7200 }
+                  - configMap: { name: kube-root-ca.crt, items: [{ key: ca.crt, path: ca.crt }] }
+                  - downwardAPI: { items: [{ path: namespace, fieldRef: { fieldPath: metadata.namespace } }] }
+          containers:
+            - name: restore
+              image: docker.io/alpine/k8s:1.36.5
+              command: ["python3", "/scripts/restore_longhorn.py"]
+              env:
+                - { name: HOME, value: /tmp }
+                - { name: PYTHONDONTWRITEBYTECODE, value: "1" }
+                # the verify pod runs the same image
+                - { name: VERIFY_IMAGE, value: "docker.io/alpine/k8s:1.36.5" }
+              securityContext:
+                capabilities: { drop: ["ALL"] }
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: { type: RuntimeDefault }
+              volumeMounts:
+                - { name: scripts, mountPath: /scripts, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+                - { name: token, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true }
+              resources:
+                requests: { cpu: 20m, memory: 64Mi }
+                limits: { cpu: 500m, memory: 256Mi }

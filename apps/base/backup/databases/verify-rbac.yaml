@@ -1,0 +1,39 @@
+# The verifier's identity: patch ONE ConfigMap and read it. Nothing else here; the Longhorn read right is in
+# storage/backup-target (the Longhorn namespace exists only with Longhorn).
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-verify
+  namespace: foundation-databases
+  labels:
+    app: backup-verify
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backup-verify
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["oa-backup-verify-metrics"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backup-verify
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: backup-verify }
+subjects:
+  - { kind: ServiceAccount, name: backup-verify, namespace: foundation-databases }

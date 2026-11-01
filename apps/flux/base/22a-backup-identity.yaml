@@ -57,5 +57,8 @@ spec:
     substituteFrom:
       - kind: ConfigMap
         name: cluster-identity
+      - kind: ConfigMap
+        name: cnpg-archive-generation   # the same value as the cnpg brick's, for the verifier and the jobs (#153)
+        optional: true
   dependsOn:
     - name: cnpg               # owner of the foundation-databases namespace

@@ -30,6 +30,8 @@ spec:
             severity: warning
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              alloynotrunningeverywhere"
             summary: "Alloy is not running on every node: logs of the missing nodes are not collected"
             description: "kubectl -n services-observability get pods -l app.kubernetes.io/name=alloy -o wide."
 
@@ -41,6 +43,7 @@ spec:
             severity: critical
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alloyabsent"
             summary: "No Alloy DaemonSet: no pod log is collected"
             description: "flux get helmrelease -n services-observability alloy (kube-state-metrics must be up)."
 
@@ -53,6 +56,7 @@ spec:
             severity: critical
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alloydroppinglogs"
             summary: "Alloy on {{ $labels.instance }} dropped log entries after retries"
             description: >-
               Loki refused or was unreachable for longer than Alloy retries. See LokiPushErrors, then
@@ -66,6 +70,7 @@ spec:
             severity: critical
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alloynotshipping"
             summary: "Alloy sent no log entry to Loki for 15 min"
             description: "kubectl -n services-observability logs ds/alloy | grep -i 'forbidden\\|error'."
 
@@ -77,6 +82,7 @@ spec:
             severity: warning
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#alloymetricsabsent"
             summary: "Alloy metrics are not scraped: its log alerts are blind"
             description: "up{job=~\".*alloy.*\"}, then the alloy CiliumNetworkPolicy ingress from vmagent."
 
@@ -90,6 +96,7 @@ spec:
             severity: critical
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#lokipusherrors"
             summary: "Loki answers more than 5% of log pushes with a 5xx"
             description: >-
               Common causes: fewer live replicas than the replication factor, S3 unreachable (CiliumNetworkPolicy
@@ -105,6 +112,7 @@ spec:
             severity: warning
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#lokireplicanotready"
             summary: "Loki has a replica that is not Ready for 15 min"
             description: "kubectl -n services-observability get pods -l app.kubernetes.io/name=loki -o wide."
 
@@ -117,6 +125,7 @@ spec:
             severity: warning
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#lokidiscardinglogs"
             summary: "Loki discards log lines: reason {{ $labels.reason }}"
             description: "limits_config in loki.yaml (rate, max age). A burst of discards is also a signal."
 
@@ -128,6 +137,7 @@ spec:
             severity: warning
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#lokimetricsabsent"
             summary: "Loki metrics are not scraped: its alerts are blind"
             description: "The loki CiliumNetworkPolicy must accept vmagent on :3100."
 
@@ -143,6 +153,7 @@ spec:
             severity: warning
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#lokiingestionburst"
             summary: "Log ingestion is more than 3x its 24 h average"
             description: "Which namespace? sum by (namespace) (count_over_time({namespace=~\".+\"}[10m])) in Explore."
 
@@ -155,6 +166,7 @@ spec:
             severity: warning
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#grafanaservererrors"
             summary: "Grafana returns 5xx"
             description: "kubectl -n services-observability logs deploy/grafana; the grafana-db CNPG cluster first."
 
@@ -170,6 +182,8 @@ spec:
             severity: warning
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              k8sauditcollectornotrunning"
             summary: "The Kubernetes audit-log collector is not running on every control plane"
             description: >-
               kubectl -n services-observability-audit get pods -o wide;
@@ -188,6 +202,7 @@ spec:
             severity: critical
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#k8sauditlogsilent"
             summary: "No Kubernetes API audit line read on {{ $labels.instance }} for 15 min"
             description: >-
               kubectl -n services-observability-audit logs ds/alloy-audit (permission denied? file missing?), then
@@ -205,6 +220,7 @@ spec:
             severity: critical
             component: logging
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#k8sauditlogneverread"
             summary: "The audit-log collector runs but has read no Kubernetes API audit line"
             description: >-
               Check /var/log/audit/kube/kube-apiserver.log on a control plane and the pod's logs (ds/alloy-audit).

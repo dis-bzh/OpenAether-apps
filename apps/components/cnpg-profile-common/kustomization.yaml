@@ -1,0 +1,12 @@
+# What every profile ships besides its Cluster: the owner's credentials (ExternalSecret) and the per-database
+# CiliumNetworkPolicy and the VMPodScrape of its metrics.
+# List this component first and cnpg-profile-values last (docs/database-profiles.md, "How a profile is built").
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - externalsecret.yaml
+  - networkpolicy.yaml
+  - podscrape.yaml
+# A planned shutdown is bounded (lab 27, FI): the same shared component as the platform Clusters.
+components:
+  - ../cnpg-bounded-shutdown

@@ -1,0 +1,14 @@
+# yamllint disable rule:line-length
+# OPT-IN, off by default. Adds a 1 GiB canary volume that Longhorn backs up with the daily recurring job, and a weekly Job that
+# restores the newest backup of it into a scratch volume and checks 24 files (apps/base/storage-restore-test). It proves that a
+# Longhorn backup comes back; it is only useful where Longhorn volume backups are on (BACKUP_TARGET_URL in cluster-identity, and
+# the backup brick for the metrics and alerts). Without a backup target the Job skips and reports nothing.
+#
+# Use it from a cluster's own overlay (generated profiles are rewritten by pick.py, do not edit those):
+#   resources:  [../../workload]            # or the profile the cluster uses
+#   components: [../components/longhorn-restore-test]
+# Rollback: remove the component line; Flux prunes the Kustomization and what it applied (prune: true).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - storage-restore-test.yaml

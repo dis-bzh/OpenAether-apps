@@ -22,12 +22,22 @@ spec:
   image:
     tag: v1.136.0
   replicaCount: 2
+  # The operator's own sidecar: it sets no memory limit (Kyverno require-limits, #47). Patched by name. Its init
+  # container
+  # `config-init` is NOT patched here: for a VMAlert the operator appends the patch instead of merging it (a duplicate
+  # init container, the Deployment is refused, lab 22), so that one stays without a limit.
+  containers:
+    - name: config-reloader
+      resources:
+        requests: {cpu: 5m, memory: 16Mi}
+        limits: {memory: 64Mi}
   securityContext:
     runAsUser: 65534
     runAsGroup: 65534
     fsGroup: 65534
     runAsNonRoot: true
     allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
@@ -63,11 +73,18 @@ spec:
               matchLabels:
                 app.kubernetes.io/name: vmalert
             topologyKey: kubernetes.io/hostname
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: vmalert
+            topologyKey: topology.kubernetes.io/zone
   podDisruptionBudget:
     minAvailable: 1
 ---
-# Single replica: an HA Alertmanager needs gossip between peers, which buys
-# nothing while there is no receiver to deduplicate towards.
+# Two replicas on two workers (0.4.0 M4): a lost worker must not silence the alerts that announce it. The peers gossip
+# on :9094 (networkpolicy.yaml) so a notification is sent once; VMAlert's notifier is the headless Service, which lists
+# the Ready replicas only. Whether both replicas see each other is checked by AlertmanagerClusterDegraded.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMAlertmanager
 metadata:
@@ -80,16 +97,46 @@ spec:
   # Pinned (apps #117): the operator's default moves with every operator bump (0.68.1 defaults to v0.31.0).
   image:
     tag: v0.31.0
-  replicaCount: 1
+  replicaCount: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: vmalertmanager
+            topologyKey: kubernetes.io/hostname
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: vmalertmanager
+            topologyKey: topology.kubernetes.io/zone
+  podDisruptionBudget:
+    minAvailable: 1
   # Kyverno reads the container level (#47). The operator copies this flat block onto every container
   # (pod and container fields share it: spec.securityContext, not containerSecurityContext).
   # runAsUser is explicit because these images run as root and runAsNonRoot alone makes the container fail to start.
+  # The operator's own sidecar and init container: it sets no memory limit (Kyverno require-limits, #47).
+  # Patched by name.
+  containers:
+    - name: config-reloader
+      resources:
+        requests: {cpu: 5m, memory: 16Mi}
+        limits: {memory: 64Mi}
+  initContainers:
+    - name: config-init
+      resources:
+        requests: {cpu: 5m, memory: 16Mi}
+        limits: {memory: 64Mi}
   securityContext:
     runAsUser: 65534
     runAsGroup: 65534
     fsGroup: 65534
     runAsNonRoot: true
     allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
@@ -117,7 +164,7 @@ spec:
         # noticing a daily message stopped is not a monitoring system. The
         # service alarms when the ping stops — which is the only arrangement
         # that survives this cluster dying.
-        # Every 5 min, because a DMS grace period is usually 15-60 min.
+        # A ping at least every 5 min, because a DMS grace period is usually 15-60 min.
         - matchers:
             - alertname="Watchdog"
           receiver: deadmansswitch
@@ -127,12 +174,30 @@ spec:
           # (verified: 1 notification in 11 min), which would trip the
           # dead-man's switch on a perfectly healthy cluster — the exact false
           # alarm this is meant to avoid.
+          # And a ping goes out at the first group_interval tick at or after repeat_interval: repeat_interval 5m with
+          # group_interval 1m measured 360 s between pings (lab 19), not 5 min. 3m gives about 4 min (at most
+          # repeat_interval + group_interval, which test-alert-delivery.py keeps within 5 min).
           group_interval: 1m
-          repeat_interval: 5m
+          repeat_interval: 3m
+        # The scheduled delivery test (opt-in component alert-delivery-probe, docs/alert-delivery.md): one chat message
+        # per window, never a "resolved" one. Without the component nothing carries this label.
+        - matchers:
+            - probe="delivery"
+          receiver: delivery-probe
+          group_wait: 30s
+          repeat_interval: 12h
         - matchers:
             - severity="critical"
           receiver: slack
           repeat_interval: 1h
+    # While a delivery test went unacknowledged, the heartbeat stops on purpose: the external dead-man's-switch then
+    # pages through its own channel, the one path that does not use the chat receiver. Nothing carries the source alert
+    # unless the opt-in probe component is on.
+    inhibit_rules:
+      - source_matchers:
+          - alertname="AlertDeliveryNotAcknowledged"
+        target_matchers:
+          - alertname="Watchdog"
     receivers:
       # The dead-man's switch. Its URL is a ping endpoint (healthchecks.io,
       # PagerDuty DMS, Better Stack…) that raises the alarm when pings STOP.
@@ -141,6 +206,12 @@ spec:
         webhook_configs:
           - url_file: /etc/vm/secrets/alertmanager-deadmansswitch/url
             send_resolved: false
+      - name: delivery-probe
+        slack_configs:
+          - api_url_file: /etc/vm/secrets/alertmanager-slack/webhook-url
+            send_resolved: false
+            title: "[PROBE] alert delivery test"
+            text: "Scheduled test of the alert path, no action. See docs/alert-delivery.md."
       - name: slack
         slack_configs:
           - api_url_file: /etc/vm/secrets/alertmanager-slack/webhook-url

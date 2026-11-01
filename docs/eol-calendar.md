@@ -13,10 +13,10 @@ or a vendored dump has no row.
 <!-- eol-table:begin -->
 | Component | Pinned | Upstream line | End of support | Waiver until | Review |
 |---|---|---|---|---|---|
-| Istio base (CRDs) (`istio`) | 1.24.2 | Istio 1.24 | 2025-06-24 | 2026-12-31 | 2026-12-14 |
-| Istio control plane (`istio`) | 1.24.2 | Istio 1.24 | 2025-06-24 | 2026-12-31 | 2026-12-14 |
-| Istio CNI (`istio`) | 1.24.2 | Istio 1.24 | 2025-06-24 | 2026-12-31 | 2026-12-14 |
-| Istio ztunnel (`istio`) | 1.24.2 | Istio 1.24 | 2025-06-24 | 2026-12-31 | 2026-12-14 |
+| Istio base (CRDs) (`istio`) | 1.31.3 | Istio 1.31 | 2027-02-28 |  | 2026-12-14 |
+| Istio control plane (`istio`) | 1.31.3 | Istio 1.31 | 2027-02-28 |  | 2026-12-14 |
+| Istio CNI (`istio`) | 1.31.3 | Istio 1.31 | 2027-02-28 |  | 2026-12-14 |
+| Istio ztunnel (`istio`) | 1.31.3 | Istio 1.31 | 2027-02-28 |  | 2026-12-14 |
 | cert-manager (`cert-manager`) | v1.21.2 | cert-manager 1.21 | not-yet |  | 2026-12-14 |
 | longhorn (`storage`) | 1.12.1 | Longhorn 1.12 | 2027-08-14 |  | 2026-12-14 |
 | grafana (`observability`) | 14.0.1 | Grafana 13.2 (chart appVersion) | 2027-05-18 |  | 2026-12-14 |
@@ -24,7 +24,7 @@ or a vendored dump has no row.
 | alloy (`observability`) | 1.13.1 | Alloy 1.20 (chart appVersion) | unknown |  | 2026-12-14 |
 | alloy-audit (second Alloy release, API audit log) (`observability`) | 1.13.1 | Alloy 1.20 (chart appVersion) | unknown |  | 2026-12-14 |
 | zitadel (`identity`) | 10.4.0 | Zitadel v4.19.5 (image override; chart appVersion is v4.19.2) | unknown |  | 2026-12-14 |
-| forgejo (git forge, dogfooding V1) (`forgejo`) | 6.1.0 | Forgejo chart 6.1 (appVersion unverified) | unknown |  | 2026-12-14 |
+| forgejo (git forge, dogfooding V1) (`forgejo`) | 17.3.1 | Forgejo 15.0 (LTS; chart appVersion 15.0.10) | 2027-07-15 |  | 2026-12-14 |
 | victoria-metrics-operator (`observability`) | 0.68.1 | VictoriaMetrics operator v0.75.0 (chart appVersion) | unknown |  | 2026-12-14 |
 | kube-state-metrics (`observability`) | 8.6.0 | kube-state-metrics 2.20.0 (chart appVersion) | unknown |  | 2026-12-14 |
 | prometheus-node-exporter (`observability`) | 4.60.0 | node_exporter 1.12.1 (chart appVersion) | unknown |  | 2026-12-14 |
@@ -33,12 +33,13 @@ or a vendored dump has no row.
 | minio (`storage`) | 5.2.0 | MinIO RELEASE.2024-04-18 (chart appVersion) | unsupported | 2026-12-31 | 2026-12-14 |
 | Kyverno (vendored dump) (`kyverno`) | 1.19.1 | Kyverno 1.19 | not-yet |  | 2026-12-14 |
 | CloudNativePG operator (vendored dump) (`cnpg`) | 1.30.1 | CNPG 1.30 | not-yet |  | 2026-12-14 |
+| CNPG Barman Cloud plugin (vendored dump) (`cnpg`) | 0.15.1 | plugin-barman-cloud 0.x | not-yet |  | 2026-12-14 |
 | PostgreSQL (zitadel cluster) (`cnpg`) | 18.6 | PostgreSQL 18 | 2030-11-14 |  | 2026-12-14 |
 | PostgreSQL (grafana cluster) (`cnpg`) | 16.15 | PostgreSQL 16 | 2028-11-09 |  | 2026-12-14 |
 | External Secrets Operator (vendored dump) (`external-secrets`) | 2.13.0 | ESO v2.13 | unknown |  | 2026-12-14 |
 | OpenStack Resource Controller (vendored dump) (`orc`) | 2.6.0 | ORC v2.6 | unknown |  | 2026-12-14 |
 | CSI external-snapshotter CRDs (vendored dump, CRDs only) (`storage`) | 8.6.0 | external-snapshotter v8.6 | unknown |  | 2026-12-14 |
-| Gateway API CRDs (vendored dump) (`platform/gateway-api`) | 1.2.1 | Gateway API v1.2 | unknown |  | 2026-12-14 |
+| Gateway API CRDs (vendored dump) (`platform/gateway-api`) | 1.6.0 | Gateway API v1.6 | unknown |  | 2026-12-14 |
 | local-path-provisioner (vendored dump) (`platform/local-path-provisioner`) | 0.0.37 | local-path v0.0.37 | unknown |  | 2026-12-14 |
 | Flux controllers pushed to child clusters (vendored dump) (`cluster-api-clusters/flux-gotk`) | 2.9.6 | Flux 2.9 | not-yet |  | 2026-12-14 |
 | restic (`backup`) | 0.19.1 | restic 0.19 | unknown |  | 2026-12-14 |
@@ -59,8 +60,9 @@ or a vendored dump has no row.
   an overdue review, an end of support within 90 days, a snapshot over 120 days old. They change with the date,
   not with a pull request, so they do not turn an unrelated PR red. `--strict` turns them into errors; that is
   for after the components below are upgraded or their waivers are the only thing left.
-- **A waiver is an accepted risk, not a fix.** Six lines are past upstream support today (Istio 1.24,
-  cert-manager 1.15, Kyverno 1.12, the CloudNativePG operator 1.23, Grafana 11.3, Loki 3.3). Each carries a waiver
+- **A waiver is an accepted risk, not a fix.** Five lines were past upstream support when this calendar was
+  written (cert-manager 1.15, Kyverno 1.12, the CloudNativePG operator 1.23, Grafana 11.3, Loki 3.3); Istio left that
+  list with the move to 1.31 (apps #96, not yet shown on a cluster). Each remaining one carries a waiver
   to 2026-12-31 with the reason it has not moved. The date is a proposal of this change, to be set by the owner.
 - **The upgrades themselves are not done here.** Each hop is a cluster exercise (see the fix review of the audit:
   Istio ambient with Cilium chaining, cert-manager CRDs and rotationPolicy, Kyverno webhooks, CNPG operator with

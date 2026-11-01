@@ -1,9 +1,13 @@
 # OpenAether — Forgejo (self-hosted git forge, dogfooding V1)
 # ──────────────────────────────────────────────────────────────────────────
-# Chart forgejo-contrib/forgejo-helm (Codeberg, published at
-# https://forgejo-contrib.codeberg.page/forgejo-helm/). Backend Postgres =
-# CNPG forgejo-db (apps/base/cnpg/forgejo-db-cluster.yaml, foundation-databases,
-# 2 instances). TLS terminated upstream by the Gateway → Forgejo serves
+# Chart forgejo-helm (Codeberg forgejo-contrib), published ONLY as an OCI artifact:
+# oci://code.forgejo.org/forgejo-helm/forgejo. The https://forgejo-contrib.codeberg.page/forgejo-helm/ address the
+# first version of this file used answers 404 (no index.yaml), so no HelmRelease could ever have fetched its chart.
+# Chart 17.3.1 ships Forgejo 15.0.10 and no sub-chart: chart 6.1.0 (Forgejo 7.0.3, two years old) rendered
+# a postgresql-ha and a redis-cluster next to the forge unless they were switched off. Flux needs code.forgejo.org on
+# 443 (apps/base/flux/flux-egress-restricted.yaml, rule 9b).
+# Backend Postgres = CNPG forgejo-db (apps/base/forgejo-db, foundation-databases,
+# 3 instances). TLS terminated upstream by the Gateway → Forgejo serves
 # cleartext HTTP (PROTOCOL http, ROOT_URL https). Secrets (DB password, initial
 # admin, OIDC client) through ESO/OpenBao (externalsecrets.yaml).
 # Single replica: the git repositories live on one RWO PVC (longhorn-x2-rwo —
@@ -19,7 +23,8 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: forgejo
 spec:
-  url: https://forgejo-contrib.codeberg.page/forgejo-helm/
+  type: oci
+  url: oci://code.forgejo.org/forgejo-helm
   interval: 1h
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
@@ -35,7 +40,7 @@ spec:
   chart:
     spec:
       chart: forgejo
-      version: "6.1.0"
+      version: "17.3.1"
       sourceRef:
         kind: HelmRepository
         name: forgejo
@@ -47,22 +52,245 @@ spec:
   upgrade:
     remediation:
       retries: 3
+  # The ServiceAccount of the chart already says automountServiceAccountToken: false; the pod says it too (the chart has
+  # no pod-level value), as the zitadel and MinIO releases do.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+            patch: |-
+              - op: add
+                path: /spec/template/spec/automountServiceAccountToken
+                value: false
+          # STALE GIT LOCKS (lab 27 sitting 3 FK2, sitting 4 b3c F-LOCKAGE). A push interrupted by a node loss or a
+          # crash leaves `refs/heads/<branch>.lock` in the bare repository, git never removes it by itself, and
+          # every later push to that branch is refused ("reference already exists") until someone deletes the file:
+          # seen for 10 minutes in the drill, for good in principle. Two cleaners, one script, two ages. It removes
+          # the lock files of BARE repositories: `refs/**/*.lock`, `packed-refs.lock`, `HEAD.lock`, `config.lock`,
+          # `shallow.lock`. Never `index.lock` (a worktree's, not a bare repository's), never anything that is not a
+          # regular file, never outside the repositories directory ([repository] ROOT of the app.ini the chart
+          # renders, /data/git/gitea-repositories). It logs the path of each file it removes, never its contents,
+          # and a cleanup that cannot run must not keep the forge from starting. The image is the main container's
+          # (pulled once, same non-root user 1000, same restricted securityContext, requests and limits).
+          # test-forgejo-brick.py pins that equality, runs this very script against a temporary tree and pins that the
+          # two copies below are the same text.
+          #
+          # 1. INIT CONTAINER, FIRST in the pod, ANY AGE (LOCK_MIN_AGE_MIN 0). Sitting 4 (OVH): the new pod started
+          # 2 minutes after a hard power loss, the old cleaner only took locks older than 5 minutes and left the
+          # branch blocked for 9. At this point NO git process of Forgejo is running on the volume, which is what
+          # makes age irrelevant: the Deployment strategy is Recreate (the chart's default, pinned by the brick test
+          # on the rendered Deployment), the old pod's containers are stopped before the new pod exists, and the
+          # volume is ReadWriteOnce with Longhorn refusing a second attach while the old one is held, so a pod on a
+          # partitioned node cannot write to it any more. Any lock found here is stale.
+          #
+          # 2. SIDECAR, EVERY 60 s, LOCKS OLDER THAN 10 MINUTES. An init container does not run again when only the
+          # MAIN container restarts (an OOM kill, a crash): its git children die with it and leave their locks, and
+          # nothing looked again. A running forge CAN hold a live lock, so this one never removes a young one. A ref
+          # lock lives for the milliseconds of one ref update; Forgejo ends its git commands after [git.timeout]
+          # DEFAULT = 360 s; 10 minutes is beyond both. If a git process were nevertheless stalled that long on a
+          # failing disk, deleting its lock makes its final rename fail, which is an error to the client of that
+          # push and not a corrupt ref (the age is looked at again right before each removal). UNVERIFIED on a
+          # cluster: the next lab must kill the main container mid-push.
+          #
+          # WHAT NEITHER FIXES: an update that git ACKNOWLEDGED and the volume then lost (the rename lock -> ref was
+          # not durable, 1 of 59 in the drill). That is the `dirsync` mount of the StorageClass (storageclass.yaml).
+          - target:
+              kind: Deployment
+            patch: |-
+              - op: add
+                path: /spec/template/spec/initContainers/0
+                value:
+                  name: clean-stale-git-locks
+                  image: code.forgejo.org/forgejo/forgejo:15.0.10-rootless
+                  imagePullPolicy: IfNotPresent
+                  command: ["/bin/sh", "-c"]
+                  args:
+                    - |
+                      set -u
+                      NAME="${CLEANER_NAME:-clean-stale-git-locks}"
+                      ROOT="${REPOS_ROOT:-/data/git/gitea-repositories}"
+                      MIN="${LOCK_MIN_AGE_MIN:-0}"
+                      EVERY="${SWEEP_EVERY_S:-0}"
+                      case "$MIN$EVERY" in
+                        "" | *[!0-9]*)
+                          echo "$NAME: LOCK_MIN_AGE_MIN and SWEEP_EVERY_S must be numbers, nothing removed"
+                          exit 0 ;;
+                      esac
+                      sweep() {
+                        if [ ! -d "$ROOT" ]; then
+                          echo "$NAME: no $ROOT yet, nothing to clean"
+                          return 0
+                        fi
+                        # objects/ holds nearly every file and no lock this script may remove: not walked.
+                        find "$ROOT" -type d -name objects -prune -o -type f -name '*.lock' -print 2>/dev/null |
+                        while IFS= read -r f; do
+                          rel="${f#"$ROOT"/}"
+                          case "$rel" in
+                            */*.git/refs/*.lock) ;;
+                            */*.git/packed-refs.lock | */*.git/HEAD.lock) ;;
+                            */*.git/config.lock | */*.git/shallow.lock) ;;
+                            *) continue ;;
+                          esac
+                          if [ "$MIN" -gt 0 ] && [ -z "$(find "$f" -type f -mmin "+$MIN" 2>/dev/null)" ]; then
+                            continue
+                          fi
+                          if rm -f -- "$f"; then
+                            echo "$NAME: removed $rel (age limit $MIN min)"
+                          else
+                            echo "$NAME: could not remove $rel"
+                          fi
+                        done
+                      }
+                      sweep
+                      if [ "$EVERY" -gt 0 ]; then
+                        trap 'exit 0' TERM INT
+                        while :; do
+                          sleep "$EVERY" &
+                          wait $!
+                          sweep
+                        done
+                      fi
+                      exit 0
+                  env:
+                    - name: REPOS_ROOT
+                      value: /data/git/gitea-repositories
+                    - name: LOCK_MIN_AGE_MIN
+                      value: "0"
+                  volumeMounts:
+                    - name: data
+                      mountPath: /data
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    privileged: false
+                    capabilities:
+                      drop: ["ALL"]
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 128Mi
+                    limits:
+                      cpu: 500m
+                      memory: 256Mi
+          - target:
+              kind: Deployment
+            patch: |-
+              - op: add
+                path: /spec/template/spec/containers/-
+                value:
+                  name: sweep-stale-git-locks
+                  image: code.forgejo.org/forgejo/forgejo:15.0.10-rootless
+                  imagePullPolicy: IfNotPresent
+                  command: ["/bin/sh", "-c"]
+                  args:
+                    - |
+                      set -u
+                      NAME="${CLEANER_NAME:-clean-stale-git-locks}"
+                      ROOT="${REPOS_ROOT:-/data/git/gitea-repositories}"
+                      MIN="${LOCK_MIN_AGE_MIN:-0}"
+                      EVERY="${SWEEP_EVERY_S:-0}"
+                      case "$MIN$EVERY" in
+                        "" | *[!0-9]*)
+                          echo "$NAME: LOCK_MIN_AGE_MIN and SWEEP_EVERY_S must be numbers, nothing removed"
+                          exit 0 ;;
+                      esac
+                      sweep() {
+                        if [ ! -d "$ROOT" ]; then
+                          echo "$NAME: no $ROOT yet, nothing to clean"
+                          return 0
+                        fi
+                        # objects/ holds nearly every file and no lock this script may remove: not walked.
+                        find "$ROOT" -type d -name objects -prune -o -type f -name '*.lock' -print 2>/dev/null |
+                        while IFS= read -r f; do
+                          rel="${f#"$ROOT"/}"
+                          case "$rel" in
+                            */*.git/refs/*.lock) ;;
+                            */*.git/packed-refs.lock | */*.git/HEAD.lock) ;;
+                            */*.git/config.lock | */*.git/shallow.lock) ;;
+                            *) continue ;;
+                          esac
+                          if [ "$MIN" -gt 0 ] && [ -z "$(find "$f" -type f -mmin "+$MIN" 2>/dev/null)" ]; then
+                            continue
+                          fi
+                          if rm -f -- "$f"; then
+                            echo "$NAME: removed $rel (age limit $MIN min)"
+                          else
+                            echo "$NAME: could not remove $rel"
+                          fi
+                        done
+                      }
+                      sweep
+                      if [ "$EVERY" -gt 0 ]; then
+                        trap 'exit 0' TERM INT
+                        while :; do
+                          sleep "$EVERY" &
+                          wait $!
+                          sweep
+                        done
+                      fi
+                      exit 0
+                  env:
+                    - name: REPOS_ROOT
+                      value: /data/git/gitea-repositories
+                    - name: CLEANER_NAME
+                      value: sweep-stale-git-locks
+                    - name: LOCK_MIN_AGE_MIN
+                      value: "10"
+                    - name: SWEEP_EVERY_S
+                      value: "60"
+                  volumeMounts:
+                    - name: data
+                      mountPath: /data
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    privileged: false
+                    capabilities:
+                      drop: ["ALL"]
+                  resources:
+                    requests:
+                      cpu: 10m
+                      memory: 32Mi
+                    limits:
+                      cpu: 100m
+                      memory: 64Mi
+              # `kubectl logs` and `exec` on the Deployment keep going to the forge, not to the sweeper.
+              - op: add
+                path: /spec/template/metadata/annotations/kubectl.kubernetes.io~1default-container
+                value: forgejo
   values:
     replicaCount: 1
 
     # ── Image: chart default (code.forgejo.org/forgejo/forgejo, rootless). ──
     # Left at the chart default rather than tag@digest-pinned here: pin the
     # digest once a Renovate pipeline covers this HelmRelease (follow-up).
-    # The chart values also declare serviceAccount.automountServiceAccountToken
-    # = false — re-verify the pod spec actually carries it at rung 3.
+    # The image tag is the chart's appVersion (15.0.10-rootless): the Forgejo version moves with the chart pin.
 
     persistence:
       enabled: true
       size: 10Gi
-      # GOLDEN RULE (apps/base/storage/storageclasses.yaml): single-replica app
-      # with no HA of its own → longhorn-x2-rwo. Not encrypted: repository data
-      # is code; revisit for private client work.
-      storageClass: longhorn-x2-rwo
+      # GOLDEN RULE (apps/base/storage/storageclasses.yaml): single-replica app with no HA of its own → 2 Longhorn
+      # replicas, RWO. Not encrypted: repository data is code; revisit for private client work. The class is
+      # storageclass.yaml (longhorn-x2-rwo + recurringJobSelector): the daily backup (recurringjob.yaml, group
+      # oa-forgejo) selects the volume because Longhorn creates it already in that group. A label on the PVC would not
+      # reach the Longhorn volume (lab 27, FG), so there is none.
+      storageClass: longhorn-x2-rwo-forgejo
+
+    # FAILOVER OF THE POD (lab 27 sitting 2, F-FORGE-TOL). Kubernetes adds a 300 s not-ready / unreachable
+    # toleration to a pod that has none, so after a node or zone loss the forge pod was only evicted five minutes
+    # after its node turned NotReady: the forge was away about 8 minutes (push gap 471.8 s). The databases tolerate
+    # 30 s (apps/base/forgejo-db/cluster.yaml, the CNPG profiles); the forge gets the same, through the chart's own
+    # `tolerations` value (pod spec, rendered as given). The volume is ReadWriteOnce with two Longhorn replicas:
+    # Longhorn, not this value, refuses a second attach while the old one is held (docs/forgejo.md says what was
+    # measured and what was not).
+    tolerations:
+      - key: node.kubernetes.io/unreachable
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
 
     # Kyverno require-limits (lab 11): requests AND limits.
     resources:
@@ -73,8 +301,35 @@ spec:
         cpu: 1
         memory: 1Gi
 
+    # The rootless image runs as 1000:1000. Not set: readOnlyRootFilesystem (the chart's init containers write under
+    # /tmp and /data; nothing here proves a read-only root works, the Kyverno Audit policy will report it).
     podSecurityContext:
       fsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
+    # The three init containers of the chart have no limit by default (Kyverno require-limits reads initContainers).
+    initContainers:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+
+    # A ServiceAccount of its own that mounts no token (the forge never calls the Kubernetes API); the chart default
+    # (create: false) would run the pod as `default` with the token mounted.
+    serviceAccount:
+      create: true
+      automountServiceAccountToken: false
+
+    # The chart's helm-test Pod (busybox:latest) is not wanted in a Flux-managed release.
+    test:
+      enabled: false
+
     containerSecurityContext:
       allowPrivilegeEscalation: false
       privileged: false
@@ -126,6 +381,31 @@ spec:
           # Zitadel); verify-full once the CNPG CA is mounted — later rung.
           SSL_MODE: require
           # PASSWD: injected through GITEA__database__PASSWD (deployment.env).
+        # The route answers anyone who sets the Host header (docs/public-exposure.md; the app LB has no source
+        # ACL). Forgejo's defaults would let that visitor register an account and read every public repository: closed
+        # here. Accounts are created by the admin (or by the OIDC source at rung 3).
+        service:
+          DISABLE_REGISTRATION: true
+          REQUIRE_SIGNIN_VIEW: true
+        # DURABILITY OF A PUSH (lab 27, FK: DATA LOSS). Git does not fsync loose objects by default
+        # (core.fsync defaults to
+        # `committed,-loose-object`), so a push acknowledged just before the node died was only in the page
+        # cache: after a zone
+        # power-off the repository held 75 zero-length loose objects, a branch pointing at an empty object,
+        # and every later push
+        # was refused. `core.fsync = all` syncs every component, loose objects included, before git reports success
+        # (https://git-scm.com/docs/git-config, core.fsync; Forgejo applies [git.config] as `git config`:
+        # https://forgejo.org/docs/latest/admin/config-cheat-sheet/). core.fsyncMethod is left at git's
+        # default (`fsync` on
+        # Linux): `writeout-only` and `batch` trade away part of the guarantee. The Longhorn volume has 2
+        # replicas, but that
+        # protects a node loss only for data the filesystem already wrote: a node that powers off holding
+        # the writable replica
+        # loses what was never synced. COST: every push pays the fsyncs, a push latency that is UNVERIFIED
+        # (not measured).
+        # Forgejo only sets keys: removing this line later does not unset core.fsync in git's config (docs/forgejo.md).
+        git.config:
+          core.fsync: all
         session:
           PROVIDER: memory     # V1: memory (single replica). Valkey later.
         cache:

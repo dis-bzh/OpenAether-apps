@@ -42,6 +42,25 @@ spec:
               issued. Look at raft first: bao operator raft list-peers from a pod that answers.
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md"
 
+        # Fewer unsealed replicas than the StatefulSet asks for: a pod is gone (a lost worker holds its volume) or
+        # sealed.
+        # With two of three the cluster works, one more loss stops it.
+        - alert: OpenBaoReplicasMissing
+          expr: |
+            (count(vault_core_unsealed{namespace="foundation-vault"} == 1) or vector(0))
+              < scalar(kube_statefulset_replicas{namespace="foundation-vault", statefulset="openbao"})
+          for: 5m
+          labels:
+            severity: warning
+            component: openbao
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#openbaoreplicasmissing"
+            summary: "OpenBao runs with fewer unsealed replicas than asked for"
+            description: >-
+              kubectl -n foundation-vault get pods -o wide. A pod Pending on a dead worker holds a local-path volume
+              that does not move: replace the node (task cluster-replace-node in OpenAether-infra) and the raft peers
+              resync the new member. Do not delete the PVC of a pod whose node is merely unreachable.
+
         # Autopilot's own figure: how many servers can be lost before quorum goes. 1 on three healthy replicas.
         - alert: OpenBaoRaftNoFailureTolerance
           expr: max(vault_autopilot_failure_tolerance{namespace="foundation-vault"}) < 1
@@ -50,6 +69,8 @@ spec:
             severity: warning
             component: openbao
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              openbaoraftnofailuretolerance"
             summary: "OpenBao can not lose another replica"
             description: >-
               Autopilot reports a failure tolerance of 0: a replica is down or unhealthy and one more loss costs the
@@ -67,6 +88,7 @@ spec:
             severity: warning
             component: openbao
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#openbaoraftapplylag"
             summary: "OpenBao {{ $labels.pod }} applies raft entries late"
             description: "More than 100 committed entries are not applied yet: slow disk or I/O pressure on the node."
 
@@ -78,6 +100,7 @@ spec:
             severity: warning
             component: openbao
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#openbaometricsdown"
             summary: "The OpenBao metrics of {{ $labels.pod }} are not scraped"
             description: >-
               vmagent can not read :8202 (certificate verification against openbao-server-tls, the CiliumNetworkPolicy

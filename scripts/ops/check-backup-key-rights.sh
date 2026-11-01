@@ -9,7 +9,8 @@
 #   AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... scripts/ops/check-backup-key-rights.sh
 #
 # Probes (all under the prefix .oa-rights-probe/, removed at the end): HeadBucket, ListObjectsV2, PutObject, HeadObject+GetObject,
-# CreateMultipartUpload + ListMultipartUploads + AbortMultipartUpload, DeleteObject. Exit 0 every right held; 1 one is missing
+# PutObject with the AES256 server-side-encryption request, CreateMultipartUpload + ListMultipartUploads + AbortMultipartUpload,
+# DeleteObject. Exit 0 every right held; 1 one is missing
 # (named); 2 usage. Rung: tested against a stub aws (scripts/dev/test-backup-key-rights.sh), not against a store.
 set -uo pipefail
 : "${S3_ENDPOINT:?S3_ENDPOINT required}" "${S3_BUCKET:?S3_BUCKET required}"
@@ -28,6 +29,9 @@ probe() { # DESC CMD... : ok when the command succeeds
 probe "HeadBucket (barman-cloud starts with it)" s3api head-bucket --bucket "$S3_BUCKET"
 probe "ListObjectsV2" s3api list-objects-v2 --bucket "$S3_BUCKET" --max-keys 1
 probe "PutObject" s3api put-object --bucket "$S3_BUCKET" --key "$key" --body "$tmp/obj"
+# The ObjectStores and the replica copy ask the store for server-side encryption (x-amz-server-side-encryption: AES256) on every object.
+# A store that refuses the header would fail every WAL archive: better to learn it here than from ContinuousArchiving=False.
+probe "PutObject with the AES256 server-side-encryption request" s3api put-object --bucket "$S3_BUCKET" --key "$key-sse" --body "$tmp/obj" --server-side-encryption AES256
 probe "HeadObject" s3api head-object --bucket "$S3_BUCKET" --key "$key"
 probe "GetObject" s3api get-object --bucket "$S3_BUCKET" --key "$key" "$tmp/back"
 probe "ListMultipartUploads" s3api list-multipart-uploads --bucket "$S3_BUCKET" --prefix .oa-rights-probe/
@@ -39,5 +43,6 @@ else
   echo "  FAIL CreateMultipartUpload -> $(tail -1 <<<"$mp" | cut -c1-160)"; fails=$((fails + 1))
 fi
 probe "DeleteObject" s3api delete-object --bucket "$S3_BUCKET" --key "$key"
+probe "DeleteObject (the SSE probe object)" s3api delete-object --bucket "$S3_BUCKET" --key "$key-sse"
 if [ "$fails" -gt 0 ]; then echo "$fails right(s) missing: see apps/base/backup/README.md, S3 rights of a dedicated key pair" >&2; exit 1; fi
 echo "every right held"

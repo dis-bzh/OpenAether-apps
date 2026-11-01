@@ -1,0 +1,35 @@
+# yamllint disable rule:line-length
+# OPT-IN (apps/flux/components/audit-log-sink): a second copy of the Kubernetes API audit log OUTSIDE the cluster (infra #318,
+# docs/audit-sink.md of the infra repository; docs/audit-sink.md here). Nothing in this directory is in any profile: the
+# Flux Kustomization that applies it comes only with the component, so a default install has no namespace, no DaemonSet,
+# no ExternalSecret and no rule from it. The network policies are in ../observability-audit-sink-policy (they need Flux
+# substitution, and this directory holds shell scripts with bare variables that substitution would blank).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - serviceaccounts.yaml
+  - externalsecret.yaml
+  - shipper.yaml
+  - checker.yaml
+  - vmscrape.yaml
+  - vmrule.yaml
+
+configMapGenerator:
+  - name: audit-sink-scripts
+    namespace: services-observability-audit-sink
+    files:
+      - scripts/ship.sh
+      - scripts/check.py
+    options:
+      # No content hash in the name: the secondary shipper (its own Kustomization) mounts this ConfigMap by name. A changed script reaches the
+      # running pods at their next restart (a running sh keeps the file it opened); restarting is safe, the shipper reads its position from the sink.
+      disableNameSuffixHash: true
+      labels:
+        openaether.io/component: audit-sink
+
+labels:
+  - includeSelectors: false
+    pairs:
+      openaether.io/managed: "true"

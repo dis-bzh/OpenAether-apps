@@ -1,0 +1,80 @@
+# yamllint disable rule:line-length
+# audit-sink-shipper: reads the apiserver's audit files on each control plane (read-only) and stores them, client-side encrypted, in an
+# object-locked bucket outside the cluster. scripts/ship.sh says how and why; scripts/dev/test-audit-sink-shipper.sh runs it for real.
+# Mocked/static + a real restic in a container: never run on a Talos node (infra #318, lab criteria in docs/audit-sink.md).
+#
+# Root with DAC_READ_SEARCH and nothing else, like alloy-audit: the audit file is 0600 and its directory belongs to the apiserver's user.
+# No Kubernetes API token, no ClusterRole, egress to the sink's host only (../observability-audit-sink-policy). Kyverno exempts these pods
+# BY NAME (audit-sink-shipper-*) for hostPath, root and the capability, never the namespace.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: audit-sink-shipper
+  namespace: services-observability-audit-sink
+  labels:
+    app: audit-sink-shipper
+    openaether.io/component: audit-sink
+spec:
+  selector:
+    matchLabels: { app: audit-sink-shipper }
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 1 }
+  template:
+    metadata:
+      labels:
+        app: audit-sink-shipper
+        openaether.io/component: audit-sink
+    spec:
+      serviceAccountName: audit-sink-shipper
+      automountServiceAccountToken: false
+      # Control planes only: the audit file exists nowhere else.
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - { key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule }
+      terminationGracePeriodSeconds: 30
+      volumes:
+        # DirectoryOrCreate: a node where the directory is not there yet must not leave the pod in ContainerCreating.
+        - name: apiserver-audit
+          hostPath: { path: /var/log/audit/kube, type: DirectoryOrCreate }
+        # restic's cache and the chunk being shipped: bounded, gone with the pod. The chunk is at most SHIP_MAX_BYTES (16 MiB), twice.
+        - name: work
+          emptyDir: { sizeLimit: 384Mi }
+        - name: scripts
+          configMap: { name: audit-sink-scripts, defaultMode: 0555 }
+      containers:
+        - name: shipper
+          image: docker.io/restic/restic:0.19.1
+          command: ["/bin/sh", "/scripts/ship.sh"]
+          envFrom:
+            - secretRef: { name: audit-sink-credentials }
+          env:
+            - name: NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+            - { name: SHIP_INTERVAL, value: "300" }
+            - { name: SHIP_MAX_BYTES, value: "16777216" }
+            - { name: WORK, value: /work }
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["DAC_READ_SEARCH"]
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - { name: apiserver-audit, mountPath: /var/log/audit/kube, readOnly: true }
+            - { name: work, mountPath: /work }
+            - { name: scripts, mountPath: /scripts, readOnly: true }
+          # The cycle touches /work/alive every success; three missed intervals plus the longest restic call is a stuck shipper.
+          livenessProbe:
+            exec: { command: ["/bin/sh", "-c", "test -n \"$(find /work/alive -mmin -45 2>/dev/null)\""] }
+            initialDelaySeconds: 2700
+            periodSeconds: 300
+            failureThreshold: 2
+          resources:
+            requests: { cpu: 25m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 384Mi }

@@ -130,6 +130,29 @@ spec:
     - port: http2-server
       path: /debug/metrics
 ---
+# Forgejo (the git forge, apps/base/forgejo): /metrics on its HTTP port, enabled by gitea.metrics in the HelmRelease.
+# Scraped so the data exists; no rule reads it yet (its metric names are not checked against a running Forgejo). The
+# Gateway does not route /metrics to the Internet (forgejo/httproute.yaml). Ingress for vmagent is in
+# forgejo/networkpolicy.yaml.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: forgejo
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: vmagent-scrapes
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo
+  namespaceSelector:
+    matchNames:
+      - services-git
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+---
 # CNPG instance pods, port `metrics` (:9187): WAL archiver failures and the last (failed) base backup. The cluster
 # manifests set enablePodMonitor, which needs the Prometheus Operator CRDs this platform does not install.
 # cnpg.io/cluster becomes the `cnpg_io_cluster` label.

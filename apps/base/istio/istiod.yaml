@@ -9,7 +9,7 @@ spec:
   chart:
     spec:
       chart: istiod
-      version: "1.24.2"
+      version: "1.31.3"
       sourceRef:
         kind: HelmRepository
         name: istio
@@ -34,6 +34,21 @@ spec:
       # alternative is a mesh control plane that pins a node forever.
       replicaCount: 2
       autoscaleEnabled: false
+      # Two istiod on two different workers (0.4.0 M4, scripts/check-ha.py). ScheduleAnyway: with one worker left the
+      # second replica still starts. The budget (pdb) is in this brick.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              istio: pilot
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              istio: pilot
       seccompProfile:
         type: RuntimeDefault
       env:
@@ -51,9 +66,11 @@ spec:
         type: RuntimeDefault
     meshConfig:
       enableAutoMtls: true
-      # No TLS floor is set here on purpose: meshConfig.tlsDefaults only carries ecdhCurves and cipherSuites for traffic
-      # that is NOT ISTIO_MUTUAL (istio/api 1.24 config.proto), so a minProtocolVersion there is accepted and ignored.
-      # Envoy's own floor (TLS 1.2) applies; a Gateway floor is a per-listener setting (tls.options), not a mesh one.
+      # No TLS floor is set here on purpose: meshConfig.tlsDefaults applies to traffic that is NOT ISTIO_MUTUAL
+      # (istio/api 1.31 config.proto), so a minProtocolVersion there sets no floor for mesh mTLS.
+      # meshConfig.meshMTLS.minProtocolVersion (new in 1.31) is the knob for ISTIO_MUTUAL traffic: not set, to
+      # evaluate on a cluster (ztunnel HBONE is separate from it). A Gateway floor is a per-listener setting
+      # (tls.options), not a mesh one.
       # trustDomain = cluster.local (Istio default). Single-cluster dev → idiomatic.
       # If multi-cluster mesh federation ever happens, reintroduce a trustDomain
       # single name + aliases (e.g. openaether.local) and migrate the principals.

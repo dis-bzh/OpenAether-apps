@@ -40,6 +40,7 @@ spec:
       fsGroup: 65534
       runAsNonRoot: true
       allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
       capabilities:
         drop:
           - ALL
@@ -64,6 +65,12 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: vminsert
               topologyKey: kubernetes.io/hostname
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: vminsert
+              topologyKey: topology.kubernetes.io/zone
     podDisruptionBudget:
       minAvailable: 1
   vmstorage:
@@ -72,12 +79,17 @@ spec:
     image:
       tag: v1.136.0-cluster
     replicaCount: 2
+    extraArgs:
+      # Keeps one sample per series per 30 s (the scrape interval): the two vmagent replicas and the two
+      # kube-state-metrics pods write the same series (apps #156). Never above the shortest scrape interval.
+      dedup.minScrapeInterval: 30s
     securityContext:
       runAsUser: 65534
       runAsGroup: 65534
       fsGroup: 65534
       runAsNonRoot: true
       allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
       capabilities:
         drop:
           - ALL
@@ -111,6 +123,12 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: vmstorage
               topologyKey: kubernetes.io/hostname
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: vmstorage
+              topologyKey: topology.kubernetes.io/zone
     podDisruptionBudget:
       minAvailable: 1
   vmselect:
@@ -119,12 +137,17 @@ spec:
     image:
       tag: v1.136.0-cluster
     replicaCount: 2
+    extraArgs:
+      # Keeps one sample per series per 30 s (the scrape interval): the two vmagent replicas and the two
+      # kube-state-metrics pods write the same series (apps #156). Never above the shortest scrape interval.
+      dedup.minScrapeInterval: 30s
     securityContext:
       runAsUser: 65534
       runAsGroup: 65534
       fsGroup: 65534
       runAsNonRoot: true
       allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
       capabilities:
         drop:
           - ALL
@@ -156,5 +179,11 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: vmselect
               topologyKey: kubernetes.io/hostname
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: vmselect
+              topologyKey: topology.kubernetes.io/zone
     podDisruptionBudget:
       minAvailable: 1

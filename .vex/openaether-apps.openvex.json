@@ -121,64 +121,6 @@
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-33186"
-      },
-      "timestamp": "2026-10-22T00:00:00Z",
-      "products": [
-        {
-          "@id": "pkg:oci/pilot?repository_url=index.docker.io/istio/pilot",
-          "subcomponents": [
-            {
-              "@id": "pkg:golang/google.golang.org/grpc@v1.67.1"
-            }
-          ]
-        },
-        {
-          "@id": "pkg:oci/install-cni?repository_url=index.docker.io/istio/install-cni",
-          "subcomponents": [
-            {
-              "@id": "pkg:golang/google.golang.org/grpc@v1.67.1"
-            }
-          ]
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "grpc-go authorization bypass through a malformed :path matters to servers with path-based authorization interceptors; istiod and the CNI plugin use none. The line is past upstream support.",
-      "action_statement": "Replace by the Istio 1.31 upgrade (fixed in 1.29.10, 1.30.7, 1.31.3); this waiver ends with it and matches the end-of-support calendar.",
-      "status_notes": "Expires: 2026-12-14"
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2025-68121"
-      },
-      "timestamp": "2026-10-22T00:00:00Z",
-      "products": [
-        {
-          "@id": "pkg:oci/pilot?repository_url=index.docker.io/istio/pilot",
-          "subcomponents": [
-            {
-              "@id": "pkg:golang/stdlib@v1.23.2"
-            }
-          ]
-        },
-        {
-          "@id": "pkg:oci/install-cni?repository_url=index.docker.io/istio/install-cni",
-          "subcomponents": [
-            {
-              "@id": "pkg:golang/stdlib@v1.23.2"
-            }
-          ]
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Go crypto/tls session resumption, mesh-internal mTLS only (xDS port, not published). The line is past upstream support.",
-      "action_statement": "Replace by the Istio 1.31 upgrade (fixed in 1.29.10, 1.30.7, 1.31.3); this waiver ends with it and matches the end-of-support calendar.",
-      "status_notes": "Expires: 2026-12-14"
-    },
-    {
-      "vulnerability": {
         "name": "GHSA-673q-mjm6-r5xr"
       },
       "products": [
@@ -212,7 +154,7 @@
           ]
         }
       ],
-      "impact_statement": "Next.js image optimization endpoint (libvips memory bug in sharp on glibc, fixed in sharp >= 0.35.5). The login image is built on node:24-alpine (musl) and ships only glibc sharp binaries: require('sharp') fails there ('linuxmusl-x64 runtime') and Next.js 16 has no fallback, so the vulnerable code never loads. FRAGILE: it becomes reachable if the image is rebuilt on a glibc base. Also, the Login V2 UI is not routed through the Gateway in 0.3.x (apps #161); fixing #161 must also block /ui/v2/login/_next/image.",
+      "impact_statement": "Next.js image optimization endpoint (libvips memory bug in sharp on glibc, fixed in sharp >= 0.35.5). The login image is built on node:24-alpine (musl) and ships only glibc sharp binaries: require('sharp') fails there ('linuxmusl-x64 runtime') and Next.js 16 has no fallback, so the vulnerable code never loads. FRAGILE: it becomes reachable if the image is rebuilt on a glibc base. The Login V2 UI is routed through the Gateway since 0.4.0 (apps #161) and the optimizer path /ui/v2/login/_next/image is answered 404 by the server, a rule that scripts/dev/test-zitadel-login-route.py keeps in place.",
       "action_statement": "Re-check at the first Zitadel tag with Next.js >= 16.4.1 or if the base image changes; review by 2026-11-05.",
       "timestamp": "2026-10-22T00:00:00Z",
       "status": "not_affected",

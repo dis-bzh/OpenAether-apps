@@ -1,0 +1,12 @@
+# OPT-IN (apps/flux/components/alert-delivery-probe): the scheduled alert-delivery test. Not part of any profile by
+# default, because its point is to reach a real chat receiver. Same CRD ordering as vm-customresources/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - vmrule.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      openaether.io/managed: "true"

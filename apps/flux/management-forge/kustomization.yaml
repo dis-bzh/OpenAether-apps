@@ -1,0 +1,13 @@
+# yamllint disable rule:line-length
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# OpenAether — the management overlay WITH the opt-in Forgejo git forge (forgejo-db, forgejo). OFF in apps/flux/management.
+#
+# Point the root Flux Kustomization here (spec.path: ./apps/flux/management-forge) to run the forge, or reference this directory
+# from a cluster's own profile (OpenAether-self does). It is the full DAG of ../base, nothing removed: the only difference with
+# ../management is those two Kustomizations (scripts/dev/test-forgejo-brick.py pins it). The data and capacity consequences are in
+# docs/forgejo.md; the vault configure Job seeds the forge's OpenBao paths whichever profile runs.
+# Rollback: point back at apps/flux/management; Flux prunes both Kustomizations and what they applied. What survives the prune
+# (the repository volume, the database volumes) has not been exercised: export what matters first (docs/forgejo.md).
+resources:
+  - ../base

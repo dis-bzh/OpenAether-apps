@@ -11,6 +11,8 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - externalsecrets.yaml
+  - storageclass.yaml
   - helmrelease.yaml
   - httproute.yaml
   - networkpolicy.yaml
+  - recurringjob.yaml

@@ -50,6 +50,12 @@ spec:
               - istio-system
             names:
               - "ztunnel-*"
+        # The audit-sink shipper (opt-in component audit-log-sink): root by design (the 0600 audit file), by name.
+        - resources:
+            namespaces:
+              - services-observability-audit-sink
+            names:
+              - "audit-sink-shipper-*"
       validate:
         failureAction: Audit
         failureActionOverrides:

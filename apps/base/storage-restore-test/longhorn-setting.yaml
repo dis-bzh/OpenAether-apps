@@ -1,0 +1,14 @@
+# The canary volume is detached except for the seconds the hourly writer holds it. Longhorn's recurring jobs skip a
+# detached volume unless this setting is true (default false): without it the daily backup of the canary never happens,
+# the restore test finds no backup and the Longhorn series stay empty (lab 20: the recurring job ran in 3 s and took
+# nothing; with the setting a backup completed in under 3 minutes). It is the platform's setting, applied here because
+# only this opt-in component needs it.
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: allow-recurring-job-while-volume-detached
+  namespace: longhorn-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+value: "true"

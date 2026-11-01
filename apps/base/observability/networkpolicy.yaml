@@ -108,7 +108,13 @@ spec:
               protocol: TCP
             - port: "9100"   # node-exporter
               protocol: TCP
+            - port: "9101"   # backup verifier exporter (foundation-databases)
+              protocol: TCP
             - port: "9402"   # cert-manager controller
+              protocol: TCP
+            - port: "9500"   # Longhorn managers
+              protocol: TCP
+            - port: "15090"  # gateway Envoy (istio_* request metrics)
               protocol: TCP
             - port: "9187"   # postgres-exporter
               protocol: TCP
@@ -470,6 +476,18 @@ spec:
               protocol: TCP
             - port: "8435"   # config-reloader sidecar (VM operator 0.68 scrape)
               protocol: TCP
+    # The cluster gossip of the two replicas (0.4.0 M4): they share silences and the notification log, so an alert
+    # reaching either one is sent once.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmalertmanager
+      toPorts:
+        - ports:
+            - port: "9094"
+              protocol: TCP
+            - port: "9094"
+              protocol: UDP
     # Flux events (#139): the notification controller posts to /api/v2/alerts.
     - fromEndpoints:
         - matchLabels:
@@ -480,6 +498,16 @@ spec:
             - port: "9093"
               protocol: TCP
   egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmalertmanager
+      toPorts:
+        - ports:
+            - port: "9094"
+              protocol: TCP
+            - port: "9094"
+              protocol: UDP
     # ⚠️ `rules.dns` is what makes toFQDNs work at all: without the DNS proxy
     # observing the lookup, Cilium never learns the IP behind hooks.slack.com
     # and the rule below matches nothing. Same trap as the CAPI policies.
@@ -843,4 +871,17 @@ spec:
       toPorts:
         - ports:
             - port: "8080"
+              protocol: TCP
+    # The same two calls go to the PUBLIC name of Zitadel (token_url and api_url are https://zitadel.<domain>/...),
+    # that is to the Gateway: Cilium translates the load balancer address to a Gateway pod before the policy is
+    # applied, so the pod is what this rule must name (lab 24 and 25: without it the callback hangs 30 s and returns
+    # to /login; apps #161). The Gateway's own ingress already admits the cluster entity on 443. UNVERIFIED with real
+    # public DNS and a trusted certificate: the lab reached the Gateway through a host alias and a throwaway CA.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-gateway
+            service.istio.io/canonical-name: openaether-gateway-istio
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP

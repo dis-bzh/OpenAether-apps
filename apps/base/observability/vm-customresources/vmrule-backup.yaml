@@ -30,13 +30,15 @@ spec:
         - alert: BackupJobFailed
           expr: |
             max by (namespace, job_name) (
-              kube_job_status_failed{namespace=~"foundation-.*", job_name=~"(openbao-snapshot|cnpg-dump)-.*"}
+              kube_job_status_failed{namespace=~"foundation-.*",
+                job_name=~"(openbao-snapshot|cnpg-dump)-.*", job_name!~"cnpg-dump-(load|restore)-.*"}
             ) > 0
           for: 15m
           labels:
             severity: critical
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#backupjobfailed"
             summary: "Backup failed: {{ $labels.namespace }}/{{ $labels.job_name }}"
             description: >-
               The Job failed and was not retried. Common causes: unreadable
@@ -50,13 +52,15 @@ spec:
         - alert: BackupCronJobStale
           expr: |
             time() - max by (namespace, cronjob) (
-              kube_cronjob_status_last_schedule_time{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"}
+              kube_cronjob_status_last_schedule_time{namespace=~"foundation-.*",
+                cronjob=~"openbao-snapshot|cnpg-dump|etcd-snapshot"}
             ) > 26 * 3600
           for: 1h
           labels:
             severity: critical
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#backupcronjobstale"
             summary: "No backup triggered for > 26 h: {{ $labels.namespace }}/{{ $labels.cronjob }}"
             description: >-
               No Job created for more than 26 h on a daily schedule.
@@ -68,13 +72,14 @@ spec:
         - alert: BackupCronJobSuspended
           expr: |
             max by (namespace, cronjob) (
-              kube_cronjob_spec_suspend{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"}
+              kube_cronjob_spec_suspend{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump|etcd-snapshot"}
             ) > 0
           for: 6h
           labels:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#backupcronjobsuspended"
             summary: "Backup suspended for > 6 h: {{ $labels.namespace }}/{{ $labels.cronjob }}"
             description: "kubectl patch cronjob -n {{ $labels.namespace }} {{ $labels.cronjob }} -p '{\"spec\":{\"suspend\":false}}'"  # yamllint disable-line rule:line-length
 
@@ -95,6 +100,7 @@ spec:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#restoreteststale"
             summary: "Restore test not run for > 35 days: {{ $labels.namespace }}/{{ $labels.cronjob }}"
             description: "Suspended? kubectl get cronjob -n {{ $labels.namespace }} {{ $labels.cronjob }}."
 
@@ -107,12 +113,14 @@ spec:
               or absent(kube_cronjob_info{namespace="foundation-vault", cronjob="openbao-snapshot-restore-test"})
               or absent(kube_cronjob_info{namespace="foundation-databases", cronjob="cnpg-dump"})
               or absent(kube_cronjob_info{namespace="foundation-databases", cronjob="cnpg-dump-restore-test"})
-            ) and on() (count(kube_cronjob_info{namespace=~"foundation-.*", cronjob=~"openbao-snapshot|cnpg-dump"}) > 0)
+            ) and on() (count(kube_cronjob_info{namespace=~"foundation-.*",
+              cronjob=~"openbao-snapshot|cnpg-dump|etcd-snapshot"}) > 0)
           for: 30m
           labels:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#backupcronjobmissing"
             summary: "Backup CronJob {{ $labels.cronjob }} no longer exists"
             description: "flux get kustomization backup; the other backup CronJobs are still present."
 
@@ -136,35 +144,55 @@ spec:
             severity: critical
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgwalarchivefailing"
             summary: "CNPG {{ $labels.cnpg_io_cluster }}: WAL archiving fails"
             description: >-
               barman cannot write to the object store (credentials, endpoint, egress).
               kubectl logs -n foundation-databases <primary-pod> -c postgres | grep -i archiv.
 
         # 7) The last base backup failed more recently than the last success.
+        #    Every backup of the platform goes through the Barman Cloud PLUGIN, and for those the CNPG collector
+        #    reports last_available = 0 (and a real last_failed): read from the collector alone, ONE failed backup
+        #    kept this rule true for good, the next success never raising the zero above it (lab 28E, 2026-11-01:
+        #    zitadel-db, a failure at 01:59Z, a success at 03:10Z, the alert still true). The plugin exports the
+        #    real values as barman_cloud_cloudnative_pg_io_*, same cnpg scrape, same cnpg_io_cluster label. Each
+        #    side takes the LARGEST of the two names (union, then max), so a Cluster whose backups only the
+        #    collector reports works too.
         - alert: CnpgBackupFailed
           expr: |
-            max by (cnpg_io_cluster) (cnpg_collector_last_failed_backup_timestamp)
-              > max by (cnpg_io_cluster) (cnpg_collector_last_available_backup_timestamp)
+            max by (cnpg_io_cluster) (union(
+              cnpg_collector_last_failed_backup_timestamp,
+              barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp))
+              > max by (cnpg_io_cluster) (union(
+                cnpg_collector_last_available_backup_timestamp,
+                barman_cloud_cloudnative_pg_io_last_available_backup_timestamp))
           for: 10m
           labels:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgbackupfailed"
             summary: "CNPG {{ $labels.cnpg_io_cluster }}: the last base backup failed"
             description: "kubectl get backup -n foundation-databases; kubectl describe backup <name>."
 
         # 8) No base backup for 48 h although the schedule is daily (03:10 / 03:25). A cluster that never had one
-        #    reports 0 and is left out; the first success arms the rule.
+        #    reports 0 and is left out; the first success arms the rule. Same two names as rule 7: for a plugin backup
+        #    the collector's value is 0, so on the collector alone this rule could NEVER arm (lab 28E: the plugin
+        #    reported 3 Clusters at 33 to 64 minutes of age, the collector 0).
         - alert: CnpgBackupStale
           expr: |
-            max by (cnpg_io_cluster) (cnpg_collector_last_available_backup_timestamp) > 0
-              and time() - max by (cnpg_io_cluster) (cnpg_collector_last_available_backup_timestamp) > 48 * 3600
+            max by (cnpg_io_cluster) (union(
+              cnpg_collector_last_available_backup_timestamp,
+              barman_cloud_cloudnative_pg_io_last_available_backup_timestamp)) > 0
+              and time() - max by (cnpg_io_cluster) (union(
+                cnpg_collector_last_available_backup_timestamp,
+                barman_cloud_cloudnative_pg_io_last_available_backup_timestamp)) > 48 * 3600
           for: 1h
           labels:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgbackupstale"
             summary: "CNPG {{ $labels.cnpg_io_cluster }}: no base backup for 48 h"
             description: "kubectl get scheduledbackup -n foundation-databases; the ScheduledBackup may be suspended."
 
@@ -176,6 +204,7 @@ spec:
             severity: warning
             component: backup
           annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgmetricsabsent"
             summary: "No CNPG metrics: WAL archive and base backup alerts are blind"
             description: "The CNPG CiliumNetworkPolicy must accept vmagent on :9187 (cnpg VMPodScrape)."
 

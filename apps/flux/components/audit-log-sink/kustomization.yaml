@@ -1,0 +1,20 @@
+# yamllint disable rule:line-length
+# OPT-IN, off by default. A second copy of the Kubernetes API audit log OUTSIDE the cluster, in an object-locked, client-side encrypted
+# bucket (infra #318; class A, zero loss). Adds the shipper (a DaemonSet on the control planes), its delivery check and alerts, and the
+# egress policy for the sink's host. Mocked/static: never run on a cluster (lab criteria in docs/audit-sink.md).
+#
+# Before turning it on, on the infra side (OpenAether-infra, docs/audit-sink.md): audit_sink_placement in the tfvars, the bucket
+# (ensure-buckets.sh), a dedicated key pair (backup-key-recipe.sh <tfvars> audit-sink) and the seed (seed-openbao.sh writes secret/audit/sink and
+# the cluster-identity host name). Then escrow the password (escrow-openbao.sh export). Without the seed the ExternalSecret stays NotReady and
+# the shipper does not start: deliberate. This component does NOT enable alloy-audit (Loki): the two are independent; most clusters want both.
+#
+# Use it from a cluster's own overlay (generated profiles are rewritten by pick.py, do not edit those):
+#   resources:  [../../workload]            # or the profile the cluster uses
+#   components: [../components/audit-log-sink]
+# A second sink (audit_sink_placement = both): also ../components/audit-log-sink-secondary.
+# Rollback: remove the component line; Flux prunes the two Kustomizations and what they applied (prune: true). The objects already in the
+# sink stay (they are locked); the namespace and the Secret go with the DaemonSet.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - audit-sink.yaml

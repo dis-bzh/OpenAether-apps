@@ -36,7 +36,7 @@ policies at L3/L4 + OpenBao's own authentication).
 | `external-secrets-operator` | `external-secrets` (foundation-pki-management) | `external-secrets-read` | read `secret/` |
 | `cert-manager-issuer` | `cert-manager` | `cert-manager-pki` | sign with `pki/sign/*` |
 | `backup-snapshot` | `openbao-snapshot` | `backup-snapshot` | read the raft snapshot |
-| `secret-seeder` | `openbao-seeder` | `secret-seeder` | **create** the Day-1 secrets listed in the policy; never overwrite, never read a value |
+| `secret-seeder` | `openbao-seeder` | `secret-seeder` | **create** the Day-1 secrets listed in the policy (and `audit/sink`, `audit/sink-secondary` for the opt-in audit sink); never overwrite, never read a value |
 | `openaether-admin` | `openaether-admin` | `openaether-admin` | read/write secrets (except the stored PKI CSR, read only), import the signed intermediate, issue from the `openaether` PKI role, leases; read the configuration. **Not** write policies/roles/PKI roles/mounts (those change through git), mint tokens or touch the seal |
 | `openaether-reader` | `openaether-reader` | `openaether-reader` | read secrets |
 | `openbao-breakglass` | `openbao-breakglass` | `openaether-breakglass` | start a root-token generation (still needs the recovery quorum) |

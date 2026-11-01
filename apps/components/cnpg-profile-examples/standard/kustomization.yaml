@@ -1,0 +1,30 @@
+# Copy this directory per application, change the values below, and point a Flux Kustomization at the copy
+# (postBuild.substituteFrom
+# cluster-identity for the ${BACKUP_S3_*} of the stores). Nothing else needs editing; docs/database-profiles.md
+# lists the values.
+# `shop-db` / `shop` are placeholders, not a real application.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+components:
+  - ../../cnpg-profile-standard
+configMapGenerator:
+  - name: db-profile-values
+    namespace: shop
+    literals:
+      - name=shop-db
+      - namespace=shop
+      - database=shop
+      - owner=shop
+      - storageClass=local-path-retain
+      - size=10Gi
+      - cpuRequest=250m
+      - cpuLimit=1
+      - memory=1Gi
+      - clientNamespace=shop
+      - clientApp=shop-api
+      - archiveServerName=shop-db
+      - profile=standard
+generatorOptions:
+  disableNameSuffixHash: true

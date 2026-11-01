@@ -1,0 +1,87 @@
+# yamllint disable rule:line-length
+# Alerts of the audit sink (opt-in component audit-log-sink; infra #318). Class A: the audit log is copied outside the cluster, so a sink
+# that stops receiving is critical. Rung: static + synthetic series (scripts/dev/vmrules-unittest.yaml); never fired on a cluster.
+# oa_audit_sink_* are exported by scripts/check.py: UNVERIFIED until a lab reads them (docs/monitoring-0.4.md).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: audit-sink
+  namespace: services-observability
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: audit-sink
+spec:
+  groups:
+    - name: openaether-audit-sink
+      interval: 1m
+      rules:
+        # The check could not list the sink (credentials, the store, the network, the egress policy), or it stopped checking.
+        - alert: AuditSinkDown
+          expr: '(oa_audit_sink_ok == 0) or (time() - oa_audit_sink_last_check_timestamp_seconds > 900)'
+          # The check lists every 5 minutes: `for: 10m` fired 16 min 41 s after the sink was cut in lab 23 (target 15 minutes).
+          # Two failed listings in a row are 5 minutes of `for`: at most about 11-12 minutes from the cut.
+          for: 5m
+          labels:
+            severity: critical
+            component: audit-sink
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#auditsinkdown"
+            summary: "The audit sink cannot be reached ({{ $labels.sink }})"
+            description: >-
+              audit-sink-check could not list the {{ $labels.sink }} sink, or has not checked for 15 minutes. The shipper cannot deliver either, so
+              the audit log is accumulating only in the apiserver's own rotated files on the control planes, which the apiserver
+              deletes by its own rotation: this is a clock. Runbook: docs/runbooks.md.
+        # A control-plane node whose newest object in the sink is old: the shipper is not delivering, whatever the check says about the store.
+        - alert: AuditSinkStale
+          expr: 'oa_audit_sink_last_object_age_seconds > 1200 and on(node) kube_node_info'
+          for: 5m
+          labels:
+            severity: critical
+            component: audit-sink
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#auditsinkstale"
+            summary: "No audit log reached the {{ $labels.sink }} sink from {{ $labels.node }} for 20 minutes"
+            description: >-
+              The newest object of node {{ $labels.node }} in the {{ $labels.sink }} sink is older than 20 minutes (the shipper sends every
+              5). Its audit file is the only copy until delivery resumes. Runbook: docs/runbooks.md.
+        # The sink is reachable but holds nothing: the shipper never delivered (a wrong key, a wrong bucket, a policy, a pod that never started).
+        - alert: AuditSinkEmpty
+          expr: 'oa_audit_sink_ok == 1 and oa_audit_sink_nodes == 0'
+          for: 30m
+          labels:
+            severity: critical
+            component: audit-sink
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#auditsinkempty"
+            summary: "The {{ $labels.sink }} audit sink is reachable but empty"
+            description: >-
+              The check lists the sink fine and finds no node in it 30 minutes after it started. The shipper has never delivered.
+              Runbook: docs/runbooks.md.
+        # A control plane without a running shipper: its audit file is not being copied at all.
+        - alert: AuditSinkShipperUnavailable
+          expr: >-
+            kube_daemonset_status_desired_number_scheduled{namespace="services-observability-audit-sink", daemonset=~"audit-sink-shipper.*"}
+            - kube_daemonset_status_number_ready{namespace="services-observability-audit-sink", daemonset=~"audit-sink-shipper.*"} > 0
+          for: 15m
+          labels:
+            severity: critical
+            component: audit-sink
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#auditsinkshipperunavailable"
+            summary: "{{ $labels.daemonset }} has a control plane without a running shipper"
+            description: >-
+              {{ $labels.daemonset }} is not ready on every control plane for 15 minutes. kubectl -n services-observability-audit-sink get pods
+              -o wide; logs of the failing pod. Runbook: docs/runbooks.md.
+        # The check itself is gone: nothing above can fire without its series.
+        - alert: AuditSinkCheckAbsent
+          expr: 'absent(oa_audit_sink_ok)'
+          for: 15m
+          labels:
+            severity: critical
+            component: audit-sink
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#auditsinkcheckabsent"
+            summary: "No audit sink delivery check is reporting"
+            description: >-
+              oa_audit_sink_ok has no series for 15 minutes: audit-sink-check is down or not scraped, so a stopped sink would not be seen.
+              Runbook: docs/runbooks.md.

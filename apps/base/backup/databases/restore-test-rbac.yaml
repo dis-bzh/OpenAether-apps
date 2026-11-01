@@ -1,0 +1,70 @@
+# yamllint disable rule:line-length
+# What the CNPG restore test may do: manage Clusters in the scratch namespace and look inside them, read the live Cluster
+# and its Backup objects (to size the copy and pick a point in time), and patch its own metrics ConfigMap. Nothing else,
+# and nothing that writes to foundation-databases but that ConfigMap.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cnpg-restore-test
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+rules:
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources: ["clusters"]
+    verbs: ["get", "list", "create", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["list", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cnpg-restore-test
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: cnpg-restore-test }
+subjects:
+  - { kind: ServiceAccount, name: cnpg-restore-test, namespace: foundation-databases }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cnpg-restore-test
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+rules:
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources: ["clusters", "backups"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["oa-restore-test-metrics"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cnpg-restore-test
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: cnpg-restore-test }
+subjects:
+  - { kind: ServiceAccount, name: cnpg-restore-test, namespace: foundation-databases }

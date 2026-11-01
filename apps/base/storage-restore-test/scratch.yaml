@@ -1,0 +1,46 @@
+# yamllint disable rule:line-length
+# The static volume the restore test mounts: a PV that names a Longhorn Volume which does NOT exist between runs, and its PVC in the
+# scratch namespace. The Job creates the Longhorn Volume (fromBackup) before it starts the verify pod and deletes it after; the PV and
+# PVC stay bound to the NAME, so the Job needs no cluster-scoped right (a StorageClass or PV per run would). The PV is Retain and
+# never deleted by Longhorn; nothing but this test claims it (claimRef).
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: oa-restore-test-canary
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  volumeMode: Filesystem
+  claimRef:
+    name: restore-canary
+    namespace: backup-restore-test
+  csi:
+    driver: driver.longhorn.io
+    fsType: ext4
+    volumeHandle: oa-restore-test-canary
+    volumeAttributes:
+      numberOfReplicas: "1"
+      staleReplicaTimeout: "30"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: restore-canary
+  namespace: backup-restore-test
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: storage
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: ""
+  volumeName: oa-restore-test-canary
+  resources:
+    requests:
+      storage: 1Gi

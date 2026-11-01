@@ -19,6 +19,25 @@ spec:
   hostnames:
     - "zitadel.openaether.local"
   rules:
+    # The Login V2 UI (Next.js, basePath /ui/v2/login) is served by the zitadel-login Service, not by the server:
+    # without this rule the authorize step ends on a 404 and nobody can sign in with a browser (apps #161).
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /ui/v2/login
+      backendRefs:
+        - name: zitadel-login
+          port: 3000
+    # The image optimizer of the login is not used (the login serves its own static files) and is where the Next.js
+    # advisories recorded in .vex/openaether-apps.openvex.json land. The longest prefix wins, so this one goes to the
+    # server, which answers 404: the optimizer is never reachable from outside. Keep it while the VEX statements stand.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /ui/v2/login/_next/image
+      backendRefs:
+        - name: zitadel
+          port: 8080
     - matches:
         - path:
             type: PathPrefix

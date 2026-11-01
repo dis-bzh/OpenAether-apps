@@ -1,0 +1,58 @@
+# Barman Cloud plugin ObjectStores of forgejo-db, the same shape as those of the two platform databases
+# (apps/base/cnpg/objectstores.yaml says why: the bucket layout, server-side encryption, the Outscale checksum fix on
+# the sidecar's environment, the quotes
+# around the `${BACKUP_S3_*}` defaults of the `cluster-identity` ConfigMap). `${BACKUP_REPLICA_S3_*}` default to the
+# `.invalid` placeholders, so a cluster that has no replica store still renders strings (lab 25, D9).
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: forgejo-db-primary
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg
+spec:
+  retentionPolicy: "30d"
+  configuration:
+    destinationPath: "s3://${BACKUP_S3_BUCKET:=}/cnpg/forgejo-db"
+    endpointURL: "${BACKUP_S3_ENDPOINT:=}"
+    s3Credentials:
+      accessKeyId: { name: cnpg-backup-s3, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: cnpg-backup-s3, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip, encryption: AES256 }
+    data: { compression: gzip, encryption: AES256 }
+  instanceSidecarConfiguration:
+    env:
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: when_required }
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: when_required }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+---
+# Replica copy of forgejo-db: read side only. The Cluster does not archive here (the plugin writes to one store); the
+# backup brick copies the primary archive here (cnpg-store-replicate): a recovery from the replica store names this.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: forgejo-db-replica
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg
+spec:
+  configuration:
+    destinationPath: "s3://${BACKUP_REPLICA_S3_BUCKET:=replica-not-set}/cnpg/forgejo-db"
+    endpointURL: "${BACKUP_REPLICA_S3_ENDPOINT:=https://replica-not-set.invalid}"
+    s3Credentials:
+      accessKeyId: { name: cnpg-backup-s3-replica, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: cnpg-backup-s3-replica, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip, encryption: AES256 }
+    data: { compression: gzip, encryption: AES256 }
+  instanceSidecarConfiguration:
+    env:
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: when_required }
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: when_required }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }

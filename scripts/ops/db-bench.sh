@@ -1,0 +1,1 @@
+../../apps/components/cnpg-profile-bench/db-bench.sh

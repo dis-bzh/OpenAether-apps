@@ -1,0 +1,9 @@
+# Longhorn Setting objects the platform owns, applied by Flux AFTER the longhorn HelmRelease (the Setting CRD comes
+# from the chart).
+# Separate Kustomization (storage-settings) for that reason: in apps/base/storage the first apply would fail on the
+# missing CRD.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - node-down-pod-deletion-policy.yaml

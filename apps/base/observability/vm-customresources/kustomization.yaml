@@ -19,11 +19,21 @@ resources:
   - vmscapes.yaml
   - vmscrapes-pipeline.yaml
   - vmrule-backup.yaml
+  - vmrule-backup-copies.yaml
   - vmrule-bootstrap.yaml
+  - vmrule-alerting.yaml
+  - vmrule-backup-signals.yaml
+  - vmrule-restore-test.yaml
+  - vmrule-database.yaml
   - vmrule-cluster.yaml
+  - vmrule-loss.yaml
+  - vmrule-gateway.yaml
+  - vmrule-resources.yaml
+  - vmrule-storage.yaml
   - vmrule-platform.yaml
   - vmrule-logging.yaml
   - vmrule-security.yaml
+  - vmrule-retention.yaml
 
 labels:
   - includeSelectors: false

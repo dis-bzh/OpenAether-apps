@@ -11,61 +11,53 @@ components:
 - id: istio-base
   brick: istio
   component: Istio base (CRDs)
-  pin: 1.24.2
+  pin: 1.31.3
   file: apps/base/istio/istio-base.yaml
   pattern: chart:\s*base\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Istio 1.24
-  eol: '2025-06-24'
+  cycle: Istio 1.31
+  eol: '2027-02-28'
   eol_source: https://endoflife.date/api/istio.json
-  waiver:
-    until: '2026-12-31'
-    reason: Istio is held at 1.24 while the ambient mesh, its policies and the waypoints are validated
-      hop by hop on a cluster (docs/patching.md); no hop is scheduled
+  note: a fresh install lands on 1.31.3 (not yet shown on a cluster); 2027-02-28 read on endoflife.date 2026-10-23, istio.io
+    supported-releases says '~Feb 2027 (Expected)', so it can move once 1.32 ships
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: istiod
   brick: istio
   component: Istio control plane
-  pin: 1.24.2
+  pin: 1.31.3
   file: apps/base/istio/istiod.yaml
   pattern: chart:\s*istiod\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Istio 1.24
-  eol: '2025-06-24'
+  cycle: Istio 1.31
+  eol: '2027-02-28'
   eol_source: https://endoflife.date/api/istio.json
-  waiver:
-    until: '2026-12-31'
-    reason: Istio is held at 1.24 while the ambient mesh, its policies and the waypoints are validated
-      hop by hop on a cluster (docs/patching.md); no hop is scheduled
+  note: a fresh install lands on 1.31.3 (not yet shown on a cluster); 2027-02-28 read on endoflife.date 2026-10-23, istio.io
+    supported-releases says '~Feb 2027 (Expected)', so it can move once 1.32 ships
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: istio-cni
   brick: istio
   component: Istio CNI
-  pin: 1.24.2
+  pin: 1.31.3
   file: apps/base/istio/istio-cni.yaml
   pattern: chart:\s*cni\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Istio 1.24
-  eol: '2025-06-24'
+  cycle: Istio 1.31
+  eol: '2027-02-28'
   eol_source: https://endoflife.date/api/istio.json
-  waiver:
-    until: '2026-12-31'
-    reason: Istio is held at 1.24 while the ambient mesh, its policies and the waypoints are validated
-      hop by hop on a cluster (docs/patching.md); no hop is scheduled
+  note: a fresh install lands on 1.31.3 (not yet shown on a cluster); 2027-02-28 read on endoflife.date 2026-10-23, istio.io
+    supported-releases says '~Feb 2027 (Expected)', so it can move once 1.32 ships
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: ztunnel
   brick: istio
   component: Istio ztunnel
-  pin: 1.24.2
+  pin: 1.31.3
   file: apps/base/istio/ztunnel.yaml
   pattern: chart:\s*ztunnel\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Istio 1.24
-  eol: '2025-06-24'
+  cycle: Istio 1.31
+  eol: '2027-02-28'
   eol_source: https://endoflife.date/api/istio.json
-  waiver:
-    until: '2026-12-31'
-    reason: Istio is held at 1.24 while the ambient mesh, its policies and the waypoints are validated
-      hop by hop on a cluster (docs/patching.md); no hop is scheduled
+  note: a fresh install lands on 1.31.3 (not yet shown on a cluster); 2027-02-28 read on endoflife.date 2026-10-23, istio.io
+    supported-releases says '~Feb 2027 (Expected)', so it can move once 1.32 ships
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: cert-manager
@@ -150,13 +142,14 @@ components:
 - id: forgejo
   brick: forgejo
   component: forgejo (git forge, dogfooding V1)
-  pin: 6.1.0
+  pin: 17.3.1
   file: apps/base/forgejo/helmrelease.yaml
   pattern: chart:\s*forgejo\s*\n\s*version:\s*"?([^"\s]+)
-  cycle: Forgejo chart 6.1 (appVersion unverified)
-  eol: unknown
-  note: chart from the forgejo-contrib Codeberg repository (dogfooding V1); upstream publishes no support calendar,
-    the row is re-read at every Renovate bump
+  cycle: Forgejo 15.0 (LTS; chart appVersion 15.0.10)
+  eol: '2027-07-15'
+  eol_source: https://endoflife.date/api/forgejo.json
+  note: the chart is an OCI artifact on code.forgejo.org and ships the Forgejo image of its appVersion; 2027-07-15 read on
+    endoflife.date 2026-10-25. The first version of the brick pinned chart 6.1.0 (Forgejo 7.0.3, long past its end of support)
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: vm-operator
@@ -249,8 +242,21 @@ components:
   eol: not-yet
   eol_source: https://github.com/cloudnative-pg/cloudnative-pg/blob/main/docs/src/supported_releases.md
   note: the project's table lists 1.29 and 1.30 as supported; a minor is supported until 3 months after
-    the next one. barmanObjectStore (both Clusters) is removed in 1.31, so the 1.30 pin cannot go to 1.31 before
-    the move to the Barman Cloud plugin
+    the next one. Both Clusters now archive through the Barman Cloud plugin (the in-tree barmanObjectStore goes
+    in 1.31), so 1.31 is no longer blocked by it; the hop is still one minor at a time
+  owner: '@vde-dis'
+  next_review: '2026-12-14'
+- id: barman-cloud-plugin
+  brick: cnpg
+  component: CNPG Barman Cloud plugin (vendored dump)
+  pin: 0.15.1
+  file: apps/base/cnpg/barman-cloud-plugin-0.15.1.yaml
+  pattern: image:\s*ghcr\.io/cloudnative-pg/plugin-barman-cloud:v([0-9.]+)
+  cycle: plugin-barman-cloud 0.x
+  eol: not-yet
+  eol_source: https://github.com/cloudnative-pg/plugin-barman-cloud/releases
+  note: pre-1.0, no published support policy; re-vendored by hand, one release at a time, and its CRD (ObjectStore)
+    is what scripts/dev/test-cnpg-barman-plugin.py validates the ObjectStores against
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: postgres-main
@@ -311,13 +317,14 @@ components:
 - id: gateway-api
   brick: platform/gateway-api
   component: Gateway API CRDs (vendored dump)
-  pin: 1.2.1
+  pin: 1.6.0
   file: apps/base/platform/gateway-api/standard-install.yaml
   pattern: gateway\.networking\.k8s\.io/bundle-version:\s*v([0-9.]+)
-  cycle: Gateway API v1.2
+  cycle: Gateway API v1.6
   eol: unknown
-  note: the 'vendored from' comment in kustomization.yaml is a Renovate tracking comment, not the vendored
-    version
+  note: v1.6.0 is the version Istio 1.31.3 is built against (go.mod); 1.6.1 to 1.6.3 differ from it only by the
+    bundle-version annotation in the standard channel. The 'vendored from' comment in kustomization.yaml is a
+    Renovate tracking comment (checked against the dump by scripts/dev/check-vendored-lock.sh)
   owner: '@vde-dis'
   next_review: '2026-12-14'
 - id: local-path

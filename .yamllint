@@ -5,6 +5,7 @@ extends: default
 ignore: |
   **/kyverno/kyverno-*.yaml
   **/cnpg/cnpg-*.yaml
+  **/cnpg/barman-cloud-plugin-*.yaml
   **/external-secrets/install.yaml
   **/orc/install.yaml
   **/platform/gateway-api/standard-install.yaml
@@ -18,6 +19,7 @@ ignore: |
   **/observability/dashboards/*.yaml
   **/foundation/vault/bootstrap-roles-job.yaml
   **/backup/*/cronjob.yaml
+  **/backup/*/cnpg-store-replicate-cronjob.yaml
 
 rules:
   document-start: disable

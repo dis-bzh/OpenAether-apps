@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
-FILES = ["apps/base/cnpg/cluster.yaml", "apps/base/cnpg/grafana-db-cluster.yaml"]
+FILES = ["apps/base/cnpg/cluster.yaml", "apps/base/cnpg/grafana-db-cluster.yaml", "apps/base/forgejo-db/cluster.yaml"]
 
 
 def spec_of(path):

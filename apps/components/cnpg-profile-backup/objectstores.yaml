@@ -1,0 +1,33 @@
+# Where this database archives its WAL and base backups (Barman Cloud plugin, like
+# apps/base/cnpg/objectstores.yaml): the primary
+# store, and the replica store the backup brick copies the primary archive to (cnpg-store-replicate: add NAME to its
+# CLUSTERS).
+# ${BACKUP_S3_*} come from the cluster-identity ConfigMap (the Flux Kustomization of the database needs
+# postBuild.substituteFrom
+# on it); keep the quotes. No client-side encryption (apps #149): docs/database-profiles.md says what that means.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: NAME-primary
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database
+    openaether.io/db-profile: customer
+    openaether.io/db-store: primary
+spec:
+  retentionPolicy: "30d"
+  configuration:
+    destinationPath: "s3://${BACKUP_S3_BUCKET:=}/cnpg/NAME"
+    endpointURL: "${BACKUP_S3_ENDPOINT:=}"
+    s3Credentials:
+      accessKeyId: { name: NAME-backup-s3, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: NAME-backup-s3, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip, encryption: AES256 }
+    data: { compression: gzip, encryption: AES256 }
+  instanceSidecarConfiguration:
+    env:
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: when_required }
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: when_required }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }

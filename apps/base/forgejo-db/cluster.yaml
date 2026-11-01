@@ -1,0 +1,112 @@
+# CNPG PostgreSQL Cluster for Forgejo
+# ──────────────────────────────────────────────────────────────────
+# Dogfooding V1: the forge stores its users, issues, pull requests, metadata and LFS pointers in forgejo-db. The
+# repositories themselves are on the Forgejo volume (apps/base/forgejo), NOT here.
+# Same posture as grafana-db (apps/base/cnpg/grafana-db-cluster.yaml), copied from it: 3 instances (synchronous quorum
+# replication, any 1 of 2) on local-path storage. Three, not two: with one replica and dataDurability required, losing
+# it
+# would block every write. CNPG handles ALL the HA, NOT Longhorn (stacking block replication under CNPG = anti-pattern,
+# cf. grafana-db).
+# New in 0.4.0: there is no 0.3.x forgejo-db to move, so none of the upgrade steps of docs/resilience.md ("The Barman
+# Cloud plugin, two replicas": the presync of synchronous replication before the apps ref moves) apply to it.
+#
+# This directory is its OWN Flux Kustomization (`forgejo-db`, apps/flux/base/36-forgejo-db.yaml), not part of `cnpg`: a
+# profile without the forge (the workload profile) does not pay for three database pods it does not use, and a database
+# that is not Ready cannot hold identity or observability back (`cnpg` is wait: true). The `forgejo` Kustomization
+# depends on it, so the chart is not installed against a database that does not exist yet.
+# Image: the same line as grafana-db (16.15). #162 and #163 (the 16.15 and 18.6 image scans) are open; this Cluster
+# follows what grafana-db does and adds no image to the inventory.
+# ExternalSecret: forgejo-db-credentials (externalsecret.yaml)
+# → OpenBao secret/forgejo/db, seeded by the vault configure Job. The services-git twin (same OpenBao key) feeds
+# the app itself through GITEA__database__PASSWD.
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: forgejo-db
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/sprint: "0.5.0-sprintC"
+    openaether.io/component: forgejo-db
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.15
+  primaryUpdateStrategy: unsupervised
+  # See apps/base/cnpg/cluster.yaml: replicas first, then a switchover, instead of restarting the only writer in place.
+  primaryUpdateMethod: switchover
+  storage:
+    # local-path-retain: node-local storage, immediate mount (no CSI
+    # attach/detach), Retain (data kept if the PVC is deleted).
+    # HA comes from the 3 CNPG instances, not from the storage.
+    storageClass: local-path-retain
+    size: 5Gi
+  # Connection: user forgejo, database forgejo.
+  # The postgres superuser is managed by CNPG (auto-generated secret).
+  bootstrap:
+    initdb:
+      database: forgejo
+      owner: forgejo
+      secret:
+        name: forgejo-db-credentials
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Class A data (users, repositories' metadata, issues): same durability as zitadel-db and grafana-db, see
+  # apps/base/cnpg/cluster.yaml and docs/resilience.md ("no acknowledged commit is lost").
+  postgresql:
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: required
+      failoverQuorum: true
+
+  affinity:
+    # CNPG AffinityConfiguration (not the standard K8s type)
+    podAntiAffinityType: preferred
+    topologyKey: kubernetes.io/hostname
+    # Lab 21: a second, zone-level preference keeps the instances in different zones when the cluster has them; it never
+    # blocks scheduling (a lost zone leaves fewer zones than instances). See grafana-db-cluster.yaml.
+    additionalPodAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: topology.kubernetes.io/zone
+            labelSelector:
+              matchLabels:
+                cnpg.io/cluster: forgejo-db
+    # Lab 21: a primary on a lost node was failed over only when the TaintManager evicted its pod, after the default
+    # 300 s toleration (apps #154). 30 s is the liveness probe of the instance manager (period 10 s x 3 failures).
+    # Docs: docs/resilience.md.
+    tolerations:
+      - key: node.kubernetes.io/unreachable
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
+  monitoring:
+    enablePodMonitor: false
+
+  # ── PITR (Point-In-Time Recovery) ───────────────────────────────────────────
+  # The Barman Cloud plugin archives WAL continuously (an RPO of minutes) and takes the base backups
+  # (scheduledbackup.yaml). Where and how is the ObjectStore `forgejo-db-primary` (objectstores.yaml); the second copy
+  # on
+  # the replica store is shipped by the backup brick (backup/databases, cnpg-store-replicate).
+  # The WAL archive name (serverName) is the Cluster name plus the archive generation suffix: empty on an install, and
+  # "-g2", "-g3"... on a cluster REBUILT from a store (task dr-restore-plan writes the ConfigMap cnpg-archive-generation
+  # in flux-system, Flux substitutes it here: the `forgejo-db` Kustomization reads it like `cnpg` does). Never edit this
+  # by hand on a running cluster; docs/traps.md.
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: forgejo-db-primary
+        serverName: "forgejo-db${CNPG_ARCHIVE_SUFFIX:=}"

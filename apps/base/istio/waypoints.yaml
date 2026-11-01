@@ -8,7 +8,10 @@ metadata:
     openaether.io/sprint: "0.5.0-sprintB"
     openaether.io/component: "istio"
 spec:
-  gatewayClassName: istio
+  # The waypoint class, not `istio`: istiod 1.31 refuses protocol HBONE on a Gateway of class `istio` ("only supported
+  # for waypoint proxies", listener not Accepted). The waypoint class names its objects after the Gateway, without the
+  # `-istio` suffix: ServiceAccount istio-waypoint (authz principal in authz/authorizationpolicy-explicit-allows.yaml).
+  gatewayClassName: istio-waypoint
   listeners:
     - name: mesh
       port: 15008

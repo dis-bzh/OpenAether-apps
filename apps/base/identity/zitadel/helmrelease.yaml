@@ -103,6 +103,27 @@ spec:
 
     # The login UI had no limit at all (the `resources:` below are the server's). Measured 191 Mi on a lab cluster.
     login:
+      # Two login pages on two workers: with one, a lost worker took the login down until the 5 minute toleration ran
+      # out (0.4.0 M4, scripts/check-ha.py). Costs 50m of CPU requests.
+      replicaCount: 2
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: zitadel-login
+              app.kubernetes.io/instance: zitadel
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: zitadel-login
+              app.kubernetes.io/instance: zitadel
+      pdb:
+        enabled: true
+        minAvailable: 1
       image:
         # renovate: datasource=docker depName=ghcr.io/zitadel/zitadel-login
         tag: "v4.19.5@sha256:2f8e57672fcd4f9a285d99355fae9f85fd7495768c090c07c3bbc2d84fc06617"
@@ -147,6 +168,12 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: zitadel
               topologyKey: kubernetes.io/hostname
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: zitadel
+              topologyKey: topology.kubernetes.io/zone
 
     zitadel:
       # Masterkey (32 bytes) from the ESO Secret — never in cleartext in the chart.
@@ -188,6 +215,10 @@ spec:
             Database: zitadel
             MaxOpenConns: 20
             MaxIdleConns: 10
+            # A failover (or a lost node) leaves pooled connections dead: recycle them quickly so none outlives a
+            # failover by more than minutes (defaults 30m / 5m). docs/database-failover-clients.md.
+            MaxConnLifetime: 5m
+            MaxConnIdleTime: 2m
             User:
               Username: zitadel
               SSL:

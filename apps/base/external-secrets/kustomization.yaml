@@ -12,10 +12,20 @@ resources:
   - install.yaml
   - rbac-cert-controller-create.yaml
   - networkpolicy.yaml
+  - pdb.yaml
 
 patches:
   # Multi-document: each Deployment is matched by its own name.
   - path: patch-resources.yaml
+  - path: patch-ha.yaml
+  # Two controller replicas need leader election (off in the vendored args).
+  - target:
+      kind: Deployment
+      name: external-secrets
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --enable-leader-election=true
   - path: patch-cert-controller-ns.yaml
     target:
       kind: Deployment

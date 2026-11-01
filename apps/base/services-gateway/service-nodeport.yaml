@@ -28,6 +28,9 @@ spec:
   # `Cluster` (the default) rather than `Local`: the cloud LB targets ALL
   # workers, including those hosting no gateway pod. Under `Local` they would
   # fail the health check and traffic would concentrate on a single node.
+  # Owner decision 2026-10-28 (docs/resilience.md of OpenAether-infra): `Cluster` stays, and the
+  # resilience comes from 3 Gateway replicas spread over nodes and zones (gateway-ha.yaml, the
+  # Kyverno policy spread-gateway-pods) and a drain-safe termination, not from `Local`.
   # Accepted trade-off: the source IP is masked by the node's SNAT — hence the
   # `host`/`remote-node` entities added to the `openaether-gateway` CNP.
   externalTrafficPolicy: Cluster

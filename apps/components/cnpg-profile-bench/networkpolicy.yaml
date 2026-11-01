@@ -1,0 +1,26 @@
+# The egress the bench and zero-loss Job pods need to reach their database and its pooler. The profile's own policy
+# (cnpg-profile-common) admits the application on the DATABASE side only; the application's side is its own business
+# and a namespace where a policy already selects the pod denies everything else (lab 23: the bench Job could not
+# connect). This one is for the Job pods only (label openaether.io/db-profile=bench); a real application needs the
+# same two lines in its own policy (docs/database-profiles.md, "Use one").
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: NAME-bench
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database-bench
+    openaether.io/db-profile: bench
+spec:
+  description: "Bench and zero-loss Jobs: their database and its pooler on 5432 (pooler pods carry the cluster label)"
+  endpointSelector:
+    matchLabels:
+      openaether.io/db-profile: bench
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: NAME
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP

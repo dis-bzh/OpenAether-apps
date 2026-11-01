@@ -1,10 +1,16 @@
 # The Gateway's Deployment (openaether-gateway-istio, created by Istio from the Gateway) is the only way in for every
 # customer request. Istio creates it with ONE replica and no disruption budget: draining the node that hosts it cut all
 # traffic for 74 s (lab 15c, measured by a 1 Hz probe through the load balancer). Istio leaves `replicas` to an HPA when
-# there is one, so two replicas are kept by the HPA's floor, and the PDB lets a drain evict one at a time. Spreading
-# the two
-# pods over different nodes is the Kyverno mutation kyverno-policies/spread-gateway-pods.yaml (Istio 1.24 offers no
-# setting).
+# there is one, so the replicas are kept by the HPA's floor: THREE since 0.4.0 (owner decision 2026-10-28, with the
+# Service kept on externalTrafficPolicy Cluster: one pod per zone of a 3-zone cluster, so a lost node or zone takes
+# one third of the Gateway and not half, and the connections the load balancer still sends to a dead member land on
+# the two survivors). The PDB lets a drain evict one at a time and never drops below two. Spreading the pods over
+# nodes AND zones, and terminating them without dropping connections (preStop, TERMINATION_DRAIN_DURATION_SECONDS,
+# terminationGracePeriodSeconds), is the Kyverno mutation kyverno-policies/spread-gateway-pods.yaml (Istio 1.31 can do
+# it with a parametersRef overlay, not adopted yet). Cost: one more pod, 100m CPU and 128Mi of requests (the Istio
+# default for a Gateway pod). Istio 1.31 can also create an HPA and a PDB of its own for a Gateway, but only when a
+# parametersRef or GatewayClass overlay asks for one (both are "required overlays" in its controller); none is set
+# here, so these two stay ours.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -15,8 +21,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: openaether-gateway-istio
-  minReplicas: 2
-  maxReplicas: 4
+  minReplicas: 3
+  maxReplicas: 6
   metrics:
     - type: Resource
       resource:

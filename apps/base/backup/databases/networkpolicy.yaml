@@ -1,3 +1,4 @@
+# yamllint disable rule:line-length
 # Egress of the CNPG dump pod (default-deny posture).
 # DB ingress :5432 is already covered by the intra-namespace rule of
 # cnpg/networkpolicy-db-restricted.yaml (selector namespace-only).
@@ -62,4 +63,245 @@ spec:
       toPorts:
         - ports:
             - port: "9000"
+              protocol: TCP
+---
+# cnpg-store-replicate: reads the primary store, writes the replica store, nothing else.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg-store-replicate
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "CNPG store replication: egress DNS + the provider S3 endpoints (443)"
+  endpointSelector:
+    matchLabels:
+      app: cnpg-store-replicate
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchPattern: "s3.*.scw.cloud"          # Scaleway Object Storage
+        - matchPattern: "s3.*.io.cloud.ovh.net"   # OVH Object Storage (standard class)
+        - matchPattern: "oos.*.outscale.com"      # Outscale OSU
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+# backup-verify: reads both stores and the Kubernetes API (stage 3 patches one ConfigMap, reads Longhorn backups).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: backup-verify
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "Backup verifier: egress DNS + the provider S3 endpoints (443) + kube-apiserver"
+  endpointSelector:
+    matchLabels:
+      app: backup-verify
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchPattern: "s3.*.scw.cloud"          # Scaleway Object Storage
+        - matchPattern: "s3.*.io.cloud.ovh.net"   # OVH Object Storage (standard class)
+        - matchPattern: "oos.*.outscale.com"      # Outscale OSU
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+# The exporter: vmagent scrapes 9101, nobody else.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: backup-verify-exporter
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "Backup verifier exporter: ingress 9101 from vmagent only"
+  endpointSelector:
+    matchLabels:
+      app: backup-verify-exporter
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": services-observability
+            "app.kubernetes.io/name": vmagent
+      toPorts:
+        - ports:
+            - port: "9101"
+              protocol: TCP
+---
+# cnpg-canary: writes one row into the two databases and talks to nothing else.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg-canary
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "CNPG canary writer: egress DNS + Postgres 5432 of the two clusters"
+  endpointSelector:
+    matchLabels:
+      app: cnpg-canary
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEndpoints:
+        - matchExpressions:
+            - key: "cnpg.io/cluster"
+              operator: Exists
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+---
+# cnpg-restore-test: reads the live databases (stage 1), then talks to the API server only (it creates, inspects, execs into
+# and deletes the scratch Cluster there). The scratch instances reach the S3 stores themselves (apps/base/cnpg/restore-scratch.yaml).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg-restore-test
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "CNPG restore test: egress DNS + Postgres 5432 of the live clusters + kube-apiserver"
+  endpointSelector:
+    matchLabels:
+      app: cnpg-restore-test
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEndpoints:
+        - matchExpressions:
+            - key: "cnpg.io/cluster"
+              operator: Exists
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+# cnpg-dump-load-restore-test: reads the two restic repositories (S3), loads the dumps in a private server (no network), publishes
+# through the API server.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg-dump-load-restore-test
+  namespace: foundation-databases
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: backup
+spec:
+  description: "Dump restore test: egress DNS + the provider S3 endpoints (443) + kube-apiserver"
+  endpointSelector:
+    matchLabels:
+      app: cnpg-dump-load-restore-test
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchPattern: "s3.*.scw.cloud"          # Scaleway Object Storage
+        - matchPattern: "s3.*.io.cloud.ovh.net"   # OVH Object Storage (standard class)
+        - matchPattern: "oos.*.outscale.com"      # Outscale OSU
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP

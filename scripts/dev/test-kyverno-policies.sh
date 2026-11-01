@@ -17,6 +17,12 @@ out="$("$kyverno" test scripts/dev/testdata/kyverno-gateway-spread 2>&1)" || { e
 if grep -q 'Want ' <<<"$out"; then grep 'Want ' <<<"$out"; exit 1; fi
 grep 'Test Summary' <<<"$out"
 
+# The restore-test guard matches CNPG Clusters, not Pods: a scratch Cluster outside the scratch namespace, one that archives, one
+# that does not recover or has several instances are refused; a live Cluster is left alone.
+out="$("$kyverno" test scripts/dev/testdata/kyverno-restore-guard 2>&1)" || { echo "$out" | tail -25; exit 1; }
+if grep -q 'Want ' <<<"$out"; then grep 'Want ' <<<"$out"; exit 1; fi
+grep 'Test Summary' <<<"$out"
+
 # The CLI cannot evaluate a `Pod/ephemeralcontainers` match (every row comes back "Excluded"), so the two ephemeral policies are
 # run on a copy whose match is rewritten to Pod: this tests the deny conditions; that the real match registers CREATE and UPDATE
 # on the subresource is checked statically by test-kyverno-enforcement.py.

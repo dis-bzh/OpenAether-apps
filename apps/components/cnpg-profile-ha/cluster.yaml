@@ -1,0 +1,67 @@
+# Profile ha: THREE instances, quorum synchronous replication ANY 1 with REQUIRED durability, backups to two stores,
+# PgBouncer.
+# A commit is acknowledged only once a replica holds it (same rule as zitadel-db and grafana-db, docs/resilience.md
+# "Zero-loss
+# proof"); with one replica lost writes continue, with both lost they BLOCK rather than be acknowledged unreplicated.
+# Limit: the two disks that hold an acknowledged commit lost at once (two nodes, or one zone holding both) lose it.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: NAME
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: database
+    openaether.io/db-profile: ha
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6
+  # No superuser over the network: the application uses its owner; CNPG keeps the postgres password out of reach.
+  enableSuperuserAccess: false
+  primaryUpdateStrategy: unsupervised
+  # Replicas first, then a switchover, instead of restarting the only writer in place (see apps/base/cnpg/cluster.yaml).
+  primaryUpdateMethod: switchover
+  storage:
+    storageClass: STORAGE_CLASS
+    size: SIZE
+  bootstrap:
+    initdb:
+      database: DATABASE
+      owner: OWNER
+      secret:
+        name: NAME-credentials
+  resources:
+    requests: {cpu: CPU_REQUEST, memory: MEMORY}
+    limits: {cpu: CPU_LIMIT, memory: MEMORY}
+  monitoring:
+    enablePodMonitor: false
+  postgresql:
+    parameters:
+      password_encryption: scram-sha-256
+    # TLS and SCRAM only: a TCP connection without TLS is refused before authentication, then every other one needs
+    # SCRAM.
+    pg_hba:
+      - hostnossl all all all reject
+      - hostssl all all all scram-sha-256
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: required
+      failoverQuorum: true
+  affinity:
+    podAntiAffinityType: preferred
+    topologyKey: kubernetes.io/hostname
+    # A second, zone-level preference (lab 21: instances landed in ONE zone); it never blocks scheduling.
+    additionalPodAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: topology.kubernetes.io/zone
+            labelSelector:
+              matchLabels:
+                cnpg.io/cluster: NAME
+    # 30 s, the liveness window of the instance manager: a primary on a lost node is failed over after 30 s, not the
+    # 300 s default
+    # (apps #154, docs/resilience.md).
+    tolerations:
+      - {key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 30}
+      - {key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 30}

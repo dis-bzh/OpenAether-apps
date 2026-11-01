@@ -40,7 +40,8 @@ spec:
         - matchName: charts.jetstack.io
         - matchName: charts.longhorn.io
         - matchName: charts.min.io
-        - matchName: istio-release.storage.googleapis.com
+        - matchName: blob.istio.io
+        - matchName: istio-release.r2.istio.io
         - matchName: victoriametrics.github.io
         - matchName: grafana.github.io
         - matchName: grafana-community.github.io

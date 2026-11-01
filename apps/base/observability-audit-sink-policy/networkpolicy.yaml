@@ -1,0 +1,98 @@
+# yamllint disable rule:line-length
+# Egress of the audit sink, by pod (cluster-wide default: ingress denied; egress is what a CNP selects). A host that is not set stays an
+# impossible name (".invalid"), so a policy for a sink that is not configured opens nothing.
+# DNS first, with rules.dns (the toFQDNs need the DNS proxy; "*" as everywhere else: a search-domain lookup the proxy refused would
+# otherwise be retried by the resolver), then the sink's host on 443 and nothing else: no kube-apiserver rule, no Loki, no other S3.
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: audit-sink-shipper
+  namespace: services-observability-audit-sink
+spec:
+  description: "audit-sink-shipper: egress DNS and the first audit sink's host on 443 only; no ingress."
+  endpointSelector:
+    matchLabels:
+      app: audit-sink-shipper
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: "${AUDIT_SINK_HOST:=audit-sink.invalid}"
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: audit-sink-shipper-secondary
+  namespace: services-observability-audit-sink
+spec:
+  description: "audit-sink-shipper-secondary: egress DNS and the second audit sink's host on 443 only; no ingress."
+  endpointSelector:
+    matchLabels:
+      app: audit-sink-shipper-secondary
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: "${AUDIT_SINK_SECONDARY_HOST:=audit-sink-secondary.invalid}"
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: audit-sink-check
+  namespace: services-observability-audit-sink
+spec:
+  description: "audit-sink-check: egress DNS and the audit sinks' hosts on 443; ingress 9101 from vmagent only."
+  endpointSelector:
+    matchLabels:
+      app: audit-sink-check
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - { port: "9101", protocol: TCP }
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: "${AUDIT_SINK_HOST:=audit-sink.invalid}"
+        - matchName: "${AUDIT_SINK_SECONDARY_HOST:=audit-sink-secondary.invalid}"
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
