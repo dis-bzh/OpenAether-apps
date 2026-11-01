@@ -7,8 +7,8 @@ The shared Kustomize component apps/components/cnpg-bounded-shutdown sets `spec.
 test renders every brick and profile that defines a Cluster and fails when one lacks it, when the value leaves the 30 s class, when
 it is not smaller than `stopDelay`, when the vendored CRD does not know the field, or when a Cluster file sets it by hand (one
 place only). The infra repository's cnpg-presync patches the SAME number on the live 0.3.x Clusters before the move
-(test-cnpg-presync.sh there). Static: it proves the value is on every Cluster, not how long a restart takes (UNVERIFIED until the
-next lab).
+(test-cnpg-presync.sh there). Static: it proves the value is on every Cluster, not how long a restart takes (26.3-33.6 s in
+labs 27B, 27C and 28B, docs/resilience.md).
 Run: python3 -I scripts/dev/test-cnpg-shutdown.py [--selftest]
 """
 import copy

@@ -227,7 +227,11 @@ def main():
     check(int(prm["query_wait_timeout"]) >= 120 and int(prm["server_login_retry"]) <= 2 and int(prm["max_prepared_statements"]) > 0
           and prm["server_reset_query_always"] == "0", "pooler: waits through a failover, retries a lost server at once, prepared statements on")
     check(prm.get("client_tls_sslmode") == "require", "pooler: clients must use TLS (the default accepts sslmode=disable; lab 23)")
-    ic = (ps["template"]["spec"].get("initContainers") or [{}])[0]
+    # lab 28D (apps #158): the default 15 s DNS cache expires inside a zone outage, c-ares opens a UDP socket that Cilium pins to the
+    # CoreDNS replica that died; an hour of cache leaves no lookup in the window. CNPG's webhook allows dns_max_ttl (pooler_webhook.go).
+    check("dns_max_ttl" in prm and int(prm["dns_max_ttl"]) >= 300,
+          "pooler: the resolved IP of <name>-rw is cached for at least 300 s (dns_max_ttl; the 15 s default left the pooler dark in a zone loss, lab 28D)")
+    ic =(ps["template"]["spec"].get("initContainers") or [{}])[0]
     check(ic.get("name") == "bootstrap-controller" and ic.get("resources", {}).get("limits", {}).get("memory"),
           "pooler: the operator's init container has a memory limit (require-limits reported it in lab 23)")
     check(ic.get("securityContext", {}).get("readOnlyRootFilesystem") is True and ic["securityContext"].get("allowPrivilegeEscalation") is False

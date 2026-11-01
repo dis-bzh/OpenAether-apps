@@ -40,6 +40,10 @@ spec:
       # Retry a lost server at once: the default of 15 s would add up to 15 s to every failover.
       server_login_retry: "1"
       server_connect_timeout: "5"
+      # Cache the IP of NAME-rw for an hour (default 15 s): in a zone loss a lookup made in the first ~100 s pinned the pooler's
+      # DNS socket to the CoreDNS replica that died and the pooler stayed dark until the zone returned (apps #158, lab 28D).
+      # 3600 and not 300: the Service IP is stable, and a short cache puts 10 times more lookups in the window.
+      dns_max_ttl: "3600"
       # Notice a dead server connection (powered-off node: no reset arrives) in about 25 s.
       tcp_keepalive: "1"
       tcp_keepidle: "10"

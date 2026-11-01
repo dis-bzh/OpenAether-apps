@@ -16,9 +16,8 @@
 # 180 s: a
 # 206.4 s write gap on the platform, against the 17-22 s measured on a lab without clients. 5 s keeps a short window
 # for sessions
-# that are about to end and then disconnects the rest; the restart itself took 7-17 s in lab 27, so the expected gap
-# is about
-# 12-25 s, inside the 30 s class. UNVERIFIED on a cluster until the next lab.
+# that are about to end and then disconnects the rest. Measured on a cluster with the pool connected: 26.3-33.6 s (labs
+# 27B, 27C, 28B), inside the 35 s target (docs/resilience.md).
 #
 # NO RESTART NEEDED to apply it: the instance manager reads the value from its cached Cluster object at shutdown
 # (cloudnative-pg pkg/management/postgres/instance.go, TryShuttingDownSmartFast), not from the pod spec. The presync
