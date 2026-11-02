@@ -7,7 +7,8 @@ replication, archiving and the replica copy), HTTPS through the load balancer an
 refused, anonymous API 403, anonymous clone refused, `/metrics` answers 500 at the Gateway and is scraped by vmagent), the admin
 logged in and was forced to change the password, two repositories were pushed (3 s each) and cloned. The defects: the daily
 volume backup never selected the volume (FG), acknowledged pushes were lost on a zone power-off (FK, DATA LOSS), and enabling the
-brick is a hand patch (FF). Not a compliance claim.
+brick is a hand patch (FF). Not a compliance claim. Later runs enabled the brick again (labs 27B, 27C, 27D, 28): what they showed, and what is still
+open (apps #176), is in "What is NOT delivered"; the sections below on `core.fsync`, `dirsync` and the lock cleaners were written before them.
 
 ## What is delivered
 
@@ -115,8 +116,17 @@ a CNPG budget of **900 m** (`CNPG_CPU_BUDGET_FORGE_M`), the default budget being
 memory requests, 15 GiB of `local-path` and 10 Gi x 2 of Longhorn. Against the roll gate of OpenAether-infra
 (`docs/capacity.md` there): lab 21 measured a worker at about 3990 m, so +400 m is **+10 points of a worker**, from the 223-228% of lab
 21/22 to about **233-238% against the 300%** a 4-worker cluster allows (75-77% of the gate's limit before, about 78-79% now): it still
-passes, **which is why the brick is opt-in and why the lab must enable it explicitly**. **Derived, not measured.** Three workers were refused already; the two-worker zone is no better. Infra's `docs/capacity.md` still
-quotes the figures without the forge.
+passes, **which is why the brick is opt-in and why the lab must enable it explicitly**. **The +400 m is derived, not measured.** Three workers were refused already; the two-worker zone is no better.
+
+Readings with the forge on, none against a twin cluster without it, so none isolates its share (they count requests, not use):
+
+| Run | Cluster | With the forge, the three profile examples of `docs/database-profiles.md` (and the audit sink in lab 28) | Without them |
+|---|---|---|---|
+| Lab 27 (Scaleway) | 3 CP + 5 W POP2-4C-16G | 313% of a worker requested; the 3 workers left by a two-worker zone hold 300%, so `failure-domain-check` refuses and the pods would stay Pending (infra `docs/capacity.md`) | not recorded |
+| Lab 27D (OVH) | 3 CP + 4 W c3-8 | 10.47 vCPU requested, 262% of a worker | about 8.6 vCPU, 215% (the default platform) |
+| Lab 28 (OVH) | 3 CP + 6 W c3-8 | 11.92 vCPU, 302% of a worker, 24.8 GiB of memory; after the loss of any one zone (2 workers) what is left to place takes 73% of the CPU and 84% of the memory the remaining workers can allocate | not recorded |
+
+The lab 27D difference (10.47 minus about 8.6, about 1.9 vCPU) is of the size of the three profile examples alone (1.8 vCPU of requests, `docs/database-profiles.md`), against 2.2 vCPU derived for the examples plus the forge: it neither confirms nor refutes +400 m (the 8.6 is rounded), so the forge's own share stays derived. Reading the 313% and the 302% as "the forge costs this much" would be wrong. Infra's `docs/capacity.md` quotes the 313% of lab 27.
 
 ## Data: what protects what
 
@@ -197,8 +207,9 @@ label its Longhorn Volume by hand, as lab 27 did (`kubectl -n longhorn-system la
 recurring-job-group.longhorn.io/oa-forgejo=enabled`), or restore it into a new PVC of the new class. `test-forgejo-brick.py` fails without
 the class, with a class that differs from `longhorn-x2-rwo`, with a selector on another group or on a job rather than a group, with a PVC on
 another class (rendered from the chart), with the PVC label used again, a job on another group, a non-backup job, a non-daily or
-colliding schedule, or no retention. **UNVERIFIED on a cluster:** that a volume created from the new class carries the label and that the
-job then selects it (lab 27 only proved the job and the restore after the manual label).
+colliding schedule, or no retention. **Seen on a cluster since:** a volume created from the new class carried the group at creation with no manual
+step and the job's backup completed at the target (lab 27B, Scaleway, 3 CP + 5 W: 289 MB; lab 27D, OVH,
+3 CP + 4 W: a backup of the 396 MB volume). Lab 27 had proved only the job and the restore after the manual label.
 
 What this covers: the content of the volume (the bare repositories) as of the night's snapshot, 14 of them, if the platform has a backup
 target. What it does not cover, precisely:
@@ -210,10 +221,17 @@ target. What it does not cover, precisely:
   the volume from the night's backup), they can disagree: a repository the database knows with pushes the volume lacks, or pushes on
   disk that no issue, pull request or webhook row in the database accounts for; an application-consistent copy of both needs
   `forgejo dump` (or stopping the forge) at one moment, which nothing schedules. A restored volume is crash-consistent at best.
-- **A restore of the repositories' volume was run ONCE, in lab 27, by hand** (after the manual label): the 289 MB backup was restored
-  into a scratch volume through a StorageClass with `fromBackup`, a PVC and a pod; it held both repositories, `refs/heads/main` was
-  the pushed commit, `git clone` and `git fsck` were clean, and the scratch namespace and class were deleted. No restore of `forgejo-db`
-  has been exercised. The documented recurring test of a volume is the opt-in `longhorn-restore-test` component (a canary volume backed up
+  **The window, and how to narrow it (reasoning, UNVERIFIED: no restore of `forgejo-db` has been run).** Between the database's base backup (03:40)
+  and the volume's backup (03:55) there are 15 minutes: that is the disagreement if `forgejo-db` is restored from its base backup alone. It does not
+  have to be: the WAL archive lets CloudNativePG recover to any instant after the base backup (point-in-time recovery, `apps/base/backup/README.md`,
+  "Order of a full recovery"). To restore the pair with the smallest disagreement, restore the volume from a Longhorn backup (Longhorn lists the time
+  of each) and recover `forgejo-db` to that time (`targetTime`). What can still disagree is what Forgejo had in flight at that instant (a push whose
+  objects reached the volume and whose row was not committed yet, or the reverse); only a `forgejo dump` closes that, and nothing runs it. The
+  window is documented, not closed.
+- **A restore of the repositories' volume was run TWICE**: in lab 27, by hand after the manual label, and in lab 27B (Scaleway) from the backup of the
+  default job. Each time the backup (289 MB) was restored into a scratch volume through a StorageClass with `fromBackup`, a PVC and a pod (about 35 s
+  in lab 27B); it held both repositories, `refs/heads/main` was the pushed commit, `git clone` and `git fsck` were clean, and the scratch namespace
+  and class were deleted. No restore of `forgejo-db` has been exercised. The documented recurring test of a volume is the opt-in `longhorn-restore-test` component (a canary volume backed up
   and restored weekly): it proves that a Longhorn backup comes back on the platform, not that the Forgejo one does.
 
 ## How long the forge is away after a node or zone loss (F-FORGE-TOL, lab 27 sitting 2)
@@ -230,27 +248,49 @@ target. What it does not cover, precisely:
 | Partition of the forge's node (netem 100 %, 300 s), default policy | **341 s** (the partition plus 41 s) | the same wait; Longhorn did NOT re-attach elsewhere during the partition (the "unknown" of sitting 2: answered, it waits for the node). Push 700 acknowledged, 0 missing |
 | The same partition with `node-down-pod-deletion-policy = delete-both-statefulset-and-deployment-pod` set by hand (LAB-ONLY, reverted) | **128 s** | NodeNotReady +27 s, eviction +57 s, Longhorn detached the volume 3 s later and attached it on another worker 27 s after; the projected 2.5 to 3 minutes is met. Push 37 acknowledged, 0 missing, but the push in flight at the cut left a stale lock (above) |
 
-**Change (0.4.0, owner decision 2026-10-27): the platform sets `node-down-pod-deletion-policy` to `delete-both-statefulset-and-deployment-pod`**, with the mechanism, the evidence on what reaches an upgraded cluster, the side effects and the one-line check in [`resilience.md`](resilience.md), "Longhorn: node-down-pod-deletion-policy". Until a drill with the shipped setting, **the figures are 341-372 s measured with the default and 128 s measured with the setting applied by hand: the shipped path itself is UNVERIFIED.** The push gap and the volume stay a single-replica design: the forge is away for this long on a node or zone loss.
+**Change (0.4.0, owner decision 2026-10-27): the platform sets `node-down-pod-deletion-policy` to `delete-both-statefulset-and-deployment-pod`**, with the mechanism, the evidence on what reaches an upgraded cluster, the side effects and the one-line check in [`resilience.md`](resilience.md), "Longhorn: node-down-pod-deletion-policy". Until lab 28, **the figures were 341-372 s measured with the default and 128 s measured with the setting applied by hand, and the shipped path itself was UNVERIFIED.** Lab 28 (OVH, a NOMINAL 3 CP + 6 W cluster, each drill an INCIDENT by design) ran it with the shipped setting: the forge was away 154, 155 and 169 s for a partition of its node (three drills) and 116, 125, 126 and 169 s for four hard power losses of its node, with every acknowledged push present. One cluster family, no Scaleway repeat. The push gap and the volume stay a single-replica design: the forge is away for this long on a node or zone loss.
 
-## What is NOT delivered (open, each one is for an issue)
+## What is NOT delivered (open, each one is for an issue: apps #176)
+
+Checked item by item against the runs that enabled the brick after this page was first written: labs 27B and 27C (Scaleway, 3 control planes +
+5 workers) and labs 27D and 28 (OVH, 3 control planes + 4 and + 6 workers).
+
+**Seen on a cluster since.** Enabled by the documented path patch, no fault (NOMINAL): the brick converged in 1 min 44 s (27B), 2 min 23 s on an
+upgraded and 1 min 36 s on a fresh cluster (27C), 1 min 17 s (27D); in lab 28 `forgejo` was ready at 72 s and `forgejo-db` at 2 min 27 s. The first
+base backup of `forgejo-db` was taken at once (Completed 43 s after the patch in 27C). `backup-verify` covers `forgejo-db` and passed on the primary
+and the replica store (lab 28). Under faults (each drill an INCIDENT by design, on the NOMINAL 3 CP + 6 W cluster of lab 28): four hard power losses
+and three partitions of the forge's node, every acknowledged push present, `git fsck` clean, the forge away 116 to 169 s. The volume's backup and its
+restore are in "The recurring backup of the repositories' volume".
+
+**Still open:**
 
 - SSH (git over SSH needs a Gateway `TCPRoute`; git is HTTPS only), OIDC login with Zitadel (rung 3: the client registration, `identity`
   in `dependsOn`, in-cluster resolution of `*.openaether.local`, enabling the commented `gitea.oauth` block), a mail relay (#174) and a
   status page (#175, out of scope here).
 - A second Forgejo replica (needs ReadWriteMany, Valkey for sessions and cache, a shared object store), so the forge is a single replica
   listed in `scripts/ha-allowlist.yaml`: while its pod is rescheduled after a node loss there is **no push, pull or web access** (about 8 minutes
-  measured with Kubernetes' 300 s default toleration; 341-372 s with the 30 s toleration and Longhorn's default policy; 128 s with the policy set, measured once with the setting applied by hand: see "How long the forge is away"); the cluster and Flux keep running.
+  measured with Kubernetes' 300 s default toleration; 341-372 s with the 30 s toleration and Longhorn's default policy; 128 s with the policy set,
+  measured once with the setting applied by hand; 116 to 169 s in lab 28 (partitions and hard power losses of its node) with the shipped policy: see "How long the forge is away"); the cluster
+  and Flux keep running.
 - Image **digest pinning** (the image is the chart's `appVersion` tag, `15.0.10-rootless`, bumped with the chart).
-- **Backups**: the proof that the repositories' volume restores and an application-consistent copy of it with the database (above), and `forgejo-db` in the rest of the backup brick: the restic `pg_dump` (`cronjob.yaml`),
-  the canary, the restore tests (`restore_cnpg.py`) and the verifier (`barman_check.py`) still know two databases. The WAL archive and the
-  base backups exist and the replica copy runs, but no restore of `forgejo-db` has been exercised and nothing alerts if its archive goes
-  stale beyond the generic CNPG rules (`CnpgSyncReplicaMissing` and the WAL archiver ones already read every instance pod).
+- **Backups.** (a) The database and the volume are not backed up at the same instant: the window, and how to narrow it by recovering the database to
+  the time of the volume's backup, are written above (UNVERIFIED). (b) `forgejo-db` is not in the restic `pg_dump` (`cronjob.yaml`), the canary, or the
+  restore tests (`restore_cnpg.py`, `cnpg-recovery-restore-test`), which know `zitadel-db` and `grafana-db`; no restore of `forgejo-db` has been
+  exercised, and the disaster-recovery chain of OpenAether-infra (`task dr-restore-plan`) does not name it either (read in infra at commit 59e7bfa).
+  (c) Nothing alerts if its archive goes stale beyond the generic CNPG rules (`CnpgSyncReplicaMissing` and the WAL archiver ones already read every
+  instance pod). The verifier (`barman_check.py`) is no longer on this list: it covers `forgejo-db` (above).
 - `readOnlyRootFilesystem` on the Forgejo containers: the one Kyverno finding left (Audit). The chart's init containers write under `/`;
   to prove read-only works needs a run.
-- A rule on Forgejo's metrics (the names are not checked against a running Forgejo), and the HTTP 500 the Gateway is expected to answer
-  to `/metrics` (a rule with no backend: standard Gateway API behaviour, unverified with Istio 1.31).
+- A rule on Forgejo's metrics. The `VMPodScrape` exists and vmagent scraped Forgejo in lab 27 (`up` = 1, 26 `gitea_*` series), but no rule reads
+  the series and their names are not checked against a running Forgejo. The Gateway answers HTTP 500 to `/metrics` (the path has no backend, so
+  nothing is exposed): seen in labs 27, 27B and 27C, on clusters moved from 0.3.2 to the 0.4.0 head, where the lab 27 journal records Istio 1.24.2
+  moved to 1.31.3 in place; never read on a fresh install, which stays UNVERIFIED.
 
 ## What the next lab must prove
+
+Status after labs 27B to 28 (details in "What is NOT delivered"): items 1 to 3 and the first half of 4 were seen, and item 5 was run on hard power
+losses and partitions in lab 28. The list below stays the acceptance list for the rest: the pair restore of 4, 6 and 7, and the graceful zone
+power-off and the push latency of 5 (whether a later run measured them was not checked: treat them as open).
 
 0. **The lab enables the brick explicitly** (`apps/flux/management-forge`, or the instance profile): a default install does not carry it,
    so a lab that does not turn it on proves nothing about it. Also there: the default install still renders and converges without it.
