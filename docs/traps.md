@@ -138,6 +138,28 @@ belong to. What follows has no skill of its own yet.
   came back in about a minute. OpenAether-infra's `seed-openbao.sh` does it after seeding. Seen on Scaleway when the Day-1 seeding came 30 minutes
   after the database pods.
 
+- **The Pooler of a freshly created `ha` database may not log in: `FATAL: role "cnpg_pooler_pgbouncer" does not exist` (apps #177; seen ONCE, cause
+  not found).**
+  *Seen.* Lab 27 (Scaleway, 3 control planes + 5 workers POP2-4C-16G, a first install, not a fault drill): the `ha` example (3 instances + Pooler) was applied by hand on a
+  cluster just moved to the 0.4.0 head, and for 9 minutes every connection through the pooler failed with that message. The role existed 20 seconds
+  after the Cluster was annotated (below). The lab journal holds only the draft of this finding: no Cluster status and no instance-manager log of those
+  minutes, so nothing shows which step was missed.
+  *Check.* A client that connects through `<name>-pooler-rw` gets that message (where else it is logged was not recorded). On the primary the role is
+  there when this prints 1 (the command was not run on a cluster):
+  `kubectl cnpg psql <name> -n <ns> -- -Atc "select count(*) from pg_roles where rolname = 'cnpg_pooler_pgbouncer'"`.
+  The role is PgBouncer's own `auth_user` (CloudNativePG's documentation), so the direct `<name>-rw` path does not need it; the issue does not say whether it was tried.
+  *Recover.* Annotate the Cluster, the same command as the S3 Secret entry above, with the namespace of the database:
+  `kubectl -n <ns> annotate cluster.postgresql.cnpg.io <name> cnpg.io/reloadedAt="$(date -u +%FT%TZ)" --overwrite`. In the lab the role appeared 20 seconds
+  later and the pooler logged in. Nothing else was done.
+  *What is NOT known.* By reading the operator 1.30.1 source (no run showed it): the instance manager of the PRIMARY creates the role at its reconcile, once
+  the Cluster status lists the Pooler's secrets (`status.poolerIntegrations`, set by the operator after the Pooler exists). Why that reconcile did not
+  create it the first time is not found, and no nudge is shipped in the component on one sighting.
+  *How often.* One sighting in 7 first installs of the profile that the issue or a journal speaks of: not met in lab 26 (issue), 27B (login checked at
+  install), 28 (OVH, 3 control planes + 6 workers: no login failure, 28 thousand pooler commits acknowledged), 28C, 28D and 28E (Scaleway, 3 control
+  planes + 6 workers: the pooler logged in and carried the writers; the time of the first login was not recorded). That is not a rate: the clusters
+  differ, and in the journals of labs 27, 27B, 28, 28B, 28D and 28E the examples were rendered and applied by hand, not through a Flux Kustomization as
+  `docs/database-profiles.md` says ("Use one"). The Flux path is UNVERIFIED for this trap.
+
 ## CAPI
 
 - **A read-only root filesystem on the CAPI operator needs a writable `/home/nonroot`, not only `/tmp`.** Its embedded clusterctl
