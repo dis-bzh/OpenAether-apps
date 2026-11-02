@@ -69,6 +69,10 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 - **Data written by the delivery test to a muted channel.** The receiver answering 2xx is the only acknowledgement.
 - **Alloy keeps log batches in memory only (#119, #80).** Its write-ahead log was tried with the real Alloy of the pinned chart
   and does not replay after a hard restart (`scripts/dev/probe-alloy-wal.sh`): not enabled.
+- **An OpenBao standby that cannot find the active node.** After a raft restore into a rebuilt cluster, `openbao-0` answered `local node not
+  active but active cluster node not found` (logins 500) for 25+ minutes (lab 28B, DR chain, INCIDENT). `OpenBaoNoActiveNode` sums
+  `vault_core_active` over the pods, so it stays quiet while another pod is active, and no rule reads a standby's view of the leader. Run
+  `bao status` on each pod after a restore (`apps/base/foundation/vault/README.md`, Disaster recovery).
 - **`ContinuousArchiving=False` itself.** Only the archiver's counters are read (`CnpgWalArchiveFailing`, `CnpgWalNeverArchived`): a Cluster
   that archived before and now fails is seen after about 25 minutes, and a False condition for another reason is not seen. A rule on the
   condition needs kube-state-metrics to read the `Cluster` objects (a `customResourceState` entry and `list`/`watch` on `clusters.postgresql.cnpg.io`,

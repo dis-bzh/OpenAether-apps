@@ -347,6 +347,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: `kubectl -n foundation-vault get pods -o wide`; `bao operator raft list-peers` from a pod that answers.
 - Do: A pod Pending on a dead worker holds a local-path volume that does not move: `task cluster-replace-node PROVIDER=<provider> NODE=<node>`; the new member resyncs from its raft peers. A sealed pod unseals itself from the seal-key Secret: see OpenBaoWorkloadSealed.
 - Do not: delete the PVC of a pod whose node is only unreachable (the data is on that node); restore a raft snapshot while two replicas are up.
+- After a raft restore (the DR chain): `bao status` on all three pods, `openbao-0` included; a pod with no `Active Node Address` (logins 500, `local node not active but active cluster node not found`) is restarted with `kubectl -n foundation-vault delete pod openbao-N`, the PVC stays (lab 28B, #184: it was `openbao-0`, for 25+ minutes). `apps/base/foundation/vault/README.md`, Disaster recovery, step 3.
 
 ### OpenBaoRaftNoFailureTolerance
 
