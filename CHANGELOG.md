@@ -19,6 +19,7 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ### Documented (0.4.1, apps #176, #177, #178, #182; rung: docs only, nothing changed in the manifests, nothing run for this entry; the figures come from the 0.4.0 lab journals (labs 27 to 28E, Scaleway and OVH), the mechanisms marked "reading" from the CloudNativePG 1.30.1 source)
 - **The Pooler of a freshly created `ha` database may not log in (`docs/traps.md`, `docs/database-profiles.md`, apps #177).** `role "cnpg_pooler_pgbouncer" does not exist` for 9 minutes at one first install (lab 27), cured 20 s after the Cluster annotation; not met in the 6 other first installs the journals speak of. Cause not found, no change to the component; every lab applied the examples by hand, so the Flux path is UNVERIFIED.
+- **A deleted `FailoverQuorum` object is not recreated for minutes (`docs/traps.md`, apps #178).** Seen once (lab 27, Scaleway): still missing after more than 2 minutes, back after the `cnpg.io/reloadedAt` annotation. By reading, the operator does not watch that kind and refuses a failover while the object is missing or empty, so a primary lost in that window would not be replaced: UNVERIFIED on a cluster, the lab never lost a primary then.
 
 ## [0.4.0] — 2026-11-01
 

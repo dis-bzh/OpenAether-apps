@@ -160,6 +160,24 @@ belong to. What follows has no skill of its own yet.
   differ, and in the journals of labs 27, 27B, 28, 28B, 28D and 28E the examples were rendered and applied by hand, not through a Flux Kustomization as
   `docs/database-profiles.md` says ("Use one"). The Flux path is UNVERIFIED for this trap.
 
+- **A deleted `FailoverQuorum` object is not recreated by the operator for minutes (apps #178; low severity).**
+  *Seen.* Lab 27 (Scaleway, 3 control planes + 5 workers, primary healthy, the deletion was the only fault, made to test the `cluster-verify` line): the
+  `FailoverQuorum` of `zitadel-db`, the object CloudNativePG reads to decide whether a failover is safe when the Cluster declares `failoverQuorum: true`,
+  was deleted in a loop. It was still missing after more than 2 minutes (how much longer was not measured) and came back after the `cnpg.io/reloadedAt`
+  annotation of the entry above. The one of `grafana-db` was back within a minute only because Flux re-applied the Cluster spec.
+  *Check.* `kubectl -n <ns> get failoverquorums.postgresql.cnpg.io <name>`: `NotFound` is the trap. `cluster-verify` (OpenAether-infra) fails on it for the
+  platform's Clusters ("the spec declares failoverQuorum true and the FailoverQuorum object does not exist"); it does not read the Clusters of your database
+  profiles (see the archive-path entry above), so read it yourself for an `ha` database.
+  *Recover.* The annotation above, on the Cluster that owns the object.
+  *What it costs, by reading, NOT by a run.* In the 1.30.1 source the operator creates the object in its Cluster reconcile and the Cluster controller does
+  not watch that kind, so a deletion triggers nothing until the Cluster is reconciled for another reason. The failover decision refuses to promote when the
+  object is missing ("Quorum check failed because no synchronous metadata is available. Denying the failover request") or when its content is empty, and
+  only the primary writes the content. So a primary lost while the object is missing would not be replaced until the object is back and filled: the guard
+  waits rather than promotes, so no acknowledged commit is at risk, but the write outage would be longer. The lab never lost a primary with the object
+  missing: UNVERIFIED on a cluster.
+  *Not established.* Why the recreation took more than 2 minutes beyond the missing watch. The upstream issue cloudnative-pg#11627 (a lost configuration
+  reload) is related according to apps #178; nothing shows it is the same cause. Nothing was posted upstream.
+
 ## CAPI
 
 - **A read-only root filesystem on the CAPI operator needs a writable `/home/nonroot`, not only `/tmp`.** Its embedded clusterctl
