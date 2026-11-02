@@ -221,6 +221,34 @@ check("the recovery target of the manifest is that row's time", all(json.loads(l
 rcode, out, *_ = flow("pitr", {n: SRC[:-2] for n in NAMES})
 check("a PITR that replays past its target fails", rcode == 1 and "exactly" in out)
 
+print("=== a Cluster younger than its first base backup (apps #169) ===")
+YOUNG = {"FAKE_CLUSTER_AGE": "3600"}
+lines = lambda out, w: [l for l in out.splitlines() if l.startswith(w + " ")]  # noqa: E731
+rcode, out, calls, left, cm, _ = flow("latest", good, env_extra=dict(YOUNG, FAKE_BACKUPS="none"))
+check("young Cluster, no Backup: four SKIP lines naming the reason, exit 0, nothing restored, no ok series",
+      rcode == 0 and len(lines(out, "SKIP")) == 4 and "no completed base backup yet" in out and not lines(out, "FAIL")
+      and not any(c.startswith("apply") for c in calls) and "oa_restore_test_ok{" not in cm and left == [], out[-500:])
+rcode, out, calls, left, cm, _ = flow("pitr", {n: cut for n in NAMES}, env_extra=dict(YOUNG, FAKE_BACKUPS="running"))
+check("PITR on a young Cluster whose only Backup is still running: SKIP, not a target before the base backup",
+      rcode == 0 and len(lines(out, "SKIP")) == 4 and not lines(out, "FAIL") and not any(c.startswith("apply") for c in calls), out[-500:])
+rcode, out, calls, left, cm, _ = flow("latest", good, env_extra={"FAKE_CLUSTER_AGE": str(5 * 86400), "FAKE_BACKUPS": "none"})
+check("a Cluster 5 days old with no completed Backup is a FAILURE (the daily ScheduledBackup produces nothing), never a skip",
+      rcode == 1 and len(lines(out, "FAIL")) == 4 and not lines(out, "SKIP") and "does not produce" in out
+      and not any(c.startswith("apply") for c in calls) and cm.count("oa_restore_test_ok{") == 4, out[-500:])
+rcode, out, calls, left, cm, _ = flow("latest", good, env_extra=dict(YOUNG, FAKE_BACKUPS="error"))
+check("a Backup listing that fails is a FAILURE, never a skip",
+      rcode == 1 and len(lines(out, "FAIL")) == 4 and not lines(out, "SKIP") and "backups" in out and not any(c.startswith("apply") for c in calls), out[-500:])
+rcode, out, calls, left, cm, _ = flow("latest", flip, env_extra=YOUNG)
+check("a base backup exists and the restored copy is corrupted: still a FAILURE on a young Cluster",
+      rcode == 1 and len(lines(out, "FAIL")) == 1 and "FAIL zitadel-db/replica/latest" in out and len(lines(out, "PASS")) == 3, out[-500:])
+rcode, out, calls, left, cm, _ = flow("latest", good, env_extra=dict(YOUNG, FAKE_BACKUPS="no-stop"))
+check("a completed Backup without stoppedAt counts as a base backup (the restore goes on)",
+      rcode == 0 and len(lines(out, "PASS")) == 4 and not lines(out, "SKIP"), out[-500:])
+rcode, out, calls, left, cm, _ = flow("latest", good, env_extra=dict(YOUNG, FAKE_BACKUP_STOP=str(time.time() - 300)))
+check("a base backup of 5 minutes ago: the primary store restores, the replica store (copied every 15 minutes) skips",
+      rcode == 0 and len(lines(out, "PASS")) == 2 and len(lines(out, "SKIP")) == 2 and all("/replica/" in l for l in lines(out, "SKIP"))
+      and "replica store" in out and cm.count("oa_restore_test_ok{") == 2, out[-500:])
+
 print("=== dump results are published ===")
 w = tempfile.mkdtemp()
 os.makedirs(os.path.join(w, "state")), os.makedirs(os.path.join(w, "results"))

@@ -13,6 +13,9 @@ What is compared (the canary: oa_canary, a counter plus a hash chain written eve
           chain must end at exactly that row, with the hash the live chain holds for it.
 Table list and row counts are exported and reported; they are NOT exact (the live side keeps moving), so only a restored
 table that is empty while the live one holds more than 1000 rows fails the test.
+Before the first base backup there is nothing to restore (apps #169): a Cluster younger than FIRST_BACKUP_GRACE with no completed
+Backup, or whose only Backup is too recent to be on the replica store, is a SKIP with its reason. Never a skip when the listing
+of the Backups fails, nor when an older Cluster has no completed Backup (the daily ScheduledBackup produces nothing: a failure).
 
 The guard: every Cluster write names the scratch namespace and an object name that starts with `rt-`; the only write in
 foundation-databases is the metrics ConfigMap. The ServiceAccount's RBAC says the same (restore-test-rbac.yaml) and a Kyverno
@@ -44,6 +47,7 @@ DELETE_TIMEOUT = float(os.environ.get("DELETE_TIMEOUT", "300"))
 POLL = float(os.environ.get("POLL", "5"))
 PITR_MIN_AGE = float(os.environ.get("PITR_MIN_AGE", "7200"))  # the target row is at least this old, so its WAL is archived on both stores
 PITR_AFTER_BACKUP = 300.0   # and at least this much after the end of the base backup it starts from
+FIRST_BACKUP_GRACE = 30 * 3600.0  # the ScheduledBackup is daily (03:10 to 03:40): a Cluster older than this has had its first base backup
 
 
 class Skip(Exception):
@@ -112,6 +116,21 @@ def target_time(ts):
     clock_timestamp() of the insert by milliseconds; the next row is 5 minutes later)."""
     t = datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f") + datetime.timedelta(seconds=2)
     return t.strftime("%Y-%m-%d %H:%M:%S+00")
+
+
+def first_backup_wait(stops, created, store, now):
+    """Why this store has nothing to restore yet (a SKIP reason), or None to go on. stops: the stop time of each completed Backup
+    (None when it records none, which still counts); created: the live Cluster's creation time. Raises when the missing base
+    backup is a defect, not youth."""
+    if not stops:
+        age = now - created
+        if age > FIRST_BACKUP_GRACE:
+            raise RuntimeError(f"no completed base backup although the Cluster is {age / 3600:.0f} h old: the daily ScheduledBackup "
+                               "does not produce one (kubectl get scheduledbackup,backup -n foundation-databases)")
+        return f"no completed base backup yet: the Cluster is {age / 3600:.1f} h old and its first ScheduledBackup has not run"
+    if store == "replica" and all(t is not None and now - t < LAG_BUDGET["replica"] for t in stops):
+        return "the only base backup is too recent to be on the replica store (the copy job runs every 15 minutes)"
+    return None
 
 
 def compare(src, res, store, mode, pitr_row=None):
@@ -340,15 +359,16 @@ def wait_healthy(name):
     raise RuntimeError(f"not healthy after {HEALTHY_TIMEOUT} s (phase: {last or 'none'})")
 
 
-def last_backup_stop(cluster):
-    """End of the newest completed base backup of the live cluster (epoch) or None."""
+def k8s_epoch(ts):
+    return datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp()
+
+
+def completed_backups(cluster):
+    """Stop time (epoch, None when the Backup records none) of each completed Backup of the live cluster. A failed listing raises:
+    that is a failure of the test, never a reason to skip."""
     items = kube_json("get", "backups.postgresql.cnpg.io", "-n", LIVE_NS, "-l", f"cnpg.io/cluster={cluster}").get("items", [])
-    stops = []
-    for b in items:
-        st = b.get("status", {})
-        if st.get("phase") == "completed" and st.get("stoppedAt"):
-            stops.append(datetime.datetime.strptime(st["stoppedAt"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp())
-    return max(stops) if stops else None
+    return [k8s_epoch(b["status"]["stoppedAt"]) if b["status"].get("stoppedAt") else None
+            for b in items if (b.get("status") or {}).get("phase") == "completed"]
 
 
 def run_one(cluster, store, mode, work, now_fn=time.time):
@@ -367,9 +387,13 @@ def run_one(cluster, store, mode, work, now_fn=time.time):
         if not src["canary"]:
             raise Skip("the live database has no canary row yet (writer not run)")
         source = kube_json("get", "cluster.postgresql.cnpg.io", cluster, "-n", LIVE_NS)
+        stops = completed_backups(cluster)
+        wait = first_backup_wait(stops, k8s_epoch(source["metadata"]["creationTimestamp"]), store, now_fn())
+        if wait:
+            raise Skip(wait)
         target, pitr_row = None, None
         if mode == "pitr":
-            pitr_row = pick_pitr_target(src["canary"], last_backup_stop(cluster), now_fn())
+            pitr_row = pick_pitr_target(src["canary"], max((t for t in stops if t), default=None), now_fn())
             if not pitr_row:
                 raise Skip("no canary row is both older than 2 h and after the last base backup")
             target = target_time(pitr_row[1])

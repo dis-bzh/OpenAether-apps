@@ -30,6 +30,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 ### RestoreTestFailed
 
 - Check: `kubectl -n foundation-databases logs job/<newest cnpg-*-restore-test job> -c restore`; the line `FAIL <cluster>/<store>/<mode>` says which check failed (canary chain, copy too old, empty tables, not healthy in time). `kubectl get cluster -n backup-restore-test` shows a scratch Cluster still there.
+- Reads (#169): a Cluster with no completed `Backup` for more than 30 hours fails with `the daily ScheduledBackup does not produce one`: `kubectl get scheduledbackup,backup -n foundation-databases` (suspended? failing? see `CnpgBackupFailed`), then take one (`kubectl cnpg backup`). A younger Cluster is not a failure, see `RestoreTestNeverReported`.
 - Do: One store failing and the other passing means that store's copy is damaged or lagging: for the replica, look at `BackupCopyJobFailed` and `kubectl -n foundation-databases logs job/<cnpg-store-replicate job>`. Both failing means the archive itself: look at `CnpgWalArchiveFailing`, take a base backup now (`kubectl cnpg backup`), then run the test again with `kubectl -n foundation-databases create job --from=cronjob/cnpg-recovery-restore-test manual-$(date +%s)`. Until it passes, the dataset is NOT proven restorable: keep the restic dump (`cnpg-dump`) as the recovery path.
 
 ### RestoreTestNoRecentPass
@@ -41,6 +42,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `kubectl -n foundation-databases get cronjob cnpg-recovery-restore-test`, the Jobs it created, `kubectl -n foundation-databases get externalsecret` (S3 keys not seeded stops the backup CronJobs too), and the exporter: `kubectl -n foundation-databases get deploy backup-verify-exporter`.
 - Do: Seed the missing keys or fix the failing step in the Job log; the series appear after the first complete run.
+- Reads (#169): a Cluster younger than 30 hours with no completed `Backup` is skipped on purpose: the log says `SKIP <cluster>/<store>/<mode>: no completed base backup yet`, the Job succeeds and the dataset reports nothing until its first base backup exists (the daily ScheduledBackup, or one by hand: `kubectl cnpg backup`). The replica store reports from 50 minutes after that backup (the copy job runs every 15 minutes). The same SKIP forever means no `Backup` ever completes: that turns into `RestoreTestFailed` after 30 hours of Cluster age.
 
 ### RestoreRecoverySlow
 

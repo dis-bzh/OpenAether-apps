@@ -17,6 +17,9 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+### Fixed (0.4.1; rung: mocked, offline, `scripts/dev/test-restore-test-cnpg.py` against the kubectl double; NOT run on a cluster)
+- **The CNPG restore tests skip, with a reason, on a Cluster younger than its first base backup (#169).** `cnpg-recovery-restore-test` and `cnpg-pitr-restore-test` ended in `no target backup found` (a red `RestoreTestFailed` for up to a day) until the first ScheduledBackup had run (lab 25). `restore_cnpg.py` now lists the live Cluster's `Backup` objects first: none `completed` on a Cluster under 30 hours old prints `SKIP <cluster>/<store>/<mode>: no completed base backup yet` and reports no `ok` series; the replica store also waits until the only base backup is 50 minutes old (the copy job runs every 15 minutes). Kept as FAILURES, each with a test that goes red when the guard is removed: no completed `Backup` on a Cluster older than 30 hours, a failed listing of the Backups, and a restore that fails when a base backup exists. A `completed` Backup without `stoppedAt` counts as a base backup (whether the plugin sets it is not established; the point-in-time target then falls back to the old behaviour). No RBAC change (the Role already reads `backups`).
+
 ## [0.4.0] — 2026-11-01
 
 0.4.0 is the **resilience release**: a node, a zone or a pod can be lost without losing an acknowledged commit and without a split brain. What it adds, from the entries below:

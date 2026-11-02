@@ -4,6 +4,9 @@
 FAKE_STATE   directory (calls.log, scratch/<name>.json, cm/<key>)
 FAKE_SNAPS   directory with <scratch cluster name>.snap: what `exec psql` prints in that scratch Cluster
 FAKE_MODE    healthy (default) | never-healthy | stuck-finalizer
+FAKE_BACKUPS the Backups of the live cluster: completed (default, one, stopped at FAKE_BACKUP_STOP) | none | running (one, not
+             completed) | no-stop (one completed, no stoppedAt) | error (the listing fails)
+FAKE_CLUSTER_AGE  seconds since the live Cluster was created (default 10 days)
 """
 import json
 import os
@@ -44,7 +47,8 @@ def fail(msg):
 verb = a[0]
 if verb == "get" and a[1].startswith("cluster.postgresql"):
     if ns == "foundation-databases":
-        say({"spec": {"imageName": "ghcr.io/cloudnative-pg/postgresql:18.6", "storage": {"size": "5Gi"},
+        say({"metadata": {"creationTimestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - float(os.environ.get("FAKE_CLUSTER_AGE", "864000"))))},
+             "spec": {"imageName": "ghcr.io/cloudnative-pg/postgresql:18.6", "storage": {"size": "5Gi"},
                       "postgresql": {"parameters": {"max_connections": "200"}}}})
     names = [f[:-5] for f in sorted(os.listdir(os.path.join(S, "scratch"))) if f.endswith(".json")]
     if a[2].startswith("-"):  # list
@@ -62,7 +66,11 @@ if verb == "get" and a[1].startswith("cluster.postgresql"):
     say(o)
 elif verb == "get" and a[1].startswith("backups"):
     stop = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(float(os.environ.get("FAKE_BACKUP_STOP", time.time() - 90000))))
-    say({"items": [{"status": {"phase": "completed", "stoppedAt": stop}}]})
+    kind = os.environ.get("FAKE_BACKUPS", "completed")
+    if kind == "error":
+        fail("Error from server (Forbidden): backups.postgresql.cnpg.io is forbidden")
+    say({"items": {"completed": [{"status": {"phase": "completed", "stoppedAt": stop}}], "none": [],
+                   "running": [{"status": {"phase": "started"}}], "no-stop": [{"status": {"phase": "completed"}}]}[kind]})
 elif verb == "get" and a[1] == "configmap":
     key = a[-1].split(".data.")[-1].rstrip("}")
     p = os.path.join(S, "cm", key)

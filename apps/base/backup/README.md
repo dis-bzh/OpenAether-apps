@@ -163,7 +163,10 @@ refuses an `rt-` Cluster anywhere else and a scratch Cluster that archives. A Jo
 SIGTERM and on failure (finalizer-safe), and the next run removes a leftover older than an hour; `RestoreScratchLeftover` fires after 3 h.
 A failed comparison is a failed Job (so `RestoreTestNotSucceeding` sees it too) and `oa_restore_test_ok 0` (`RestoreTestFailed`, critical);
 no pass for 3 days (10 for the weekly ones) is `RestoreTestNoRecentPass`. The two key pairs are the archive's and the replica copy's: a read-only pair
-is a follow-up. Run one by hand: `kubectl -n foundation-databases create job --from=cronjob/cnpg-recovery-restore-test manual-$(date +%s)`.
+is a follow-up. Before the first base backup there is nothing to restore (#169): for a Cluster younger than 30 hours with no completed `Backup`, the CNPG tests print
+`SKIP <cluster>/<store>/<mode>: no completed base backup yet`, report no `ok` series and the Job succeeds; the replica store also waits until the only base backup is 50 minutes old
+(the copy job runs every 15 minutes). No completed `Backup` on an older Cluster (the daily ScheduledBackup produces nothing) and a failed listing of the Backups are FAILURES, never a skip. Rung: mocked
+(`test-restore-test-cnpg.py`), not run on a cluster. Run one by hand: `kubectl -n foundation-databases create job --from=cronjob/cnpg-recovery-restore-test manual-$(date +%s)`.
 
 Lab pass criteria (M3; observed in lab 20, results below). On a cluster with both stores seeded: (1) after the first night `oa_restore_test_ok` is 1 for the four
 `kind="cnpg"` label sets (2 clusters x 2 stores, `mode="latest"`), the four `kind="dump"` ones and, after the first Sunday, the four `mode="pitr"` ones,
