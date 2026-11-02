@@ -150,6 +150,32 @@ spec:
               barman cannot write to the object store (credentials, endpoint, egress).
               kubectl logs -n foundation-databases <primary-pod> -c postgres | grep -i archiv.
 
+        # 6b) The archiver of a Cluster has FAILED, has never SUCCEEDED, and fails now (infra #430, lab 28C). A Cluster
+        #     created over the WAL of another database system archives nothing (archived 0, failed 39 on the primary,
+        #     ContinuousArchiving=False) while it looks healthy, and its first failover wedged in 4 of 4 reproductions.
+        #     Rule 6 needs a failure with no archive in the same 10 minutes AND 15 minutes of `for`; this one has no
+        #     drain to tell apart (a Cluster that ever archived is excluded), so the failures only have to be recent.
+        #     Per Cluster, summed over its pods: a standby reports 0 and 0, and a Cluster that archived for a day
+        #     stays rule 6's. It reads pg_stat_archiver, not the condition itself, and has not fired on a cluster.
+        #     A rule on the condition needs kube-state-metrics to read Cluster objects (new RBAC): not done.
+        - alert: CnpgWalNeverArchived
+          expr: |
+            (sum by (cnpg_io_cluster) (increase(cnpg_pg_stat_archiver_failed_count[5m])) > 0)
+              and
+            (sum by (cnpg_io_cluster) (cnpg_pg_stat_archiver_archived_count) == 0)
+          for: 5m
+          labels:
+            severity: critical
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgwalneverarchived"
+            summary: "CNPG {{ $labels.cnpg_io_cluster }}: not one WAL segment archived, and the archiver fails now"
+            description: >-
+              The archive path or the credentials refuse every WAL since the Cluster exists (a path that holds the WAL
+              of another database system, S3 keys not seeded): ContinuousArchiving is False and the first failover can
+              wedge. kubectl get cluster -n <ns> <name>
+              -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'.
+
         # 7) The last base backup failed more recently than the last success.
         #    Every backup of the platform goes through the Barman Cloud PLUGIN, and for those the CNPG collector
         #    reports last_available = 0 (and a real last_failed): read from the collector alone, ONE failed backup

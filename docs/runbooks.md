@@ -79,6 +79,12 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: `kubectl -n <ns> logs <cluster>-1 -c postgres | grep -i archive`; the S3 secret and bucket.
 - Do: Restore the archive credentials or bucket; a stuck WAL fills the primary disk, so act within hours.
 
+### CnpgWalNeverArchived
+
+- Check: the Cluster has never archived a WAL segment and fails now. `kubectl get clusters.postgresql.cnpg.io -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\t"}{.status.conditions[?(@.type=="ContinuousArchiving")].status}{"\n"}{end}'` (False for this one, with the reason in the condition message); `kubectl -n <ns> logs <cluster>-1 -c postgres | grep -i archiv`; the ObjectStore of the Cluster and its credentials Secret.
+- Do: The Cluster looks healthy and replicates, but its first failover can wedge for good (lab 28C, 4 of 4): fix it before its primary is moved or lost (a failover already stuck: the Release steps of the same trap). A path that holds the WAL of another database system (a Cluster re-created by hand over the same `serverName`): see `docs/traps.md`, "A cluster rebuilt on a bucket that still holds the old cluster's WAL archive does not archive". Missing or wrong S3 keys: seed them (`kubectl -n foundation-databases get externalsecret`).
+- Reads: per Cluster, `increase(cnpg_pg_stat_archiver_failed_count[5m]) > 0` while the sum of `cnpg_pg_stat_archiver_archived_count` over its pods is 0, for 5 minutes (`CnpgWalArchiveFailing` fires later for the same Cluster; for a Cluster that archived before, only that one can fire). It reads the archiver, not the `ContinuousArchiving` condition. UNVERIFIED on a cluster; a first install whose S3 keys are not seeded yet is expected to fire it (reading, not observed). It is silent for a Cluster with no archiver (the `light` profile).
+
 ### CnpgBackupFailed
 
 - Check: `kubectl -n <ns> get backup` and the failed Backup's `.status.error`.

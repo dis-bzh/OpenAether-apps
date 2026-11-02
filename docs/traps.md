@@ -100,9 +100,11 @@ belong to. What follows has no skill of its own yet.
   ```
   kubectl get clusters.postgresql.cnpg.io -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\t"}{.status.conditions[?(@.type=="ContinuousArchiving")].status}{"\n"}{end}'
   ```
-  `cluster-verify` reads the platform's Clusters in `foundation-databases` only, not the Clusters of your database profiles, and `CnpgWalArchiveFailing`
-  fires about 25 minutes after archiving starts failing (10 minutes of window, then `for: 15m`): a young Cluster is silent, so read the condition
-  yourself after creating one.
+  `cluster-verify` of 0.4.0 reads the platform's Clusters in `foundation-databases` only, not the Clusters of your database profiles (infra #430
+  tracks that check). `CnpgWalNeverArchived` fires for a Cluster that never archived a segment and fails now, 5 minutes (`for`) after the
+  first evaluation that sees the failure (mocked with the pinned `vmalert-tool`, not seen on a cluster); it reads the archiver's counters, not the
+  condition. `CnpgWalArchiveFailing` is slower: about 15 minutes for such a Cluster, about 25 for one that archived before (10 minutes of window,
+  then `for: 15m`). Read the condition yourself after creating a Cluster.
   *Prevent.* Give every incarnation of a Cluster a NEW `serverName` (the `archiveServerName` value of a database profile, `<name>-g2`, see
   `docs/database-profiles.md`) or an EMPTY archive path, and never create a Cluster over a path that holds files; the DR chain already rebuilds on a
   new generation. On a Cluster already running, delete the foreign objects from its path (once you are sure nobody needs them): in lab 28C,
