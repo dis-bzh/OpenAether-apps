@@ -2,11 +2,15 @@
 """Fixture tests of scripts/check-gateway-routes.py: it passes on a consistent set and fails, for the right reason, on each way
 the register can drift. No cluster, no kubectl. Usage: python3 scripts/dev/test-check-gateway-routes.py
 """
+import contextlib
 import copy
 import importlib.util
+import io
 import sys
 import tempfile
 from pathlib import Path
+
+import yaml
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("chk", HERE.parent / "check-gateway-routes.py")
@@ -72,7 +76,6 @@ with tempfile.TemporaryDirectory() as tmp:
     PASS += ok
     FAIL += not ok
     print(("  ok   " if ok else "  FAIL ") + "a route without a namespace is reported")
-
 
 
 # --- the metrics endpoints are refused at the Gateway (Grafana /metrics answered 200 to anyone on the public Gateway) ---
@@ -170,10 +173,57 @@ with tempfile.TemporaryDirectory() as tmp:
 hosts = ["grafana.openaether.local"]
 static = (Path("s.yaml"), {"kind": "VMStaticScrape", "metadata": {"name": "g"}, "spec": {"targetEndpoints": [{"targets": ["grafana.openaether.local:443"]}]}})
 pod = (Path("p.yaml"), {"kind": "VMPodScrape", "metadata": {"name": "grafana"}, "spec": {"podMetricsEndpoints": [{"port": "grafana", "path": "/metrics"}]}})
-ok = len(chk.scrape_problems([static, pod], hosts)) == 1 and not chk.scrape_problems([pod], hosts)
+probe = (Path("b.yaml"), {"kind": "VMProbe", "metadata": {"name": "g"}, "spec": {"targets": {"staticConfig": {"targets": ["https://grafana.openaether.local/metrics"]}}}})
+ok = len(chk.scrape_problems([static, probe, pod], hosts)) == 2 and not chk.scrape_problems([pod], hosts)
 PASS += ok
 FAIL += not ok
-print(("  ok   " if ok else "  FAIL ") + "a VMStaticScrape of a Gateway host is reported, a VMPodScrape is not")
+print(("  ok   " if ok else "  FAIL ") + "a VMStaticScrape or VMProbe of a Gateway host is reported, a VMPodScrape is not")
+
+# main() must CALL the checks: the unit cases above stay green if a call is dropped, the real-tree run in CI too once the policy is gone
+def run_main(with_policy, scrape=None):
+    files = {"apps/base/app/route.yaml": {"kind": "HTTPRoute", "metadata": {"name": "app", "namespace": "ns"}, "spec": {
+                 "parentRefs": [{"name": chk.GATEWAY}], "rules": [backend("/")]}},
+             "apps/base/app/kustomization.yaml": {"resources": ["route.yaml"]},
+             chk.REGISTER: {"routes": [{"route": "ns/app", "host": "app.example", "authentication": "a login", "default": True}]},
+             chk.COMPONENT: {"patches": []}}
+    if with_policy:
+        files[f"{chk.POLICY_BRICK}/policy.yaml"] = policy()
+        files[f"{chk.POLICY_BRICK}/kustomization.yaml"] = {"resources": ["policy.yaml"]}
+    if scrape:
+        files["apps/base/obs/scrape.yaml"] = scrape
+    out, err, old = io.StringIO(), io.StringIO(), chk.REPO
+    with tempfile.TemporaryDirectory() as tmp:
+        for rel, obj in files.items():
+            f = Path(tmp) / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(yaml.safe_dump(obj))
+        chk.REPO = Path(tmp)
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                chk.main()
+            code = 0
+        except SystemExit as e:
+            code = e.code
+        finally:
+            chk.REPO = old
+    return code, out.getvalue(), err.getvalue()
+
+
+code, out, err = run_main(True)
+ok = code == 0 and "refused at the Gateway" in out
+PASS += ok
+FAIL += not ok
+print(("  ok   " if ok else "  FAIL ") + f"main(): a consistent tree with the policy passes ({code} {err.strip()})")
+code, out, err = run_main(False)
+ok = code == 1 and "refuses /metrics" in err
+PASS += ok
+FAIL += not ok
+print(("  ok   " if ok else "  FAIL ") + "main(): a tree without the policy fails (metrics_problems is called)")
+code, out, err = run_main(True, {"kind": "VMStaticScrape", "metadata": {"name": "g"}, "spec": {"targetEndpoints": [{"targets": ["app.example:443"]}]}})
+ok = code == 1 and "reads a Gateway host" in err
+PASS += ok
+FAIL += not ok
+print(("  ok   " if ok else "  FAIL ") + "main(): a URL scrape of a registered host fails (scrape_problems is called, with the register's hosts)")
 
 print(f"{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
