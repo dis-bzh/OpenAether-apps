@@ -171,10 +171,11 @@ refuses any SKIP. No completed `Backup` on an older Cluster (its ScheduledBackup
 (`test-restore-test-cnpg.py`), not run on a cluster. Run one by hand: `kubectl -n foundation-databases create job --from=cronjob/cnpg-recovery-restore-test manual-$(date +%s)`.
 
 The dump-load test has the same window on a fresh install, with another cause: `cnpg-dump` (02:47 UTC) creates the restic repositories and the test runs at 05:40, so an install made in between has
-nothing to load. A restic repository that does not exist (`restic cat config` exits 10, which is that case and no other) is a SKIP for that store, `SKIP <cluster>/<store>/dump: the <store> restic repository does not exist yet`
-in the log of the `load` init container; the store reports no `ok` series and the Job succeeds. Kept as FAILURES: a store that passed before and has no repository now (the publishing stage reads the last success it published), a refused key, a wrong password, a missing
-bucket, a repository that exists with no snapshot, a dump missing from the snapshot, a dump that does not load or is stale. A skip that lasts means `cnpg-dump` never succeeds, which `BackupNotSucceededRecently` reports (the CNPG-only
-`RestoreTestNeverReported` does not watch this test). Rung: mocked stores with a real restic (`test-restore-test-dumps.sh`) and the Python stages (`test-restore-test-cnpg.py`), not run on a cluster.
+nothing to load. A restic repository that does not exist (`restic cat config` exits 10, which is that case and no other) is a SKIP for that store: `SKIP <cluster>/<store>/dump: the <store> restic repository does not exist yet`
+in the log of the `load` init container; the store reports no `ok` series and the Job succeeds. Kept as FAILURES: a store that passed before and has no repository now (the publishing stage reads the last success it published;
+if it cannot read it, every skipped store fails), a refused key, a wrong password, a missing bucket (restic is stopped by the timeout, not exit 10), a repository that exists with no snapshot, a dump missing from the snapshot, a dump that
+does not load or is stale. Limit: a skip that lasts usually means `cnpg-dump` never succeeds, which `BackupNotSucceededRecently` reports (about 37 hours after the CronJob was created); but a wrong bucket or prefix on the test
+side exits 10 too, and nothing reports that (`RestoreTestNeverReported` watches the CNPG test only). Rung: mocked stores with a real restic (`test-restore-test-dumps.sh`) and the Python stages (`test-restore-test-cnpg.py`), not run on a cluster.
 
 Lab pass criteria (M3; observed in lab 20, results below). On a cluster with both stores seeded: (1) after the first night `oa_restore_test_ok` is 1 for the four
 `kind="cnpg"` label sets (2 clusters x 2 stores, `mode="latest"`), the four `kind="dump"` ones and, after the first Sunday, the four `mode="pitr"` ones,
