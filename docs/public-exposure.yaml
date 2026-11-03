@@ -22,7 +22,7 @@ routes:
     host: grafana.openaether.local
     authentication: >-
       Grafana's own: a local admin login and Zitadel OIDC. No ACL in front; the login page answers anyone. /metrics is
-      refused at the Gateway (403 expected, UNVERIFIED on a cluster: docs/public-exposure.md; before 0.4.1 it answered
+      refused at the Gateway (403, seen on a cluster in a proof lab: docs/public-exposure.md; before 0.4.1 it answered
       200 to any caller that reached the Gateway).
     default: true
     private_admin: true
@@ -32,7 +32,7 @@ routes:
       Zitadel's own login, with the password, lockout and MFA policy of docs/zitadel-hardening.md; the first admin
       password comes from OpenBao. It is the identity provider, so browsers must reach it. Policies apply to new
       instances only. /debug/metrics is refused at the Gateway
-      (403 expected, UNVERIFIED on a cluster: docs/public-exposure.md).
+      (403, seen on a cluster in a proof lab: docs/public-exposure.md).
     default: true
     private_admin: false
   - route: services-git/forgejo

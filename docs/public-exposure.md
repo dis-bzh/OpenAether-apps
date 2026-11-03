@@ -50,22 +50,26 @@ listed in its brick, is narrowed (caller, host, port, condition), aims elsewhere
 it names the routes that would forward each path. Its fixture cases, `main()`'s wiring included, were mutation-checked by hand;
 the mutants are not kept and not every branch of the checker has a case of its own.
 
-Rung: **mocked, offline** (the checker on the manifests and its fixture cases, the policy against the CRD schema CI uses).
-Nothing here has been seen on a cluster. **Only a cluster can show:**
+Rung: the checker is **mocked, offline** (the manifests and its fixture cases, the policy against the CRD schema CI uses); the policy
+was **observed on a cluster** in a second proof lab (Scaleway, 3 CP + 6 W, NOMINAL, from the lab host, no credential):
 
-1. the Gateway answers 403 to `/metrics` and `/debug/metrics` on each host, and still serves `/`, `/login`, `/api/health`,
-   `/ui/v2/login`;
-2. vmagent still scrapes Grafana, Zitadel and (when deployed) the forge: `up == 1` after the policy is applied;
-3. the spellings `//metrics`, `/%6Detrics`, `/metrics;a=b`, `/Metrics` and `/metrics?x=1`. The policy matches the path after
-   Istio's normalisation (default BASE: removes dot segments, does not merge slashes; percent-encoded letters were not checked
-   here), and whether Grafana or Zitadel serve such a spelling was not established. If one passes, the answer is at the source:
-   Grafana's `[metrics] basic_auth_username` and `basic_auth_password` (a credential in OpenBao and in the scrape: a larger
-   change) or `enabled = false` (no Grafana metrics);
-4. the plain-HTTP listener answers 403, not 301, to these paths.
+1. **Shown.** 216 probes (27 spellings x 4 hosts x HTTPS and plain HTTP on :80) returned 0 Prometheus bodies. `/metrics` and
+   `/debug/metrics` answered 403 "RBAC: access denied" on all four hosts (Grafana, Zitadel, OpenBao and the lab's own test
+   application), on both listeners: the plain-HTTP listener answers 403, not 301. `/`, `/login`, `/api/health`, `/ui/v2/login`
+   and `/.well-known/openid-configuration` were still served. After a disaster-recovery rebuild: 36 probes, 30 of them 403, 0 bodies.
+2. **Shown.** `up` = 1 for Grafana (2 pods) and Zitadel (2 pods) after the policy. The forge was not deployed in the lab: **not shown**
+   for the forge.
+3. **Spellings.** The policy matched `/metrics/`, `/metrics/x`, `/metrics?x=1`, `/%6Detrics`, `/%6detrics`, `/./metrics`,
+   `/a/../metrics` and `/%2e/metrics` (403): the policy sees the path after Istio's normalisation. It did **not** match `//metrics`,
+   `/debug//metrics`, `/Metrics`, `/METRICS`, `/metrics;a=b`, `/metrics.`, `/metrics%20`, `/metrics%2f` and `/%2fmetrics`, which reached
+   the service: Grafana redirected to its login, Zitadel and OpenBao answered 404 or a redirect, and the test application answered
+   200 with its own 60-byte page, not metrics. None served metrics. A service that treats one of these as its metrics path would
+   still leak; the answer is then at the source: Grafana's `[metrics] basic_auth_username` and `basic_auth_password` (a credential in
+   OpenBao and in the scrape: a larger change) or `enabled = false` (no Grafana metrics).
 
 Not covered here: the other paths those services answer without a login (Zitadel `/debug/healthz`, `/debug/ready`,
-`/debug/validate`; Grafana `/api/health`), which were not read. OpenBao's `/v1/sys/metrics` needs a token on the API listener;
-its unauthenticated metrics listener is a separate port that no Service of the route exposes.
+`/debug/validate`; Grafana `/api/health`), which were not read beyond the ones above. OpenBao's `/v1/sys/metrics` needs a token on the
+API listener; its unauthenticated metrics listener is a separate port that no Service of the route exposes.
 
 ## Taking OpenBao and Grafana off the Gateway (opt-in)
 
