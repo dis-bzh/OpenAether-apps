@@ -139,6 +139,46 @@ belong to. What follows has no skill of its own yet.
   came back in about a minute. OpenAether-infra's `seed-openbao.sh` does it after seeding. Seen on Scaleway when the Day-1 seeding came 30 minutes
   after the database pods.
 
+- **The Pooler of a freshly created `ha` database may not log in: `FATAL: role "cnpg_pooler_pgbouncer" does not exist` (apps #177; seen ONCE, cause
+  not found).**
+  *Seen.* Lab 27 (Scaleway, 3 control planes + 5 workers POP2-4C-16G, a first install, not a fault drill): the `ha` example (3 instances + Pooler) was applied by hand on a
+  cluster just moved to the 0.4.0 head, and for 9 minutes every connection through the pooler failed with that message. The role existed 20 seconds
+  after the Cluster was annotated (below). The lab journal holds only the draft of this finding: no Cluster status and no instance-manager log of those
+  minutes, so nothing shows which step was missed.
+  *Check.* A client that connects through `<name>-pooler-rw` gets that message (where else it is logged was not recorded). On the primary the role is
+  there when this prints 1 (the command was not run on a cluster):
+  `kubectl cnpg psql <name> -n <ns> -- -Atc "select count(*) from pg_roles where rolname = 'cnpg_pooler_pgbouncer'"`.
+  The role is PgBouncer's own `auth_user` (CloudNativePG's documentation), so the direct `<name>-rw` path does not need it; the issue does not say whether it was tried.
+  *Recover.* Annotate the Cluster, the same command as the S3 Secret entry above, with the namespace of the database:
+  `kubectl -n <ns> annotate cluster.postgresql.cnpg.io <name> cnpg.io/reloadedAt="$(date -u +%FT%TZ)" --overwrite`. In the lab the role appeared 20 seconds
+  later and the pooler logged in. Nothing else was done.
+  *What is NOT known.* By reading the operator 1.30.1 source (no run showed it): the instance manager of the PRIMARY creates the role at its reconcile, once
+  the Cluster status lists the Pooler's secrets (`status.poolerIntegrations`, set by the operator after the Pooler exists). Why that reconcile did not
+  create it the first time is not found, and no nudge is shipped in the component on one sighting.
+  *How often.* One sighting in 7 first installs of the profile that the issue or a journal speaks of: not met in lab 26 (issue), 27B (login checked at
+  install), 28 (OVH, 3 control planes + 6 workers: no login failure, 28 thousand pooler commits acknowledged), 28C, 28D and 28E (Scaleway, 3 control
+  planes + 6 workers: the pooler logged in and carried the writers; the time of the first login was not recorded). That is not a rate: the clusters
+  differ, and in the journals of labs 27, 27B, 28, 28B, 28D and 28E the examples were rendered and applied by hand, not through a Flux Kustomization as
+  `docs/database-profiles.md` says ("Use one"). The Flux path is UNVERIFIED for this trap.
+
+- **A deleted `FailoverQuorum` object is not recreated by the operator for minutes (apps #178; low severity).**
+  *Seen.* Lab 27 (Scaleway, 3 control planes + 5 workers, primary healthy, the deletion was the only fault, made to test the `cluster-verify` line): the
+  `FailoverQuorum` of `zitadel-db`, the object CloudNativePG reads to decide whether a failover is safe when the Cluster declares `failoverQuorum: true`,
+  was deleted in a loop. It was still missing after more than 2 minutes (how much longer was not measured) and came back after the `cnpg.io/reloadedAt`
+  annotation of the entry above. The one of `grafana-db` was back within a minute only because Flux re-applied the Cluster spec.
+  *Check.* `kubectl -n <ns> get failoverquorums.postgresql.cnpg.io <name>`: `NotFound` is the trap. `cluster-verify` (OpenAether-infra) fails on it for the
+  platform's Clusters ("the spec declares failoverQuorum true and the FailoverQuorum object does not exist"); it does not read the Clusters of your database
+  profiles (see the archive-path entry above), so read it yourself for an `ha` database.
+  *Recover.* The annotation above, on the Cluster that owns the object.
+  *What it costs, by reading, NOT by a run.* In the 1.30.1 source the operator creates the object in its Cluster reconcile and the Cluster controller does
+  not watch that kind, so a deletion triggers nothing until the Cluster is reconciled for another reason. The failover decision refuses to promote when the
+  object is missing ("Quorum check failed because no synchronous metadata is available. Denying the failover request") or when its content is empty, and
+  only the primary writes the content. So a primary lost while the object is missing would not be replaced until the object is back and filled: the guard
+  waits rather than promotes, so no acknowledged commit is at risk, but the write outage would be longer. The lab never lost a primary with the object
+  missing: UNVERIFIED on a cluster.
+  *Not established.* Why the recreation took more than 2 minutes beyond the missing watch. The upstream issue cloudnative-pg#11627 (a lost configuration
+  reload) is related according to apps #178; nothing shows it is the same cause. Nothing was posted upstream.
+
 ## CAPI
 
 - **A read-only root filesystem on the CAPI operator needs a writable `/home/nonroot`, not only `/tmp`.** Its embedded clusterctl
