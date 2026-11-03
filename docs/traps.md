@@ -102,11 +102,11 @@ belong to. What follows has no skill of its own yet.
   ```
   `cluster-verify` of 0.4.0 reads the platform's Clusters in `foundation-databases` only, not the Clusters of your database profiles (infra #430
   tracks that check). `CnpgWalNeverArchived` fires for a Cluster whose archiver counters show no archived segment and a failure in the last 5
-  minutes (`for: 5m`): a proxy for the condition with the limits listed in `docs/detection.md`, mocked with the pinned `vmalert-tool`, never fired
-  on a cluster. `CnpgWalArchiveFailing` is slower: 10 minutes of window then `for: 15m`, so it fires at 16 minutes for a Cluster that never archived
-  (the new rule at 6) and at about 25 for one that archived before (a one-off `vmalert-tool` run on synthetic series with a 1-minute evaluation, not
-  in the suite and not a duration measured on a cluster; VMAlert declares `evaluationInterval: 30s` in `vmalert.yaml`, so real delays should be close,
-  not read on a cluster). Read the condition yourself after creating a Cluster.
+  minutes (`for: 5m`): a proxy for the condition with the limits listed in `docs/detection.md`, mocked with the pinned `vmalert-tool`. It is NOT
+  immediate: the rule group is evaluated every 5 minutes, so it fired 13 min 36 s after the Cluster was created (pending after 8 min 42 s) in a proof
+  lab on Scaleway (3 CP + 6 W, NOMINAL), 8 to 14 minutes by the rule's arithmetic. `CnpgWalArchiveFailing` is slower: 10 minutes of window then
+  `for: 15m`, 23 min 40 s after creation on the same Cluster (about 25 for one that archived before, not measured; a one-off `vmalert-tool` run with a
+  1-minute evaluation had said 6 and 16 minutes, which the 5-minute group interval makes wrong). Read the condition yourself after creating a Cluster.
   *Prevent.* Give every incarnation of a Cluster a NEW `serverName` (the `archiveServerName` value of a database profile, `<name>-g2`, see
   `docs/database-profiles.md`) or an EMPTY archive path, and never create a Cluster over a path that holds files; the DR chain already rebuilds on a
   new generation. On a Cluster already running, delete the foreign objects from its path (once you are sure nobody needs them): in lab 28C,
