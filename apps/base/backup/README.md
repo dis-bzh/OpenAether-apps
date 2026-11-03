@@ -109,9 +109,10 @@ The apps-side links of the chain, in the order that works (the infra documents c
    passwords. **Zitadel's masterkey lives in OpenBao**, so this step comes BEFORE the Zitadel database restore: a database restored
    under a fresh masterkey is unusable.
 4. CNPG: restore the databases (dump below, or point-in-time recovery).
-5. Zitadel and the rest of the DAG reconcile; check logins.
+5. Zitadel and the rest of the DAG reconcile; check logins. The restored database keeps its users, but a rebuilt cluster has no
+   `iam-admin` and no `iam-admin-pat`: the machine-user break-glass is gone (`docs/zitadel-hardening.md`, "After a disaster-recovery rebuild").
 
-Targets, the command that runs this chain (`task dr-restore-plan`) and a yearly drill are in `OpenAether-infra/docs/disaster-recovery.md`; the chain has not been run on a cluster.
+Targets, the command that runs this chain (`task dr-restore-plan`) and a yearly drill are in `OpenAether-infra/docs/disaster-recovery.md`; the chain was run on clusters in proof labs, not unattended (`docs/resilience.md`, "What the 0.4.1 proof labs showed").
 
 ## Restore
 
