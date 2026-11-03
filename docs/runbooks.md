@@ -557,7 +557,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ### BackupVerificationFailed
 
-- Check: The verifier's logs (`backup-verify`, `-c collect`): which object or checksum failed. A `MISSING` message means a store has no repository or archive while the other store passed: that store was wiped or its prefix deleted (check the bucket, its lifecycle rules and the key pair). A message `its end WAL ... is not archived yet` is NOT a corrupt backup: it is a Backup still waiting for its last WAL segment (force a switch, wait, verify again; `apps/base/backup/README.md`, "A completed Backup is not a restore point yet").
+- Check: The verifier's logs (`backup-verify`, `-c collect`): which object or checksum failed. A `MISSING` message means a store has no repository or archive while the other store passed: that store was wiped or its prefix deleted (check the bucket, its lifecycle rules and the key pair). A message `its end WAL ... is not archived yet` is NOT a corrupt backup: it is a Backup still waiting for its last WAL segment (force a switch, wait, verify again; `apps/base/backup/README.md`, "A completed Backup is not a restore point yet"). If the forced switch is not archived either, archiving is failing: read `pg_stat_archiver` (`last_failed_wal`, `last_failed_time`) and the `ContinuousArchiving` condition, fix that first (see `CnpgWalArchiveFailing`, and the same README for the steps), destroy nothing meanwhile.
 - Do: Otherwise treat the backup as corrupt: run a fresh backup and verify it. For a wiped primary, re-seed it from the replica or from a fresh backup (CNPG: `pg_switch_wal`, a Backup, `pg_switch_wal`, then verify), and keep the replica untouched until then.
 
 ### BackupCopyJobFailed

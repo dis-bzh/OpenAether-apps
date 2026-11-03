@@ -109,8 +109,9 @@ The apps-side links of the chain, in the order that works (the infra documents c
    passwords. **Zitadel's masterkey lives in OpenBao**, so this step comes BEFORE the Zitadel database restore: a database restored
    under a fresh masterkey is unusable.
 4. CNPG: restore the databases (dump below, or point-in-time recovery).
-5. Zitadel and the rest of the DAG reconcile; check logins. The restored database keeps its users, but a rebuilt cluster has no
-   `iam-admin` and no `iam-admin-pat`: the machine-user break-glass is gone (`docs/zitadel-hardening.md`, "After a disaster-recovery rebuild").
+5. Zitadel and the rest of the DAG reconcile; check logins. A rebuilt cluster has no `iam-admin` and no `iam-admin-pat`: the
+   machine-user break-glass is gone, and only part of what the restored database kept was read (`docs/zitadel-hardening.md`,
+   "After a disaster-recovery rebuild").
 
 Targets, the command that runs this chain (`task dr-restore-plan`) and a yearly drill are in `OpenAether-infra/docs/disaster-recovery.md`; the chain was run on clusters in proof labs, not unattended (`docs/resilience.md`, "What the 0.4.1 proof labs showed").
 
@@ -343,12 +344,31 @@ next `archive_timeout` before the destroy, was not measured. The scheduled `back
 ScheduledBackups, so it does not meet this window; a verify started by hand right after a Backup does. The verify Job itself ends
 `Complete` when a check fails (the result is the log and `oa_backup_verify_ok`): do not gate on the Job status.
 
-**Before a planned destroy, a migration or any final backup:** stop the writers; take the Backup; force the switch on each primary
-(`kubectl -n foundation-databases exec <primary pod> -c postgres -- psql -c 'SELECT pg_switch_wal();'`); wait until
-`SELECT last_archived_wal FROM pg_stat_archiver;` is at or past the Backup's `end_wal`; run `cnpg-store-replicate` and then `backup-verify` by
-hand and read its log: `PASS` with `WAL ... contiguous` on both stores. Destroy only then. The verify says the same when it fails on
-this (message `its end WAL ... is not archived yet`): it is a backup waiting for its segment, not a corrupt one. Whether the plugin
-should wait for its end segment before reporting `completed` is an upstream question, not asked.
+**Before a planned destroy, a migration or any final backup:**
+
+1. Stop the writers, take the Backup and wait until it is `completed`.
+2. On each primary, force the switch and print the segment it completed (checked on a local PostgreSQL 18.6, not on a cluster):
+   `kubectl -n foundation-databases exec <primary pod> -c postgres -- psql -At -c 'SELECT pg_walfile_name(pg_switch_wal() - 1)'`.
+   That segment holds your last commit; the Backup's `end_wal`, which the verify checks, is that segment or an earlier one.
+3. Wait until `SELECT last_archived_wal FROM pg_stat_archiver;` is at or past that segment (2 to 4 s in the proof lab).
+4. Run `cnpg-store-replicate` and then `backup-verify` by hand and read its log: `PASS` with `WAL ... contiguous` on both stores.
+   Destroy only then.
+
+The verify says the same when it fails on this (message `its end WAL ... is not archived yet`): a backup waiting for its segment,
+not a corrupt one. Segment names are hex (`...0C`); the PASS line counts the same segments in decimal (`WAL 11..12` is `...0B`
+to `...0C`).
+
+**If the forced segment does not get archived** (`last_archived_wal` has not moved after about a minute, or `last_failed_wal` is
+newer than it), archiving is failing and steps 3 and 4 cannot pass. Read, on the primary,
+`SELECT last_archived_wal, last_failed_wal, last_failed_time, failed_count FROM pg_stat_archiver;`, the Cluster's `ContinuousArchiving`
+condition (`False`, with its reason: the command is in `docs/traps.md`), the `archiv` lines of the primary's `postgres` log
+(`kubectl -n foundation-databases logs <primary pod> -c postgres`), and the alerts `CnpgWalArchiveFailing` and `CnpgWalNeverArchived`. Fix the cause (the S3 keys or the bucket, the
+endpoint, a path that holds another database's WAL: `docs/runbooks.md` and `docs/traps.md`), force the switch again and go back to
+step 3. **Do not destroy while it fails:** the commits since the last archived segment are on the Cluster's volumes only, and a
+stuck WAL also fills the primary's disk. If the archive cannot be fixed first, a fresh `cnpg-dump` (a manual Job from the CronJob,
+`docs/runbooks.md`) is the recovery path that needs no WAL, as of the moment of the dump; this branch was not run in a lab.
+
+Whether the plugin should wait for its end segment before reporting `completed` is an upstream question, not asked.
 
 ## Known limits / upgrades
 
