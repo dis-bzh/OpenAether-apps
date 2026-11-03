@@ -186,15 +186,17 @@ the recovery shares that apply afterwards are the SOURCE cluster's:
    `bao operator raft snapshot restore -force <file>`. The Kubernetes auth config in the snapshot pins no CA, so logins keep working on a
    rebuilt cluster. Then run `bao status` on EACH of the three pods, `openbao-0` (the pod the restore ran on) included: every standby
    must show an `Active Node Address`. A pod that shows none answers `local node not active but active cluster node not found`
-   (logins 500) until it is restarted: `kubectl -n foundation-vault delete pod openbao-N` (the PVC stays). In lab 28B (Scaleway, DR chain,
-   INCIDENT) it was `openbao-0` and logins failed for 25+ minutes, while only `openbao-1` and `openbao-2` had been restarted: check all
-   three, whoever ran the restore. No alert sees it while another pod is active (`docs/detection.md`).
+   (logins 500) until it is restarted: `kubectl -n foundation-vault delete pod openbao-N` (the PVC stays). In lab 28B (Scaleway, 3 CP + 6 W,
+   DR chain) it was `openbao-0` and logins failed for 25+ minutes (INCIDENT: the time until a person restarted it), while only `openbao-1`
+   and `openbao-2` had been restarted: check all three, whoever ran the restore. No alert sees it while another pod is active
+   (`docs/detection.md`).
 4. Put the source's shares back (delete the fresh `openbao-recovery-shares`, then
    `kubectl create secret generic openbao-recovery-shares --from-file=share-1=openbao-share-1.b64 …`), then resume Flux.
 
-With any other key the data does not come back (tested on a real OpenBao). Run on a cluster only inside the DR chain with the
-DEVELOPMENT bootstrap (labs 27 and 28B: a 3-member leader in 7.4 to 8 s); a production-style restore, with the recovery shares of
-the holders, was not run (`OpenAether-infra`, `docs/disaster-recovery.md`).
+With any other key the data does not come back (tested on a real OpenBao). Run on a cluster with the DEVELOPMENT bootstrap only: a
+3-member leader 7.4 s after the restore (lab 28B, Scaleway, 3 CP + 7 W) and 8 s (lab 27, Scaleway, 3 CP + 5 W), both NOMINAL, and the
+`openbao` step of the DR chain took 9 s (lab 28B, NOMINAL, 3 CP + 6 W, restic restore included). A production-style restore, with the
+recovery shares of the holders, was not run (`OpenAether-infra`, `docs/disaster-recovery.md`).
 
 **Interrupted first run.** A failure inside the root window (between `sys/init` and the hand-over) revokes the root token on the
 way out, whatever the cause, and leaves an initialised OpenBao that nobody can configure (the root token is gone by design; the
@@ -297,8 +299,8 @@ keeps two); one that holds several is not: spread first.
 - A development bootstrap can not be upgraded to production. The escrow is monitored only as far as an operator's attestation
   goes (Day 0, step 5): the cluster can not check that the escrowed copy opens the CURRENT key, and the restore from it is not drilled.
 - The Kubernetes-auth login is only exercised on a cluster; the harness replaces that one call. The 3-replica join, the seal-key
-  rotation and the start-over were run on a cluster; the restore with standbys ran inside the DR chain with the development bootstrap
-  only (lab 28B: `openbao-0` stayed a standby, step 3 of the Disaster recovery above), the other runbooks were not.
+  rotation and the start-over were run on a cluster; the restore with standbys ran with the development bootstrap only (lab 28B:
+  `openbao-0` stayed a standby after it, step 3 of the Disaster recovery above), the other runbooks were not.
 - **Recorded deviations** (ANSSI TLS-12): the seal key is a software key, not an HSM or an external KMS, and the static seal wraps the
   barrier with AES-GCM (upstream's implementation) rather than a key-wrap mode; `vault-ca`'s `openbao-ca` is separate from the OpenBao
   PKI because OpenBao needs a certificate to start; the Istio CA is istiod's own. The way out for the first is a `transit` seal against an

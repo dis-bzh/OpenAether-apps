@@ -70,13 +70,17 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 - **Alloy keeps log batches in memory only (#119, #80).** Its write-ahead log was tried with the real Alloy of the pinned chart
   and does not replay after a hard restart (`scripts/dev/probe-alloy-wal.sh`): not enabled.
 - **An OpenBao standby that cannot find the active node.** After a raft restore into a rebuilt cluster, `openbao-0` answered `local node not
-  active but active cluster node not found` (logins 500) for 25+ minutes (lab 28B, DR chain, INCIDENT). `OpenBaoNoActiveNode` sums
+  active but active cluster node not found` (logins 500) for 25+ minutes, the time until a person restarted it (lab 28B, Scaleway, 3 CP + 6 W,
+  DR chain, INCIDENT). `OpenBaoNoActiveNode` sums
   `vault_core_active` over the pods, so it stays quiet while another pod is active, and no rule reads a standby's view of the leader. Run
   `bao status` on each pod after a restore (`apps/base/foundation/vault/README.md`, Disaster recovery).
-- **`ContinuousArchiving=False` itself.** Only the archiver's counters are read (`CnpgWalArchiveFailing`, `CnpgWalNeverArchived`): a Cluster
-  that archived before and now fails is seen after about 25 minutes, and a False condition for another reason is not seen. A rule on the
-  condition needs kube-state-metrics to read the `Cluster` objects (a `customResourceState` entry and `list`/`watch` on `clusters.postgresql.cnpg.io`,
-  new RBAC): not done. `kubectl get clusters.postgresql.cnpg.io -A` prints it (`docs/traps.md`).
+- **`ContinuousArchiving=False` itself.** Only the archiver's counters are read, and a False condition with another cause is not seen.
+  `CnpgWalNeverArchived` is a proxy: a Cluster whose counters show no archived segment and a failure in the last 5 minutes. The counters
+  restart at 0 after a crash recovery, on a promotion and on a re-cloned instance (so it can name a Cluster that did archive), and it fires on a
+  new Cluster whose S3 keys are not seeded yet; mocked, never fired on a cluster. `CnpgWalArchiveFailing` is slower: by its rule (10 minutes of
+  window, then `for: 15m`) about 25 minutes for a Cluster that archived before, not measured. A rule on the condition needs kube-state-metrics to
+  read the `Cluster` objects (a `customResourceState` entry and `list`/`watch` on `clusters.postgresql.cnpg.io`, new RBAC): not done, infra #430
+  stays open. `kubectl get clusters.postgresql.cnpg.io -A` prints it (`docs/traps.md`).
 - **Metrics no cluster has shown.** `docs/monitoring-0.4.md` lists them; `scripts/dev/test-alert-metrics.py` checks offline that
   every metric an alert reads is catalogued with a scrape that exists.
 

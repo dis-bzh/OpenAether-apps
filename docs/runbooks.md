@@ -30,7 +30,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 ### RestoreTestFailed
 
 - Check: `kubectl -n foundation-databases logs job/<newest cnpg-*-restore-test job> -c restore`; the line `FAIL <cluster>/<store>/<mode>` says which check failed (canary chain, copy too old, empty tables, not healthy in time). `kubectl get cluster -n backup-restore-test` shows a scratch Cluster still there.
-- Reads (#169): a Cluster with no completed `Backup` for more than 30 hours fails with `the daily ScheduledBackup does not produce one`: `kubectl get scheduledbackup,backup -n foundation-databases` (suspended? failing? see `CnpgBackupFailed`), then take one (`kubectl cnpg backup`). A younger Cluster is not a failure, see `RestoreTestNeverReported`.
+- Reads (#169): a Cluster with no completed `Backup` for more than 30 hours fails with `no completed base backup although the Cluster is N h old`: `kubectl get scheduledbackup,backup -n foundation-databases` (suspended? failing? see `CnpgBackupFailed`), then take one (`kubectl cnpg backup`). A younger Cluster is not a failure, see `RestoreTestNeverReported`. Only the replica store fails with `no target backup found` while a Backup is completed: `cnpg-store-replicate` (every 15 minutes) has not copied it yet; wait, or `kubectl -n foundation-databases create job --from=cronjob/cnpg-store-replicate manual-$(date +%s)`.
 - Do: One store failing and the other passing means that store's copy is damaged or lagging: for the replica, look at `BackupCopyJobFailed` and `kubectl -n foundation-databases logs job/<cnpg-store-replicate job>`. Both failing means the archive itself: look at `CnpgWalArchiveFailing`, take a base backup now (`kubectl cnpg backup`), then run the test again with `kubectl -n foundation-databases create job --from=cronjob/cnpg-recovery-restore-test manual-$(date +%s)`. Until it passes, the dataset is NOT proven restorable: keep the restic dump (`cnpg-dump`) as the recovery path.
 
 ### RestoreTestNoRecentPass
@@ -42,7 +42,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `kubectl -n foundation-databases get cronjob cnpg-recovery-restore-test`, the Jobs it created, `kubectl -n foundation-databases get externalsecret` (S3 keys not seeded stops the backup CronJobs too), and the exporter: `kubectl -n foundation-databases get deploy backup-verify-exporter`.
 - Do: Seed the missing keys or fix the failing step in the Job log; the series appear after the first complete run.
-- Reads (#169): a Cluster younger than 30 hours with no completed `Backup` is skipped on purpose: the log says `SKIP <cluster>/<store>/<mode>: no completed base backup yet`, the Job succeeds and the dataset reports nothing until its first base backup exists (the daily ScheduledBackup, or one by hand: `kubectl cnpg backup`). The replica store reports from 50 minutes after that backup (the copy job runs every 15 minutes). The same SKIP forever means no `Backup` ever completes: that turns into `RestoreTestFailed` after 30 hours of Cluster age.
+- Reads (#169): a Cluster younger than 30 hours none of whose `Backup` objects is completed is skipped on purpose: the log says `SKIP <cluster>/<store>/<mode>: no completed base backup yet`, the Job succeeds and the dataset reports nothing until a base backup of it completes (the immediate Backup of its ScheduledBackup, or one by hand: `kubectl cnpg backup`). The same SKIP forever means no `Backup` ever completes: the Cluster turns into `RestoreTestFailed` at 30 hours of age, and this alert fires 3 days after the CronJob was created if nothing of kind `cnpg` ever reported.
 
 ### RestoreRecoverySlow
 
@@ -83,7 +83,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: the Cluster has never archived a WAL segment and fails now. `kubectl get clusters.postgresql.cnpg.io -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\t"}{.status.conditions[?(@.type=="ContinuousArchiving")].status}{"\n"}{end}'` (False for this one, with the reason in the condition message); `kubectl -n <ns> logs <cluster>-1 -c postgres | grep -i archiv`; the ObjectStore of the Cluster and its credentials Secret.
 - Do: The Cluster looks healthy and replicates, but its first failover can wedge for good (lab 28C, 4 of 4): fix it before its primary is moved or lost (a failover already stuck: the Release steps of the same trap). A path that holds the WAL of another database system (a Cluster re-created by hand over the same `serverName`): see `docs/traps.md`, "A cluster rebuilt on a bucket that still holds the old cluster's WAL archive does not archive". Missing or wrong S3 keys: seed them (`kubectl -n foundation-databases get externalsecret`).
-- Reads: per Cluster, `increase(cnpg_pg_stat_archiver_failed_count[5m]) > 0` while the sum of `cnpg_pg_stat_archiver_archived_count` over its pods is 0, for 5 minutes (`CnpgWalArchiveFailing` fires later for the same Cluster; for a Cluster that archived before, only that one can fire). It reads the archiver, not the `ContinuousArchiving` condition. UNVERIFIED on a cluster; a first install whose S3 keys are not seeded yet is expected to fire it (reading, not observed). It is silent for a Cluster with no archiver (the `light` profile).
+- Reads: per namespace and Cluster, `increase(cnpg_pg_stat_archiver_failed_count[5m]) > 0` while the sum of `cnpg_pg_stat_archiver_archived_count` over its pods is 0, for 5 minutes (`CnpgWalArchiveFailing` fires later for the same Cluster). It is a PROXY: it reads the archiver's counters, not the `ContinuousArchiving` condition, so a False condition with another cause is not seen. The counters restart at 0 after a crash recovery and on a promoted or re-cloned instance, so a Cluster that archived before can fire it when its archive then fails; read the Cluster's age and the condition before concluding that it "never" archived. A first install whose S3 keys are not seeded yet fires it until they are (reading, not observed). Silent for a Cluster with no archiver (the `light` profile). Mocked with `vmalert-tool` (evaluation every 10 minutes: `for: 5m` is not told from `for: 10m`), never fired on a cluster.
 
 ### CnpgBackupFailed
 
@@ -347,7 +347,6 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: `kubectl -n foundation-vault get pods -o wide`; `bao operator raft list-peers` from a pod that answers.
 - Do: A pod Pending on a dead worker holds a local-path volume that does not move: `task cluster-replace-node PROVIDER=<provider> NODE=<node>`; the new member resyncs from its raft peers. A sealed pod unseals itself from the seal-key Secret: see OpenBaoWorkloadSealed.
 - Do not: delete the PVC of a pod whose node is only unreachable (the data is on that node); restore a raft snapshot while two replicas are up.
-- After a raft restore (the DR chain): `bao status` on all three pods, `openbao-0` included; a pod with no `Active Node Address` (logins 500, `local node not active but active cluster node not found`) is restarted with `kubectl -n foundation-vault delete pod openbao-N`, the PVC stays (lab 28B, #184: it was `openbao-0`, for 25+ minutes). `apps/base/foundation/vault/README.md`, Disaster recovery, step 3.
 
 ### OpenBaoRaftNoFailureTolerance
 
@@ -363,6 +362,11 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: The OpenBao VMServiceScrape (TLS) and the metrics listener.
 - Do: Restore the scrape; the seal alerts are blind meanwhile.
+
+### After an OpenBao raft restore (no alert)
+
+- Check: `bao status` on each of the three pods, `openbao-0` (the pod the restore ran on) included; every standby must show an `Active Node Address` (the field name is the issue's, not re-read on a cluster).
+- Do: restart a pod that shows none (logins answer 500, `local node not active but active cluster node not found`): `kubectl -n foundation-vault delete pod openbao-N`, the PVC stays. No alert sees it while another pod is active (`docs/detection.md`). In lab 28B (Scaleway, 3 CP + 6 W, DR chain, INCIDENT) it was `openbao-0`, and logins failed for 25+ minutes, the time until a person restarted it. `apps/base/foundation/vault/README.md`, Disaster recovery, step 3.
 
 ## Alerting chain
 
