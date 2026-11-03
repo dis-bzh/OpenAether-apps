@@ -27,7 +27,10 @@ A proof lab on Scaleway (3 CP + 6 W) read `https://grafana.<domain>/metrics` thr
 head. That lab had `app_lb_allowed_cidrs` set to the lab host, so the reading came from an allowed source: the exposure is to
 any caller that reaches the Gateway, which by default (no ACL) is anyone. Same lab: `/metrics` answered 404 on the OpenBao and
 Zitadel routes, and 200 on the route of a test application. Zitadel serves its metrics at `/debug/metrics` (the scrape in
-`vmscrapes-pipeline.yaml`); the first lab did not probe it, so whether it was open before the policy was never read.
+`vmscrapes-pipeline.yaml`); the first lab did not probe it. A third lab did, on a cluster at the 0.4.0 tags, before the policy:
+it was open there too, HTTP 200 with a Prometheus body (11,573 bytes, 53 `# HELP` lines) on the Zitadel host, read from the lab
+host like Grafana's. On the 216-probe sweep below, 10 probes returned a Prometheus body at 0.4.0: 7 on Grafana (`/metrics` and 6
+spellings) and 3 on Zitadel (`/debug/metrics` and 2 spellings), all on HTTPS.
 Only the Forgejo route had a rule of its own for `/metrics` (no backend; it answered 500 in an earlier proof lab).
 
 Since 0.4.1, `apps/base/services-gateway/authorizationpolicy-deny-metrics.yaml` is an Istio AuthorizationPolicy (DENY) aimed at
@@ -43,6 +46,20 @@ Gateway (Grafana's and Zitadel's own metrics are then open again): delete `Autho
 `apps/flux/components/private-admin-routes`. The inner patch renders with `kubectl kustomize` on the brick; the Flux field and
 an overlay doing it have not been run, UNVERIFIED on a cluster. The checker reads the manifests, not overlays: it stays green.
 
+**On an upgrade the refusal arrives with Flux, not with the end of the move.** In the third lab (a 0.4.0 cluster moved to the 0.4.1
+release heads, probed every 2 s from the lab host) Grafana's and Zitadel's metrics still answered with a body until
+`services-gateway` applied the policy: 2 min 38 s after the apps ref moved, 71 s after `cluster-up` returned. The next probe, 2 s
+later, got a 403, and none got a body after the first 403.
+
+**Istio warns when it applies the policy, and a TCP listener would be denied.** Flux applied `deny-metrics-paths` without error
+and the admission answered a warning (kustomize-controller log, third lab): `configured AuthorizationPolicy will deny all traffic
+to TCP ports under its scope due to the use of only HTTP attributes in a DENY rule; it is recommended to explicitly specify the
+port`. The policy names no port, so it covers every listener of `openaether-gateway`. Harmless today: that Gateway has an HTTP
+listener on 80 and an HTTPS listener on 443 (`gateway-openaether.yaml`) and `apps/` holds no `TCPRoute` or `TLSRoute` resource (the
+live listeners were not read back in the lab). A TCP or TLS listener added to it later would, by Istio's own warning, be denied.
+Narrow the policy to ports 80 and 443 before adding one (`ports` in the operation; not tried on a cluster, and
+`scripts/check-gateway-routes.py` counts a policy narrowed by port as no policy, so the checker needs an edit with it).
+
 **The scrapes are not affected**: vmagent reads `VMPodScrape` and `VMServiceScrape` targets pod to pod, and none crosses the
 Gateway. `scripts/check-gateway-routes.py` (CI, job "Flux DAG") fails when a `VMStaticScrape` or `VMProbe` names a Gateway host
 (a `VMScrapeConfig` or an inline scrape config of the VMAgent is not read), when the policy loses one of the four paths, is not
@@ -51,15 +68,17 @@ it names the routes that would forward each path. Its fixture cases, `main()`'s 
 the mutants are not kept and not every branch of the checker has a case of its own.
 
 Rung: the checker is **mocked, offline** (the manifests and its fixture cases, the policy against the CRD schema CI uses); the policy
-was **observed on a cluster** in a second proof lab (Scaleway, 3 CP + 6 W, NOMINAL, from the lab host, no credential):
+was **observed on a cluster** in a second proof lab and again in a third, on a cluster moved from 0.4.0 (Scaleway, 3 CP + 6 W,
+NOMINAL, from the lab host, no credential):
 
 1. **Shown.** 216 probes (27 spellings x 4 hosts x HTTPS and plain HTTP on :80) returned 0 Prometheus bodies. `/metrics` and
    `/debug/metrics` answered 403 "RBAC: access denied" on all four hosts (Grafana, Zitadel, OpenBao and the lab's own test
    application), on both listeners: the plain-HTTP listener answers 403, not 301. `/`, `/login`, `/api/health`, `/ui/v2/login`
    and `/.well-known/openid-configuration` were still served. After a disaster-recovery rebuild: 36 probes, 30 of them 403, 0 bodies.
-2. **Shown, thinly.** `up` = 1 for Grafana (2 pods) and Zitadel (2 pods) after the policy, read by the operator in VictoriaMetrics;
-   that output was not kept with the lab's files, and the vmagent target list that was kept shows Grafana but not the Zitadel pool.
-   The forge was not deployed in the lab: **not shown** for the forge.
+   The third lab's sweep after the move: 112 x 403 and 0 bodies, against 10 bodies on the same sweep at 0.4.0 (above).
+2. **Shown.** `up` = 1 for Grafana (2 pods) and Zitadel (2 pods): in the third lab the VictoriaMetrics query
+   `up{job=~".*zitadel.*|.*grafana.*"}` returned those 4 series, all 1, at 0.4.0 and twice after the policy (about 3 and 10 minutes
+   after it), the raw answers kept with the lab's files. The forge was not deployed in the labs: **not shown** for the forge.
 3. **Spellings.** The policy matched `/metrics/`, `/metrics/x`, `/metrics?x=1`, `/%6Detrics`, `/%6detrics`, `/./metrics`,
    `/a/../metrics` and `/%2e/metrics` (403): the policy sees the path after Istio's normalisation. It did **not** match `//metrics`,
    `/debug//metrics`, `/Metrics`, `/METRICS`, `/metrics;a=b`, `/metrics.`, `/metrics%20`, `/metrics%2f` and `/%2fmetrics`, which reached
