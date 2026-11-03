@@ -23,9 +23,9 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 | Node clock drift | `NodeClockSkew`, `NodeClockNotSynchronised` | `vmrule-cluster.yaml` |
 | An OpenBao pod sealed, no active node, raft without failure tolerance or lagging in applying entries, its metrics not scraped | `OpenBaoWorkloadSealed`, `OpenBaoNoActiveNode`, `OpenBaoRaftNoFailureTolerance`, `OpenBaoRaftApplyLag`, `OpenBaoMetricsDown` | `observability-openbao/vmrule.yaml` |
 | The OpenBao seal-key escrow not attested, or attested too long ago (also when the check has never succeeded) | `OpenBaoEscrowNotAttested` | `vmrule-backup.yaml` |
-| Backups: a restore test or CronJob that no longer runs, WAL archive failing, base backup failed or stale (`CnpgBackupFailed` and `CnpgBackupStale` read the Barman Cloud plugin's `barman_cloud_cloudnative_pg_io_last_*_backup_timestamp` as well as the CNPG collector's: for a plugin backup the collector reports 0, lab 28E; `docs/runbooks.md`) | `RestoreTestStale`, `BackupCronJobMissing`, `CnpgWalArchiveFailing`, `CnpgBackupFailed`, `CnpgBackupStale` | `vmrule-backup.yaml` |
+| Backups: a restore test or CronJob that no longer runs, WAL archive failing (`CnpgWalNeverArchived`: a Cluster that has never archived a segment and fails now, about 10 to 15 minutes after its creation, which `CnpgWalArchiveFailing` reports later), base backup failed or stale (`CnpgBackupFailed` and `CnpgBackupStale` read the Barman Cloud plugin's `barman_cloud_cloudnative_pg_io_last_*_backup_timestamp` as well as the CNPG collector's: for a plugin backup the collector reports 0, lab 28E; `docs/runbooks.md`) | `RestoreTestStale`, `BackupCronJobMissing`, `CnpgWalArchiveFailing`, `CnpgWalNeverArchived`, `CnpgBackupFailed`, `CnpgBackupStale` | `vmrule-backup.yaml` |
 | The last SUCCESS of a backup or restore test too old (the schedule alone is not enough); the verification alerts on the M2 verifier's series | `BackupNotSucceededRecently`, `RestoreTestNotSucceeding`, `BackupVerificationStale`, `BackupVerificationFailed` | `vmrule-backup-signals.yaml` |
-| A restore test that failed (canary chain, copy too old, tables empty), no pass for days, never reported, a slow recovery, a scratch Cluster left behind, the canary writer stopped | `RestoreTestFailed`, `RestoreTestNoRecentPass`, `RestoreTestNeverReported`, `RestoreRecoverySlow`, `RestoreScratchLeftover`, `CnpgCanaryNotWriting` | `vmrule-restore-test.yaml` |
+| A restore test that failed (canary chain, copy too old, tables empty), no pass for days, never reported (a store with no backup or dump pushed yet is skipped, not failed: `docs/runbooks.md`, `RestoreTestFailed`), a slow recovery, a scratch Cluster left behind, the canary writer stopped | `RestoreTestFailed`, `RestoreTestNoRecentPass`, `RestoreTestNeverReported`, `RestoreRecoverySlow`, `RestoreScratchLeftover`, `CnpgCanaryNotWriting` | `vmrule-restore-test.yaml` |
 | The copies of the backups (0.4.0 M2): a copy, etcd snapshot or verifier Job failed; the CNPG archive not copied to the replica store for an hour; no etcd snapshot for 36 h; the verifier not completed for 36 h; a store failing verification | `BackupCopyJobFailed`, `CnpgStoreReplicationStale`, `EtcdSnapshotStale`, `BackupVerifierStale`, `BackupStoreVerificationFailed` | `vmrule-backup-copies.yaml` |
 | CNPG replica lag, replica not streaming, PostgreSQL not answering, an instance gone from the exporters, no replica left so synchronous writes are blocked, WAL files piling | `CnpgReplicationLagHigh`, `CnpgReplicaNotStreaming`, `CnpgInstanceDown`, `CnpgInstanceMissing`, `CnpgSyncReplicaMissing`, `CnpgWalFilesPiling` | `vmrule-database.yaml` |
 | The alerting chain itself: VMAlert to Alertmanager, rule evaluation, alert state, config reload, Alertmanager absent | `VMAlertNotifierErrors`, `VMAlertRuleEvaluationErrors`, `VMAlertRemoteWriteErrors`, `AlertmanagerConfigReloadFailed`, `AlertmanagerAbsent` | `vmrule-alerting.yaml` |
@@ -69,6 +69,20 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 - **Data written by the delivery test to a muted channel.** The receiver answering 2xx is the only acknowledgement.
 - **Alloy keeps log batches in memory only (#119, #80).** Its write-ahead log was tried with the real Alloy of the pinned chart
   and does not replay after a hard restart (`scripts/dev/probe-alloy-wal.sh`): not enabled.
+- **An OpenBao standby that cannot find the active node.** After a raft restore into a rebuilt cluster, `openbao-0` answered `local node not
+  active but active cluster node not found` (logins 500) for 25+ minutes, the time until a person restarted it (lab 28B, Scaleway, 3 CP + 6 W,
+  DR chain, INCIDENT). `OpenBaoNoActiveNode` sums
+  `vault_core_active` over the pods, so it stays quiet while another pod is active, and no rule reads a standby's view of the leader. Run
+  `bao status` on each pod after a restore (`apps/base/foundation/vault/README.md`, Disaster recovery).
+- **`ContinuousArchiving=False` itself.** Only the archiver's counters are read, and a False condition with another cause is not seen.
+  `CnpgWalNeverArchived` is a proxy: a Cluster whose counters show no archived segment and a failure in the last 5 minutes. The counters
+  restart at 0 after a crash recovery, on a promotion and on a re-cloned instance (so it can name a Cluster that did archive), and it fires on a
+  new Cluster whose S3 keys are not seeded yet; the rule is mocked, and fired once on a cluster. **It is not instant: about 10 to 15 minutes after
+  the Cluster is created** (its group is evaluated every 5 minutes; figures: `docs/runbooks.md#cnpgwalneverarchived`). `CnpgWalArchiveFailing` is slower: by its rule
+  (10 minutes of window, then `for: 15m`) about 25 minutes for a Cluster that archived before (not measured). The fast signal is the Cluster's
+  `ContinuousArchiving` condition, read by hand (`docs/traps.md` has the command). A rule on the condition needs kube-state-metrics to
+  read the `Cluster` objects (a `customResourceState` entry and `list`/`watch` on `clusters.postgresql.cnpg.io`, new RBAC): not done, infra #430
+  stays open. The jsonpath command prints it (the bare `kubectl get clusters.postgresql.cnpg.io -A` does not show the condition).
 - **Metrics no cluster has shown.** `docs/monitoring-0.4.md` lists them; `scripts/dev/test-alert-metrics.py` checks offline that
   every metric an alert reads is catalogued with a scrape that exists.
 

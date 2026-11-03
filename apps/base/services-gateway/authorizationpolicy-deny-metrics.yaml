@@ -1,0 +1,25 @@
+# No route of the Gateway should serve a metrics endpoint: Grafana's /metrics answered 200 to any caller that reached
+# the Gateway (Zitadel's is /debug/metrics). vmagent scrapes pod to pod. DENY runs before allow-gateway-ingress.
+# Refusal seen on a cluster in a proof lab, the forge's route not shown; opt-out and limits: docs/public-exposure.md.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: deny-metrics-paths
+  namespace: services-gateway
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "gateway"
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: openaether-gateway
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            paths:
+              - /metrics
+              - /metrics/*
+              - /debug/metrics
+              - /debug/metrics/*

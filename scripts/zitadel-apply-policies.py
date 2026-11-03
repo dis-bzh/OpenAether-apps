@@ -14,6 +14,8 @@ Org-level custom policies, if any were created in the console, override the inst
 Usage:  ZITADEL_PAT=<iam-admin PAT> python3 scripts/zitadel-apply-policies.py --url http://127.0.0.1:8080 \\
             --host zitadel.openaether.local [--apply]
   The PAT: kubectl -n services-identity get secret iam-admin-pat -o jsonpath='{.data.pat}' | base64 -d
+  A cluster rebuilt by the DR chain has no such Secret: use the PAT of an IAM_OWNER machine user you created
+  (docs/zitadel-hardening.md, "After a disaster-recovery rebuild").
   The URL: kubectl -n services-identity port-forward svc/zitadel 8080:8080 (the Host header selects the instance).
 Dependencies: PyYAML.
 """

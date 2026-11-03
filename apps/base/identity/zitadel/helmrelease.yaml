@@ -254,7 +254,8 @@ spec:
             HasSymbol: true
           LockoutPolicy:
             # R10. The default is 0 (no limit). The break-glass if the only human admin is locked out is the
-            # iam-admin machine user (secret iam-admin-pat), see docs/zitadel-hardening.md.
+            # iam-admin machine user (secret iam-admin-pat); it does not exist after a DR rebuild.
+            # See docs/zitadel-hardening.md.
             MaxPasswordAttempts: 5
             MaxOTPAttempts: 5
           LoginPolicy:

@@ -67,6 +67,7 @@ spec:
     - port: http-metrics
       path: /metrics
 ---
+# Pod to pod. The Gateway refuses /metrics (services-gateway/authorizationpolicy-deny-metrics.yaml): no URL scrape.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:

@@ -3,7 +3,8 @@
 # CNPG version, so it is LOADED, not only listed (cnpg-dump-restore-test, monthly, stays as the shallow check). Daily, for each
 # restic repository (primary and replica): restore the latest snapshot, load each dump into a private throwaway PostgreSQL
 # (no network, deleted after), and judge it with the canary rows it carries (tables present, hash chain intact, newest row less than
-# 26 h old). Metrics oa_restore_test_* with kind="dump", published like the CNPG recovery test; a failure fails the Job.
+# 26 h old). Metrics oa_restore_test_* with kind="dump", published like the CNPG recovery test; a failure fails the Job. A store with no
+# restic repository yet (fresh install) is skipped, not failed, unless it passed before: apps/base/backup/README.md.
 #   stage 1  restic image      restore the latest cnpg snapshot of each repository
 #   stage 2  PostgreSQL image  user postgres: initdb, pg_restore, snapshot.sql, judge (dump_load.py)
 #   stage 3  kubectl image     publish; the only container with the ServiceAccount token, which may patch one ConfigMap

@@ -109,9 +109,11 @@ The apps-side links of the chain, in the order that works (the infra documents c
    passwords. **Zitadel's masterkey lives in OpenBao**, so this step comes BEFORE the Zitadel database restore: a database restored
    under a fresh masterkey is unusable.
 4. CNPG: restore the databases (dump below, or point-in-time recovery).
-5. Zitadel and the rest of the DAG reconcile; check logins.
+5. Zitadel and the rest of the DAG reconcile; check logins. A rebuilt cluster has no `iam-admin` and no `iam-admin-pat`: the
+   machine-user break-glass is gone, and only part of what the restored database kept was read (`docs/zitadel-hardening.md`,
+   "After a disaster-recovery rebuild").
 
-Targets, the command that runs this chain (`task dr-restore-plan`) and a yearly drill are in `OpenAether-infra/docs/disaster-recovery.md`; the chain has not been run on a cluster.
+Targets, the command that runs this chain (`task dr-restore-plan`) and a yearly drill are in `OpenAether-infra/docs/disaster-recovery.md`; the chain was run on clusters in proof labs, not unattended (`docs/resilience.md`, "What the 0.4.1 proof labs showed").
 
 ## Restore
 
@@ -163,7 +165,19 @@ refuses an `rt-` Cluster anywhere else and a scratch Cluster that archives. A Jo
 SIGTERM and on failure (finalizer-safe), and the next run removes a leftover older than an hour; `RestoreScratchLeftover` fires after 3 h.
 A failed comparison is a failed Job (so `RestoreTestNotSucceeding` sees it too) and `oa_restore_test_ok 0` (`RestoreTestFailed`, critical);
 no pass for 3 days (10 for the weekly ones) is `RestoreTestNoRecentPass`. The two key pairs are the archive's and the replica copy's: a read-only pair
-is a follow-up. Run one by hand: `kubectl -n foundation-databases create job --from=cronjob/cnpg-recovery-restore-test manual-$(date +%s)`.
+is a follow-up. Before the first base backup there is nothing to restore (#169): for a Cluster younger than 30 hours none of whose `Backup` objects is completed, the CNPG tests print
+`SKIP <cluster>/<store>/<mode>: no completed base backup yet`, report no `ok` series and the Job succeeds. A Backup counts when its `spec.cluster.name` names the Cluster, made by a
+ScheduledBackup or by hand (`kubectl cnpg backup`, the DR chain's `dr-base-<cluster>`): no label is read. Once one is completed, all four combinations restore, with no extra wait for the replica
+store: until `cnpg-store-replicate` (every 15 minutes) has copied the first base backup, the replica restore fails with `no target backup found`, as before; the DR chain forces that copy first and
+refuses any SKIP. No completed `Backup` on an older Cluster (its ScheduledBackups, `immediate: true` and then daily, produce nothing) and a failed listing of the Backups are FAILURES, never a skip. Rung: mocked
+(`test-restore-test-cnpg.py`), not run on a cluster. Run one by hand: `kubectl -n foundation-databases create job --from=cronjob/cnpg-recovery-restore-test manual-$(date +%s)`.
+
+The dump-load test has the same window on a fresh install, with another cause: `cnpg-dump` (02:47 UTC) creates the restic repositories and the test runs at 05:40, so an install made in between has
+nothing to load. A restic repository that does not exist (`restic cat config` exits 10, which is that case and no other) is a SKIP for that store: `SKIP <cluster>/<store>/dump: the <store> restic repository does not exist yet`
+in the log of the `load` init container; the store reports no `ok` series and the Job succeeds. Kept as FAILURES: a store that passed before and has no repository now (the publishing stage reads the last success it published;
+if it cannot read it, every skipped store fails), a refused key, a wrong password, a missing bucket (restic is stopped by the timeout, not exit 10), a repository that exists with no snapshot, a dump missing from the snapshot, a dump that
+does not load or is stale. Limit: a skip that lasts usually means `cnpg-dump` never succeeds, which `BackupNotSucceededRecently` reports (about 37 hours after the CronJob was created); but a wrong bucket or prefix on the test
+side exits 10 too, and nothing reports that (`RestoreTestNeverReported` watches the CNPG test only). Rung: mocked stores with a real restic (`test-restore-test-dumps.sh`) and the Python stages (`test-restore-test-cnpg.py`), not run on a cluster.
 
 Lab pass criteria (M3; observed in lab 20, results below). On a cluster with both stores seeded: (1) after the first night `oa_restore_test_ok` is 1 for the four
 `kind="cnpg"` label sets (2 clusters x 2 stores, `mode="latest"`), the four `kind="dump"` ones and, after the first Sunday, the four `mode="pitr"` ones,
@@ -312,6 +326,49 @@ stores wiped at once (nothing is left to compare; the freshness alerts of the jo
 database or etcd works (the restore tests, M3), and that a byte flipped inside an etcd snapshot's data pages (no hash trailer) is
 seen (`etcdutl snapshot status` would; restic's own authentication covers the stored copy). It uses the key pairs of the backup
 Jobs (restic needs to write its lock files); a read-only pair is a follow-up.
+
+## A completed Backup is not a restore point yet (the end WAL)
+
+**A plugin `Backup` that says `completed` is not a usable restore point until the WAL segment that ends it (`end_wal` in its
+`backup.info`) is archived.** The segment is archived at the next WAL switch, at the latest `archive_timeout` after the last one (5 minutes
+in the proof lab; this repository does not set it). Until then the archive ends before `end_wal`: the base backup cannot be restored
+and the commits written since the last archived segment are in no store. The replica store has the same rule since 0.4.0
+(`cnpg-store-replicate` holds a `backup.info` back until its end segment is copied).
+
+Seen once, in a proof lab on Scaleway (3 CP + 6 W, NOMINAL), at the final backups before a planned destroy: `backup-verify`
+failed on the primary store of `zitadel-db` and `grafana-db` about 1.5 minutes (86 s) after both Backups were `completed` and the writers had
+stopped (`end_wal ...0C is not archived (newest 11)`, where 11 is the number of segment `...0B`). `SELECT pg_switch_wal();` on each
+primary archived `...0C` 2 to 4 s later; after `cnpg-store-replicate` the verify passed on both stores (`WAL 11..12 contiguous`). A destroy
+at that moment would have ended the archive at `...0B`. How often it happens, and whether the segment would have been archived by the
+next `archive_timeout` before the destroy, was not measured. The scheduled `backup-verify` (05:10 UTC) runs two hours after the
+ScheduledBackups, so it does not meet this window; a verify started by hand right after a Backup does. The verify Job itself ends
+`Complete` when a check fails (the result is the log and `oa_backup_verify_ok`): do not gate on the Job status.
+
+**Before a planned destroy, a migration or any final backup:**
+
+1. Stop the writers, take the Backup and wait until it is `completed`.
+2. On each primary, force the switch and print the segment it completed (checked on a local PostgreSQL 18.6, not on a cluster):
+   `kubectl -n foundation-databases exec <primary pod> -c postgres -- psql -At -c 'SELECT pg_walfile_name(pg_switch_wal() - 1)'`.
+   That segment holds your last commit; the Backup's `end_wal`, which the verify checks, is that segment or an earlier one.
+3. Wait until `SELECT last_archived_wal FROM pg_stat_archiver;` is at or past that segment (2 to 4 s in the proof lab).
+4. Run `cnpg-store-replicate` and then `backup-verify` by hand and read its log: `PASS` with `WAL ... contiguous` on both stores.
+   Destroy only then.
+
+The verify says the same when it fails on this (message `its end WAL ... is not archived yet`): a backup waiting for its segment,
+not a corrupt one. Segment names are hex (`...0C`); the PASS line counts the same segments in decimal (`WAL 11..12` is `...0B`
+to `...0C`).
+
+**If the forced segment does not get archived** (`last_archived_wal` has not moved after about a minute, or `last_failed_wal` is
+newer than it), archiving is failing and steps 3 and 4 cannot pass. Read, on the primary,
+`SELECT last_archived_wal, last_failed_wal, last_failed_time, failed_count FROM pg_stat_archiver;`, the Cluster's `ContinuousArchiving`
+condition (`False`, with its reason: the command is in `docs/traps.md`), the `archiv` lines of the primary's `postgres` log
+(`kubectl -n foundation-databases logs <primary pod> -c postgres`), and the alerts `CnpgWalArchiveFailing` and `CnpgWalNeverArchived`. Fix the cause (the S3 keys or the bucket, the
+endpoint, a path that holds another database's WAL: `docs/runbooks.md` and `docs/traps.md`), force the switch again and go back to
+step 3. **Do not destroy while it fails:** the commits since the last archived segment are on the Cluster's volumes only, and a
+stuck WAL also fills the primary's disk. If the archive cannot be fixed first, a fresh `cnpg-dump` (a manual Job from the CronJob,
+`docs/runbooks.md`) is the recovery path that needs no WAL, as of the moment of the dump; this branch was not run in a lab.
+
+Whether the plugin should wait for its end segment before reporting `completed` is an upstream question, not asked.
 
 ## Known limits / upgrades
 

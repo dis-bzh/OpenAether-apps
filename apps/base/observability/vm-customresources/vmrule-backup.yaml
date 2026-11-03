@@ -150,6 +150,29 @@ spec:
               barman cannot write to the object store (credentials, endpoint, egress).
               kubectl logs -n foundation-databases <primary-pod> -c postgres | grep -i archiv.
 
+        # 6b) A PROXY for ContinuousArchiving=False, not the condition (infra #430, lab 28C): a Cluster created over
+        #     the WAL of another database system archives nothing and fails while it looks healthy, and rule 6 has no
+        #     history to wait for here. Limits: docs/runbooks.md#cnpgwalneverarchived and docs/detection.md.
+        - alert: CnpgWalNeverArchived
+          expr: |
+            (sum by (namespace, cnpg_io_cluster) (increase(cnpg_pg_stat_archiver_failed_count[5m])) > 0)
+              and
+            (sum by (namespace, cnpg_io_cluster) (cnpg_pg_stat_archiver_archived_count) == 0)
+          for: 5m
+          labels:
+            severity: critical
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgwalneverarchived"
+            summary: "CNPG {{ $labels.namespace }}/{{ $labels.cnpg_io_cluster }}: no WAL archived yet, archiver failing"
+            description: >-
+              The archiver counters show no segment archived and a failure in the last 5 minutes: the archive path or
+              the credentials refuse every WAL (a path that holds the WAL of another database system, S3 keys not
+              seeded; the counters also restart at 0 after a crash or a promotion). ContinuousArchiving is then False
+              and the first failover can wedge.
+              kubectl get cluster -n {{ $labels.namespace }} {{ $labels.cnpg_io_cluster }}
+              -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'.
+
         # 7) The last base backup failed more recently than the last success.
         #    Every backup of the platform goes through the Barman Cloud PLUGIN, and for those the CNPG collector
         #    reports last_available = 0 (and a real last_failed): read from the collector alone, ONE failed backup

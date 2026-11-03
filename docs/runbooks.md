@@ -30,6 +30,8 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 ### RestoreTestFailed
 
 - Check: `kubectl -n foundation-databases logs job/<newest cnpg-*-restore-test job> -c restore`; the line `FAIL <cluster>/<store>/<mode>` says which check failed (canary chain, copy too old, empty tables, not healthy in time). `kubectl get cluster -n backup-restore-test` shows a scratch Cluster still there.
+- Reads (#169): a Cluster with no completed `Backup` for more than 30 hours fails with `no completed base backup although the Cluster is N h old`: `kubectl get scheduledbackup,backup -n foundation-databases` (suspended? failing? see `CnpgBackupFailed`), then take one (`kubectl cnpg backup`). A younger Cluster is not a failure, see `RestoreTestNeverReported`. Only the replica store fails with `no target backup found` while a Backup is completed: `cnpg-store-replicate` (every 15 minutes) has not copied it yet; wait, or `kubectl -n foundation-databases create job --from=cronjob/cnpg-store-replicate manual-$(date +%s)`.
+- Reads (dump load): a fresh install has no restic repository to load until the first `cnpg-dump` (02:47 UTC) has run, and that is a SKIP, not a failure: `kubectl -n foundation-databases logs job/<newest cnpg-dump-load-restore-test job> -c load` says `SKIP <cluster>/<store>/dump: ... does not exist yet`. A store that passed before and has no repository now fails (`FAIL ...` in the log of the `publish` container: the pushed dumps are gone, the path moved, or the results published before could not be read): check the bucket and `cnpg-dump`, take a dump (`kubectl -n foundation-databases create job --from=cronjob/cnpg-dump manual-$(date +%s)`), run the test again (`--from=cronjob/cnpg-dump-load-restore-test`). What is skipped, what is not, and the limit of a skip that lasts: `apps/base/backup/README.md`.
 - Do: One store failing and the other passing means that store's copy is damaged or lagging: for the replica, look at `BackupCopyJobFailed` and `kubectl -n foundation-databases logs job/<cnpg-store-replicate job>`. Both failing means the archive itself: look at `CnpgWalArchiveFailing`, take a base backup now (`kubectl cnpg backup`), then run the test again with `kubectl -n foundation-databases create job --from=cronjob/cnpg-recovery-restore-test manual-$(date +%s)`. Until it passes, the dataset is NOT proven restorable: keep the restic dump (`cnpg-dump`) as the recovery path.
 
 ### RestoreTestNoRecentPass
@@ -41,6 +43,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `kubectl -n foundation-databases get cronjob cnpg-recovery-restore-test`, the Jobs it created, `kubectl -n foundation-databases get externalsecret` (S3 keys not seeded stops the backup CronJobs too), and the exporter: `kubectl -n foundation-databases get deploy backup-verify-exporter`.
 - Do: Seed the missing keys or fix the failing step in the Job log; the series appear after the first complete run.
+- Reads (#169): a Cluster younger than 30 hours none of whose `Backup` objects is completed is skipped on purpose: the log says `SKIP <cluster>/<store>/<mode>: no completed base backup yet`, the Job succeeds and the dataset reports nothing until a base backup of it completes (the immediate Backup of its ScheduledBackup, or one by hand: `kubectl cnpg backup`). The same SKIP forever means no `Backup` ever completes: the Cluster turns into `RestoreTestFailed` at 30 hours of age, and this alert fires 3 days after the CronJob was created if nothing of kind `cnpg` ever reported.
 
 ### RestoreRecoverySlow
 
@@ -76,6 +79,12 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `kubectl -n <ns> logs <cluster>-1 -c postgres | grep -i archive`; the S3 secret and bucket.
 - Do: Restore the archive credentials or bucket; a stuck WAL fills the primary disk, so act within hours.
+
+### CnpgWalNeverArchived
+
+- Check: the Cluster has never archived a WAL segment and fails now. `kubectl get clusters.postgresql.cnpg.io -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\t"}{.status.conditions[?(@.type=="ContinuousArchiving")].status}{"\n"}{end}'` (False for this one, with the reason in the condition message); `kubectl -n <ns> logs <cluster>-1 -c postgres | grep -i archiv`; the ObjectStore of the Cluster and its credentials Secret.
+- Do: The Cluster looks healthy and replicates, but its first failover can wedge for good (lab 28C, 4 of 4): fix it before its primary is moved or lost (a failover already stuck: the Release steps of the same trap). A path that holds the WAL of another database system (a Cluster re-created by hand over the same `serverName`): see `docs/traps.md`, "A cluster rebuilt on a bucket that still holds the old cluster's WAL archive does not archive". Missing or wrong S3 keys: seed them (`kubectl -n foundation-databases get externalsecret`).
+- Reads: per namespace and Cluster, `increase(cnpg_pg_stat_archiver_failed_count[5m]) > 0` while the sum of `cnpg_pg_stat_archiver_archived_count` over its pods is 0, for 5 minutes (`CnpgWalArchiveFailing` fires later for the same Cluster). **It does not fire within minutes of the Cluster's creation: expect about 10 to 15 minutes.** The rule group (`openaether-backups-verification`) is evaluated every 5 minutes and the rule has `for: 5m`: pending at the first evaluation that sees a failed archive attempt, firing at the next. Observed once, on a Cluster over the WAL of another database system (a proof lab on Scaleway, 3 CP + 6 W, NOMINAL): pending 8 min 42 s and firing 13 min 36 s after creation; `CnpgWalArchiveFailing` 23 min 40 s. The 10 to 15 is an estimate from that one observation, not a measured spread. Do not wait for the alert: read the `ContinuousArchiving` condition (command above) a few minutes after the Cluster is Ready. Fast signal: the `task cluster-verify` section "The profile CNPG Clusters: WAL archiving", red from 5 minutes of age (`OpenAether-infra/docs/upgrade.md`). It is a PROXY: it reads the archiver's counters, not the `ContinuousArchiving` condition, so a False condition with another cause is not seen. The counters restart at 0 after a crash recovery and on a promoted or re-cloned instance, so a Cluster that archived before can fire it when its archive then fails; read the Cluster's age and the condition before concluding that it "never" archived. A first install whose S3 keys are not seeded yet fires it until they are (reading, not observed). Silent for a Cluster with no archiver (the `light` profile). The rule's logic is mocked with `vmalert-tool` (evaluation every 10 minutes: `for: 5m` is not told from `for: 10m`); the delay above was observed on one provider only (Scaleway).
 
 ### CnpgBackupFailed
 
@@ -355,6 +364,11 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: The OpenBao VMServiceScrape (TLS) and the metrics listener.
 - Do: Restore the scrape; the seal alerts are blind meanwhile.
 
+### After an OpenBao raft restore (no alert)
+
+- Check: `bao status` on each of the three pods, `openbao-0` (the pod the restore ran on) included; every standby must show an `Active Node Address` (#184: lab 28B noted "no active address"; the exact field name was not re-read on a cluster).
+- Do: restart a pod that shows none (logins answer 500, `local node not active but active cluster node not found`): `kubectl -n foundation-vault delete pod openbao-N`, the PVC stays. No alert sees it while another pod is active (`docs/detection.md`). In lab 28B (Scaleway, 3 CP + 6 W, DR chain, INCIDENT) it was `openbao-0`, and logins failed for 25+ minutes, the time until a person restarted it. `apps/base/foundation/vault/README.md`, Disaster recovery, step 3.
+
 ## Alerting chain
 
 ### VMAlertNotifierErrors
@@ -543,8 +557,8 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ### BackupVerificationFailed
 
-- Check: The verifier's logs (`backup-verify`, `-c collect`): which object or checksum failed. A `MISSING` message means a store has no repository or archive while the other store passed: that store was wiped or its prefix deleted (check the bucket, its lifecycle rules and the key pair).
-- Do: Treat the backup as corrupt: run a fresh backup and verify it. For a wiped primary, re-seed it from the replica or from a fresh backup (CNPG: `pg_switch_wal`, a Backup, `pg_switch_wal`, then verify), and keep the replica untouched until then.
+- Check: The verifier's logs (`backup-verify`, `-c collect`): which object or checksum failed. A `MISSING` message means a store has no repository or archive while the other store passed: that store was wiped or its prefix deleted (check the bucket, its lifecycle rules and the key pair). A message `its end WAL ... is not archived yet` is NOT a corrupt backup: it is a Backup still waiting for its last WAL segment (force a switch, wait, verify again; `apps/base/backup/README.md`, "A completed Backup is not a restore point yet"). If the forced switch is not archived either, archiving is failing: read `pg_stat_archiver` (`last_failed_wal`, `last_failed_time`) and the `ContinuousArchiving` condition, fix that first (see `CnpgWalArchiveFailing`, and the same README for the steps), destroy nothing meanwhile.
+- Do: Otherwise treat the backup as corrupt: run a fresh backup and verify it. For a wiped primary, re-seed it from the replica or from a fresh backup (CNPG: `pg_switch_wal`, a Backup, `pg_switch_wal`, then verify), and keep the replica untouched until then.
 
 ### BackupCopyJobFailed
 

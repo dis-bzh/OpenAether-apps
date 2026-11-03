@@ -20,6 +20,11 @@ keeps its 8-character policy and open registration after the new values are roll
 | Grafana sessions 2 h idle / 12 h, request log as JSON | `grafana.yaml` | applied | applied at the next rollout |
 | Grafana SSO-only (no local form, strict roles) | `apps/base/observability-sso-only` | **off** | **off**: you choose |
 
+**A cluster rebuilt by the disaster-recovery chain has no `iam-admin` and no `iam-admin-pat`** (observed once, in a proof lab at
+the 0.4.1 head; 0.4.0 was not probed).
+Every command below that reads `iam-admin-pat`, and the break-glass, need a token that such a cluster does not have: see the end of
+"Locked out, and the break-glass".
+
 ## A new cluster
 
 `configure.sh` creates `secret/zitadel/admin` once (`{username: zitadel-admin, password}`: 28 random characters and the
@@ -38,7 +43,8 @@ that first login, by design.
 
 ## An existing cluster
 
-1. **Is `Password1!` still live?** Ask Zitadel (a session check; it creates nothing you need to clean):
+1. **Is `Password1!` still live?** Ask Zitadel (a session check; it creates nothing you need to clean). On a rebuilt cluster the
+   `iam-admin-pat` Secret read here does not exist: use the PAT of a machine user you created (end of "Locked out, and the break-glass"):
    ```bash
    kubectl -n services-identity port-forward svc/zitadel 8080:8080 &   # or use https://zitadel.openaether.local
    PAT="$(kubectl -n services-identity get secret iam-admin-pat -o jsonpath='{.data.pat}' | base64 -d)"
@@ -81,6 +87,30 @@ curl -s -X POST "http://127.0.0.1:8080/v2/users/$UID_/unlock" -H "Host: zitadel.
 
 Treat the PAT as a root credential: it is a standing IAM_OWNER secret in the cluster for as long as the Secret exists
 (deleting `iam-admin-pat` after bootstrap is possible, and removes this way back).
+
+### After a disaster-recovery rebuild: this break-glass is gone
+
+On a cluster rebuilt by the DR chain (`task dr-restore-plan`, OpenAether-infra) the two Secrets above do not exist. Observed once, in a
+proof lab on Scaleway (3 CP + 6 W, after a rebuild by the chain): `kubectl -n services-identity get secret iam-admin-pat` answered
+`not found`, and `kubectl get secrets -A` listed no Secret with `iam-admin` in its name. The cause is a reading, not a separate
+experiment: the machine user and its PAT come from `FirstInstance`, which Zitadel reads once, when the instance is created ("The
+one thing to know first"). The rebuild restores the Zitadel database, so the instance already exists and the setup Job creates
+neither Secret; they are Kubernetes Secrets written by the chart's setup Job and nothing in this repository stores them in OpenBao.
+Whether the machine user itself is still in the restored database was not checked.
+
+- **What was read of the identity data (SQL, one lab, one read).** The restored `zitadel` database held the original instance, not a
+  new one (instance events from the first install up to the setup Job of the rebuild) and the user created before the disaster.
+  **Not examined:** any other user, the machine user, and whether any password or second factor still works. A sign-in of that
+  user after the rebuild was **not** shown: the lab's scripted way needs the PAT, and no browser run was made.
+- **What may exist instead:** a human IAM_OWNER who can still sign in can create a machine user and a personal access token in the
+  console and use that token in place of `$PAT` above (Zitadel's console feature; not run on a rebuilt cluster). Whether a human
+  can sign in after a rebuild was not shown (`secret/zitadel/admin` in OpenBao is the initial password of `zitadel-admin` only,
+  stale after its first login).
+- **What does not exist:** a token you hold for a machine user, so the scripted path (`scripts/zitadel-apply-policies.py`, the unlock
+  above) has nothing to authenticate with, and **no way back in if no human admin can sign in** (locked at 5 wrong passwords, a
+  lost second factor). No recovery for that case is documented or tested in 0.4.1, and `FirstInstance` cannot be run again on an
+  existing instance. Its design is for a later release. Saving the PAT outside the cluster before a disaster is the obvious
+  mitigation; whether a saved PAT works against the restored database was not tried.
 
 ## Grafana
 
@@ -146,5 +176,5 @@ HelmRelease overrides `image.tag` and `login.image.tag` (tag and digest) because
   decision, together with the load-balancer ACL on the infrastructure side.
 - **Grafana keeps PBKDF2 at 10,000 iterations for its local admin** (upstream's fixed cost). ANSSI R29 asks for a memory-hard
   function for stored passwords; Zitadel now has one, Grafana's local account cannot. SSO-only hides it, nothing more.
-- **`iam-admin`'s key and PAT stay valid to 2029**, see above.
+- **`iam-admin`'s key and PAT stay valid to 2029**, see above, on a cluster that was not rebuilt: after a DR rebuild they do not exist.
 - Zitadel Actions, SMTP (so no email for password reset) and the Zitadel login v2 UI texts were not looked at.

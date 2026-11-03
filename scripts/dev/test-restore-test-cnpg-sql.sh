@@ -98,10 +98,13 @@ dumpall() { # stage the live databases as the dump job leaves them, in both "rep
   done
 }
 load() { docker exec -e NOW="${NOW:-}" oa-rt-sql python3 -I /scripts/dump_load.py >"$W/load.out" 2>&1; }
-res() { python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1]))["results"]; print(" ".join(sorted(r["labels"].split("store=\"")[1].split("\"")[0]+"/"+r["labels"].split("dataset=\"")[1].split("\"")[0]+"="+str(int(r["ok"])) for r in d)))' "$W/results/dump.json"; }
+res() { python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1]))["results"]; print(" ".join(sorted(r["labels"].split("store=\"")[1].split("\"")[0]+"/"+r["labels"].split("dataset=\"")[1].split("\"")[0]+"="+("skip" if r["ok"] is None else str(int(r["ok"]))) for r in d)))' "$W/results/dump.json"; }
 W2 >/dev/null 2>&1; dumpall; load
 chk "intact dumps load into a private server, in both repositories ($(res))" "[ \"\$(res)\" = 'primary/grafana-db=1 primary/zitadel-db=1 replica/grafana-db=1 replica/zitadel-db=1' ]"
 chk "the private server is gone afterwards" "! docker exec oa-rt-sql sh -c 'ls /tmp | grep -q pgdata'"
+docker exec oa-rt-sql sh -c 'rm -rf /restore/primary/backup; echo "Fatal: repository does not exist" > /restore/primary/absent'; load
+chk "a store with no repository yet is skipped and the other store still loads, as the Job runs it ($(res))" "[ \"\$(res)\" = 'primary/grafana-db=skip primary/zitadel-db=skip replica/grafana-db=1 replica/zitadel-db=1' ]"
+docker exec oa-rt-sql sh -c 'rm -f /restore/primary/absent'; dumpall
 docker exec oa-rt-sql sh -c 'head -c 3000 /restore/replica/backup/zitadel-db.dump > /tmp/t && cp /tmp/t /restore/replica/backup/zitadel-db.dump'
 load; chk "a truncated dump fails that store and dataset only ($(res))" "[ \"\$(res)\" = 'primary/grafana-db=1 primary/zitadel-db=1 replica/grafana-db=1 replica/zitadel-db=0' ]"
 dumpall; live grafana -c "update oa_canary set sha = repeat('1', 64) where counter = (select min(counter)+3 from oa_canary)" >/dev/null; dumpall; load
