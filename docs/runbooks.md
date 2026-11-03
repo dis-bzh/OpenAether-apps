@@ -365,7 +365,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ### After an OpenBao raft restore (no alert)
 
-- Check: `bao status` on each of the three pods, `openbao-0` (the pod the restore ran on) included; every standby must show an `Active Node Address` (the field name is the issue's, not re-read on a cluster).
+- Check: `bao status` on each of the three pods, `openbao-0` (the pod the restore ran on) included; every standby must show an `Active Node Address` (#184: lab 28B noted "no active address"; the exact field name was not re-read on a cluster).
 - Do: restart a pod that shows none (logins answer 500, `local node not active but active cluster node not found`): `kubectl -n foundation-vault delete pod openbao-N`, the PVC stays. No alert sees it while another pod is active (`docs/detection.md`). In lab 28B (Scaleway, 3 CP + 6 W, DR chain, INCIDENT) it was `openbao-0`, and logins failed for 25+ minutes, the time until a person restarted it. `apps/base/foundation/vault/README.md`, Disaster recovery, step 3.
 
 ## Alerting chain

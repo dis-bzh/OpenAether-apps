@@ -78,9 +78,10 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
   `CnpgWalNeverArchived` is a proxy: a Cluster whose counters show no archived segment and a failure in the last 5 minutes. The counters
   restart at 0 after a crash recovery, on a promotion and on a re-cloned instance (so it can name a Cluster that did archive), and it fires on a
   new Cluster whose S3 keys are not seeded yet; mocked, never fired on a cluster. `CnpgWalArchiveFailing` is slower: by its rule (10 minutes of
-  window, then `for: 15m`) about 25 minutes for a Cluster that archived before, not measured. A rule on the condition needs kube-state-metrics to
+  window, then `for: 15m`) about 25 minutes for a Cluster that archived before, not measured; add up to one evaluation interval (`evaluationInterval: 30s`
+  declared in `vmalert.yaml`, the value running on a cluster was not read). A rule on the condition needs kube-state-metrics to
   read the `Cluster` objects (a `customResourceState` entry and `list`/`watch` on `clusters.postgresql.cnpg.io`, new RBAC): not done, infra #430
-  stays open. `kubectl get clusters.postgresql.cnpg.io -A` prints it (`docs/traps.md`).
+  stays open. The jsonpath command of `docs/traps.md` prints it (the bare `kubectl get clusters.postgresql.cnpg.io -A` does not show the condition).
 - **Metrics no cluster has shown.** `docs/monitoring-0.4.md` lists them; `scripts/dev/test-alert-metrics.py` checks offline that
   every metric an alert reads is catalogued with a scrape that exists.
 

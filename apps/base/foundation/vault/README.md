@@ -195,7 +195,8 @@ the recovery shares that apply afterwards are the SOURCE cluster's:
 
 With any other key the data does not come back (tested on a real OpenBao). Run on a cluster with the DEVELOPMENT bootstrap only: a
 3-member leader 7.4 s after the restore (lab 28B, Scaleway, 3 CP + 7 W) and 8 s (lab 27, Scaleway, 3 CP + 5 W), both NOMINAL, and the
-`openbao` step of the DR chain took 9 s (lab 28B, NOMINAL, 3 CP + 6 W, restic restore included). A production-style restore, with the
+`openbao` step of the DR chain took 9 s (step time only, not the time until logins worked, see step 3; lab 28B, NOMINAL, 3 CP + 6 W, restic restore
+included). A production-style restore, with the
 recovery shares of the holders, was not run (`OpenAether-infra`, `docs/disaster-recovery.md`).
 
 **Interrupted first run.** A failure inside the root window (between `sys/init` and the hand-over) revokes the root token on the

@@ -13,12 +13,9 @@ What is compared (the canary: oa_canary, a counter plus a hash chain written eve
           chain must end at exactly that row, with the hash the live chain holds for it.
 Table list and row counts are exported and reported; they are NOT exact (the live side keeps moving), so only a restored
 table that is empty while the live one holds more than 1000 rows fails the test.
-Before the first base backup there is nothing to restore (apps #169): a Cluster younger than FIRST_BACKUP_GRACE none of whose Backups
-is completed is a SKIP with its reason. Never a skip when the listing of the Backups fails, nor when an older Cluster has no completed
-Backup (its ScheduledBackups produce nothing: a failure), nor once any Backup is completed: then every store is restored and a copy
-that is missing on the replica store fails as it always did (the DR chain forces the copy first and needs a PASS, not a SKIP). The
-Backups of a Cluster are those whose spec.cluster.name names it, with or without a label: one made by hand, such as the DR chain's
-dr-base-<cluster>, carries none.
+Before the first base backup there is nothing to restore (apps #169): a Cluster younger than FIRST_BACKUP_GRACE with no completed Backup
+is a SKIP with its reason; a failed listing, or an older Cluster with none, is a FAIL. A Backup is matched by spec.cluster.name, no label
+(docs/runbooks.md, RestoreTestFailed).
 
 The guard: every Cluster write names the scratch namespace and an object name that starts with `rt-`; the only write in
 foundation-databases is the metrics ConfigMap. The ServiceAccount's RBAC says the same (restore-test-rbac.yaml) and a Kyverno
@@ -50,10 +47,8 @@ DELETE_TIMEOUT = float(os.environ.get("DELETE_TIMEOUT", "300"))
 POLL = float(os.environ.get("POLL", "5"))
 PITR_MIN_AGE = float(os.environ.get("PITR_MIN_AGE", "7200"))  # the target row is at least this old, so its WAL is archived on both stores
 PITR_AFTER_BACKUP = 300.0   # and at least this much after the end of the base backup it starts from
-# Both ScheduledBackups are `immediate: true` (a base backup starts when the Cluster is created) and then daily at 03:10 and 03:25. A
-# Cluster older than this has had a daily run as well: no completed Backup by then means its backups fail, not that it is young. 30 h
-# is a day and a margin, the same figure as the backup verifier's YOUNG_S (verify/barman_check.py), not a figure of the owner; what it
-# covers is a failed immediate Backup.
+# Both ScheduledBackups are `immediate: true`, then daily: an older Cluster with no completed Backup has failing backups, not youth.
+# 30 h = a day and a margin, the verifier's YOUNG_S (verify/barman_check.py); our figure, not the owner's.
 FIRST_BACKUP_GRACE = 30 * 3600.0
 
 

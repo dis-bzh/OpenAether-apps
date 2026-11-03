@@ -105,7 +105,8 @@ belong to. What follows has no skill of its own yet.
   minutes (`for: 5m`): a proxy for the condition with the limits listed in `docs/detection.md`, mocked with the pinned `vmalert-tool`, never fired
   on a cluster. `CnpgWalArchiveFailing` is slower: 10 minutes of window then `for: 15m`, so it fires at 16 minutes for a Cluster that never archived
   (the new rule at 6) and at about 25 for one that archived before (a one-off `vmalert-tool` run on synthetic series with a 1-minute evaluation, not
-  in the suite and not a duration measured on a cluster). Read the condition yourself after creating a Cluster.
+  in the suite and not a duration measured on a cluster; VMAlert declares `evaluationInterval: 30s` in `vmalert.yaml`, so real delays should be close,
+  not read on a cluster). Read the condition yourself after creating a Cluster.
   *Prevent.* Give every incarnation of a Cluster a NEW `serverName` (the `archiveServerName` value of a database profile, `<name>-g2`, see
   `docs/database-profiles.md`) or an EMPTY archive path, and never create a Cluster over a path that holds files; the DR chain already rebuilds on a
   new generation. On a Cluster already running, delete the foreign objects from its path (once you are sure nobody needs them): in lab 28C,
