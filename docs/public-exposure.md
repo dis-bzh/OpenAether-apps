@@ -46,10 +46,12 @@ Gateway (Grafana's and Zitadel's own metrics are then open again): delete `Autho
 `apps/flux/components/private-admin-routes`. The inner patch renders with `kubectl kustomize` on the brick; the Flux field and
 an overlay doing it have not been run, UNVERIFIED on a cluster. The checker reads the manifests, not overlays: it stays green.
 
-**On an upgrade the refusal arrives with Flux, not with the end of the move.** In the third lab (a 0.4.0 cluster moved to the 0.4.1
-release heads, probed every 2 s from the lab host) Grafana's and Zitadel's metrics still answered with a body until
-`services-gateway` applied the policy: 2 min 38 s after the apps ref moved, 71 s after `cluster-up` returned. The next probe, 2 s
-later, got a 403, and none got a body after the first 403.
+**On an upgrade the refusal arrives with Flux, not with the end of the move.** In the third lab (Scaleway, 3 CP + 6 W, durations
+NOMINAL; a 0.4.0 cluster moved onto the branch of the release candidate at the lab-proven apps head, the tag not existing yet,
+probed every 2 s from the lab host) Grafana's and Zitadel's metrics still answered with a body until `services-gateway` applied the
+policy: 2 min 38 s after the apps ref moved (the ref move is read from a poll every 5 to 6 s, so the resolution is about 6 s), 71 s
+after `cluster-up` returned. All 247 probes of each path before that got a 200 with a body; the next probe, 2 s later, got a 403, and
+none got a body after the first 403.
 
 **Istio warns when it applies the policy, and a TCP listener would be denied.** Flux applied `deny-metrics-paths` without error
 and the admission answered a warning (kustomize-controller log, third lab): `configured AuthorizationPolicy will deny all traffic
