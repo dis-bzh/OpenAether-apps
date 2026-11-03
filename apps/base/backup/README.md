@@ -325,6 +325,30 @@ database or etcd works (the restore tests, M3), and that a byte flipped inside a
 seen (`etcdutl snapshot status` would; restic's own authentication covers the stored copy). It uses the key pairs of the backup
 Jobs (restic needs to write its lock files); a read-only pair is a follow-up.
 
+## A completed Backup is not a restore point yet (the end WAL)
+
+**A plugin `Backup` that says `completed` is not a usable restore point until the WAL segment that ends it (`end_wal` in its
+`backup.info`) is archived.** The segment is archived at the next WAL switch, at the latest `archive_timeout` after the last one (5 minutes
+in the proof lab; this repository does not set it). Until then the archive ends before `end_wal`: the base backup cannot be restored
+and the commits written since the last archived segment are in no store. The replica store has the same rule since 0.4.0
+(`cnpg-store-replicate` holds a `backup.info` back until its end segment is copied).
+
+Seen once, in a proof lab on Scaleway (3 CP + 6 W, NOMINAL), at the final backups before a planned destroy: `backup-verify`
+failed on the primary store of `zitadel-db` and `grafana-db` 2 minutes after both Backups were `completed` and the writers had
+stopped (`end_wal ...0C is not archived (newest 11)`, where 11 is the number of segment `...0B`). `SELECT pg_switch_wal();` on each
+primary archived `...0C` 2 to 4 s later; after `cnpg-store-replicate` the verify passed on both stores (`WAL 11..12 contiguous`). A destroy
+at that moment would have ended the archive at `...0B`. How often it happens, and whether the segment would have been archived by the
+next `archive_timeout` before the destroy, was not measured. The scheduled `backup-verify` (05:10 UTC) runs two hours after the
+ScheduledBackups, so it does not meet this window; a verify started by hand right after a Backup does. The verify Job itself ends
+`Complete` when a check fails (the result is the log and `oa_backup_verify_ok`): do not gate on the Job status.
+
+**Before a planned destroy, a migration or any final backup:** stop the writers; take the Backup; force the switch on each primary
+(`kubectl -n foundation-databases exec <primary pod> -c postgres -- psql -c 'SELECT pg_switch_wal();'`); wait until
+`SELECT last_archived_wal FROM pg_stat_archiver;` is at or past the Backup's `end_wal`; run `cnpg-store-replicate` and then `backup-verify` by
+hand and read its log: `PASS` with `WAL ... contiguous` on both stores. Destroy only then. The verify says the same when it fails on
+this (message `its end WAL ... is not archived yet`): it is a backup waiting for its segment, not a corrupt one. Whether the plugin
+should wait for its end segment before reporting `completed` is an upstream question, not asked.
+
 ## Known limits / upgrades
 
 - **CNPG PITR**: the restic dumps are daily (RPO 24 h). PITR goes through the Barman Cloud plugin: `plugins:` in each Cluster,
