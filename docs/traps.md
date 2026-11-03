@@ -85,7 +85,7 @@ belong to. What follows has no skill of its own yet.
   The next entry is what such a cluster does at its first failover.
 
 - **A Cluster created on an archive path that holds another database's WAL looks healthy, then never finishes its first failover** (lab 28B/28C,
-  I25; observed on Scaleway with CloudNativePG 1.30.1, Barman Cloud plugin 0.15.1, PostgreSQL 18.6; a cluster-side mitigation is planned for 0.4.1).
+  I25; observed on Scaleway with CloudNativePG 1.30.1, Barman Cloud plugin 0.15.1, PostgreSQL 18.6; 0.4.1 adds detection only, no prevention: see "See it before a failure").
   *Symptom.* `ContinuousArchiving` is `False` from the first minute (`unexpected failure invoking barman-cloud-wal-archive: exit status 1`) while
   the Cluster reports `Cluster in healthy state` and replicates, so nothing is visible. After the loss of the primary the Cluster stays in
   `Failing over` until a person acts: the operator logs `There is a switchover or a failover in progress, waiting for the operation to complete`
@@ -100,10 +100,13 @@ belong to. What follows has no skill of its own yet.
   ```
   kubectl get clusters.postgresql.cnpg.io -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\t"}{.status.conditions[?(@.type=="ContinuousArchiving")].status}{"\n"}{end}'
   ```
-  `cluster-verify` of 0.4.0 reads the platform's Clusters in `foundation-databases` only, not the Clusters of your database profiles (infra #430
-  tracks that check). `CnpgWalNeverArchived` fires for a Cluster whose archiver counters show no archived segment and a failure in the last 5
+  `task cluster-verify` (OpenAether-infra) reads the platform's Clusters in `foundation-databases` at 0.4.0; at 0.4.1 it also reads the Clusters
+  of your database profiles: yellow under 5 minutes of age, red from there (read once in a proof lab: yellow at 2 min 12 s, red at 9 min 49 s).
+  `CnpgWalNeverArchived` fires for a Cluster whose archiver counters show no archived segment and a failure in the last 5
   minutes (`for: 5m`): a proxy for the condition with the limits listed in `docs/detection.md`, mocked with the pinned `vmalert-tool`. It is NOT
   immediate: about 10 to 15 minutes after the Cluster is created (`docs/runbooks.md#cnpgwalneverarchived` has the figures). Read the condition yourself after creating a Cluster.
+  **Not in 0.4.1:** an alert on the condition itself (it needs new RBAC for kube-state-metrics, `docs/detection.md`) and a `serverName` chosen
+  per incarnation of a profile Cluster for you (today you set `archiveServerName` yourself, below); both are deferred and infra #430 stays open.
   *Prevent.* Give every incarnation of a Cluster a NEW `serverName` (the `archiveServerName` value of a database profile, `<name>-g2`, see
   `docs/database-profiles.md`) or an EMPTY archive path, and never create a Cluster over a path that holds files; the DR chain already rebuilds on a
   new generation. On a Cluster already running, delete the foreign objects from its path (once you are sure nobody needs them): in lab 28C,
