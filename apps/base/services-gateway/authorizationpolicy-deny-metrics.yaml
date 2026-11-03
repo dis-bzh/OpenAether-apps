@@ -1,9 +1,6 @@
-# The Gateway never serves a metrics endpoint. The services publish theirs without a login (Grafana's /metrics answered
-# 200 to anyone: build version, user and alert-rule totals; Zitadel's is /debug/metrics) and vmagent reads them pod to
-# pod, never through here (VMPodScrape / VMServiceScrape). One DENY on the Gateway covers every route, present and
-# future, a customer route attached to it included. DENY is evaluated before the ALLOW of allow-gateway-ingress; the
-# answer is a 403 from the Gateway's Envoy. UNVERIFIED on a cluster; see docs/public-exposure.md and
-# scripts/check-gateway-routes.py.
+# No route of the Gateway should serve a metrics endpoint: Grafana's /metrics answered 200 to any caller that reached
+# the Gateway (Zitadel's is /debug/metrics). vmagent scrapes pod to pod. DENY runs before allow-gateway-ingress.
+# UNVERIFIED on a cluster; opt-out and limits: docs/public-exposure.md.
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:

@@ -5,10 +5,10 @@ LB-IPAM VIP of Istio's own Service (the admin path, through the bastion tunnel),
 `openaether-gateway-nodeport` behind the cloud **app load balancer**, which exists only when OpenAether-infra's
 `deploy_app_lb` is true. Both land on the same listener and the same routes.
 
-**The app LB has no source ACL.** `admin_ip` guards the Kubernetes API frontend only, and the gateway sees the LB's address,
+**By default the app LB has no source ACL** (`app_lb_allowed_cidrs` is optional, see the end of this page). `admin_ip` guards the Kubernetes API frontend only, and the gateway sees the LB's address,
 not the caller's, so it cannot filter by source either (`apps/base/istio/authz/authorizationpolicy-explicit-allows.yaml`).
-So, when the app LB is deployed, **every route on this Gateway answers anyone who sets its Host header.** What protects a
-route is its own login, nothing before it. OpenAether-infra's `docs/admin-access.md` section 6 still says "nothing public":
+So, when the app LB is deployed without that ACL, **every route on this Gateway answers anyone who sets its Host header.** What
+protects a route is its own login, nothing before it. OpenAether-infra's `docs/admin-access.md` section 6 still says "nothing public":
 that is wrong whenever `deploy_app_lb` is true (corrected on the infra side).
 
 ## The register
@@ -17,42 +17,50 @@ that is wrong whenever `deploy_app_lb` is true (corrected on the infra side).
 default and whether the opt-in below removes it. `scripts/check-gateway-routes.py` (CI, job "Flux DAG") fails when a route
 is attached to the Gateway without a row, when a row has no authentication, when a route served by default states none, or
 when the flags disagree with the manifests. A new UI therefore cannot reach the Gateway without someone writing down what
-guards it (the metrics paths are a separate check, below). Longhorn is the example of the rule: its route has no login, so it is not in the default kustomization.
+guards it (the metrics paths are a separate check, below). Longhorn is the example of the rule: its route has no login, so it is
+not in the default kustomization.
 
-## Metrics endpoints are refused at the Gateway
+## Metrics endpoints: expected to be refused at the Gateway
 
 A proof lab on Scaleway (3 CP + 6 W) read `https://grafana.<domain>/metrics` through the public Gateway: HTTP 200, 4,516 lines
-(2,525 `grafana_*` series: build version, user, organisation and alert-rule totals), to any caller, with no login, at 0.4.0 and at
-the 0.4.1 head. Same lab: `/metrics` answered 404 on the OpenBao and Zitadel routes, and 200 on the route of a test application.
-Zitadel serves its metrics at `/debug/metrics` on the port its route forwards to (the scrape in `vmscrapes-pipeline.yaml`): that
-path was not probed, and since the route forwards it, it is covered here without having been seen open. Only the Forgejo route
-had a rule of its own for `/metrics` (a rule with no backend, which answered 500 in an earlier proof lab).
+(2,525 `grafana_*` series: build version, user, organisation and alert-rule totals), with no login, at 0.4.0 and at the 0.4.1
+head. That lab had `app_lb_allowed_cidrs` set to the lab host, so the reading came from an allowed source: the exposure is to
+any caller that reaches the Gateway, which by default (no ACL) is anyone. Same lab: `/metrics` answered 404 on the OpenBao and
+Zitadel routes, and 200 on the route of a test application. Zitadel serves its metrics at `/debug/metrics` (the scrape in
+`vmscrapes-pipeline.yaml`), which was not probed; its route forwards that port, so it is covered without having been seen open.
+Only the Forgejo route had a rule of its own for `/metrics` (no backend; it answered 500 in an earlier proof lab).
 
 Since 0.4.1, `apps/base/services-gateway/authorizationpolicy-deny-metrics.yaml` is an Istio AuthorizationPolicy (DENY) aimed at
-the Gateway. It refuses `/metrics`, `/metrics/*`, `/debug/metrics` and `/debug/metrics/*` for every caller, host and route, with a
-403 from the Gateway's own Envoy. One policy rather than a rule per route, because it also covers a route nobody has written yet
-and a route a customer attaches (the test application's route was not in this repository), and because it is the mechanism
-`allow-gateway-ingress` already uses (`targetRefs` on the Gateway, DENY evaluated before ALLOW). The Forgejo rule stays, as a
-second layer behind it.
+the Gateway for `/metrics`, `/metrics/*`, `/debug/metrics` and `/debug/metrics/*`, any caller, host and route. The expected
+answer is a 403 from the Gateway's Envoy. One policy rather than a rule per route: it covers a route nobody has written yet,
+and it is the mechanism `allow-gateway-ingress` already uses (`targetRefs` on the Gateway, DENY evaluated before ALLOW). The
+Forgejo rule stays, as a second layer.
 
-**The scrapes are not affected**: vmagent reads `VMPodScrape` and `VMServiceScrape` targets pod to pod (pod IP and port), and
-none of them crosses the Gateway. `scripts/check-gateway-routes.py` (CI, job "Flux DAG") fails when a `VMStaticScrape` or
-`VMProbe` names a Gateway host, when the policy loses one of the four paths, is not listed in its brick, is narrowed (by
-caller, host, port or condition), aims at another Gateway or namespace, or refuses ordinary paths (`/`, `/login`,
-`/api/health`...). On a missing policy it names the routes that would forward each path.
+**Upgrade note.** A route of yours that serves `/metrics` or `/debug/metrics` on purpose (an external uptime or Prometheus
+check, say) gets the 403 too, and no ALLOW overrides a DENY. Serve it under another path, or turn the policy off for the whole
+Gateway (Grafana's and Zitadel's own metrics are then open again): delete `AuthorizationPolicy/deny-metrics-paths` (namespace
+`services-gateway`) with a `$patch: delete` in a `spec.patches` of the Flux Kustomization `services-gateway`, built like
+`apps/flux/components/private-admin-routes`. The inner patch renders with `kubectl kustomize` on the brick; the Flux field and
+an overlay doing it have not been run, UNVERIFIED on a cluster. The checker reads the manifests, not overlays: it stays green.
 
-Rung: **mocked, offline** (the checker on the manifests and its fixture cases, the policy against the CRD schema CI uses). **Only a
-cluster can show**, and nothing here has been seen on one yet:
+**The scrapes are not affected**: vmagent reads `VMPodScrape` and `VMServiceScrape` targets pod to pod, and none crosses the
+Gateway. `scripts/check-gateway-routes.py` (CI, job "Flux DAG") fails when a `VMStaticScrape` or `VMProbe` names a Gateway host
+(a `VMScrapeConfig` or an inline scrape config of the VMAgent is not read), when the policy loses one of the four paths, is not
+listed in its brick, is narrowed (caller, host, port, condition), aims elsewhere, or refuses ordinary paths; on a missing policy
+it names the routes that would forward each path. Its fixture cases, `main()`'s wiring included, were mutation-checked by hand;
+the mutants are not kept and not every branch of the checker has a case of its own.
+
+Rung: **mocked, offline** (the checker on the manifests and its fixture cases, the policy against the CRD schema CI uses).
+Nothing here has been seen on a cluster. **Only a cluster can show:**
 
 1. the Gateway answers 403 to `/metrics` and `/debug/metrics` on each host, and still serves `/`, `/login`, `/api/health`,
    `/ui/v2/login`;
 2. vmagent still scrapes Grafana, Zitadel and (when deployed) the forge: `up == 1` after the policy is applied;
-3. the spellings `//metrics`, `/%6Detrics`, `/metrics;a=b`, `/Metrics` and `/metrics?x=1`. The policy matches the path as the
-   Gateway's Envoy sees it, after Istio's path normalisation (default BASE: by Istio's documentation it removes dot segments and
-   does not merge slashes; its handling of percent-encoded letters was not checked here), and whether Grafana or Zitadel serve
-   such a spelling was not established. If one passes, the answer is at the source: Grafana's `[metrics] basic_auth_username`
-   and `basic_auth_password` (a credential in OpenBao and in the scrape: a larger change) or `enabled = false` (no Grafana
-   metrics);
+3. the spellings `//metrics`, `/%6Detrics`, `/metrics;a=b`, `/Metrics` and `/metrics?x=1`. The policy matches the path after
+   Istio's normalisation (default BASE: removes dot segments, does not merge slashes; percent-encoded letters were not checked
+   here), and whether Grafana or Zitadel serve such a spelling was not established. If one passes, the answer is at the source:
+   Grafana's `[metrics] basic_auth_username` and `basic_auth_password` (a credential in OpenBao and in the scrape: a larger
+   change) or `enabled = false` (no Grafana metrics);
 4. the plain-HTTP listener answers 403, not 301, to these paths.
 
 Not covered here: the other paths those services answer without a login (Zitadel `/debug/healthz`, `/debug/ready`,

@@ -22,8 +22,8 @@ routes:
     host: grafana.openaether.local
     authentication: >-
       Grafana's own: a local admin login and Zitadel OIDC. No ACL in front; the login page answers anyone. /metrics is
-      refused at the Gateway (403 expected, UNVERIFIED on a cluster: docs/public-exposure.md; it answered 200 to anyone
-      before 0.4.1).
+      refused at the Gateway (403 expected, UNVERIFIED on a cluster: docs/public-exposure.md; before 0.4.1 it answered
+      200 to any caller that reached the Gateway).
     default: true
     private_admin: true
   - route: services-identity/zitadel

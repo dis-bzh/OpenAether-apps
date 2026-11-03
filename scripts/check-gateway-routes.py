@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """check-gateway-routes.py - every HTTPRoute on the shared Gateway is registered, with what authenticates its callers.
 
-The app load balancer in front of openaether-gateway has no source ACL (docs/public-exposure.md), so a route attached to that
-Gateway is reachable by anyone who sets the Host header. This scans the manifests (no cluster, no kubectl) and fails when:
+The app load balancer in front of openaether-gateway has no source ACL by default (docs/public-exposure.md), so a route attached
+to that Gateway is reachable by anyone who sets the Host header. This scans the manifests (no cluster, no kubectl) and fails when:
   - an HTTPRoute whose parentRef is the Gateway has no row in docs/public-exposure.yaml, or a row names no such route;
   - a row has no `authentication`, or says "none" while its route is served by default;
   - `default` disagrees with the brick's kustomization.yaml (is the route's file listed there?);
   - `private_admin` disagrees with the routes apps/flux/components/private-admin-routes deletes;
-  - a metrics endpoint (METRICS_PATHS) can be reached through the Gateway: no DENY AuthorizationPolicy on the Gateway covers it
-    (it names the routes that would forward it), the policy is not listed in its brick, it is narrowed to some callers or
-    some hosts, or it denies ordinary paths too; or a URL-based scrape (VMStaticScrape, VMProbe) goes through the Gateway,
-    where the deny would cut it. The in-cluster scrapes (VMPodScrape, VMServiceScrape) go pod to pod and never pass the Gateway.
+  - a metrics endpoint (METRICS_PATHS) is not refused at the Gateway: no listed DENY AuthorizationPolicy covers it for every
+    caller and host (the routes that would forward it are named), or the policy also denies ordinary paths; or a URL scrape
+    (VMStaticScrape, VMProbe) names a Gateway host, where the deny would cut it. Pod and service scrapes never pass the Gateway.
 
 Usage: python3 scripts/check-gateway-routes.py            Dependency: PyYAML.
 """
