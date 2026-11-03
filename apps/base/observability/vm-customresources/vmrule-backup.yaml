@@ -150,9 +150,9 @@ spec:
               barman cannot write to the object store (credentials, endpoint, egress).
               kubectl logs -n foundation-databases <primary-pod> -c postgres | grep -i archiv.
 
-        # 6b) A PROXY for ContinuousArchiving=False, not the condition (infra #430, lab 28C): a Cluster created over the WAL of another
-        #     database system archives nothing and fails while it looks healthy, and rule 6 has no history to wait for here.
-        #     Limits (counter reset, S3 keys not seeded, 10 min test step): docs/runbooks.md#cnpgwalneverarchived and docs/detection.md.
+        # 6b) A PROXY for ContinuousArchiving=False, not the condition (infra #430, lab 28C): a Cluster created over
+        #     the WAL of another database system archives nothing and fails while it looks healthy, and rule 6 has no
+        #     history to wait for here. Limits: docs/runbooks.md#cnpgwalneverarchived and docs/detection.md.
         - alert: CnpgWalNeverArchived
           expr: |
             (sum by (namespace, cnpg_io_cluster) (increase(cnpg_pg_stat_archiver_failed_count[5m])) > 0)
