@@ -149,6 +149,19 @@ printf '\x00\x01\x02\x03\x04\x05' | dd of="$bk" bs=1 seek=$(( $(stat -c %s "$bk"
 run_all
 chk "a flipped byte inside the base backup data: cnpg fails on primary" "[ \"\$(okv cnpg)\" = 0 ] && [ \"\$(storeok cnpg primary)\" = 0 ] && grep -q 'corrupt' '$W/res/cnpg.tsv'"
 cp "$W/data.bak" "$bk"
+# the end WAL of the newest base backup is not archived yet (a plugin Backup says `completed` before that; seen in a proof lab): the
+# primary store fails and the message says what it means and what to do, with the segment names in hex
+segs() { find "$W/P/bkp/cnpg/zitadel-db" -path '*wals*' -name '*.gz' ! -name '*.backup.gz'; }
+ew="$(sed -n 's/^end_wal=//p' "$(find "$W/P/bkp/cnpg/zitadel-db" -name backup.info | head -1)" | head -1)"
+wd="$(dirname "$(segs | head -1)")"; mkdir "$W/walaway"
+for w in $(segs); do n="$(basename "$w")"; [[ "${n:0:24}" < "$ew" ]] || mv "$w" "$W/walaway/$n"; done
+newest="$(segs | xargs -n1 basename | cut -c1-24 | LC_ALL=C sort | tail -1)"
+run_all
+chk "an end WAL not archived yet: cnpg fails on primary only, naming the end WAL" "[ \"\$(okv cnpg)\" = 0 ] && [ \"\$(storeok cnpg primary)\" = 0 ] && [ \"\$(storeok cnpg replica)\" = 1 ] && grep -q '$ew is not archived' '$W/res/cnpg.tsv'"
+chk "...and the message names the newest archived segment, says it is no restore point yet and to force pg_switch_wal and verify again" \
+  "grep -q 'newest archived: $newest' '$W/res/cnpg.tsv' && grep -q 'not a usable restore point' '$W/res/cnpg.tsv' && grep -q 'pg_switch_wal' '$W/res/cnpg.tsv' && grep -q 'verify again' '$W/res/cnpg.tsv'"
+mv "$W/walaway"/* "$wd/"; run_all
+chk "the end WAL archived: cnpg is 1 again" "[ \"\$(okv cnpg)\" = 1 ]"
 wal="$(find "$W/P/bkp/cnpg/zitadel-db" -path '*wals*' -name '*0004.gz' | head -1)"; cp "$wal" "$W/wal.bak"; rm "$wal"
 cp -a "$W/P/bkp/cnpg/." "$W/R/bkr/cnpg/" 2>/dev/null; rm -f "$W/R/bkr/${wal#$W/P/bkp/}"
 run_all

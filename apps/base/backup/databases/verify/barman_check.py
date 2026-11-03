@@ -168,7 +168,13 @@ def check_cluster(st, base, server, now, sample=None, archive=None):
         return 0, age, f"backup {bid}: no WAL on timeline {tl}"
     top = max(mine)
     if top < last_end:
-        return 0, age, f"backup {bid}: end_wal {info['end_wal']} is not archived (newest {top})"
+        # The plugin Backup says `completed` before this segment is archived (archive_timeout, 5 min, after the last switch).
+        newest = f"{tl:08X}{top // per:08X}{top % per:08X}"
+        return 0, age, (f"backup {bid}: its end WAL {info['end_wal']} is not archived yet (newest archived: {newest}). A completed Backup is "
+                        "not a usable restore point until then, and the commits after the last archived segment are not in the archive. "
+                        "Force a WAL switch on the primary (SELECT pg_switch_wal();), wait until it is archived, let the replica copy "
+                        "follow (cnpg-store-replicate) and verify again; destroy nothing before this passes "
+                        "(apps/base/backup/README.md, 'A completed Backup is not a restore point yet')")
     missing = [n for n in range(first, top + 1) if n not in mine]
     if missing:
         n = missing[0]
