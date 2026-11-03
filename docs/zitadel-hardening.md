@@ -20,7 +20,8 @@ keeps its 8-character policy and open registration after the new values are roll
 | Grafana sessions 2 h idle / 12 h, request log as JSON | `grafana.yaml` | applied | applied at the next rollout |
 | Grafana SSO-only (no local form, strict roles) | `apps/base/observability-sso-only` | **off** | **off**: you choose |
 
-**A cluster rebuilt by the disaster-recovery chain has no `iam-admin` and no `iam-admin-pat`** (0.4.1, observed in a proof lab).
+**A cluster rebuilt by the disaster-recovery chain has no `iam-admin` and no `iam-admin-pat`** (observed once, in a proof lab at
+the 0.4.1 head; 0.4.0 was not probed).
 Every command below that reads `iam-admin-pat`, and the break-glass, need a token that such a cluster does not have: see the end of
 "Locked out, and the break-glass".
 
@@ -89,7 +90,7 @@ Treat the PAT as a root credential: it is a standing IAM_OWNER secret in the clu
 
 ### After a disaster-recovery rebuild: this break-glass is gone
 
-On a cluster rebuilt by the DR chain (`task dr-restore-plan`, OpenAether-infra) the two Secrets above do not exist. Observed in a
+On a cluster rebuilt by the DR chain (`task dr-restore-plan`, OpenAether-infra) the two Secrets above do not exist. Observed once, in a
 proof lab on Scaleway (3 CP + 6 W, after a rebuild by the chain): `kubectl -n services-identity get secret iam-admin-pat` answered
 `not found`, and `kubectl get secrets -A` listed no Secret with `iam-admin` in its name. The cause is a reading, not a separate
 experiment: the machine user and its PAT come from `FirstInstance`, which Zitadel reads once, when the instance is created ("The
@@ -97,14 +98,14 @@ one thing to know first"). The rebuild restores the Zitadel database, so the ins
 neither Secret; they are Kubernetes Secrets written by the chart's setup Job and nothing in this repository stores them in OpenBao.
 Whether the machine user itself is still in the restored database was not checked.
 
-- **The identity data is intact.** The restored `zitadel` database holds the original instance, not a new one: in the lab it held
-  the user created before the disaster, with its password and second-factor events, and instance events from the first install up
-  to the setup Job of the rebuild (read in SQL). A sign-in of that user after the rebuild was **not** shown: the lab's scripted
-  way needs the PAT, and no browser run was made.
-- **What exists instead:** the humans of that database with the passwords and second factors they set before the disaster
-  (`secret/zitadel/admin` in OpenBao is the initial password of `zitadel-admin` only, stale after its first login). A human
-  IAM_OWNER who can still sign in can create a machine user and a personal access token in the console and use that token in
-  place of `$PAT` above (Zitadel's console feature; not run on a rebuilt cluster).
+- **What was read of the identity data (SQL, one lab, one read).** The restored `zitadel` database held the original instance, not a
+  new one (instance events from the first install up to the setup Job of the rebuild) and the user created before the disaster.
+  **Not examined:** any other user, the machine user, and whether any password or second factor still works. A sign-in of that
+  user after the rebuild was **not** shown: the lab's scripted way needs the PAT, and no browser run was made.
+- **What may exist instead:** a human IAM_OWNER who can still sign in can create a machine user and a personal access token in the
+  console and use that token in place of `$PAT` above (Zitadel's console feature; not run on a rebuilt cluster). Whether a human
+  can sign in after a rebuild was not shown (`secret/zitadel/admin` in OpenBao is the initial password of `zitadel-admin` only,
+  stale after its first login).
 - **What does not exist:** a token you hold for a machine user, so the scripted path (`scripts/zitadel-apply-policies.py`, the unlock
   above) has nothing to authenticate with, and **no way back in if no human admin can sign in** (locked at 5 wrong passwords, a
   lost second factor). No recovery for that case is documented or tested in 0.4.1, and `FirstInstance` cannot be run again on an
