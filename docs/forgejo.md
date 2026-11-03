@@ -247,8 +247,8 @@ target. What it does not cover, precisely:
   stale beyond the generic CNPG rules (`CnpgSyncReplicaMissing` and the WAL archiver ones already read every instance pod).
 - `readOnlyRootFilesystem` on the Forgejo containers: the one Kyverno finding left (Audit). The chart's init containers write under `/`;
   to prove read-only works needs a run.
-- A rule on Forgejo's metrics (the names are not checked against a running Forgejo), and the HTTP 500 the Gateway is expected to answer
-  to `/metrics` (a rule with no backend: standard Gateway API behaviour, unverified with Istio 1.31).
+- A rule on Forgejo's metrics (the names are not checked against a running Forgejo). The Gateway now refuses `/metrics` for every route with a
+  403 (`docs/public-exposure.md`, UNVERIFIED on a cluster); the HTTP 500 of the route's own rule with no backend (seen in lab 27) is the second layer behind it.
 
 ## What the next lab must prove
 
