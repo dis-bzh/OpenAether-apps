@@ -332,39 +332,47 @@ tests:
       - {eval_time: 26m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
       - {eval_time: 30m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
       - {eval_time: 45m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
-  # CnpgWalNeverArchived (infra #430, lab 28C): a Cluster created over the WAL of another database system archives nothing:
-  # on the primary archived 0 and failed 39 (every WAL since the creation refused), ContinuousArchiving=False, the Cluster
-  # healthy, the first failover wedged in 4 of 4 reproductions. The series below take that shape; the standby reports 0 and 0,
-  # and a healthy neighbour keeps archiving (the rule is per Cluster).
-  - name: a Cluster that never archived and fails now, a neighbour that archives (lab 28C polluted path)
+  # CnpgWalNeverArchived (infra #430, lab 28C), a PROXY on the archiver counters, not the ContinuousArchiving condition: a Cluster
+  # created over the WAL of another database system archives nothing: on the primary archived 0 and failed 39 (every WAL since the
+  # creation refused), the Cluster healthy, the first failover wedged in 4 of 4 reproductions. The series below take that shape; the
+  # standby reports 0 and 0, a healthy neighbour keeps archiving, and a Cluster of the SAME NAME in another namespace archives too
+  # (the rule is per namespace and Cluster: summed over both it would be masked).
+  - name: a Cluster that never archived and fails now, a neighbour that archives, a namesake in another namespace
     interval: 1m
     input_series:
-      - series: 'cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster="lab27-hb", pod="lab27-hb-1"}'
+      - series: 'cnpg_pg_stat_archiver_failed_count{namespace="customer-a", cnpg_io_cluster="lab27-hb", pod="lab27-hb-1"}'
         values: '0+1x59'
-      - series: 'cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster="lab27-hb", pod="lab27-hb-1"}'
+      - series: 'cnpg_pg_stat_archiver_archived_count{namespace="customer-a", cnpg_io_cluster="lab27-hb", pod="lab27-hb-1"}'
         values: '0+0x59'
-      - series: 'cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster="lab27-hb", pod="lab27-hb-2"}'
+      - series: 'cnpg_pg_stat_archiver_failed_count{namespace="customer-a", cnpg_io_cluster="lab27-hb", pod="lab27-hb-2"}'
         values: '0+0x59'
-      - series: 'cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster="lab27-hb", pod="lab27-hb-2"}'
+      - series: 'cnpg_pg_stat_archiver_archived_count{namespace="customer-a", cnpg_io_cluster="lab27-hb", pod="lab27-hb-2"}'
         values: '0+0x59'
-      - series: 'cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster="grafana-db", pod="grafana-db-1"}'
+      - series: 'cnpg_pg_stat_archiver_failed_count{namespace="customer-b", cnpg_io_cluster="lab27-hb", pod="lab27-hb-1"}'
         values: '0+0x59'
-      - series: 'cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster="grafana-db", pod="grafana-db-1"}'
+      - series: 'cnpg_pg_stat_archiver_archived_count{namespace="customer-b", cnpg_io_cluster="lab27-hb", pod="lab27-hb-1"}'
+        values: '10+1x59'
+      - series: 'cnpg_pg_stat_archiver_failed_count{namespace="foundation-databases", cnpg_io_cluster="grafana-db", pod="grafana-db-1"}'
+        values: '0+0x59'
+      - series: 'cnpg_pg_stat_archiver_archived_count{namespace="foundation-databases", cnpg_io_cluster="grafana-db", pod="grafana-db-1"}'
         values: '10+1x59'
     alert_rule_test:
-      # The engine evaluates every 10 minutes in this file (evaluation_interval): pending at 10 minutes, firing at 20.
+      # The engine evaluates every 10 minutes in this file (evaluation_interval): pending at 10 minutes, firing at 20. It cannot tell
+      # `for: 5m` from `for: 10m`.
       - {eval_time: 10m, alertname: CnpgWalNeverArchived, exp_alerts: []}
       - eval_time: 20m
         alertname: CnpgWalNeverArchived
         exp_alerts:
-          - exp_labels: {cnpg_io_cluster: lab27-hb, severity: critical, component: backup}
+          - exp_labels: {namespace: customer-a, cnpg_io_cluster: lab27-hb, severity: critical, component: backup}
             exp_annotations:
-              summary: "CNPG lab27-hb: not one WAL segment archived, and the archiver fails now"
+              summary: "CNPG customer-a/lab27-hb: no WAL archived yet, archiver failing"
               runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgwalneverarchived"
               description: >-
-                The archive path or the credentials refuse every WAL since the Cluster exists (a path that holds the WAL
-                of another database system, S3 keys not seeded): ContinuousArchiving is False and the first failover can
-                wedge. kubectl get cluster -n <ns> <name>
+                The archiver counters show no segment archived and a failure in the last 5 minutes: the archive path or
+                the credentials refuse every WAL (a path that holds the WAL of another database system, S3 keys not
+                seeded; the counters also restart at 0 after a crash or a promotion). ContinuousArchiving is then False
+                and the first failover can wedge.
+                kubectl get cluster -n customer-a lab27-hb
                 -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'.
       # CnpgWalArchiveFailing (for: 15m) is still silent when the new rule fires.
       - {eval_time: 20m, alertname: CnpgWalArchiveFailing, exp_alerts: []}
@@ -372,34 +380,34 @@ tests:
     interval: 1m
     input_series:
       # healthy: archives, never fails
-      - series: 'cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster="a-healthy", pod="a-healthy-1"}'
+      - series: 'cnpg_pg_stat_archiver_failed_count{namespace="foundation-databases", cnpg_io_cluster="a-healthy", pod="a-healthy-1"}'
         values: '0+0x59'
-      - series: 'cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster="a-healthy", pod="a-healthy-1"}'
+      - series: 'cnpg_pg_stat_archiver_archived_count{namespace="foundation-databases", cnpg_io_cluster="a-healthy", pod="a-healthy-1"}'
         values: '5+1x59'
       # a Cluster that archived for a day and fails now: the older rule's case, not this one (archived is above 0)
-      - series: 'cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster="b-was-archiving", pod="b-was-archiving-1"}'
+      - series: 'cnpg_pg_stat_archiver_failed_count{namespace="foundation-databases", cnpg_io_cluster="b-was-archiving", pod="b-was-archiving-1"}'
         values: '0x10 1+1x49'
-      - series: 'cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster="b-was-archiving", pod="b-was-archiving-1"}'
+      - series: 'cnpg_pg_stat_archiver_archived_count{namespace="foundation-databases", cnpg_io_cluster="b-was-archiving", pod="b-was-archiving-1"}'
         values: '500x59'
       # and its standby, which has archived nothing (it is not the primary): the sum over the pods is what counts
-      - series: 'cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster="b-was-archiving", pod="b-was-archiving-2"}'
+      - series: 'cnpg_pg_stat_archiver_failed_count{namespace="foundation-databases", cnpg_io_cluster="b-was-archiving", pod="b-was-archiving-2"}'
         values: '0x59'
-      - series: 'cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster="b-was-archiving", pod="b-was-archiving-2"}'
+      - series: 'cnpg_pg_stat_archiver_archived_count{namespace="foundation-databases", cnpg_io_cluster="b-was-archiving", pod="b-was-archiving-2"}'
         values: '0x59'
       # three refusals in the first minutes, then it archives (a plugin sidecar not ready yet): resolved long before `for`
-      - series: 'cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster="c-slow-start", pod="c-slow-start-1"}'
+      - series: 'cnpg_pg_stat_archiver_failed_count{namespace="foundation-databases", cnpg_io_cluster="c-slow-start", pod="c-slow-start-1"}'
         values: '0 1 2 3 3x56'
-      - series: 'cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster="c-slow-start", pod="c-slow-start-1"}'
+      - series: 'cnpg_pg_stat_archiver_archived_count{namespace="foundation-databases", cnpg_io_cluster="c-slow-start", pod="c-slow-start-1"}'
         values: '0x3 1+1x56'
       # a few refusals, then nothing more attempted and nothing archived (idle): not failing now
-      - series: 'cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster="d-quiet", pod="d-quiet-1"}'
+      - series: 'cnpg_pg_stat_archiver_failed_count{namespace="foundation-databases", cnpg_io_cluster="d-quiet", pod="d-quiet-1"}'
         values: '0x5 3x54'
-      - series: 'cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster="d-quiet", pod="d-quiet-1"}'
+      - series: 'cnpg_pg_stat_archiver_archived_count{namespace="foundation-databases", cnpg_io_cluster="d-quiet", pod="d-quiet-1"}'
         values: '0+0x59'
       # no archiver configured (the light profile): failed and archived stay 0
-      - series: 'cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster="e-no-archive", pod="e-no-archive-1"}'
+      - series: 'cnpg_pg_stat_archiver_failed_count{namespace="foundation-databases", cnpg_io_cluster="e-no-archive", pod="e-no-archive-1"}'
         values: '0+0x59'
-      - series: 'cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster="e-no-archive", pod="e-no-archive-1"}'
+      - series: 'cnpg_pg_stat_archiver_archived_count{namespace="foundation-databases", cnpg_io_cluster="e-no-archive", pod="e-no-archive-1"}'
         values: '0+0x59'
     alert_rule_test:
       - {eval_time: 10m, alertname: CnpgWalNeverArchived, exp_alerts: []}

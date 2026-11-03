@@ -150,30 +150,37 @@ spec:
               barman cannot write to the object store (credentials, endpoint, egress).
               kubectl logs -n foundation-databases <primary-pod> -c postgres | grep -i archiv.
 
-        # 6b) The archiver of a Cluster has FAILED, has never SUCCEEDED, and fails now (infra #430, lab 28C). A Cluster
-        #     created over the WAL of another database system archives nothing (archived 0, failed 39 on the primary,
-        #     ContinuousArchiving=False) while it looks healthy, and its first failover wedged in 4 of 4 reproductions.
-        #     Rule 6 needs a failure with no archive in the same 10 minutes AND 15 minutes of `for`; this one has no
-        #     drain to tell apart (a Cluster that ever archived is excluded), so the failures only have to be recent.
-        #     Per Cluster, summed over its pods: a standby reports 0 and 0, and a Cluster that archived for a day
-        #     stays rule 6's. It reads pg_stat_archiver, not the condition itself, and has not fired on a cluster.
-        #     A rule on the condition needs kube-state-metrics to read Cluster objects (new RBAC): not done.
+        # 6b) A PROXY for ContinuousArchiving=False, not the condition (infra #430, lab 28C). A Cluster created over the
+        #     WAL of another database system archives nothing (archived 0, failed 39 on the primary) while it looks
+        #     healthy, and its first failover wedged in 4 of 4 reproductions. Rule 6 needs a failure with no archive in
+        #     the same 10 minutes AND 15 minutes of `for`; this one has no history to tell apart, so it fires sooner.
+        #     Limits, all read from the expression, none seen on a cluster:
+        #     - it reads pg_stat_archiver: a False condition with another cause is not seen. A rule on the condition
+        #       needs kube-state-metrics to read Cluster objects (a new RBAC grant): NOT added, infra #430 stays open.
+        #     - "never archived" is "no archived segment in the counters": PostgreSQL resets them after a crash
+        #       recovery, and a promoted or re-cloned instance starts at 0, so a Cluster that archived before can fire
+        #       it if its archive then fails (rule 6 fires for it too, later).
+        #     - summed over the pods of a Cluster, per namespace (a standby reports 0 and 0).
+        #     - a new Cluster whose S3 keys are not seeded yet archives nothing and fails: it fires until they are.
+        #     - the unit test (vmalert-tool) evaluates every 10 minutes: it cannot tell `for: 5m` from `for: 10m`.
         - alert: CnpgWalNeverArchived
           expr: |
-            (sum by (cnpg_io_cluster) (increase(cnpg_pg_stat_archiver_failed_count[5m])) > 0)
+            (sum by (namespace, cnpg_io_cluster) (increase(cnpg_pg_stat_archiver_failed_count[5m])) > 0)
               and
-            (sum by (cnpg_io_cluster) (cnpg_pg_stat_archiver_archived_count) == 0)
+            (sum by (namespace, cnpg_io_cluster) (cnpg_pg_stat_archiver_archived_count) == 0)
           for: 5m
           labels:
             severity: critical
             component: backup
           annotations:
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgwalneverarchived"
-            summary: "CNPG {{ $labels.cnpg_io_cluster }}: not one WAL segment archived, and the archiver fails now"
+            summary: "CNPG {{ $labels.namespace }}/{{ $labels.cnpg_io_cluster }}: no WAL archived yet, archiver failing"
             description: >-
-              The archive path or the credentials refuse every WAL since the Cluster exists (a path that holds the WAL
-              of another database system, S3 keys not seeded): ContinuousArchiving is False and the first failover can
-              wedge. kubectl get cluster -n <ns> <name>
+              The archiver counters show no segment archived and a failure in the last 5 minutes: the archive path or
+              the credentials refuse every WAL (a path that holds the WAL of another database system, S3 keys not
+              seeded; the counters also restart at 0 after a crash or a promotion). ContinuousArchiving is then False
+              and the first failover can wedge.
+              kubectl get cluster -n {{ $labels.namespace }} {{ $labels.cnpg_io_cluster }}
               -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'.
 
         # 7) The last base backup failed more recently than the last success.
