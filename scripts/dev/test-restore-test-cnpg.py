@@ -232,8 +232,8 @@ rcode, out, calls, left, cm, _ = flow("pitr", {n: cut for n in NAMES}, env_extra
 check("PITR on a young Cluster whose only Backup is still running: SKIP, not a target before the base backup",
       rcode == 0 and len(lines(out, "SKIP")) == 4 and not lines(out, "FAIL") and not any(c.startswith("apply") for c in calls), out[-500:])
 rcode, out, calls, left, cm, _ = flow("latest", good, env_extra={"FAKE_CLUSTER_AGE": str(5 * 86400), "FAKE_BACKUPS": "none"})
-check("a Cluster 5 days old with no completed Backup is a FAILURE (the daily ScheduledBackup produces nothing), never a skip",
-      rcode == 1 and len(lines(out, "FAIL")) == 4 and not lines(out, "SKIP") and "does not produce" in out
+check("a Cluster 5 days old with no completed Backup is a FAILURE (its ScheduledBackups produce nothing), never a skip",
+      rcode == 1 and len(lines(out, "FAIL")) == 4 and not lines(out, "SKIP") and "no completed base backup although" in out
       and not any(c.startswith("apply") for c in calls) and cm.count("oa_restore_test_ok{") == 4, out[-500:])
 rcode, out, calls, left, cm, _ = flow("latest", good, env_extra=dict(YOUNG, FAKE_BACKUPS="error"))
 check("a Backup listing that fails is a FAILURE, never a skip",
@@ -244,10 +244,17 @@ check("a base backup exists and the restored copy is corrupted: still a FAILURE 
 rcode, out, calls, left, cm, _ = flow("latest", good, env_extra=dict(YOUNG, FAKE_BACKUPS="no-stop"))
 check("a completed Backup without stoppedAt counts as a base backup (the restore goes on)",
       rcode == 0 and len(lines(out, "PASS")) == 4 and not lines(out, "SKIP"), out[-500:])
-rcode, out, calls, left, cm, _ = flow("latest", good, env_extra=dict(YOUNG, FAKE_BACKUP_STOP=str(time.time() - 300)))
-check("a base backup of 5 minutes ago: the primary store restores, the replica store (copied every 15 minutes) skips",
-      rcode == 0 and len(lines(out, "PASS")) == 2 and len(lines(out, "SKIP")) == 2 and all("/replica/" in l for l in lines(out, "SKIP"))
-      and "replica store" in out and cm.count("oa_restore_test_ok{") == 2, out[-500:])
+# The DR chain's shape (infra scripts/ops/dr-restore-plan.sh, prove_new_archive): a Backup made BY HAND, `dr-base-<cluster>`, with no
+# label, taken a few minutes before the restore test; the chain copies it to the replica store, runs the test and requires a PASS
+# and no SKIP. A Cluster that young must restore on BOTH stores.
+rcode, out, calls, left, cm, _ = flow("latest", good, env_extra=dict(YOUNG, FAKE_BACKUPS="manual", FAKE_BACKUP_STOP=str(time.time() - 300)))
+check("a young Cluster whose only base backup is a label-less manual Backup of 5 minutes ago: all four recoveries run and PASS, no SKIP",
+      rcode == 0 and len(lines(out, "PASS")) == 4 and not lines(out, "SKIP") and not lines(out, "FAIL")
+      and sum(c.startswith("apply") for c in calls) == 4 and cm.count("oa_restore_test_ok{") == 4, out[-500:])
+# The point-in-time target must start after the NEWEST completed Backup, a manual one included (matched on spec.cluster.name, not on a label).
+rcode, out, calls, left, cm, _ = flow("pitr", {n: cut for n in NAMES}, env_extra={"FAKE_BACKUPS": "mixed", "FAKE_BACKUP_STOP": str(time.time() - 300)})
+check("PITR with an old scheduled Backup and a manual one of 5 minutes ago: no target before the manual one, SKIP, nothing restored",
+      rcode == 0 and len(lines(out, "SKIP")) == 4 and "after the last base backup" in out and not any(c.startswith("apply") for c in calls), out[-500:])
 
 print("=== dump results are published ===")
 w = tempfile.mkdtemp()

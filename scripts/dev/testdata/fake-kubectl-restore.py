@@ -4,8 +4,12 @@
 FAKE_STATE   directory (calls.log, scratch/<name>.json, cm/<key>)
 FAKE_SNAPS   directory with <scratch cluster name>.snap: what `exec psql` prints in that scratch Cluster
 FAKE_MODE    healthy (default) | never-healthy | stuck-finalizer
-FAKE_BACKUPS the Backups of the live cluster: completed (default, one, stopped at FAKE_BACKUP_STOP) | none | running (one, not
-             completed) | no-stop (one completed, no stoppedAt) | error (the listing fails)
+FAKE_BACKUPS the Backups of the namespace: completed (default: one per live Cluster, made by a ScheduledBackup, so labelled
+             cnpg.io/cluster, stopped at FAKE_BACKUP_STOP) | manual (one per live Cluster, made by hand like the DR chain's
+             dr-base-<cluster>: NO label, only spec.cluster.name) | mixed (the manual one at FAKE_BACKUP_STOP and a scheduled one
+             25 h old) | none | running (one, not completed) | no-stop (one completed, no stoppedAt) | error (the listing fails).
+             Every list also holds a completed Backup of ANOTHER cluster (other-db), which must never count.
+             The double honours `-l key=value` on metadata.labels, as the API server does.
 FAKE_CLUSTER_AGE  seconds since the live Cluster was created (default 10 days)
 """
 import json
@@ -65,12 +69,32 @@ if verb == "get" and a[1].startswith("cluster.postgresql"):
                    "readyInstances": 1 if healthy else 0, "currentPrimary": n + "-1"}
     say(o)
 elif verb == "get" and a[1].startswith("backups"):
-    stop = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(float(os.environ.get("FAKE_BACKUP_STOP", time.time() - 90000))))
+    ts = lambda t: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))  # noqa: E731
+    stop = ts(float(os.environ.get("FAKE_BACKUP_STOP", time.time() - 90000)))
     kind = os.environ.get("FAKE_BACKUPS", "completed")
     if kind == "error":
         fail("Error from server (Forbidden): backups.postgresql.cnpg.io is forbidden")
-    say({"items": {"completed": [{"status": {"phase": "completed", "stoppedAt": stop}}], "none": [],
-                   "running": [{"status": {"phase": "started"}}], "no-stop": [{"status": {"phase": "completed"}}]}[kind]})
+
+    def backup(name, cluster, phase, stopped=None, labelled=True):
+        st = {"phase": phase}
+        if stopped:
+            st["stoppedAt"] = stopped
+        return {"metadata": {"name": name, "labels": {"cnpg.io/cluster": cluster} if labelled else {}},
+                "spec": {"cluster": {"name": cluster}}, "status": st}
+
+    items = [backup("other-db-daily", "other-db", "completed", ts(time.time() - 400000))]
+    for c in ("zitadel-db", "grafana-db"):
+        items += {"completed": [backup(c + "-daily", c, "completed", stop)],
+                  "manual": [backup("dr-base-" + c, c, "completed", stop, labelled=False)],
+                  "mixed": [backup(c + "-daily", c, "completed", ts(time.time() - 90000)),
+                            backup("dr-base-" + c, c, "completed", stop, labelled=False)],
+                  "none": [], "running": [backup(c + "-daily", c, "started")],
+                  "no-stop": [backup(c + "-daily", c, "completed")]}[kind]
+    sel = opt("-l")
+    if sel:
+        k, _, v = sel.partition("=")
+        items = [b for b in items if b["metadata"]["labels"].get(k) == v]
+    say({"items": items})
 elif verb == "get" and a[1] == "configmap":
     key = a[-1].split(".data.")[-1].rstrip("}")
     p = os.path.join(S, "cm", key)
