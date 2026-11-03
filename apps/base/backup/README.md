@@ -336,7 +336,7 @@ and the commits written since the last archived segment are in no store. The rep
 (`cnpg-store-replicate` holds a `backup.info` back until its end segment is copied).
 
 Seen once, in a proof lab on Scaleway (3 CP + 6 W, NOMINAL), at the final backups before a planned destroy: `backup-verify`
-failed on the primary store of `zitadel-db` and `grafana-db` 2 minutes after both Backups were `completed` and the writers had
+failed on the primary store of `zitadel-db` and `grafana-db` about 1.5 minutes (86 s) after both Backups were `completed` and the writers had
 stopped (`end_wal ...0C is not archived (newest 11)`, where 11 is the number of segment `...0B`). `SELECT pg_switch_wal();` on each
 primary archived `...0C` 2 to 4 s later; after `cnpg-store-replicate` the verify passed on both stores (`WAL 11..12 contiguous`). A destroy
 at that moment would have ended the archive at `...0B`. How often it happens, and whether the segment would have been archived by the
