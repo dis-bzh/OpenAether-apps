@@ -11,6 +11,7 @@ FAKE_BACKUPS the Backups of the namespace: completed (default: one per live Clus
              Every list also holds a completed Backup of ANOTHER cluster (other-db), which must never count.
              The double honours `-l key=value` on metadata.labels, as the API server does.
 FAKE_CLUSTER_AGE  seconds since the live Cluster was created (default 10 days)
+FAKE_CM_GET  fail: every `get configmap` exits 1 (an API error while the publishing stage reads what it published before)
 """
 import json
 import os
@@ -96,6 +97,8 @@ elif verb == "get" and a[1].startswith("backups"):
         items = [b for b in items if b["metadata"]["labels"].get(k) == v]
     say({"items": items})
 elif verb == "get" and a[1] == "configmap":
+    if os.environ.get("FAKE_CM_GET") == "fail":
+        fail("Error from server (ServiceUnavailable): the server is currently unable to handle the request")
     key = a[-1].split(".data.")[-1].rstrip("}")
     p = os.path.join(S, "cm", key)
     print(open(p).read() if os.path.exists(p) else "", end="")

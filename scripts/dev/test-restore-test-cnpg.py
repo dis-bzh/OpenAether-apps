@@ -277,13 +277,13 @@ def dump_stage(layout):
     return r.returncode, r.stdout + r.stderr, json.load(open(out))["results"]
 
 
-def dump_publish(results, prev=None):
+def dump_publish(results, prev=None, **env_extra):
     w = tempfile.mkdtemp()
     os.makedirs(os.path.join(w, "state", "cm")), os.makedirs(os.path.join(w, "results"))
     json.dump({"results": results, "now": NOW}, open(os.path.join(w, "results", "dump.json"), "w"))
     if prev is not None:
         open(os.path.join(w, "state", "cm", "dump-load"), "w").write(prev)
-    env = dict(os.environ, KUBECTL=FAKE, FAKE_STATE=os.path.join(w, "state"), RESULTS=os.path.join(w, "results"), NOW=str(NOW))
+    env = dict(os.environ, KUBECTL=FAKE, FAKE_STATE=os.path.join(w, "state"), RESULTS=os.path.join(w, "results"), NOW=str(NOW), **env_extra)
     r = subprocess.run([sys.executable, "-I", os.path.join(D, "restore_cnpg.py"), "--mode", "dump", "--publish"], env=env, capture_output=True, text=True)
     return r.returncode, r.stdout + r.stderr, open(os.path.join(w, "state", "cm", "dump-load")).read()
 
@@ -322,6 +322,9 @@ check("a store that passed before and has NO repository now is a FAILURE (a dump
       and ok_lines(cmv) == [f"oa_restore_test_ok{{{DL[('zitadel-db', 'primary')]}}} 0"], out + cmv)
 check("and its last success is kept, not moved to now",
       f"oa_restore_test_last_success_timestamp_seconds{{{DL[('zitadel-db', 'primary')]}}} {NOW - 86400:.0f}" in cmv, cmv)
+rcode, out, cmv = dump_publish(res, prev, FAKE_CM_GET="fail")
+check("the previous ConfigMap cannot be read: a skipped store is a FAILURE (a lost dump is never downgraded to a skip), the Job fails, and the output says why",
+      rcode == 1 and out.count("FAIL") == 4 and "cannot be read" in out and len(ok_lines(cmv)) == 4 and all(l.endswith(" 0") for l in ok_lines(cmv)), out + cmv)
 rcode, out, res = dump_stage({"primary": "absent", "replica": "restic restore failed"})
 rcode, out, cmv = dump_publish(res)
 check("the primary absent and the replica broken: the Job fails and only the two replica combinations say ok=0",

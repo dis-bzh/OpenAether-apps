@@ -2,8 +2,8 @@
 # Stage 1 of the dump restore test (restic image): restore the latest cnpg snapshot of EACH repository (primary, replica) into
 # /restore/<store>/. The data is what the dump job pushed; restic decrypts it with the escrowed password, so a pass here also
 # proves that password. A repository that cannot be read leaves an `error` file instead of a restore: dump_load.py reports it.
-# A repository that DOES NOT EXIST (restic exit code 10, and nothing else: not a refused key, a wrong password, a missing bucket or a
-# timeout) is a fresh install that has not run cnpg-dump yet: it leaves an `absent` marker instead, and dump_load.py skips that store.
+# Only restic exit code 10 (the repository does not exist: a fresh install before the first cnpg-dump) leaves an `absent` marker, skipped.
+# PROBE_TIMEOUT (seconds, default 120) bounds the probe of a repository; the stage test shortens it.
 set -u
 : "${CLUSTER_NAME:?}"
 export RESTIC_CACHE_DIR="${RESTIC_CACHE_DIR:-/tmp/restic-cache}"
@@ -11,7 +11,7 @@ one() { # store endpoint bucket ak sk
   export RESTIC_REPOSITORY="s3:${2}/${3}/${CLUSTER_NAME}/cnpg" AWS_ACCESS_KEY_ID="$4" AWS_SECRET_ACCESS_KEY="$5"
   mkdir -p "/restore/$1"
   rc=0
-  timeout 120 restic cat config >/dev/null 2>"/restore/$1/error" || rc=$?
+  timeout "${PROBE_TIMEOUT:-120}" restic cat config >/dev/null 2>"/restore/$1/error" || rc=$?
   if [ "$rc" -eq 10 ]; then
     mv "/restore/$1/error" "/restore/$1/absent"; chmod -R a+rX "/restore/$1"
     echo "NOTE: repository $1 does not exist (no dump has been pushed to it yet)"; return

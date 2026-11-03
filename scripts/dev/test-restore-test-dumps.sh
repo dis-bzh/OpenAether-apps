@@ -45,7 +45,7 @@ stage() { # replica-key [replica-bucket] [primary-bucket] [password]
   rm -rf "$W/restore"/*; mkdir -p "$W/restore"
   docker run --rm --network host $U -v "$D:/scripts:ro" -v "$W/restore:/restore" -v "$W/tmp:/tmp" -e CLUSTER_NAME=lab -e RESTIC_PASSWORD="${4:-pw}" \
     -e PRIMARY_ENDPOINT="$PU" -e PRIMARY_BUCKET="${3:-bkp}" -e PRIMARY_ACCESS_KEY=AKP -e PRIMARY_SECRET_KEY=s \
-    -e REPLICA_ENDPOINT="$RU" -e REPLICA_BUCKET="${2:-bkr}" -e REPLICA_ACCESS_KEY="$1" -e REPLICA_SECRET_KEY=s \
+    -e REPLICA_ENDPOINT="$RU" -e REPLICA_BUCKET="${2:-bkr}" -e REPLICA_ACCESS_KEY="$1" -e REPLICA_SECRET_KEY=s -e PROBE_TIMEOUT="${PT:-}" \
     --entrypoint sh "$RESTIC" /scripts/restic-dump.sh >"$W/stage.out" 2>&1
 }
 echo "=== restic-dump.sh ==="
@@ -68,6 +68,8 @@ chk "the primary absent, the replica restored: the marker is the primary's" "[ $
 echo "=== every other way to fail stays an error ==="
 stage AKR bkn; rc=$?
 chk "a repository that exists with no snapshot is an error (the dump job's push failed after init), not an absent one" "[ $rc = 0 ] && [ -s '$W/restore/replica/error' ] && [ ! -e '$W/restore/replica/absent' ] && [ -f '$W/restore/primary/backup/zitadel-db.dump' ]"
+PT=4 stage AKR nobucket; rc=$?  # restic retries a missing bucket until the timeout stops it (120 s in the Job, 4 s here; exit 130 in this image): not rc 10
+chk "a missing bucket (restic is stopped by the timeout) is an error, NOT an absent repository" "[ $rc = 0 ] && [ -s '$W/restore/replica/error' ] && [ ! -e '$W/restore/replica/absent' ] && [ -f '$W/restore/primary/backup/zitadel-db.dump' ]"
 stage AKR bkr bkp wrong; rc=$?
 chk "a repository that exists but whose password is wrong is an error on both stores, never an absent one" "[ $rc = 0 ] && [ -s '$W/restore/primary/error' ] && [ -s '$W/restore/replica/error' ] && [ ! -e '$W/restore/primary/absent' ] && [ ! -e '$W/restore/replica/absent' ]"
 echo "$PASS passed, $FAIL failed"

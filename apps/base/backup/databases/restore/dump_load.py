@@ -6,9 +6,8 @@ recovery path of last resort: it must LOAD, not just list.
 For each store and database: initdb in a temporary directory, start a private server (no network, unix socket only),
 pg_restore --exit-on-error, run snapshot.sql, judge with restore_cnpg.check_dump (tables, canary chain, age of the newest
 canary row), stop and delete the server. Writes the results as JSON for the publishing stage; never fails the Job itself.
-A store whose restic repository does not exist yet (stage 1 left an `absent` marker: a fresh install before the first cnpg-dump) is a
-SKIP with its reason, not a failure; the publishing stage turns it back into a failure when that store passed before. Any other
-failure, a missing dump included, is a FAIL.
+A store with an `absent` marker (stage 1: no restic repository yet, a fresh install) is a SKIP; the publishing stage turns it back into
+a FAIL when that store passed before (restore_cnpg.dump_gone). Any other failure, a missing dump included, is a FAIL.
 """
 import glob
 import json
