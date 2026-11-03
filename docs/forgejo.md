@@ -316,8 +316,8 @@ The volume's backup and its restore are in "The recurring backup of the reposito
   to prove read-only works needs a run.
 - A rule on Forgejo's metrics. The `VMPodScrape` exists and vmagent scraped Forgejo in lab 27 (`up` = 1, 26 `gitea_*` series), but no rule reads
   the series and their names are not checked against a running Forgejo. Through the Gateway, `/metrics` is refused with a 403 for every route
-  (`docs/public-exposure.md`); the 403 was read on four hosts of a Scaleway proof lab (Forgejo was not deployed there, so its own route is
-  UNVERIFIED on a cluster). Before that policy the route answered HTTP 500 (the path has no backend, so nothing was exposed): labs 27, 27B and 27C.
+  (`docs/public-exposure.md`); the 403 was read on the other hosts of a Scaleway proof lab (Forgejo was not deployed there, so its own
+  route is UNVERIFIED on a cluster). Before that policy the route answered HTTP 500 (the path has no backend, so nothing was exposed): labs 27, 27B and 27C.
 
 ## What the next lab must prove
 

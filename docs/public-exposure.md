@@ -20,21 +20,21 @@ when the flags disagree with the manifests. A new UI therefore cannot reach the 
 guards it (the metrics paths are a separate check, below). Longhorn is the example of the rule: its route has no login, so it is
 not in the default kustomization.
 
-## Metrics endpoints: expected to be refused at the Gateway
+## Metrics endpoints: refused at the Gateway
 
 A proof lab on Scaleway (3 CP + 6 W) read `https://grafana.<domain>/metrics` through the public Gateway: HTTP 200, 4,516 lines
 (2,525 `grafana_*` series: build version, user, organisation and alert-rule totals), with no login, at 0.4.0 and at the 0.4.1
 head. That lab had `app_lb_allowed_cidrs` set to the lab host, so the reading came from an allowed source: the exposure is to
 any caller that reaches the Gateway, which by default (no ACL) is anyone. Same lab: `/metrics` answered 404 on the OpenBao and
 Zitadel routes, and 200 on the route of a test application. Zitadel serves its metrics at `/debug/metrics` (the scrape in
-`vmscrapes-pipeline.yaml`), which was not probed; its route forwards that port, so it is covered without having been seen open.
+`vmscrapes-pipeline.yaml`); the first lab did not probe it, so whether it was open before the policy was never read.
 Only the Forgejo route had a rule of its own for `/metrics` (no backend; it answered 500 in an earlier proof lab).
 
 Since 0.4.1, `apps/base/services-gateway/authorizationpolicy-deny-metrics.yaml` is an Istio AuthorizationPolicy (DENY) aimed at
-the Gateway for `/metrics`, `/metrics/*`, `/debug/metrics` and `/debug/metrics/*`, any caller, host and route. The expected
-answer is a 403 from the Gateway's Envoy. One policy rather than a rule per route: it covers a route nobody has written yet,
-and it is the mechanism `allow-gateway-ingress` already uses (`targetRefs` on the Gateway, DENY evaluated before ALLOW). The
-Forgejo rule stays, as a second layer.
+the Gateway for `/metrics`, `/metrics/*`, `/debug/metrics` and `/debug/metrics/*`, any caller, host and route. The answer is
+a 403 from the Gateway's Envoy (read in the second lab, below). One policy rather than a rule per route: it covers a route nobody
+has written yet, and it is the mechanism `allow-gateway-ingress` already uses (`targetRefs` on the Gateway, DENY evaluated before
+ALLOW). The Forgejo rule stays, as a second layer.
 
 **Upgrade note.** A route of yours that serves `/metrics` or `/debug/metrics` on purpose (an external uptime or Prometheus
 check, say) gets the 403 too, and no ALLOW overrides a DENY. Serve it under another path, or turn the policy off for the whole
@@ -57,8 +57,9 @@ was **observed on a cluster** in a second proof lab (Scaleway, 3 CP + 6 W, NOMIN
    `/debug/metrics` answered 403 "RBAC: access denied" on all four hosts (Grafana, Zitadel, OpenBao and the lab's own test
    application), on both listeners: the plain-HTTP listener answers 403, not 301. `/`, `/login`, `/api/health`, `/ui/v2/login`
    and `/.well-known/openid-configuration` were still served. After a disaster-recovery rebuild: 36 probes, 30 of them 403, 0 bodies.
-2. **Shown.** `up` = 1 for Grafana (2 pods) and Zitadel (2 pods) after the policy. The forge was not deployed in the lab: **not shown**
-   for the forge.
+2. **Shown, thinly.** `up` = 1 for Grafana (2 pods) and Zitadel (2 pods) after the policy, read by the operator in VictoriaMetrics;
+   that output was not kept with the lab's files, and the vmagent target list that was kept shows Grafana but not the Zitadel pool.
+   The forge was not deployed in the lab: **not shown** for the forge.
 3. **Spellings.** The policy matched `/metrics/`, `/metrics/x`, `/metrics?x=1`, `/%6Detrics`, `/%6detrics`, `/./metrics`,
    `/a/../metrics` and `/%2e/metrics` (403): the policy sees the path after Istio's normalisation. It did **not** match `//metrics`,
    `/debug//metrics`, `/Metrics`, `/METRICS`, `/metrics;a=b`, `/metrics.`, `/metrics%20`, `/metrics%2f` and `/%2fmetrics`, which reached

@@ -40,8 +40,9 @@ routes:
     authentication: >-
       Forgejo's own: local accounts, the initial admin password comes from OpenBao; Zitadel OIDC lands at rung 3.
       Self-registration is off and sign-in is required to view anything; /metrics is refused at the Gateway
-      (403 expected from the policy of docs/public-exposure.md, UNVERIFIED on a cluster; behind it the route's own rule
-      with no backend). No ACL in front; the login page answers anyone.
+      (403 expected from the policy of docs/public-exposure.md; the forge was not deployed in the proof lab, so
+      UNVERIFIED on a cluster; behind it the route's own rule with no backend). No ACL in front; the login page answers
+      anyone.
     default: true
     private_admin: false
   - route: services-gateway/global-http-redirect
