@@ -97,7 +97,7 @@ one thing to know first"). The rebuild restores the Zitadel database, so the ins
 neither Secret; they are Kubernetes Secrets written by the chart's setup Job and nothing in this repository stores them in OpenBao.
 Whether the machine user itself is still in the restored database was not checked.
 
-- **The identity data is intact.** The restored `zitadel` database holds the original instance and its users: in the lab it held
+- **The identity data is intact.** The restored `zitadel` database holds the original instance, not a new one: in the lab it held
   the user created before the disaster, with its password and second-factor events, and instance events from the first install up
   to the setup Job of the rebuild (read in SQL). A sign-in of that user after the rebuild was **not** shown: the lab's scripted
   way needs the PAT, and no browser run was made.
