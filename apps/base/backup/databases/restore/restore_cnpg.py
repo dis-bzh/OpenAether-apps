@@ -134,6 +134,25 @@ def first_backup_wait(stops, created, now):
             "(the immediate Backup of its ScheduledBackup is still running, or failed)")
 
 
+def dump_gone(results, previous):
+    """The dump results (dump_load.py) whose store has NO restic repository now although it passed before: a dump that existed is
+    gone, which is a failure, not a fresh install. Marks them ok=False in place and returns the FAIL lines. A store that never passed
+    (previous holds no last success for it) stays a skip. previous: parse_previous of the published metrics, or None when they could
+    not be read: a fresh install cannot then be told from a lost dump, so every such store fails (never a silent skip)."""
+    lines = []
+    for r in results:
+        if r.get("no_repository") and r["ok"] is None and (previous is None or r["labels"] in previous):
+            r["ok"] = False
+            if previous is None:
+                lines.append(f"FAIL {r['name']}: the restic repository does not exist, and the results published before cannot be read, "
+                             "so this cannot be told from a lost dump (the next run decides)")
+                continue
+            when = datetime.datetime.fromtimestamp(previous[r["labels"]], datetime.timezone.utc).strftime("%Y-%m-%d %H:%MZ")
+            lines.append(f"FAIL {r['name']}: the restic repository does not exist any more although this dump passed before (last pass "
+                         f"{when}): the pushed dumps are gone or the path changed (kubectl -n foundation-databases get cronjob cnpg-dump)")
+    return lines
+
+
 def compare(src, res, store, mode, pitr_row=None):
     """-> (ok, reasons, info). src/res are parse_snapshot results. Raises Skip when the live side has no canary yet."""
     info = {"lag": None, "missing": len(src["tables"] - res["tables"])}
@@ -452,13 +471,18 @@ def main():
     def term(*_):
         raise Terminated()
     signal.signal(signal.SIGTERM, term)
-    previous = {}
+    previous, readable = {}, True
     if a.publish:
         r = kube("get", "configmap", CM, "-n", LIVE_NS, "-o", "jsonpath={.data." + key + "}", check=False)
+        readable = r.returncode == 0
+        if not readable:
+            print("ERROR: cannot read the results published before:", r.stderr.strip()[:300])
         previous = parse_previous(r.stdout)
     results = []
     if a.mode == "dump":
         results = json.load(open(os.path.join(os.environ.get("RESULTS", "/results"), "dump.json")))["results"]
+        for line in dump_gone(results, previous if readable else None):
+            print(line)
     else:
         try:
             sweep_leftovers()

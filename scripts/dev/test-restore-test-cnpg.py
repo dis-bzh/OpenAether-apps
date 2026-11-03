@@ -256,6 +256,80 @@ rcode, out, calls, left, cm, _ = flow("pitr", {n: cut for n in NAMES}, env_extra
 check("PITR with an old scheduled Backup and a manual one of 5 minutes ago: no target before the manual one, SKIP, nothing restored",
       rcode == 0 and len(lines(out, "SKIP")) == 4 and "after the last base backup" in out and not any(c.startswith("apply") for c in calls), out[-500:])
 
+print("=== dump load: no dump pushed yet (a fresh install before the first cnpg-dump) ===")
+# Stage 2 (dump_load.py) on the /restore tree stage 1 (restic-dump.sh) leaves: an `absent` marker is a repository that does not exist
+# (restic exit code 10, proven with a real restic in test-restore-test-dumps.sh), an `error` file any other failure. No PostgreSQL is
+# needed: a skip or a missing dump ends before initdb. Then stage 3 (restore_cnpg.py --mode dump --publish) on what stage 2 wrote.
+ABSENT = "Fatal: repository does not exist: unable to open config file: Stat: The specified key does not exist.\nIs there a repository at the following location?\n"
+
+
+def dump_stage(layout):
+    w = tempfile.mkdtemp()
+    for store, how in layout.items():
+        os.makedirs(os.path.join(w, "restore", store))
+        if how == "absent":
+            open(os.path.join(w, "restore", store, "absent"), "w").write(ABSENT)
+        elif how:
+            open(os.path.join(w, "restore", store, "error"), "w").write(how)
+    out = os.path.join(w, "results", "dump.json")
+    env = dict(os.environ, RESTORE_DIR=os.path.join(w, "restore"), RESULT=out, TMPDIR=w, NOW=str(NOW))
+    r = subprocess.run([sys.executable, "-I", os.path.join(D, "dump_load.py")], env=env, capture_output=True, text=True)
+    return r.returncode, r.stdout + r.stderr, json.load(open(out))["results"]
+
+
+def dump_publish(results, prev=None, **env_extra):
+    w = tempfile.mkdtemp()
+    os.makedirs(os.path.join(w, "state", "cm")), os.makedirs(os.path.join(w, "results"))
+    json.dump({"results": results, "now": NOW}, open(os.path.join(w, "results", "dump.json"), "w"))
+    if prev is not None:
+        open(os.path.join(w, "state", "cm", "dump-load"), "w").write(prev)
+    env = dict(os.environ, KUBECTL=FAKE, FAKE_STATE=os.path.join(w, "state"), RESULTS=os.path.join(w, "results"), NOW=str(NOW), **env_extra)
+    r = subprocess.run([sys.executable, "-I", os.path.join(D, "restore_cnpg.py"), "--mode", "dump", "--publish"], env=env, capture_output=True, text=True)
+    return r.returncode, r.stdout + r.stderr, open(os.path.join(w, "state", "cm", "dump-load")).read()
+
+
+def ok_lines(text):
+    return [l for l in text.splitlines() if l.startswith("oa_restore_test_ok{")]
+
+
+DL = {(c, st): rc.labels("dump", c, st, "latest") for st in rc.STORES for c in rc.CLUSTERS}
+rcode, out, res = dump_stage({"primary": "absent", "replica": "absent"})
+check("both repositories absent: the stage ends 0 and skips all four combinations, with the reason",
+      rcode == 0 and [r["ok"] for r in res] == [None] * 4 and out.count("SKIP ") == 4 and "FAIL" not in out and "does not exist" in out, out)
+rcode, out, res = dump_stage({"primary": "absent", "replica": "restic restore failed"})
+check("the primary absent, the replica's restic restore failed: only the replica is a failure",
+      [(r["labels"].split('store="')[1].split('"')[0], r["ok"]) for r in res] == [("primary", None)] * 2 + [("replica", False)] * 2
+      and "FAIL zitadel-db/replica/dump: restic restore failed" in out and out.count("SKIP ") == 2, out)
+rcode, out, res = dump_stage({"primary": "absent", "replica": None})
+check("the primary absent, the replica restored nothing and left no error: still a failure (the dump is missing from the snapshot)",
+      [r["ok"] for r in res] == [None, None, False, False] and "missing from the latest snapshot" in out, out)
+rcode, out, res = dump_stage({"primary": "wrong password", "replica": "wrong password"})
+check("an error file without the absent marker (unreadable repository, wrong password, refused key) is a failure on all four",
+      [r["ok"] for r in res] == [False] * 4 and "SKIP" not in out, out)
+
+rcode, out, res = dump_stage({"primary": "absent", "replica": "absent"})
+rcode, out, cmv = dump_publish(res)
+check("all four skipped on a fresh ConfigMap: the Job succeeds, no ok series, no last success, no FAIL (so no RestoreTestFailed)",
+      rcode == 0 and not ok_lines(cmv) and "last_success_timestamp_seconds{" not in cmv and "FAIL" not in out, out + cmv)
+old = "".join(f'oa_restore_test_ok{{{l}}} 0\noa_restore_test_last_run_timestamp_seconds{{{l}}} 1\n' for l in DL.values())
+rcode, out, cmv = dump_publish(res, old)
+check("the four ok=0 series a fresh install published before are gone after a skipping run (the alert resolves at once)",
+      rcode == 0 and not ok_lines(cmv), cmv)
+prev = rc.build_metrics([{"labels": DL[("zitadel-db", "primary")], "ok": True, "duration": 3, "recovery": 2, "lag": 9, "missing": None}], NOW - 86400, {})
+rcode, out, cmv = dump_publish(res, prev)
+check("a store that passed before and has NO repository now is a FAILURE (a dump that existed is gone), only that one",
+      rcode == 1 and "FAIL zitadel-db/primary/dump" in out and "passed before" in out and out.count("FAIL") == 1
+      and ok_lines(cmv) == [f"oa_restore_test_ok{{{DL[('zitadel-db', 'primary')]}}} 0"], out + cmv)
+check("and its last success is kept, not moved to now",
+      f"oa_restore_test_last_success_timestamp_seconds{{{DL[('zitadel-db', 'primary')]}}} {NOW - 86400:.0f}" in cmv, cmv)
+rcode, out, cmv = dump_publish(res, prev, FAKE_CM_GET="fail")
+check("the previous ConfigMap cannot be read: a skipped store is a FAILURE (a lost dump is never downgraded to a skip), the Job fails, and the output says why",
+      rcode == 1 and out.count("FAIL") == 4 and "cannot be read" in out and len(ok_lines(cmv)) == 4 and all(l.endswith(" 0") for l in ok_lines(cmv)), out + cmv)
+rcode, out, res = dump_stage({"primary": "absent", "replica": "restic restore failed"})
+rcode, out, cmv = dump_publish(res)
+check("the primary absent and the replica broken: the Job fails and only the two replica combinations say ok=0",
+      rcode == 1 and ok_lines(cmv) == [f"oa_restore_test_ok{{{DL[(c, 'replica')]}}} 0" for c in rc.CLUSTERS], out + cmv)
+
 print("=== dump results are published ===")
 w = tempfile.mkdtemp()
 os.makedirs(os.path.join(w, "state")), os.makedirs(os.path.join(w, "results"))
