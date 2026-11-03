@@ -134,6 +134,20 @@ def first_backup_wait(stops, created, now):
             "(the immediate Backup of its ScheduledBackup is still running, or failed)")
 
 
+def dump_gone(results, previous):
+    """The dump results (dump_load.py) whose store has NO restic repository now although it passed before: a dump that existed is
+    gone, which is a failure, not a fresh install. Marks them ok=False in place and returns the FAIL lines. A store that never passed
+    (previous holds no last success for it) stays a skip. previous: parse_previous of the published metrics."""
+    lines = []
+    for r in results:
+        if r.get("no_repository") and r["ok"] is None and r["labels"] in previous:
+            r["ok"] = False
+            when = datetime.datetime.fromtimestamp(previous[r["labels"]], datetime.timezone.utc).strftime("%Y-%m-%d %H:%MZ")
+            lines.append(f"FAIL {r['name']}: the restic repository does not exist any more although this dump passed before (last pass "
+                         f"{when}): the pushed dumps are gone or the path changed (kubectl -n foundation-databases get cronjob cnpg-dump)")
+    return lines
+
+
 def compare(src, res, store, mode, pitr_row=None):
     """-> (ok, reasons, info). src/res are parse_snapshot results. Raises Skip when the live side has no canary yet."""
     info = {"lag": None, "missing": len(src["tables"] - res["tables"])}
@@ -459,6 +473,8 @@ def main():
     results = []
     if a.mode == "dump":
         results = json.load(open(os.path.join(os.environ.get("RESULTS", "/results"), "dump.json")))["results"]
+        for line in dump_gone(results, previous):
+            print(line)
     else:
         try:
             sweep_leftovers()

@@ -6,6 +6,9 @@ recovery path of last resort: it must LOAD, not just list.
 For each store and database: initdb in a temporary directory, start a private server (no network, unix socket only),
 pg_restore --exit-on-error, run snapshot.sql, judge with restore_cnpg.check_dump (tables, canary chain, age of the newest
 canary row), stop and delete the server. Writes the results as JSON for the publishing stage; never fails the Job itself.
+A store whose restic repository does not exist yet (stage 1 left an `absent` marker: a fresh install before the first cnpg-dump) is a
+SKIP with its reason, not a failure; the publishing stage turns it back into a failure when that store passed before. Any other
+failure, a missing dump included, is a FAIL.
 """
 import glob
 import json
@@ -41,12 +44,16 @@ def run(*cmd, **kw):
 def load_one(store, cluster, now):
     db = rc.CLUSTERS[cluster]
     lab = rc.labels("dump", cluster, store, "latest")
-    res = {"labels": lab, "ok": False, "duration": None, "recovery": None, "lag": None, "missing": None}
+    res = {"labels": lab, "ok": False, "duration": None, "recovery": None, "lag": None, "missing": None,
+           "name": f"{cluster}/{store}/dump"}
     t0 = time.time()
     d = os.path.join(TMP, f"pgdata-{store}-{cluster}")
     sock = os.path.join(TMP, f"pgsock-{store}-{cluster}")
     started = False
     try:
+        if os.path.exists(os.path.join(RESTORE, store, "absent")):
+            res["no_repository"] = True
+            raise rc.Skip(f"the {store} restic repository does not exist yet: cnpg-dump has not pushed a dump (it runs daily)")
         err = os.path.join(RESTORE, store, "error")
         if os.path.exists(err):
             raise RuntimeError(open(err).read().strip()[:200] or "restic restore failed")
@@ -78,6 +85,9 @@ def load_one(store, cluster, now):
         res.update(ok=ok, lag=info["lag"])
         print(("PASS " if ok else "FAIL ") + f"{cluster}/{store}/dump: " + ("; ".join(why) if why else
               f"loaded, canary chain intact, newest row {info['lag']:.0f} s old, {info['tables']} tables"))
+    except rc.Skip as e:
+        res["ok"] = None
+        print(f"SKIP {cluster}/{store}/dump: {e}")
     except Exception as e:  # noqa: BLE001
         print(f"FAIL {cluster}/{store}/dump: {e}")
     finally:
