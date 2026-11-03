@@ -1,0 +1,28 @@
+# The Gateway never serves a metrics endpoint. The services publish theirs without a login (Grafana's /metrics answered
+# 200 to anyone: build version, user and alert-rule totals; Zitadel's is /debug/metrics) and vmagent reads them pod to
+# pod, never through here (VMPodScrape / VMServiceScrape). One DENY on the Gateway covers every route, present and
+# future, a customer route attached to it included. DENY is evaluated before the ALLOW of allow-gateway-ingress; the
+# answer is a 403 from the Gateway's Envoy. UNVERIFIED on a cluster; see docs/public-exposure.md and
+# scripts/check-gateway-routes.py.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: deny-metrics-paths
+  namespace: services-gateway
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: "gateway"
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: openaether-gateway
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            paths:
+              - /metrics
+              - /metrics/*
+              - /debug/metrics
+              - /debug/metrics/*

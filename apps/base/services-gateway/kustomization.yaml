@@ -19,6 +19,7 @@ resources:
   - certificate-openaether-tls.yaml
   - httproute-redirect.yaml
   - gateway-ha.yaml  # two replicas and a PDB: one drained node must not cut the ingress
+  - authorizationpolicy-deny-metrics.yaml  # no route serves /metrics or /debug/metrics (docs/public-exposure.md)
 
 labels:
   - includeSelectors: false
