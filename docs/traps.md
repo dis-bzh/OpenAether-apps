@@ -203,6 +203,13 @@ belong to. What follows has no skill of its own yet.
   is the only Secret read.
 - **The Loki chart's default pod anti-affinity is `required`.** Helm merges maps, so adding a preferred rule does not remove it: three replicas on
   two workers leave the third Pending. The values clear the required list.
+- **On a fresh install `observability-vm-customresources` fails for about 2 minutes, then converges: expected, no action (performance only,
+  left for 0.5.0).** `flux get ks` shows it `ReconciliationFailed` until the VictoriaMetrics operator has registered its CRDs. Seen on all
+  three fresh installs whose Flux events were kept (two at the 0.4.0 tags, one at a 0.4.1 release-candidate head; Scaleway, 3 CP + 6 W):
+  failing for 2 min 2 s to 2 min 3 s, ending 30 to 34 s before 41 of 41 were Ready (11 to 12 minutes after `cluster-up`), so it is not new in
+  0.4.1. No alert fires (`FluxObjectNotReady` waits 20 minutes). The cause is a reading: the failure message was read once as `no matches
+  for kind "VMCluster"`, and that text was not archived, only the timings. A missing ordering or health gate between the operator's
+  HelmRelease and the custom resources is not diagnosed.
 
 - **`up == 0` only catches NODE-discovered targets.** A rule on a metric nobody
   produces never fires and never says so — that is what `task check-alerts` is for.
