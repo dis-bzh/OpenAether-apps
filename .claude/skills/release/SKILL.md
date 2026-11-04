@@ -47,7 +47,13 @@ validation leg turned it on, so what the pin asserts is that the tag exists and
    the archive** — and check that the quick start's commands exist and its values
    are accepted. Infra's `tags` ruleset blocks moving or deleting a tag, so a
    defect found after tagging cannot be re-cut away.
-3. Tag it, then a GitHub release, with notes that name the limits.
+3. Tag it, then a GitHub release, with notes that name the limits. Push the signed tag: the `SBOM` workflow starts on it,
+   creates the **draft** release and attaches the inventory (`openaether-apps-<tag>.cdx.json`). Read that run, publish
+   only when its `Attach to a draft release` job is green, with `gh release edit <tag> --notes-file notes.md --draft=false`.
+   An immutable release takes no asset once published (0.3.2, 0.4.0 and 0.4.1 went out without one, infra #395): never
+   `gh release create` without `--draft`, never publish a draft that lacks the file. The scan jobs of the same run may be
+   red (open `[vuln]` issues) without holding the attach. If it did not attach the file, create the draft by hand and run
+   `gh workflow run sbom.yml -f tag=<tag>` (`docs/supply-chain.md`).
 
 ## The notes must admit what is not fixed
 
