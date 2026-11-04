@@ -81,6 +81,13 @@ the `apps/flux/management` render (40 Kustomizations) these 14 have no health ga
 On a real management cluster `OpenAether-infra` adds a 15th (`openaether-platform`), absent from this repository: 15 of 40.
 Adding or removing a `wait`/`healthChecks` changes this list; the test fails until it is updated.
 
+A gate is only as good as the verdict on each object. Two traps, both read in the sources of Flux 2.9.6 and 2.10.0:
+with `wait: true` the controller **ignores** `spec.healthChecks` (an entry next to it gates nothing), and a custom resource
+with no Ready condition yet counts as "Current", so an operator that has not touched its CR passes the gate. That is how
+`cnpg` was Ready after 47 s with both platform databases empty (lab 32). `cnpg` therefore carries a `healthCheckExprs` entry
+for the CNPG `Cluster` (Current only when its `Ready` condition is `True`); `scripts/dev/test-flux-health-gates.sh` pins it.
+Write such an expression with `exists`, not `filter(...).all(...)`: `all` is true on a list with no Ready condition.
+
 ## Invariant to maintain
 
 **`dependsOn` = real dependencies**, not merely a convergence order. Every new
