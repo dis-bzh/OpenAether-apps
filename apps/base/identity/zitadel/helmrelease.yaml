@@ -80,8 +80,8 @@ spec:
     # fixed three HIGH account-takeover advisories (GHSA-mchc-246r-6m76, GHSA-84fg-x5h4-w8xv, GHSA-qj3q-235g-qr6w) and
     # v4.20.1 (2026-11-03) keeps those fixes and ships Next.js 16.4.3 in the login (GHSA-673q-mjm6-r5xr and
     # GHSA-2464-fhr4-w9xw are fixed from 16.4.1). Server and login move together.
-    # tag@digest: the tag stays readable, the digest (the multi-arch INDEX digest) makes a re-pushed tag fail instead of
-    # reaching the cluster. Drop the two overrides when a stable chart ships a patched appVersion.
+    # tag@digest: the tag stays readable, the digest (the multi-arch INDEX digest) decides what runs, so a re-pushed tag
+    # changes nothing. Drop the two overrides when a stable chart ships a patched appVersion.
     image:
       # renovate: datasource=docker depName=ghcr.io/zitadel/zitadel
       tag: "v4.20.1@sha256:4817dbd8896306867f28bba63e7dc3526b2d2646ac7111db9524eb3ab6e82301"

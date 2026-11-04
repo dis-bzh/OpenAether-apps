@@ -165,7 +165,7 @@ Read: the release notes of v4.20.0 and v4.20.1 and the source diff v4.19.5 to v4
 `cmd/defaults.yaml` unchanged). Run, in containers against a PostgreSQL 17 fixture with `sslmode disable` and no Kubernetes:
 `scripts/dev/test-zitadel-config.sh` (32 passed) and `scripts/dev/test-zitadel-migration-lock.sh` (16 passed) on v4.20.1, and a
 database set up by v4.19.5 then by v4.20.1 and back. Not run: a cluster, Go 1.26 TLS to CNPG with `sslmode=require`, memory under
-load, arm64.
+load, arm64, and a browser sign-in with a second factor into Grafana through the Gateway (asked for by apps #195).
 
 - **No schema step.** `cmd/setup` has the same steps as in v4.19.5. A database that v4.19.5 set up gets, from the setup hook Job,
   the two steps that re-run on every version change, `projection_tables` and `79_backfill_unique_constraint_owners`, plus the
@@ -173,9 +173,12 @@ load, arm64.
   neither of the two. The backfill walks the unique constraints in pages, so its time follows the number of users and
   organisations; it was not measured on a cluster. If the Job dies inside a step, the trap of `docs/traps.md` (apps #133) applies; on
   an instance that holds users the recovery there is the CNPG backup, not the script.
-- **Rollback.** v4.19.5 (setup, then server) started on the database that v4.20.1 had set up, served the session created before the
-  move and accepted the same password, so a Helm rollback after a failed upgrade has a database to go back to. A request sent in
-  the first second after `healthz` answered 503 once; the next ones were served.
+- **Rollback.** v4.19.5 started on the database that v4.20.1 had set up, in two ways: setup, then server, and the server alone.
+  The second is what a Helm rollback produces: the chart's init and setup Jobs are hooks of `pre-install` and `pre-upgrade` only
+  (chart 10.4.0 values), so a rollback does not run a v4.19.5 setup. The server alone was ready in about 3 seconds with no ERROR
+  or WARN line and the API answered; in the first run it served the session created before the move and accepted the same
+  password. A request sent in the first second after `healthz` answered 503 once; the next ones were served. Offline, on a
+  near-empty database; not tried on a cluster.
 - **Go 1.26.** The release notes say the server is built with Go 1.26.10. Outbound TLS (SMTP, external identity providers, Actions and webhook targets,
   HTTP SMS providers) no longer accepts chains through the compromised eMudhra intermediates; this platform configures none of them.
   The database connection is also a Go TLS client (CNPG, `sslmode=require`): the offline runs could not test it, only a cluster
