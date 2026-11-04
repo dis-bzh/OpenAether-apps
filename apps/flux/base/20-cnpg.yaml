@@ -38,9 +38,11 @@ spec:
         optional: true
   wait: true
   # `wait: true` also checks zitadel-db and grafana-db, but kstatus calls a custom resource with no Ready condition
-  # "Current", and a CNPG Cluster gets its Ready condition with its FIRST phase. Lab 32 (N1): this Kustomization passed
-  # in 47 s with both Clusters still empty, 9 minutes before they were 3 of 3, and its dependents started on databases
-  # that did not exist (Grafana restarted 6 times). In labs 29-31 it became Ready 2-6 s after both were 3 of 3.
+  # "Current", and a CNPG Cluster gets its Ready condition with its FIRST phase (read in the sources of Flux 2.9.6 and
+  # 2.10.0 and of CloudNativePG 1.30.1; not yet shown on a cluster). Lab 32 (N1) is consistent with it: this
+  # Kustomization was Ready after 47 s, both Clusters were 3 of 3 about 9 minutes later, and the dependents started on
+  # databases that did not exist (Grafana restarted 6 times); the cause there is inferred, not observed. In labs 29-31
+  # it became Ready 2-6 s after both were 3 of 3.
   # `spec.healthChecks` cannot fix that: with `wait: true` the controller ignores it. This expression takes over the
   # verdict for the kind (kustomize-controller v1.9.6 and v1.10.1, same code): Current only when the Ready condition is
   # True, which CNPG sets with the phase "Cluster in healthy state"; anything else, an empty status included, is
@@ -50,7 +52,10 @@ spec:
   # kstatus (Ready=False), so nothing becomes NotReady that was not before. test-flux-health-gates.sh pins it.
   # timeout 15m now has to cover the databases: 5:52-6:16 (Scaleway, labs 29-31), 7:19 (OVH, lab 28), 10:02 in lab 32
   # with the released dependents on the same nodes (not shown to be the cause). Past it the Kustomization fails, is
-  # retried every 2m and passes as soon as both are Ready; nothing is rolled back, its dependents only wait.
+  # retried every 2m and passes as soon as both are Ready; nothing is rolled back, its dependents only wait. Their wait
+  # is silent: the Flux alerts (FluxObjectNotReady, FluxReconciliationStalled) are rules of the observability bricks,
+  # which depend on this Kustomization, so read `kubectl -n flux-system get kustomization cnpg` directly when the
+  # databases are slow.
   healthCheckExprs:
     - apiVersion: postgresql.cnpg.io/v1
       kind: Cluster

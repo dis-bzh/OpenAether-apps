@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# The Kustomizations of the management profile that have neither `wait` nor `healthChecks` must match the list kept in
-# apps/flux/README.md (#50): "Ready" on those means "applied", and the doc must say so. REPO_ROOT overrides the tree.
+# Two checks on the management profile's Kustomizations (REPO_ROOT overrides the tree):
+#  1. the ones with neither `wait` nor `healthChecks` must match the list kept in apps/flux/README.md (#50): "Ready" on
+#     those means "applied", and the doc must say so;
+#  2. what a gate is worth (lab 32, N1): no `wait: true` next to `healthChecks` (the controller ignores them), and `cnpg`
+#     carries exactly the healthCheckExprs entry that holds it until both platform Clusters are Ready, with timeout >= 15m.
 set -euo pipefail
 root="${REPO_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 rendered="$(kubectl kustomize "$root/apps/flux/management")"
@@ -29,10 +32,12 @@ PY
 #  - with `wait: true` the controller IGNORES `spec.healthChecks` (checkHealth reads them only when wait is false), so an entry
 #    there next to `wait: true` gates nothing and reads as if it did;
 #  - kstatus calls a custom resource that has no Ready condition "Current". A CNPG Cluster gets its Ready condition with its
-#    first phase, so a Cluster the operator has not yet touched passes `wait: true`: `cnpg` was Ready after 47 s with both
-#    platform databases still empty and released its dependents 9 minutes early. `healthCheckExprs` replaces the verdict for
-#    that kind. `current` must be an `exists` over the conditions: the usual `filter(...).all(...)` is true on a list with
-#    no Ready condition, which is the very hole.
+#    first phase, so a Cluster the operator has not yet touched would pass `wait: true`. Lab 32 is consistent with that
+#    (`cnpg` Ready after 47 s, both databases 3 of 3 about 9 minutes later); it is a reading of the sources, not shown on a
+#    cluster. `healthCheckExprs` replaces the verdict for that kind. `current` must be an `exists` over the conditions: the
+#    usual `filter(...).all(...)` is true on a list with no Ready condition, which is the very hole.
+# The pin below is the exact string, not a pattern: a pattern let `... || true`, `!has(...) && ...`, `has(...) || exists(...)`
+# and an added `failed: "true"` through. A deliberate change of the expression changes the string here in the same commit.
 RENDER="$rendered" python3 -I - <<'PY'
 import os, re, sys
 import yaml
@@ -50,16 +55,22 @@ cnpg = by_name.get("cnpg")
 if cnpg is None:
     errors.append("no Kustomization named cnpg in the management render")
 else:
+    CANON = "has(status.conditions) && status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')"
     exprs = [e for e in cnpg.get("healthCheckExprs") or []
              if str(e.get("apiVersion", "")).split("/")[0] == "postgresql.cnpg.io" and e.get("kind") == "Cluster"]
-    cur = exprs[0].get("current", "") if len(exprs) == 1 else ""
     if not cnpg.get("wait"):
         errors.append("cnpg has no wait: true")
     if len(exprs) != 1:
         errors.append(f"cnpg needs exactly one healthCheckExprs entry for postgresql.cnpg.io Cluster, found {len(exprs)}")
-    elif not (".exists(" in cur and re.search(r"['\"]Ready['\"]", cur) and re.search(r"['\"]True['\"]", cur)
-              and ".all(" not in cur):
-        errors.append(f"cnpg Cluster 'current' must be an exists() on the Ready condition being True, not all(): {cur!r}")
+    else:
+        e = exprs[0]
+        if e.get("apiVersion") != "postgresql.cnpg.io/v1":
+            errors.append(f"cnpg Cluster entry apiVersion must be postgresql.cnpg.io/v1: {e.get('apiVersion')!r}")
+        if e.get("current") != CANON:
+            errors.append(f"cnpg Cluster 'current' must be exactly {CANON!r} (Ready condition True, nothing else): {e.get('current')!r}")
+        extra = sorted(set(e) - {"apiVersion", "kind", "current"})
+        if extra:
+            errors.append(f"cnpg Cluster entry must set only apiVersion, kind and current (an inProgress or failed would change the verdict): {extra}")
     m = re.fullmatch(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?", str(cnpg.get("timeout", "")))
     secs = (int(m[1] or 0) * 3600 + int(m[2] or 0) * 60 + int(m[3] or 0)) if m else 0
     if secs < 900:
