@@ -220,7 +220,6 @@ jobs:
     permissions:
       contents: read
       issues: write  # open, comment on or close the `[vuln] <image>` issue, nothing else
-      packages: read  # the ghcr.io login below
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -249,7 +248,9 @@ jobs:
           fi
 
       # An anonymous pull from ghcr.io was refused with TOOMANYREQUESTS on the 0.4.2 tag run (#197). Trivy reads the
-      # credentials per registry from ~/.docker/config.json, so only ghcr.io gets the token.
+      # credentials per registry from ~/.docker/config.json, so only ghcr.io gets the token. It MAY lift the limit: not
+      # shown yet, and the limit is reported per runner address. The images are public, so no `packages` scope is asked
+      # for; if a pull is ever refused after this login, that is the first thing to read.
       - name: Log in to ghcr.io
         if: startsWith(matrix.image, 'ghcr.io/')
         run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
@@ -279,6 +280,7 @@ jobs:
           IMAGE: ${{ matrix.image }}
         run: |
           if [ -s trivy-report.txt ]; then
+            echo "report present, the scan ran: a finding of ${IMAGE}"
             echo "complete=true" >>"$GITHUB_OUTPUT"
           else
             msg="Trivy wrote no report for ${IMAGE}: the scan did not run (pull refused or rate limited, DB download)."
