@@ -57,7 +57,7 @@ spec:
               configMap: { name: longhorn-restore-scripts }
           containers:
             - name: write
-              image: docker.io/alpine/k8s:1.36.5
+              image: docker.io/alpine/k8s:1.36.6
               command: ["python3", "/scripts/canary_volume.py", "write", "/data/canary"]
               env:
                 - { name: PYTHONDONTWRITEBYTECODE, value: "1" }

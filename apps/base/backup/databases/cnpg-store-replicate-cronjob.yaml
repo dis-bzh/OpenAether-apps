@@ -55,7 +55,7 @@ spec:
               emptyDir: { sizeLimit: 1Gi }
           containers:
             - name: replicate
-              image: docker.io/alpine/k8s:1.36.5
+              image: docker.io/alpine/k8s:1.36.6
               command:
                 - /bin/bash
                 - -c

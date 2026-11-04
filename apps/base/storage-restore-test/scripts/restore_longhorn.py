@@ -221,7 +221,7 @@ def run(image, now_fn=time.time):
 
 
 def main():
-    image = os.environ.get("VERIFY_IMAGE", "docker.io/alpine/k8s:1.36.5")
+    image = os.environ.get("VERIFY_IMAGE", "docker.io/alpine/k8s:1.36.6")
     def term(*_):
         raise Terminated()
     signal.signal(signal.SIGTERM, term)
