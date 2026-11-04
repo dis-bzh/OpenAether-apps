@@ -84,10 +84,28 @@ Adding or removing a `wait`/`healthChecks` changes this list; the test fails unt
 A gate is only as good as the verdict on each object. Two traps, both read in the sources of Flux 2.9.6 and 2.10.0:
 with `wait: true` the controller **ignores** `spec.healthChecks` (an entry next to it gates nothing), and a custom resource
 with no Ready condition yet counts as "Current", so an operator that has not touched its CR would pass the gate. Read in the
-sources and consistent with lab 32 (`cnpg` Ready after 47 s, both platform databases 3 of 3 about 9 minutes later), not yet
-shown on a cluster. `cnpg` therefore carries a `healthCheckExprs` entry for the CNPG `Cluster` (Current only when its `Ready`
-condition is `True`); `scripts/dev/test-flux-health-gates.sh` pins that entry, string for string.
-Write such an expression with `exists`, not `filter(...).all(...)`: `all` is true on a list with no Ready condition.
+sources, not yet shown on a cluster.
+
+**The `cnpg` gate. This is the one text on it**: `apps/flux/base/20-cnpg.yaml` and `scripts/dev/test-flux-health-gates.sh`
+point here.
+
+- **Why.** `wait: true` also checks `zitadel-db` and `grafana-db`, and a CNPG `Cluster` gets its Ready condition with its
+  FIRST phase (read in CloudNativePG 1.30.1; not yet shown on a cluster). Lab 32 (N1) is consistent with it: `cnpg` was
+  Ready after 47 s, both Clusters were 3 of 3 about 9 minutes later, and the dependents started on databases that did not
+  exist (Grafana restarted 6 times); the cause there is inferred, not observed. In labs 29-31 it became Ready 2-6 s after
+  both were 3 of 3.
+- **The entry.** `cnpg` carries a `healthCheckExprs` entry for the `Cluster` kind (kustomize-controller v1.9.6 and v1.10.1,
+  same code). Current only when the Ready condition is `True`, which CNPG sets with the phase "Cluster in healthy state";
+  anything else, an empty status included, is InProgress. With no `status` key at all the expression errors, Flux reads
+  Unknown and keeps waiting, as wanted. Write it with `exists`, never `filter(...).all(...)`: `all` is true on a list with
+  no Ready condition, the very hole. A healthy Cluster is Ready=True and passes at the first poll; one in a rolling update
+  was already InProgress for kstatus (Ready=False), so nothing becomes NotReady that was not before.
+- **The timeout.** `15m` now has to cover the databases: 5:52-6:16 (Scaleway, labs 29-31), 7:19 (OVH, lab 28), 10:02 in
+  lab 32 with the released dependents on the same nodes (not shown to be the cause). Past it the Kustomization fails, is
+  retried every 2m and passes as soon as both are Ready; nothing is rolled back, its dependents only wait. Their wait is
+  silent: the Flux alerts (FluxObjectNotReady, FluxReconciliationStalled) are rules of the observability bricks, which
+  depend on this Kustomization, so read `kubectl -n flux-system get kustomization cnpg` directly when the databases are slow.
+- **The pin.** `scripts/dev/test-flux-health-gates.sh` pins that entry string for string and checks `timeout` >= 15m.
 
 ## Invariant to maintain
 

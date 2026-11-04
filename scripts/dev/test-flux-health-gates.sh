@@ -28,16 +28,8 @@ if actual != listed:
 print(f"ok: {len(actual)} of {len(docs)} Kustomizations have no health gate, as apps/flux/README.md lists")
 PY
 
-# What a gate is worth (lab 32, finding N1). Two facts read in kustomize-controller v1.9.6 and v1.10.1:
-#  - with `wait: true` the controller IGNORES `spec.healthChecks` (checkHealth reads them only when wait is false), so an entry
-#    there next to `wait: true` gates nothing and reads as if it did;
-#  - kstatus calls a custom resource that has no Ready condition "Current". A CNPG Cluster gets its Ready condition with its
-#    first phase, so a Cluster the operator has not yet touched would pass `wait: true`. Lab 32 is consistent with that
-#    (`cnpg` Ready after 47 s, both databases 3 of 3 about 9 minutes later); it is a reading of the sources, not shown on a
-#    cluster. `healthCheckExprs` replaces the verdict for that kind. `current` must be an `exists` over the conditions: the
-#    usual `filter(...).all(...)` is true on a list with no Ready condition, which is the very hole.
-# The pin below is the exact string, not a pattern: a pattern let `... || true`, `!has(...) && ...`, `has(...) || exists(...)`
-# and an added `failed: "true"` through. A deliberate change of the expression changes the string here in the same commit.
+# What a gate is worth (lab 32, N1): the why is in apps/flux/README.md ("The cnpg gate"). The pin below is the exact string,
+# not a pattern: a pattern let `... || true`, `!has(...) && ...`, `has(...) || exists(...)` and an added `failed: "true"` through.
 RENDER="$rendered" python3 -I - <<'PY'
 import os, re, sys
 import yaml
@@ -74,8 +66,7 @@ else:
     m = re.fullmatch(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?", str(cnpg.get("timeout", "")))
     secs = (int(m[1] or 0) * 3600 + int(m[2] or 0) * 60 + int(m[3] or 0)) if m else 0
     if secs < 900:
-        # The gate now spans the databases: 5:52-6:16 (Scaleway) and 7:19 (OVH) after the Kustomization starts, 10:02 when
-        # its dependents competed for the nodes. A timeout under that turns a slow first install into a failed retry loop.
+        # The figures are in apps/flux/README.md ("The cnpg gate"): under them a slow first install is a failed retry loop.
         errors.append(f"cnpg timeout {cnpg.get('timeout')!r} is under 15m: it now covers both databases coming up")
 if errors:
     print("\n".join("FAIL " + e for e in errors))

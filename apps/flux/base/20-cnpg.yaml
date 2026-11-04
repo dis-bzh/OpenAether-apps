@@ -37,25 +37,9 @@ spec:
         name: cnpg-archive-generation
         optional: true
   wait: true
-  # `wait: true` also checks zitadel-db and grafana-db, but kstatus calls a custom resource with no Ready condition
-  # "Current", and a CNPG Cluster gets its Ready condition with its FIRST phase (read in the sources of Flux 2.9.6 and
-  # 2.10.0 and of CloudNativePG 1.30.1; not yet shown on a cluster). Lab 32 (N1) is consistent with it: this
-  # Kustomization was Ready after 47 s, both Clusters were 3 of 3 about 9 minutes later, and the dependents started on
-  # databases that did not exist (Grafana restarted 6 times); the cause there is inferred, not observed. In labs 29-31
-  # it became Ready 2-6 s after both were 3 of 3.
-  # `spec.healthChecks` cannot fix that: with `wait: true` the controller ignores it. This expression takes over the
-  # verdict for the kind (kustomize-controller v1.9.6 and v1.10.1, same code): Current only when the Ready condition is
-  # True, which CNPG sets with the phase "Cluster in healthy state"; anything else, an empty status included, is
-  # InProgress. exists(), never filter().all(): all() is true on a list with no Ready condition, the very hole. With no
-  # `status` key at all the expression errors, Flux reads Unknown and keeps waiting, as wanted.
-  # A healthy Cluster is Ready=True and passes at the first poll; one in a rolling update was already InProgress for
-  # kstatus (Ready=False), so nothing becomes NotReady that was not before. test-flux-health-gates.sh pins it.
-  # timeout 15m now has to cover the databases: 5:52-6:16 (Scaleway, labs 29-31), 7:19 (OVH, lab 28), 10:02 in lab 32
-  # with the released dependents on the same nodes (not shown to be the cause). Past it the Kustomization fails, is
-  # retried every 2m and passes as soon as both are Ready; nothing is rolled back, its dependents only wait. Their wait
-  # is silent: the Flux alerts (FluxObjectNotReady, FluxReconciliationStalled) are rules of the observability bricks,
-  # which depend on this Kustomization, so read `kubectl -n flux-system get kustomization cnpg` directly when the
-  # databases are slow.
+  # Gate: a Cluster is Current only when its Ready condition is True; `wait: true` alone may pass before the databases
+  # exist (a reading of the sources, not shown on a cluster). The why, the timeout figures and the silent wait of the
+  # dependents: apps/flux/README.md ("The cnpg gate"). Pinned by scripts/dev/test-flux-health-gates.sh.
   healthCheckExprs:
     - apiVersion: postgresql.cnpg.io/v1
       kind: Cluster

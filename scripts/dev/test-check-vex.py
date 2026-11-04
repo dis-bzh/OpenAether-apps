@@ -55,7 +55,7 @@ check("an ignore entry with no date fails", any("expired_at" in e for e in vex.c
 check("an ignore entry with no statement fails", any("statement" in e for e in vex.check_ignore({"vulnerabilities": [{"id": "X", "expired_at": dt.date(2026, 11, 1)}]}, TODAY)))
 check("an ignore entry months away fails", any("days away" in e for e in vex.check_ignore({"vulnerabilities": [{"id": "X", "statement": "s", "expired_at": dt.date(2027, 6, 1)}]}, TODAY)))
 real = json.loads((HERE.parent.parent / ".vex/openaether-apps.openvex.json").read_text())
-check("the shipped file passes on the day it was written", vex.check(real, dt.date(2026, 10, 22)) == [])
+check("the shipped file passes on the day it was written", vex.check(real, dt.date(2026, 11, 4)) == [])
 check("every shipped statement is not_affected with a justification", all(s.get("justification") for s in real["statements"]))
 print(f"{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

@@ -81,7 +81,7 @@ Forgejo, the CNPG operator and the two PostgreSQL images; the last three failed 
 **Waivers: two VEX statements and one Trivy ignore entry, all renewed on 2026-11-04 after a re-reading and all ending on
 2026-12-04.** The statements: restic (CVE-2026-60002, OpenSSH in the image's alpine layer, never called; `restic` 0.19.1 is
 still the newest tag) and PyJWT in the CNPG PostgreSQL images (CVE-2026-102268, imported only by `msal`, not used). The
-ignore entry: libexpat in the Longhorn v1.12.1 images (SUSE-SU-2026:4619-1; a reading of package data, nothing was run).
+ignore entry: libexpat in the Longhorn v1.12.1 images (SUSE-SU-2026:4619-1; a reading of package data and file searches: no Longhorn process was run or traced, only `wget --help` and `ldd` in the backing-image-manager image).
 The five statements of the list above were deleted, not renewed, because the fixed images carry no such finding. Nothing
 ends on 2026-11-20 any more: `scripts/check-vex.py` passes on 2026-11-21 and on 2026-12-03, and fails from 2026-12-05 if
 the three are not re-read again or removed.
@@ -104,8 +104,10 @@ the three are not re-read again or removed.
   did not run (a pull refused or rate limited, #197; no report on disk) is **only a red job**: it fails with a message
   and opens, comments on and closes no issue, so an open `[vuln]` issue stays as it was. **Residual:** nothing announces
   an image that then stays unscanned until someone reads the run; there is no retry, and the next chance is the next
-  scheduled run (weekly). The `ghcr.io` images are pulled after a login with the workflow token, which may lift the
-  rate limit (not shown yet: a run on a branch shows that the login works, not that the limit is gone). The `VEX
+  scheduled run (weekly). **The #197 change (the `ghcr.io` login with the workflow token, and the step that tells a
+  finding from a scan that did not run) has never run in Actions** (2026-11-04: the branch is not pushed). The 0.4.2
+  failures read `TOOMANYREQUESTS ... allowed: 44000/minute`, a limit reported per runner address, and a login may not lift
+  it. Not shown: a run on a branch would show that the login works, not that the limit is gone. The `VEX
   statements` job follows the same rule: its report holds the output of `check-vex.py`, stderr included, so a VEX file
   the script cannot read (exit 2) opens or updates the issue with that message; a run with no output at all is only a
   red job.
