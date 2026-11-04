@@ -89,7 +89,7 @@ spec:
       kubectl:
         image:
           # renovate: datasource=docker depName=alpine/k8s
-          tag: "1.37.1"
+          tag: "1.37.2"
       # The readiness-wait init container of the login pods had no limit (Kyverno require-limits, lab 11).
       wait4x:
         image:
