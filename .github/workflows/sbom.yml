@@ -1,7 +1,11 @@
-# Weekly and on every published release: an inventory of what the DAG deploys (CycloneDX 1.5,
+# Weekly and on every pushed release tag: an inventory of what the DAG deploys (CycloneDX 1.5,
 # scripts/dev/gen-sbom.py: Helm charts and every image, including the ones the charts render) and a Trivy scan of
 # those images (ANSSI SBOM25-1/-2/-3, SSDLC CICD-AIP-01b, CONT-REC05).
-# The inventory is attached to the release as openaether-apps-<tag>.cdx.json. A CRITICAL finding with a fix
+# The inventory is attached to the release as openaether-apps-<tag>.cdx.json, to a DRAFT release: immutable releases
+# (on since 2026-10) refuse every upload once a release is published, so the asset has to be there BEFORE the publish
+# (infra #395: 0.3.2, 0.4.0 and 0.4.1 went out without it). Order: push the signed tag, this workflow creates the draft
+# (or reuses yours) and attaches the file, the owner edits the notes and publishes (the release skill). On the
+# publish event the same workflow only checks that the asset is there. A CRITICAL finding with a fix
 # upstream fails the scan job; an accepted one is recorded in .vex/openaether-apps.openvex.json (docs/supply-chain.md),
 # with a reason and an expiry date that scripts/check-vex.py enforces (Trivy itself ignores dates).
 # A failing scan opens (or comments on) ONE issue per image, `[vuln] <image>`, and closes it when the scan passes: a red
@@ -13,9 +17,16 @@ on:
   schedule:
     # Off the hour: a shared runner pool is busiest at :00.
     - cron: "41 5 * * 2"
+  push:
+    tags: ["[0-9]*"]
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "An existing tag whose DRAFT release gets the inventory (empty: a plain run on the branch)"
+        required: false
+        default: ""
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -27,7 +38,7 @@ permissions:
 jobs:
   inventory:
     name: Inventory
-    if: github.repository == 'dis-bzh/OpenAether-apps'
+    if: github.repository == 'dis-bzh/OpenAether-apps' && github.event_name != 'release'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -36,6 +47,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
+          ref: ${{ inputs.tag || '' }}
 
       - name: Install kubectl (pinned + checksum-verified)
         env:
@@ -58,7 +70,7 @@ jobs:
       # drops a chart's images is the defect this exists to avoid.
       - name: Generate the CycloneDX inventory
         env:
-          REF_NAME: ${{ github.ref_name }}
+          REF_NAME: ${{ inputs.tag || github.ref_name }}
         run: |
           python3 -I scripts/dev/gen-sbom.py --rendered "$RUNNER_TEMP/rendered" --helm \
             --version "$REF_NAME" --output sbom.cdx.json
@@ -125,27 +137,74 @@ jobs:
         run: exit 1
 
   release-asset:
-    name: Attach to the release
+    name: Attach to a draft release
     needs: inventory
-    if: github.event_name == 'release'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: write  # upload one asset to the release being published, nothing else
+      contents: write  # create the DRAFT release when there is none, upload one asset to it, nothing else
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
           name: sbom
 
-      - name: Upload, named by the tag
+      - name: Upload to the draft, named by the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          file="openaether-apps-${TAG}.cdx.json"
+          mv sbom.cdx.json "$file"
+          # The by-tag endpoint does not return drafts: list the releases (drafts included) and pick the tag.
+          releases="$(gh api "repos/${REPO}/releases" --paginate)"
+          # shellcheck disable=SC2016  # $t is a jq variable, not a shell one
+          pick='[.[] | select(.tag_name == $t) | .draft | tostring] | first // "none"'
+          state="$(jq -r --arg t "$TAG" "$pick" <<<"$releases")"
+          case "$state" in
+            none)
+              gh release create "$TAG" --repo "$REPO" --draft --verify-tag --title "$TAG" \
+                --notes "Draft by the SBOM workflow. Write the notes, then: gh release edit $TAG --draft=false"
+              ;;
+            true) ;;
+            false)
+              msg="the release of ${TAG} is already published, and an immutable release takes no more assets."
+              msg="$msg The SBOM goes on a DRAFT: create the release with --draft (or let this workflow create it)"
+              echo "::error::$msg before publishing (the release skill)."
+              exit 1
+              ;;
+            *) echo "::error::unexpected isDraft value: $state"; exit 1 ;;
+          esac
+          gh release upload "$TAG" "$file" --clobber --repo "$REPO"
+
+  release-has-asset:
+    name: The published release carries the SBOM
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check the asset
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          mv sbom.cdx.json "openaether-apps-${TAG}.cdx.json"
-          gh release upload "$TAG" "openaether-apps-${TAG}.cdx.json" --clobber --repo "$REPO"
+          want="openaether-apps-${TAG}.cdx.json"
+          have="$(gh release view "$TAG" --repo "$REPO" --json assets --jq '[.assets[].name] | join(" ")')"
+          case " $have " in
+            *" $want "*) echo "ok: $want is attached" ;;
+            *)
+              msg="the published release $TAG has no $want (assets: ${have:-none}); an immutable release takes no more."
+              msg="$msg Rebuild it from the tag (see the inventory step of this workflow)."
+              echo "::error::$msg"
+              exit 1
+              ;;
+          esac
 
   scan-images:
     name: Scan ${{ matrix.image }}

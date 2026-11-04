@@ -47,7 +47,9 @@ validation leg turned it on, so what the pin asserts is that the tag exists and
    the archive** — and check that the quick start's commands exist and its values
    are accepted. Infra's `tags` ruleset blocks moving or deleting a tag, so a
    defect found after tagging cannot be re-cut away.
-3. Tag it, then a GitHub release, with notes that name the limits.
+3. Tag it, then a GitHub release, with notes that name the limits. The `SBOM` workflow, started by the pushed tag, creates the
+   **draft** release and attaches the inventory; `gh release edit <tag> --notes-file notes.md --draft=false` publishes it. An
+   immutable release takes no asset once published: never `gh release create` without `--draft`.
 
 ## The notes must admit what is not fixed
 

@@ -17,6 +17,10 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+### Fixed
+
+- **The `SBOM` workflow attaches the inventory to a DRAFT release** (infra #395). Les releases immuables (actives depuis 2026-10) refusent tout fichier une fois publiées : l'ancien déclencheur `release: published` échouait avec « Cannot upload assets to an immutable release », et 0.3.2, 0.4.0 et 0.4.1 sont sorties sans `openaether-apps-<tag>.cdx.json`. Le workflow démarre maintenant sur le tag poussé, crée la release en brouillon si elle n'existe pas, y joint l'inventaire, et refuse (rouge, message clair) une release déjà publiée ; à la publication, un job vérifie seulement que le fichier est là. Procédure : tag signé poussé, attendre le run `SBOM`, `gh release edit <tag> --notes-file notes.md --draft=false` (skill `release`). Rung : actionlint et yamllint ; le chemin « brouillon existant » est lu sur GitHub avant la fusion (voir la PR), le chemin « pas de release » n'a pas tourné avant la prochaine release.
+
 ## [0.4.1] — 2026-11-03
 
 0.4.1 is a **patch release** of 0.4.0, paired with **OpenAether-infra 0.4.1** (most of the work, the disaster-recovery chain, the tunnels and the roll gates, is in that repository). No new scope. What the apps side fixes, from the entries below:

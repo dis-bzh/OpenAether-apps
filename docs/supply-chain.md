@@ -9,8 +9,12 @@
 `scripts/dev/gen-sbom.py` writes a CycloneDX 1.5 file from the **rendered** DAG (`scripts/dev/render-dag.py`: what Flux
 applies, not the source tree): every Helm chart a HelmRelease installs, every image the manifests name, and with `--helm`
 the images the charts render with the release's own values (a `valuesFrom` target gets a placeholder, as Flux fills it
-at run time). The `SBOM` workflow runs it weekly and on every published release, attaches it as
-`openaether-apps-<tag>.cdx.json`, and scans each image with Trivy: a CRITICAL finding with a fix upstream fails.
+at run time). The `SBOM` workflow runs it weekly and on every pushed release tag, attaches it as
+`openaether-apps-<tag>.cdx.json` to the DRAFT release (it creates the draft when there is none: an immutable release takes no
+asset once published), and scans each image with Trivy: a CRITICAL finding with a fix upstream fails. When the release is
+published the same workflow only checks that the asset is there. The releases 0.3.2, 0.4.0 and 0.4.1 went out without it
+(`python3 scripts/dev/gen-sbom.py --version <tag> --helm` on a checkout of the tag rebuilds it; the workflow's inventory step
+shows the exact command).
 It does not read image layers (Trivy does), the images controllers create at run time (Cluster API machines, CNPG
 pods), or what the child clusters' own profile deploys. 14 images come from the manifests and about 38 with the
 charts on 2026-10-14.
