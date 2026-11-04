@@ -82,7 +82,7 @@ red from 2026-11-21 unless they are re-read or their images fixed.
   dates, so `scripts/check-vex.py` (a CI step, and the `VEX statements` job of the SBOM workflow) fails on a missing
   justification or expiry and on an expired statement. A statement never covers a fixable, reachable CRITICAL. Docker Hub products are written with
   Trivy's `index.docker.io` repository URL. `.github/trivy-ignore.yaml` (Trivy's format, with its own `expired_at`) holds the
-  one accepted finding Trivy's VEX matching misses (Longhorn UI and manager); `check-vex.py` holds it to the same rule.
+  one accepted finding Trivy's VEX matching misses (libexpat in the Longhorn v1.12.1 images); `check-vex.py` holds it to the same rule.
   Whether Trivy matches a product is only seen by scanning the image: `trivy image --config .github/trivy-image-vex.yaml <ref>`.
 - **Failing scans are announced:** a failed scan opens, or comments on, one issue `[vuln] <image>` and closes it when the
   scan passes (`scripts/ops/vuln-issue.sh`); an expired waiver does the same under `[vuln] VEX statements`. Before, a red
