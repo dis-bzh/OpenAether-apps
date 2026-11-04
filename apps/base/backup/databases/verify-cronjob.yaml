@@ -112,7 +112,7 @@ spec:
                 limits: { cpu: "1", memory: 1Gi }
           containers:
             - name: collect
-              image: docker.io/alpine/k8s:1.36.5
+              image: docker.io/alpine/k8s:1.36.6
               command: ["/bin/sh", "-c", "python3 /scripts/collect.py --publish"]
               securityContext:
                 capabilities: { drop: ["ALL"] }

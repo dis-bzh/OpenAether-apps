@@ -141,7 +141,7 @@ spec:
                 limits: { cpu: "1", memory: 768Mi }
           containers:
             - name: publish
-              image: docker.io/alpine/k8s:1.36.5
+              image: docker.io/alpine/k8s:1.36.6
               command: ["python3", "/scripts/restore_cnpg.py", "--mode", "dump", "--publish"]
               env:
                 - { name: HOME, value: /tmp }

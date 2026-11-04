@@ -58,7 +58,7 @@ spec:
           emptyDir: { sizeLimit: 32Mi }
       containers:
         - name: check
-          image: docker.io/alpine/k8s:1.36.5
+          image: docker.io/alpine/k8s:1.36.6
           command: ["python3", "-B", "/scripts/check.py"]
           env:
             - { name: PYTHONDONTWRITEBYTECODE, value: "1" }

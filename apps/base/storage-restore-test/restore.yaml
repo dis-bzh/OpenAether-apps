@@ -208,13 +208,13 @@ spec:
                   - downwardAPI: { items: [{ path: namespace, fieldRef: { fieldPath: metadata.namespace } }] }
           containers:
             - name: restore
-              image: docker.io/alpine/k8s:1.36.5
+              image: docker.io/alpine/k8s:1.36.6
               command: ["python3", "/scripts/restore_longhorn.py"]
               env:
                 - { name: HOME, value: /tmp }
                 - { name: PYTHONDONTWRITEBYTECODE, value: "1" }
                 # the verify pod runs the same image
-                - { name: VERIFY_IMAGE, value: "docker.io/alpine/k8s:1.36.5" }
+                - { name: VERIFY_IMAGE, value: "docker.io/alpine/k8s:1.36.6" }
               securityContext:
                 capabilities: { drop: ["ALL"] }
                 allowPrivilegeEscalation: false

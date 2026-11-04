@@ -115,7 +115,7 @@ spec:
           containers:
             # Stage 2: recover each Cluster from each store, compare, clean up, publish the metrics.
             - name: restore
-              image: docker.io/alpine/k8s:1.36.5
+              image: docker.io/alpine/k8s:1.36.6
               command: ["python3", "/scripts/restore_cnpg.py", "--mode", "latest", "--publish"]
               env:
                 - { name: HOME, value: /tmp }
@@ -217,7 +217,7 @@ spec:
           containers:
             # Stage 2: the same with a recovery target: the time of one canary row; the copy must end at exactly that row.
             - name: restore
-              image: docker.io/alpine/k8s:1.36.5
+              image: docker.io/alpine/k8s:1.36.6
               command: ["python3", "/scripts/restore_cnpg.py", "--mode", "pitr", "--publish"]
               env:
                 - { name: HOME, value: /tmp }
