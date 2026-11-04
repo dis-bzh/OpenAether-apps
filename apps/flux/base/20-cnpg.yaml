@@ -37,6 +37,24 @@ spec:
         name: cnpg-archive-generation
         optional: true
   wait: true
+  # `wait: true` also checks zitadel-db and grafana-db, but kstatus calls a custom resource with no Ready condition
+  # "Current", and a CNPG Cluster gets its Ready condition with its FIRST phase. Lab 32 (N1): this Kustomization passed
+  # in 47 s with both Clusters still empty, 9 minutes before they were 3 of 3, and its dependents started on databases
+  # that did not exist (Grafana restarted 6 times). In labs 29-31 it became Ready 2-6 s after both were 3 of 3.
+  # `spec.healthChecks` cannot fix that: with `wait: true` the controller ignores it. This expression takes over the
+  # verdict for the kind (kustomize-controller v1.9.6 and v1.10.1, same code): Current only when the Ready condition is
+  # True, which CNPG sets with the phase "Cluster in healthy state"; anything else, an empty status included, is
+  # InProgress. exists(), never filter().all(): all() is true on a list with no Ready condition, the very hole. With no
+  # `status` key at all the expression errors, Flux reads Unknown and keeps waiting, as wanted.
+  # A healthy Cluster is Ready=True and passes at the first poll; one in a rolling update was already InProgress for
+  # kstatus (Ready=False), so nothing becomes NotReady that was not before. test-flux-health-gates.sh pins it.
+  # timeout 15m now has to cover the databases: 5:52-6:16 (Scaleway, labs 29-31), 7:19 (OVH, lab 28), 10:02 in lab 32
+  # with the released dependents on the same nodes (not shown to be the cause). Past it the Kustomization fails, is
+  # retried every 2m and passes as soon as both are Ready; nothing is rolled back, its dependents only wait.
+  healthCheckExprs:
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      current: "has(status.conditions) && status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')"
   dependsOn:
     - name: external-secrets
     - name: external-secrets-stores  # ClusterSecretStore openbao (#38)
