@@ -1,7 +1,7 @@
 # Zitadel and Grafana authentication: what is set, where it applies, what an existing cluster needs
 
 > Addresses ANSSI PA-079 (R10, R12, R21, R23, R29), PG-078 and PA-012 R27 in part. Rung: the Zitadel settings were run
-> through a real Zitadel (v4.19.5, the image tag the HelmRelease sets; the chart's own appVersion is v4.19.2) against PostgreSQL by `scripts/dev/test-zitadel-config.sh`, and
+> through a real Zitadel (v4.20.1, the image tag the HelmRelease sets; the chart's own appVersion is v4.19.2) against PostgreSQL by `scripts/dev/test-zitadel-config.sh`, and
 > Grafana's through a real Grafana 11.3.1 (the chart now ships 13.2.4, which was started with the shipped settings and dashboards;
 > the login behaviours below were not re-run on it); nothing was run on a cluster, with OpenBao, External Secrets or Istio.
 
@@ -149,15 +149,51 @@ HelmRelease overrides `image.tag` and `login.image.tag` (tag and digest) because
   pages through `_search` or `/v2/.../list` calls must send an explicit `limit`.
 - **The device authorization flow has a consent screen.** A user who starts a device login now confirms it. No client of this
   platform uses the device flow; if you register one, tell your users to expect the screen.
-- **Not covered by this bump:** the login's `next` is 16.3.6, which newer advisories flag again (fixed in 16.4.1); they are
-  waived with an expiry in `.vex/openaether-apps.openvex.json` (re-read and renewed on 2026-11-04). Zitadel v4.20.1
-  (2026-11-03) ships `next` 16.4.3; it is not pinned yet, bump `zitadel` and `zitadel-login` together and drop the waivers then.
+- **Not covered by this bump:** the login's `next` was 16.3.6, which newer advisories flagged (fixed in 16.4.1). They were
+  waived with an expiry until Zitadel v4.20.1 (next 16.4.3) was pinned (0.4.3, next section), which ended the waivers.
 - **The login page is routed through the Gateway** (apps #161): `/ui/v2/login` goes to `zitadel-login:3000`, and the Gateway may
   reach that pod on port 3000 and nothing else of it. Before, the authorize step of any OIDC client ended on a 404 for a person in
-  a browser. The image optimizer of the login, `/ui/v2/login/_next/image`, is sent to the server and answers 404 on purpose (the
-  VEX statements about Next.js rest on it); `scripts/dev/test-zitadel-login-route.py` keeps both rules. Proven by manifests only:
+  a browser. The image optimizer of the login, `/ui/v2/login/_next/image`, is sent to the server and answers 404 on purpose (defence
+  in depth: the endpoint is still enabled in the login build); `scripts/dev/test-zitadel-login-route.py` keeps both rules. Proven by manifests only:
   a browser sign-in with a second factor into Grafana is a lab check. A cluster without public DNS for the Zitadel host, or whose
   Grafana does not trust the Gateway's CA, cannot complete the token exchange: Grafana's egress allows `zitadel:8080` only.
+
+## Zitadel v4.20.1 (0.4.3): what changed for an operator
+
+v4.20.1 (2026-11-03) replaces v4.19.5 for the server and the login: the same two overrides, tag and INDEX digest, moved together.
+Read: the release notes of v4.20.0 and v4.20.1 and the source diff v4.19.5 to v4.20.1 (22 commits; nothing under `cmd/setup`,
+`cmd/defaults.yaml` unchanged). Run, in containers against a PostgreSQL 17 fixture with `sslmode disable` and no Kubernetes:
+`scripts/dev/test-zitadel-config.sh` (32 passed) and `scripts/dev/test-zitadel-migration-lock.sh` (16 passed) on v4.20.1, and a
+database set up by v4.19.5 then by v4.20.1 and back. Not run: a cluster, Go 1.26 TLS to CNPG with `sslmode=require`, memory under
+load, arm64.
+
+- **No schema step.** `cmd/setup` has the same steps as in v4.19.5. A database that v4.19.5 set up gets, from the setup hook Job,
+  the two steps that re-run on every version change, `projection_tables` and `79_backfill_unique_constraint_owners`, plus the
+  repeatable steps that run at every setup. In the offline run the Job took about 3 seconds and a second run of v4.20.1 re-ran
+  neither of the two. The backfill walks the unique constraints in pages, so its time follows the number of users and
+  organisations; it was not measured on a cluster. If the Job dies inside a step, the trap of `docs/traps.md` (apps #133) applies; on
+  an instance that holds users the recovery there is the CNPG backup, not the script.
+- **Rollback.** v4.19.5 (setup, then server) started on the database that v4.20.1 had set up, served the session created before the
+  move and accepted the same password, so a Helm rollback after a failed upgrade has a database to go back to. A request sent in
+  the first second after `healthz` answered 503 once; the next ones were served.
+- **Go 1.26.** The release notes say the server is built with Go 1.26.10. Outbound TLS (SMTP, external identity providers, Actions and webhook targets,
+  HTTP SMS providers) no longer accepts chains through the compromised eMudhra intermediates; this platform configures none of them.
+  The database connection is also a Go TLS client (CNPG, `sslmode=require`): the offline runs could not test it, only a cluster
+  can. `GODEBUG=urlstrictcolons=0` and `GODEBUG=tlssecpmlkem=0` restore the previous behaviour if an outbound URL or handshake breaks.
+- **Login V2.** The device code check is signed with `ZITADEL_SESSION_COOKIE_SECRET` like the other proofs (the secret of the
+  previous section, already wired); a person in the middle of a device authorization at the upgrade enters the user code again, and no
+  client of this platform uses that flow. The sessions cookie stays within the browser size limit (expired entries, then the least
+  recently changed, are dropped), and the login compares e-mail addresses without case in more places.
+- **Console.** `environment.json` takes its origin from the instance domain instead of the Host header and `ExternalSecure`. With
+  the settings the chart passes (`ExternalDomain` `zitadel.openaether.local`, 443, secure, no `--tlsMode`), v4.19.5 and v4.20.1
+  answered the same `https://zitadel.openaether.local`, with and without `X-Forwarded-Proto`.
+- **Next.js.** zitadel-login v4.20.1 ships Next.js 16.4.3 and sharp 0.35.5 (read in the amd64 image of the pin), above the fixes of
+  GHSA-673q-mjm6-r5xr and GHSA-2464-fhr4-w9xw (16.4.1, sharp 0.35.5). The two VEX statements were deleted, not renewed. The image
+  optimizer is still enabled in the build (`images.unoptimized` is false), so the Gateway keeps sending `/ui/v2/login/_next/image` to
+  the server.
+- **Scan.** Trivy 0.69.3 with its database of 2026-11-04, CRITICAL and HIGH with a fix, no VEX file: zitadel-login v4.19.5 had 2 CRITICAL
+  (the two advisories above) and 10 HIGH, v4.20.1 has 0 CRITICAL and 6 HIGH (undici, brace-expansion); zitadel v4.19.5 had 15 HIGH,
+  v4.20.1 has 1 (go-jose 4.1.4, fixed in 4.1.6). The gate of the weekly scan is CRITICAL only.
 
 ## What this does not do
 
