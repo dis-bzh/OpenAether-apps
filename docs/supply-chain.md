@@ -1,8 +1,9 @@
 # Supply chain: what is inventoried, what is checked, what is only trusted
 
 > What stands between a hostile or broken upstream release and a pod of this platform, and what does not.
-> Addresses ANSSI SSDLC CICD-AIP-01a/-01b/-01c, CONT-REC05 and SBOM25-1/-2/-3 in part. Static and mocked checks only:
-> nothing here has run on GitHub or a cluster yet. OpenAether-infra has the same page for its side.
+> Addresses ANSSI SSDLC CICD-AIP-01a/-01b/-01c, CONT-REC05 and SBOM25-1/-2/-3 in part. Static and mocked checks, plus
+> the `SBOM` workflow, which has run on GitHub (what was and was not run of its release attach is under "The inventory");
+> nothing here has run on a cluster yet. OpenAether-infra has the same page for its side.
 
 ## The inventory (SBOM)
 
@@ -11,13 +12,43 @@ applies, not the source tree): every Helm chart a HelmRelease installs, every im
 the images the charts render with the release's own values (a `valuesFrom` target gets a placeholder, as Flux fills it
 at run time). The `SBOM` workflow runs it weekly and on every pushed release tag, attaches it as
 `openaether-apps-<tag>.cdx.json` to the DRAFT release (it creates the draft when there is none: an immutable release takes no
-asset once published), and scans each image with Trivy: a CRITICAL finding with a fix upstream fails. When the release is
-published the same workflow only checks that the asset is there. The releases 0.3.2, 0.4.0 and 0.4.1 went out without it
-(`python3 scripts/dev/gen-sbom.py --version <tag> --helm` on a checkout of the tag rebuilds it; the workflow's inventory step
-shows the exact command).
+asset once published), and scans each image with Trivy: a CRITICAL finding with a fix upstream fails. The attach job needs
+the inventory only, not the scans, so a red scan does not stop it. When the release is published the same workflow only
+checks that the asset is there. The releases 0.3.2, 0.4.0 and 0.4.1 went out without it and cannot be given it now (a
+published immutable release takes no asset). An inventory of any tag can be rebuilt by hand from a checkout of it, to keep
+elsewhere, with the two commands of the workflow's inventory step: `python3 scripts/dev/render-dag.py <dir>`, then
+`python3 -I scripts/dev/gen-sbom.py --rendered <dir> --helm --version <tag> --output openaether-apps-<tag>.cdx.json`
+(`--rendered` is required; `--helm` needs helm and the network).
 It does not read image layers (Trivy does), the images controllers create at run time (Cluster API machines, CNPG
 pods), or what the child clusters' own profile deploys. 14 images come from the manifests and about 38 with the
 charts on 2026-10-14.
+
+**Releasing with the inventory (the procedure from 0.4.2).**
+
+1. Push the signed tag. The workflow starts on it, builds the inventory from the tag, creates the DRAFT release when there is
+   none (or uses the draft you made with `gh release create --draft`) and attaches the file.
+2. Read the run before anything else: the `Attach to a draft release` job must be green. The scans and the VEX check run
+   beside it and may be red (see the open items below) without stopping it. While the release is a draft, a failure costs
+   nothing.
+3. Write the notes and publish: `gh release edit <tag> --notes-file notes.md --draft=false`. On that event the workflow builds
+   and scans nothing: it runs the VEX check, as on every run, and one job that fails if the published release lacks the file.
+
+Never `gh release create` without `--draft`: the release would be published at once, immutable, and the attach job refuses a
+published release with a clear message instead of trying. **Fallback**, if the tag-push run did not attach the file (it did
+not start, or the job failed): create the draft by hand (`gh release create <tag> --draft --verify-tag --title <tag>`), then
+`gh workflow run sbom.yml -f tag=<tag>` from the default branch; that run checks out the tag and attaches to its draft.
+
+**Rung of the attach, stated once.** Checked: actionlint and yamllint on `sbom.yml`. Replayed on GitHub: the upload step,
+against a throwaway draft release of this repository (the asset was attached, the draft deleted afterwards) and against the
+published 0.4.1 release (refused, exit 1). **Not run:** the tag-push trigger, the path with no release yet (the draft
+creation), the check job that runs on publish and the `workflow_dispatch` fallback above. They run for the first time at the
+0.4.2 tag, so **the 0.4.2 release is the first live proof of this procedure**; if it fails, use the fallback before
+publishing.
+
+**Open, 2026-11-04:** the weekly scan is red. The open `[vuln]` issues say on what (apps #179, #162 and #163;
+OpenAether-infra #444 for the Flux kustomize-controller image; the findings are listed in `CHANGELOG.md`, `[0.4.2]`). A tag
+pushed while they are open gives a red `SBOM` run; by the job graph the attach job (it needs only the inventory) can still
+be green.
 
 - **VEX:** a finding that does not apply is an OpenVEX statement in `.vex/openaether-apps.openvex.json`
   (`not_affected` with a justification, an `impact_statement`, an `action_statement` and ONE `Expires: YYYY-MM-DD` in
