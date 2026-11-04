@@ -48,21 +48,25 @@ validation leg turned it on, so what the pin asserts is that the tag exists and
    are accepted. Infra's `tags` ruleset blocks moving or deleting a tag, so a
    defect found after tagging cannot be re-cut away.
 3. Tag it, then a GitHub release, with notes that name the limits. The tag is an **annotated, signed** tag made with
-   the release key of the signer table (`docs/signed-commits.md`), pushed **before** the release exists, and the
-   release is created against it: `git tag -s -u <fingerprint> -m "<repository> <tag>" <tag> <release sha>`
-   (`<repository>` is `OpenAether-infra` or `OpenAether-apps`), `git push origin <tag>`, then the `SBOM` workflow
-   (started by the pushed tag) creates the **draft** release and attaches the inventory. Read that run: publish with
-   `gh release edit <tag> --notes-file notes.md --draft=false` only when its `Attach to a draft release` job is green
-   (red scan jobs do not hold the attach; the steps and the fallback are in section 8 of the checklist, and in
-   `docs/supply-chain.md` of OpenAether-apps). An immutable release takes no asset once published: never
-   `gh release create` without `--draft` (infra #395). The notes carry the release commit SHA in full. A client checks
-   it with `git verify-tag <tag>` (compare its fingerprint with the table) and `git rev-parse <tag>^{commit}` against
-   the notes. Only OpenAether-infra has the signer table filled in (the apps page has an empty one), its public key
-   `docs/signers/release-vps.asc` and `./scripts/dev/check-release-tag.sh <tag>` (annotated, signer in the table; run it
-   before the push): in OpenAether-apps, tagged with the same key, check by hand that `git cat-file -t <tag>` prints
-   `tag` and that `git tag -v <tag>` names the fingerprint of the infra table. Immutable releases are on; no admin
-   token is used in CI, so bypass actors are checked by hand each release (`check-required-checks.sh`, checklist
-   section 8).
+   the release key of the signer table in OpenAether-infra's `docs/signed-commits.md` (OpenAether-apps releases are
+   tagged with the same key), pushed **before** the release exists, and the release is created against it. In this order:
+   - `git tag -s -u <fingerprint> -m "<repository> <tag>" <tag> <release sha>` (`<repository>` is `OpenAether-infra` or
+     `OpenAether-apps`);
+   - the check of the tag, before anything is pushed, because a pushed tag cannot be moved or deleted in OpenAether-infra
+     (its `tags` ruleset): there `./scripts/dev/check-release-tag.sh <tag>` (annotated, signer in the table). That script
+     exists in OpenAether-infra only; in OpenAether-apps check by hand that `git cat-file -t <tag>` prints `tag` and that
+     `git tag -v <tag>` names a fingerprint of the table;
+   - `git push origin <tag>`.
+
+   The `SBOM` workflow (started by the pushed tag) then creates the **draft** release and attaches the inventory. Read
+   that run: publish with `gh release edit <tag> --notes-file notes.md --draft=false` only when its
+   `Attach to a draft release` job is green (red scan jobs do not hold the attach; the steps and the fallback are in
+   section 8 of the checklist, and in `docs/supply-chain.md` of OpenAether-apps). An immutable release takes no asset
+   once published: never `gh release create` without `--draft` (infra #395). The notes carry the release commit SHA in
+   full. A client checks it with `git verify-tag <tag>` (the public key is `docs/signers/release-vps.asc` of
+   OpenAether-infra; compare its fingerprint with the table) and `git rev-parse <tag>^{commit}` against the notes.
+   Immutable releases are on; no admin token is used in CI, so bypass actors are checked by hand each release
+   (`check-required-checks.sh`, checklist section 8).
 
 ## The notes must admit what is not fixed
 
