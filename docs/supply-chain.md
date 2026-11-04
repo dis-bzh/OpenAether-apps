@@ -15,40 +15,66 @@ at run time). The `SBOM` workflow runs it weekly and on every pushed release tag
 asset once published), and scans each image with Trivy: a CRITICAL finding with a fix upstream fails. The attach job needs
 the inventory only, not the scans, so a red scan does not stop it. When the release is published the same workflow only
 checks that the asset is there. The releases 0.3.2, 0.4.0 and 0.4.1 went out without it and cannot be given it now (a
-published immutable release takes no asset). An inventory of any tag can be rebuilt by hand from a checkout of it, to keep
-elsewhere, with the two commands of the workflow's inventory step: `python3 scripts/dev/render-dag.py <dir>`, then
-`python3 -I scripts/dev/gen-sbom.py --rendered <dir> --helm --version <tag> --output openaether-apps-<tag>.cdx.json`
-(`--rendered` is required; `--helm` needs helm and the network).
-It does not read image layers (Trivy does), the images controllers create at run time (Cluster API machines, CNPG
-pods), or what the child clusters' own profile deploys. 14 images come from the manifests and about 38 with the
-charts on 2026-10-14.
+published immutable release takes no asset).
+
+`gen-sbom.py` does not read image layers (Trivy does), the images controllers create at run time (Cluster API machines,
+CNPG pods), or what the child clusters' own profile deploys. On the 0.4.1 tag it lists 16 images from the manifests and
+40 with the charts (`--helm`).
+
+**Rebuilding an inventory by hand**, from a checkout of any tag, to keep elsewhere: the two commands of the workflow's
+inventory step.
+
+```sh
+python3 scripts/dev/render-dag.py <dir>
+python3 -I scripts/dev/gen-sbom.py --rendered <dir> --helm --version <tag> --output openaether-apps-<tag>.cdx.json
+```
+
+`render-dag.py` needs kubectl and PyYAML, `--rendered` is required, `--helm` needs helm and the network. Run on a copy of
+the 0.4.1 tag on 2026-11-04 with fresh helm directories: rc 0, CycloneDX 1.5, 56 components, 40 images (without `--helm`:
+32 components, 16 images).
 
 **Releasing with the inventory (the procedure from 0.4.2).**
 
 1. Push the signed tag. The workflow starts on it, builds the inventory from the tag, creates the DRAFT release when there is
-   none (or uses the draft you made with `gh release create --draft`) and attaches the file.
+   none (or uses a draft you made by hand, see the fallback below) and attaches the file.
 2. Read the run before anything else: the `Attach to a draft release` job must be green. The scans and the VEX check run
    beside it and may be red (see the open items below) without stopping it. While the release is a draft, a failure costs
    nothing.
 3. Write the notes and publish: `gh release edit <tag> --notes-file notes.md --draft=false`. On that event the workflow builds
-   and scans nothing: it runs the VEX check, as on every run, and one job that fails if the published release lacks the file.
+   and scans nothing (the scan job has an explicit `if` for it): it runs the VEX check, as on every run, and one job that
+   fails if the published release lacks the file. That run shares the concurrency group of the tag-push run
+   (`cancel-in-progress: false`), so, by that setting (not observed), it waits for scans still running when you publish: the
+   check comes later, it does not fail for that.
 
 Never `gh release create` without `--draft`: the release would be published at once, immutable, and the attach job refuses a
 published release with a clear message instead of trying. **Fallback**, if the tag-push run did not attach the file (it did
-not start, or the job failed): create the draft by hand (`gh release create <tag> --draft --verify-tag --title <tag>`), then
-`gh workflow run sbom.yml -f tag=<tag>` from the default branch; that run checks out the tag and attaches to its draft.
+not start, or the job failed): create the draft by hand, then run the workflow on the tag.
 
-**Rung of the attach, stated once.** Checked: actionlint and yamllint on `sbom.yml`. Replayed on GitHub: the upload step,
-against a throwaway draft release of this repository (the asset was attached, the draft deleted afterwards) and against the
-published 0.4.1 release (refused, exit 1). **Not run:** the tag-push trigger, the path with no release yet (the draft
-creation), the check job that runs on publish and the `workflow_dispatch` fallback above. They run for the first time at the
-0.4.2 tag, so **the 0.4.2 release is the first live proof of this procedure**; if it fails, use the fallback before
-publishing.
+```sh
+gh release create <tag> --draft --verify-tag --title <tag> --notes-file notes.md
+gh workflow run sbom.yml -f tag=<tag>
+```
 
-**Open, 2026-11-04:** the weekly scan is red. The open `[vuln]` issues say on what (apps #179, #162 and #163;
-OpenAether-infra #444 for the Flux kustomize-controller image; the findings are listed in `CHANGELOG.md`, `[0.4.2]`). A tag
-pushed while they are open gives a red `SBOM` run; by the job graph the attach job (it needs only the inventory) can still
-be green.
+The second command runs from the default branch; that run checks out the tag and attaches to its draft. If the failed run
+had already created the draft, skip the first command.
+
+**Rung of the attach. This is the one place that states it** (`CHANGELOG.md` and the release notes point here).
+**Checked:** actionlint and yamllint on `sbom.yml`. **Replayed by hand:** the upload step only, with the maintainer's own
+`gh` credentials from a shell on the maintainer's machine, **not as an Actions job**: against a throwaway draft release of
+this repository (the asset was attached, the draft deleted afterwards) and against the published 0.4.1 release (refused,
+exit 1). **Not run:** the `GITHUB_TOKEN` path inside Actions (`contents: write` on the job, the draft creation, the upload
+with that token), the tag-push trigger, the path with no release yet, the run started by the publish (the job `The published
+release carries the SBOM`, and the skipped scan matrix) and the `workflow_dispatch` fallback above. All of it runs for the
+first time at the 0.4.2 tag, so **the 0.4.2 release is the first live proof of this procedure**; if it fails, use the
+fallback before publishing. After that run, update this paragraph and the "not observed yet" sentence below together.
+
+**Open, 2026-11-04:** the weekly scan is red. The open `[vuln]` issues say on what: apps #179 (the Forgejo image
+`15.0.10-rootless`, `brotli-libs` CVE-2026-111497), apps #162 and #163 (the CNPG PostgreSQL 16.15 and 18.6 images) and
+OpenAether-infra #444 (the Flux kustomize-controller image: the same CVE as #179); `CHANGELOG.md`, `[0.4.2]`, has the
+figures. A tag pushed while they are open gives a red `SBOM` run; by the job graph the attach job (it needs only the
+inventory) can still be green (not observed yet). Not all VEX waivers are long-lived either: two (Next.js on
+`zitadel-login`) run to 2026-12-04, five more and one Trivy ignore entry end on 2026-11-20, and `scripts/check-vex.py` is
+red from 2026-11-21 unless they are re-read or their images fixed.
 
 - **VEX:** a finding that does not apply is an OpenVEX statement in `.vex/openaether-apps.openvex.json`
   (`not_affected` with a justification, an `impact_statement`, an `action_statement` and ONE `Expires: YYYY-MM-DD` in
@@ -65,7 +91,7 @@ be green.
 ## What is checked on every pull request
 
 - `scripts/check-image-pins.py`: no image floats (no tag, or `latest`/`main`...). It prints how many are pinned by
-  tag only (14 of 14 today). `--require-digest` is the next step, after Renovate has rewritten the lines.
+  tag only (16 of 16 today). `--require-digest` is the next step, after Renovate has rewritten the lines.
 - `kubeconform` (strict) and `trivy config` on the rendered DAG, with the accepted findings in `.trivyignore.yaml`.
 - Renovate: `pinDigests` for the images of the hand-written bricks (`backup`, `foundation`), so a bump writes
   `tag@sha256:...`. The Postgres images stay on the custom managers. Vendored dumps stay a human re-vendor.

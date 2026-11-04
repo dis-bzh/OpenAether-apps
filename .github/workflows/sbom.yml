@@ -206,9 +206,12 @@ jobs:
               ;;
           esac
 
+  # Not on the publish event: `inventory` is skipped there, and a matrix built from the output of a skipped job is
+  # not left to chance (the run started by the publish must not turn red on its own matrix).
   scan-images:
     name: Scan ${{ matrix.image }}
     needs: inventory
+    if: github.event_name != 'release'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
