@@ -72,9 +72,12 @@ fallback before publishing. After that run, update this paragraph and the "not o
 `15.0.10-rootless`, `brotli-libs` CVE-2026-111497), apps #162 and #163 (the CNPG PostgreSQL 16.15 and 18.6 images) and
 OpenAether-infra #444 (the Flux kustomize-controller image: the same CVE as #179); `CHANGELOG.md`, `[0.4.2]`, has the
 figures. A tag pushed while they are open gives a red `SBOM` run; by the job graph the attach job (it needs only the
-inventory) can still be green (not observed yet). Not all VEX waivers are long-lived either: two (Next.js on
-`zitadel-login`) run to 2026-12-04, five more and one Trivy ignore entry end on 2026-11-20, and `scripts/check-vex.py` is
-red from 2026-11-21 unless they are re-read or their images fixed.
+inventory) can still be green (not observed yet). The VEX waivers are dated too. Re-read and run to 2026-12-04: restic
+(CVE-2026-60002), PyJWT in the CNPG PostgreSQL images (CVE-2026-102268), the two Next.js statements on `zitadel-login`
+and the Trivy ignore entry for libexpat in the Longhorn v1.12.1 images. Not renewed, ending on 2026-11-20: `alpine/k8s`
+(CVE-2025-68121 and the certifi advisory GHSA-6q48-6c7w-9gw2) and the same advisory in `k8s-sidecar`. From 2026-11-21
+`scripts/check-vex.py` is red until those images are bumped or the statements re-read. certifi in the PostgreSQL images
+has no statement (the backup verifier uses it) and stays red there until those images are replaced (planned for 0.4.4).
 
 - **VEX:** a finding that does not apply is an OpenVEX statement in `.vex/openaether-apps.openvex.json`
   (`not_affected` with a justification, an `impact_statement`, an `action_statement` and ONE `Expires: YYYY-MM-DD` in

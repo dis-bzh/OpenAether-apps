@@ -14,7 +14,12 @@ vulnerabilities:
     expired_at: 2026-12-04
     statement: >-
       libexpat1 2.7.1-150700.3.12.1 is present in all six v1.12.1 images; fixed in 2.8.5-150700.3.15.1, not yet in a
-      Longhorn image. Re-read 2026-11-04 on package data only (the RPM requirements on the libexpat soname and a
-      search of each image for files that name it; nothing was run or traced): they are dbus, python, fontconfig, cmake,
-      thin-provisioning-tools and libmetalink, and no Longhorn binary is among them. That does not show that
-      those tools never run in the images or never read XML from outside.
+      Longhorn image. Re-read 2026-11-04 on package data and file searches only (the RPM requirements on the libexpat
+      soname, and a search of each image for files that name it; nothing was run or traced): they are dbus, python,
+      fontconfig, cmake, thin-provisioning-tools and, in backing-image-manager, libmetalink3. No Longhorn binary is
+      among them. No package requires libmetalink3, and the only file in backing-image-manager that links it is
+      /usr/bin/wget (wget 1.24.5), the one tool there that fetches from the network and has an XML parser behind it
+      (Metalink; `wget --help` lists the options that use it). The backing-image-manager binary was checked by strings
+      only: `wget` occurs once in it, inside the text "wget credentials: %v", not as a command; the binary links
+      os/exec, so strings cannot exclude a command built at run time. That does not show that wget or the other tools
+      never run in the images or never read XML from outside.
