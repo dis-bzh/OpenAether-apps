@@ -205,6 +205,11 @@ spec:
       create: false
     # Sidecar: automatic discovery of ConfigMaps labelled grafana_dashboard=1.
     sidecar:
+      # Ahead of the chart: 14.0.1 defaults to 2.14.1, whose certifi is flagged critical (GHSA-6q48-6c7w-9gw2);
+      # 2.14.3 is clean. tag@digest, as for Zitadel: a re-pushed tag fails instead of reaching the cluster.
+      # Drop the override once the chart's own default is 2.14.3 or later (chart 14.3.1).
+      image:
+        tag: "2.14.3@sha256:52d311dcedd587421a236c4d6c621f05614c40a51386e955e0699dca97ec0880"
       # No limit before (Kyverno require-limits, lab 11). Measured 74-93 Mi.
       resources:
         requests:
