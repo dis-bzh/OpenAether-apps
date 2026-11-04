@@ -18,8 +18,9 @@ vulnerabilities:
       soname, and a search of each image for files that name it; nothing was run or traced): they are dbus, python,
       fontconfig, cmake, thin-provisioning-tools and, in backing-image-manager, libmetalink3. No Longhorn binary is
       among them. No package requires libmetalink3, and the only file in backing-image-manager that links it is
-      /usr/bin/wget (wget 1.24.5), the one tool there that fetches from the network and has an XML parser behind it
-      (Metalink; `wget --help` lists the options that use it). The backing-image-manager binary was checked by strings
-      only: `wget` occurs once in it, inside the text "wget credentials: %v", not as a command; the binary links
-      os/exec, so strings cannot exclude a command built at run time. That does not show that wget or the other tools
-      never run in the images or never read XML from outside.
+      /usr/bin/wget (wget 1.24.5), a tool that fetches from the network and has an XML parser behind it (Metalink;
+      `wget --help` lists the options that use it); python3 with its XML module is another one in the image. The
+      backing-image-manager binary was checked by `strings -a` only: it holds no `wget` string of its own (the one
+      case-sensitive match is the junction of two adjacent Go strings, "...%w" and "get credentials: %v"), and it links
+      os/exec (158 lines of the output name it), so strings cannot exclude a command built at run time. That does not
+      show that wget or the other tools never run in the images or never read XML from outside.
