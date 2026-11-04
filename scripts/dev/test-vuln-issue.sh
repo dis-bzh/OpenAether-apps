@@ -34,10 +34,12 @@ S="$ROOT/scripts/ops/vuln-issue.sh"
 "$S" close docker.io/restic/restic:0.19.1 http://run/4 >/dev/null
 grep -q '^close 1$' "$W/log" && [ "$(jq -r '.[1].state' "$W/issues.json")" = open ] && ok "a passing scan closes only its own issue" || bad "close"
 "$S" close docker.io/other/never:1 http://run/5 >/dev/null && ok "closing an image with no issue is a no-op" || bad "close of nothing failed"
-# #197: a scan that wrote no report (file missing or empty) opens no issue and comments on none, and says why.
-before="$(cat "$W/log")"; : > "$W/empty"
+# #197: a scan that wrote no report (file missing or empty) opens no issue and comments on none, and says why. Each case
+# takes its own `before`, so one failing guard does not fail the other case as well.
+: > "$W/empty"; before="$(cat "$W/log")"
 "$S" open docker.io/restic/restic:0.19.10 "$W/empty" http://run/6 >/dev/null 2>"$W/err"; rc1=$?
-[ "$rc1" != 0 ] && [ "$(cat "$W/log")" = "$before" ] && grep -q 'no scan report' "$W/err" && ok "an empty report comments on nothing and fails" || bad "empty report: rc $rc1, log changed or no message"
+[ "$rc1" != 0 ] && [ "$(cat "$W/log")" = "$before" ] && grep -q 'no report in' "$W/err" && ok "an empty report comments on nothing and fails" || bad "empty report: rc $rc1, log changed or no message"
+before="$(cat "$W/log")"
 "$S" open docker.io/other/never:1 "$W/missing" http://run/7 >/dev/null 2>"$W/err"; rc2=$?
-[ "$rc2" != 0 ] && [ "$(cat "$W/log")" = "$before" ] && grep -q 'no scan report' "$W/err" && ok "a missing report opens nothing and fails" || bad "missing report: rc $rc2, log changed or no message"
+[ "$rc2" != 0 ] && [ "$(cat "$W/log")" = "$before" ] && grep -q 'no report in' "$W/err" && ok "a missing report opens nothing and fails" || bad "missing report: rc $rc2, log changed or no message"
 echo "$PASS passed, $FAIL failed"; [ "$FAIL" = 0 ]

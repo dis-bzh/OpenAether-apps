@@ -13,8 +13,9 @@ number="$(gh issue list --state open --search "\"$title\" in:title" --json numbe
 case "$cmd" in
   open)
     body="${3:?body file}"; url="${4:-}"
-    # No report, no issue: a scan that did not run (#197) must not open an issue with an empty code block.
-    [ -s "$body" ] || { echo "vuln-issue.sh: no scan report in '$body' (missing or empty), nothing to report for $key" >&2; exit 1; }
+    # No report, no issue: a scan that did not run (#197) must not open an issue with an empty code block. The same file
+    # holds the output of check-vex.py for the `VEX statements` key, hence the neutral wording.
+    [ -s "$body" ] || { echo "vuln-issue.sh: no report in '$body' (missing or empty), nothing to report for $key" >&2; exit 1; }
     text="$(printf 'Scan failed again: %s\n\n%s\n' "$url" "$(head -c 20000 "$body")")"
     if [ -n "$number" ]; then
       gh issue comment "$number" --body "$text" >/dev/null
