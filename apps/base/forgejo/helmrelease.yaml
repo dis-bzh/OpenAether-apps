@@ -3,7 +3,7 @@
 # Chart forgejo-helm (Codeberg forgejo-contrib), published ONLY as an OCI artifact:
 # oci://code.forgejo.org/forgejo-helm/forgejo. The https://forgejo-contrib.codeberg.page/forgejo-helm/ address the
 # first version of this file used answers 404 (no index.yaml), so no HelmRelease could ever have fetched its chart.
-# Chart 17.3.1 ships Forgejo 15.0.10 and no sub-chart: chart 6.1.0 (Forgejo 7.0.3, two years old) rendered
+# Chart 17.3.2 ships Forgejo 15.0.11 and no sub-chart: chart 6.1.0 (Forgejo 7.0.3, two years old) rendered
 # a postgresql-ha and a redis-cluster next to the forge unless they were switched off. Flux needs code.forgejo.org on
 # 443 (apps/base/flux/flux-egress-restricted.yaml, rule 9b).
 # Backend Postgres = CNPG forgejo-db (apps/base/forgejo-db, foundation-databases,
@@ -40,7 +40,7 @@ spec:
   chart:
     spec:
       chart: forgejo
-      version: "17.3.1"
+      version: "17.3.2"
       sourceRef:
         kind: HelmRepository
         name: forgejo
@@ -102,7 +102,7 @@ spec:
                 path: /spec/template/spec/initContainers/0
                 value:
                   name: clean-stale-git-locks
-                  image: code.forgejo.org/forgejo/forgejo:15.0.10-rootless
+                  image: code.forgejo.org/forgejo/forgejo:15.0.11-rootless
                   imagePullPolicy: IfNotPresent
                   command: ["/bin/sh", "-c"]
                   args:
@@ -179,7 +179,7 @@ spec:
                 path: /spec/template/spec/containers/-
                 value:
                   name: sweep-stale-git-locks
-                  image: code.forgejo.org/forgejo/forgejo:15.0.10-rootless
+                  image: code.forgejo.org/forgejo/forgejo:15.0.11-rootless
                   imagePullPolicy: IfNotPresent
                   command: ["/bin/sh", "-c"]
                   args:
@@ -263,7 +263,9 @@ spec:
     # ── Image: chart default (code.forgejo.org/forgejo/forgejo, rootless). ──
     # Left at the chart default rather than tag@digest-pinned here: pin the
     # digest once a Renovate pipeline covers this HelmRelease (follow-up).
-    # The image tag is the chart's appVersion (15.0.10-rootless): the Forgejo version moves with the chart pin.
+    # The image tag is the chart's appVersion (15.0.11-rootless): the Forgejo version moves with the chart pin.
+    # The two lock-cleaner images in the post-renderer above are written by hand and must move with it
+    # (test-forgejo-brick.py fails when they differ from the rendered main image).
 
     persistence:
       enabled: true

@@ -15,7 +15,7 @@ status line. What is still open (apps #176) is in "What is NOT delivered".
 
 ## What is delivered
 
-- **Forgejo 15.0.10** (LTS, end of support 2027-07-15, `docs/eol-calendar.yaml`), from the chart `forgejo-helm` 17.3.1, a single replica
+- **Forgejo 15.0.11** (LTS, end of support 2027-07-15, `docs/eol-calendar.yaml`), from the chart `forgejo-helm` 17.3.2, a single replica
   with its repositories on a 10 Gi `longhorn-x2-rwo` volume, in the namespace `services-git` (outside the mesh, a `CiliumNetworkPolicy`
   of its own), reached at `https://forge.openaether.local` through the shared Gateway (HTTPS only; no SSH).
 - **`forgejo-db`**, its PostgreSQL: a CNPG Cluster of 3 instances in `foundation-databases`, built from what `grafana-db` is in this
@@ -97,7 +97,7 @@ Each line is a defect of the first version, fixed here and held by `scripts/dev/
    Flux's egress policy admits `code.forgejo.org` (rule 9b). `check-ha.py` was red on this alone.
 2. **Chart 6.1.0 was two years old and rendered two databases and a cache.** It shipped Forgejo 7.0.3 (long past its end of support) and,
    with the values of the PR, a `postgresql-ha` and a `redis-cluster` next to the forge. Chart 17.3.1 renders one Deployment and no
-   sub-chart. Every values key the brick sets was checked against that chart's `values.yaml` and schema by `helm template`.
+   sub-chart (17.3.2, the pin since 0.4.3, has the same `values.yaml` and `values.schema.json`). Every values key the brick sets was checked against that chart's `values.yaml` and schema by `helm template`.
 3. **The admin Secret had no `username`.** The chart reads `username` and `password` of `gitea.admin.existingSecret`; the ExternalSecret
    provided only the password, so the `configure-gitea` init container would have stayed in `CreateContainerConfigError`.
 4. **Nothing seeded the three OpenBao paths**, so `forgejo-db-credentials` would never exist, the database would never bootstrap and (it
@@ -280,6 +280,32 @@ target. What it does not cover, precisely:
 
 **Change (0.4.0, owner decision 2026-10-27): the platform sets `node-down-pod-deletion-policy` to `delete-both-statefulset-and-deployment-pod`**, with the mechanism, the evidence on what reaches an upgraded cluster, the side effects and the one-line check in [`resilience.md`](resilience.md), "Longhorn: node-down-pod-deletion-policy". Until lab 28, **the figures were 341-372 s measured with the default and 128 s measured with the setting applied by hand, and the shipped path itself was UNVERIFIED.** Lab 28 (OVH, a NOMINAL 3 CP + 6 W cluster, each drill an INCIDENT by design) ran it with the shipped setting: the forge was away 154, 155 and 169 s for three partitions of its node, 85, 115, 116, 126 and 169 s for five hard reboots of its node and 125 s for a simultaneous hard reboot of its whole zone (three nodes), with every acknowledged push present. (The lab's summary line counts four hard cuts, 116, 125, 126 and 169 s; two later stale-lock runs also cut the forge's node and are counted here.) Lab 28B repeated it on Scaleway with the shipped setting (INCIDENT drills on a NOMINAL cluster): away 178 and 174 s for two graceful zone power-offs and 145 s for a partition (3 CP + 6 W), 134 s for a graceful node power-off (3 CP + 7 W), every acknowledged push present. The push gap and the volume stay a single-replica design: the forge is away for this long on a node or zone loss.
 
+## Updating the forge: 15.0.10 to 15.0.11, chart 17.3.1 to 17.3.2 (0.4.3, apps #179)
+
+**Rung: read offline and rendered, not run on a cluster.** What was read, on 2026-11-04:
+
+- **The chart diff is two files.** `Chart.yaml` (`appVersion` 15.0.11) and the `helm test` Pod, which this brick switches off (`test.enabled: false`).
+  `values.yaml`, `values.schema.json`, the templates of the Deployment, the Secrets, the Service and the PVC and the vendored `common` sub-chart
+  are identical. Rendered with the brick's values (`helm template` plus the post-renderer), the two versions differ only by the image tag of the
+  main container and of the three chart init containers, the `version` labels, and the `checksum/config` annotation (a hash that reads those labels;
+  the config Secrets carry the same keys and values). No change in probes, security context, resources, tolerations, strategy (Recreate) or PVC.
+- **Two images are written by hand** (the lock cleaner and the sweeper, `helmrelease.yaml`). A chart bump alone leaves them on the old Forgejo:
+  `test-forgejo-brick.py` went red on exactly that and is green with both moved.
+- **Upstream notes of 15.0.11** (released 2026-10-26 on endoflife.date, which still gives the 15.0 LTS cycle end of support 2027-07-15). Three security fixes: Actions `pull_request_review` could run a workflow from an arbitrary
+  `commit_id`; the visibility of users was not considered when listing watched and starred repositories; a NuGet `X-NuGet-ApiKey` token did not respect
+  its scopes (package APIs only). Also one dashboard fix, two Actions-log fixes, and updates of the Go toolchain (1.26.10, which clears the `stdlib` HIGH CVE-2026-111943 that the
+  15.0.10 binaries report) and of a build-time dependency. The brick deploys no runner and sets no `[actions]` key, registration is closed and sign-in
+  is required to view, which narrows the reach; which of the three applies to this platform was not established.
+- **No schema migration is visible.** 15 commits between `v15.0.10` and `v15.0.11` touch 21 files, none of them a migration. That is a reading of the file
+  list, not a run: a roll back to 15.0.10 was not tried.
+- **The brotli CVE is not in the release notes.** It leaves with the rebuilt Alpine base (3.23.6 to 3.23.7). Trivy 0.75.0, database of 2026-11-04, `linux/amd64`
+  (arm64 not scanned), by index digest: 15.0.10-rootless (`sha256:6ffebd9a...`) reports 1 CRITICAL (`brotli-libs` 1.2.0-r0, CVE-2026-111497, fixed in 1.2.1-r0) and 8 HIGH;
+  15.0.11-rootless (`sha256:3cd6bc2b...`) reports 0 CRITICAL and 3 HIGH, all `libexpat` 2.9.0-r0 (fixed in 2.10.0-r0, not yet in the image),
+  with `brotli-libs` 1.2.1-r0. The scan gate of the SBOM workflow is CRITICAL with a fix, so these 3 HIGH do not fail it.
+- **The roll is a downtime.** The Deployment is Recreate on a ReadWriteOnce volume: the old pod stops, then the new pod runs its init containers and
+  starts. A push or a clone in flight at that moment fails and has to be retried. There is **no baseline** for how long: the first measurement is the next
+  lab (push and clone across the roll), reported as a first figure, not as better or the same.
+
 ## What is NOT delivered (open, each one is for an issue: apps #176)
 
 Checked item by item against the runs that enabled the brick after this page was first written: labs 27B and 27C (Scaleway, 3 control planes +
@@ -305,7 +331,7 @@ The volume's backup and its restore are in "The recurring backup of the reposito
   measured with Kubernetes' 300 s default toleration; 341-372 s with the 30 s toleration and Longhorn's default policy; 128 s with the policy set,
   measured once with the setting applied by hand; 85 to 178 s in labs 28 and 28B with the shipped policy (INCIDENT drills, 3 CP + 6 W, one on 3 CP + 7 W):
   see "How long the forge is away"); the cluster and Flux keep running.
-- Image **digest pinning** (the image is the chart's `appVersion` tag, `15.0.10-rootless`, bumped with the chart).
+- Image **digest pinning** (the image is the chart's `appVersion` tag, `15.0.11-rootless`, bumped with the chart; the two lock-cleaner images are written by hand and bumped with it).
 - **Backups.** (a) The database and the volume are not backed up at the same instant: the window, and how to narrow it by recovering the database to
   the time of the volume's backup, are written above (UNVERIFIED). (b) `forgejo-db` is not in the restic `pg_dump` (`cronjob.yaml`), the canary, or the
   restore tests (`restore_cnpg.py`, `cnpg-recovery-restore-test`), which know `zitadel-db` and `grafana-db`; no restore of `forgejo-db` has been
