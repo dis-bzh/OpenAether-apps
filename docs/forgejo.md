@@ -286,7 +286,7 @@ target. What it does not cover, precisely:
 
 ## Updating the forge: 15.0.10 to 15.0.11, chart 17.3.1 to 17.3.2 (apps #179)
 
-**Rung: read offline and rendered, not run on a cluster.** What was read, on 2026-11-04:
+**Rung: read offline and rendered on 2026-11-04; then run on two proof clusters (lab 34, Scaleway, 3 CP + 6 W, n=1, the moving branch ref, not a tag): the move from 15.0.10 on cluster A (six of six containers on the new image) and a fresh install on cluster B.** What was read, on 2026-11-04:
 
 - **The chart diff is two files.** `Chart.yaml` (`appVersion` 15.0.11) and the `helm test` Pod, which this brick switches off (`test.enabled: false`).
   `values.yaml`, `values.schema.json`, the templates of the Deployment, the Secrets, the Service and the PVC and the vendored `common` sub-chart
@@ -317,8 +317,9 @@ target. What it does not cover, precisely:
   `sha256:6ffebd9ab9ee9f6677e3523fa60debd9de630ff2a226fa681d6cc0c7ba541d77`. A pod's `imageID` shows either the index or the platform manifest,
   depending on the runtime: both are correct.
 - **The roll is a downtime.** The Deployment is Recreate on a ReadWriteOnce volume: the old pod stops, then the new pod runs its init containers and
-  starts. A push or a clone in flight at that moment fails and has to be retried. There is **no baseline** for how long: the first measurement is the next
-  lab (push and clone across the roll), reported as a first figure, not as better or the same.
+  starts. A push or a clone in flight at that moment fails and has to be retried. There was **no baseline** for how long. The first figure is lab 34's move
+  on cluster A: the forge was away **50.3 s** (NOMINAL, 3 CP + 6 W), in ONE roll that carried this update and the token environment of 0.4.3
+  ("The metrics endpoint and its token"); it is a first figure for the pair, not a baseline for either change alone, and not better or the same.
 
 ## The metrics endpoint and its token (0.4.3)
 
@@ -328,9 +329,10 @@ balancer answered `https://forge.<domain>//metrics` with its metrics (66 familie
 (`docs/public-exposure.md`: slash merging in istiod, two more paths in the policy); this is the third layer, at the source: the endpoint
 answers 401 without the right bearer, whatever the path.
 
-**Rung: rendered and measured on a LOCAL RIG (k3s in a container, Istio 1.31.3, Forgejo 15.0.11 from chart 17.3.2 with SQLite and `emptyDir`,
-VM operator 0.68.1, vmagent v1.136.0, the Secrets made by hand), not on a cluster of the platform.** The ExternalSecrets and the OpenBao path
-were not run on it.
+**Rung: rendered and first measured on a LOCAL RIG (k3s in a container, Istio 1.31.3, Forgejo 15.0.11 from chart 17.3.2 with SQLite and `emptyDir`,
+VM operator 0.68.1, vmagent v1.136.0, the Secrets made by hand); the ExternalSecrets, the OpenBao path, the scrape and the upgrade were not run on
+it. Then observed on two proof clusters (lab 34: Scaleway, 3 CP + 6 W, n=1 per figure, the moving branch ref at the heads apps e8ca37f and infra
+d1d268c, NOT a tag): cluster A, a move from 0.4.2 with the forge on, and cluster B, a fresh install with the forge on.** Each item below says which.
 
 - **The token.** `secret/forgejo/metrics` `{token}`, 40 alphanumeric characters, created by the vault configure Job (create only, never rotated by
   a re-run, never printed). The chart has no value for it: `gitea.metrics.enabled` only renders `[metrics] ENABLED = true`, and
@@ -338,8 +340,9 @@ were not run on it.
   `TOKEN` line; `test-forgejo-brick.py` fails if a `TOKEN` is added to the values). So the Deployment gets `GITEA__metrics__TOKEN` from the Secret
   `forgejo-metrics` through a `secretKeyRef`, as the database password does. **Where the token then is:** in the pod's environment, and in
   `/data/gitea/conf/app.ini` on the repositories' volume, because the chart's `init-app-ini` runs `environment-to-ini` (read in the rendered
-  chart, as for `GITEA__database__PASSWD`; not observed in a pod). The daily Longhorn backup of that volume therefore carries it. The operator
-  may also copy the token into the Secret that holds the vmagent configuration it generates, in `services-observability` (not looked at).
+  chart, as for `GITEA__database__PASSWD`; **observed on both proof clusters: `app.ini` holds exactly 1 `TOKEN` line, equal to the Secret**). The
+  daily Longhorn backup of that volume therefore carries it. **The operator's generated vmagent configuration Secret in `services-observability`
+  contains the token (observed on cluster A)**, and the scrape target's label is `job="services-observability/forgejo"`.
 - **The reference is NOT optional, on purpose.** An optional `secretKeyRef` starts the forge with no token when the Secret is missing, silently
   open. This one makes the pod wait in `CreateContainerConfigError` until the ExternalSecret has written the Secret, then start by itself.
 - **The scrape.** With the token set, the unchanged `VMPodScrape forgejo` goes DOWN (vmagent: `unexpected status code 401`). It now carries
@@ -354,16 +357,31 @@ were not run on it.
   right token, `//metrics` answers 200, as expected: the token is the secret. The scrape was UP with the credentials and DOWN without.
 - **An existing forge keeps being scraped after the move, but not without a gap.** On the move from 0.4.2 three things change together: the vault
   script ConfigMap (Flux re-creates the configure Job, which creates `forgejo/metrics`), the two ExternalSecrets, and the Deployment's
-  environment. The Deployment is **Recreate**, so the pod rolls (31 s on the rig with no volume, NOMINAL, one pod; the forge was Ready 72 s after its
-  patch in lab 34 at the 0.4.2 arm, 3 CP + 6 W, NOMINAL, a different measure) and, if the Secret is not there yet, it sits in `CreateContainerConfigError`, with the forge
-  away, until the ExternalSecret has been synced (ESO retries a failed read with a back-off, not on its `refreshInterval`; how long that takes after the Job ran was
-  **not measured**). Nothing orders the forge behind the vault Job (the `forgejo` Kustomization has no `dependsOn` on `foundation-vault`, which is `wait: false`), so on an
-  upgraded cluster the wait is real. The HelmRelease therefore carries `timeout: 15m` (Flux's default is 5 min): at 5 min Helm would roll the Deployment
-  back to the spec without the token (the forge without layer 3, layers 1 and 2 still holding), and after `retries: 3` the release would stay stalled. The next lab times the whole window. The scrape comes back by itself when both Secrets exist and the new pod is up. Either order is safe: a scrape that sends the bearer to a forge that has
+  environment. The Deployment is **Recreate**, so the pod rolls (31 s on the rig with no volume, NOMINAL, one pod; the forge was Ready 72 s and 79 s after its
+  patch in lab 34 at the 0.4.2 arm, runs 1 and 2, 3 CP + 6 W, NOMINAL, a different measure) and, if the Secret is not there yet, it sits in `CreateContainerConfigError`, with the forge
+  away, until the ExternalSecret has been synced (ESO retries a failed read with a back-off, not on its `refreshInterval`). Nothing orders the forge behind the vault Job (the
+  `forgejo` Kustomization has no `dependsOn` on `foundation-vault`, which is `wait: false`), so on an
+  upgraded cluster the order is luck. The HelmRelease therefore carries `timeout: 15m` (Flux's default is 5 min): at 5 min Helm would roll the Deployment
+  back to the spec without the token (the forge without layer 3, layers 1 and 2 still holding), and after `retries: 3` the release would stay stalled (reasoned from
+  Helm's behaviour, not run: the unfavourable case below was run with `timeout: 15m`). **The window, measured in lab 34 in both orders** (3 CP + 6 W, n=1 per order,
+  the moving branch ref, not a tag):
+  - *Favourable order (cluster A, the move from 0.4.2 with the forge on, NOMINAL).* Flux re-created the vault Jobs inside their TTL, and they wrote
+    `secret/forgejo/metrics` at 12:15:27; both ExternalSecrets synced at 12:16:42 to 12:16:45 (75 to 78 s later, computed from the timestamps; why it took that
+    long is not shown); the forge pod rolled with **0 s in `CreateContainerConfigError`**. The forge was away **50.3 s** (last answer 12:16:45.6, first
+    answer 12:17:35.9, 49 probe failures) and the scrape gap was **65 s**, back with no manual step; 1,284 acknowledged pushes, 0 missing, `git fsck`
+    clean. That order was favourable by 76 s, and nothing enforces it.
+  - *Unfavourable order (cluster B, the forge Secret unavailable during a Helm upgrade).* The pod waited **6 min 30 s** in `CreateContainerConfigError`;
+    the HelmRelease reached `UpgradeSucceeded` with **no rollback** (`timeout: 15m`); the Deployment kept `GITEA__metrics__TOKEN` in 37 of 37 polls; the
+    pod started by itself 19 s after the Secret came back. **A wait beyond 15 minutes is not shown.** During it `up{forgejo}` was 0 for about 7.5 minutes
+    (90 samples), and no rule names the forge scrape (alerts were sampled at two moments only).
+  - *Fresh install (cluster B).* The forge was enabled by the documented live patch 14 s BEFORE the vault Jobs were first created, so this is the favourable
+    order by construction (the case of a Job still running is not shown): the pod started at the first try with 0 `CreateContainerConfigError` and was Ready
+    101 s after the pod was created, which is not comparable with the patch-to-Ready figures above.
+
+  The scrape comes back by itself when both Secrets exist and the new pod is up. Either order is safe: a scrape that sends the bearer to a forge that has
   no token yet is answered 200 (no token configured, the header is ignored, read in Forgejo's documented behaviour and not run), and a forge that has the token before the
   scrape has it answers 401, so the target is DOWN until the twin Secret exists. No alert reads the forge's `up` today (`vmrule-*.yaml` do not name it), so the gap pages nobody and shows only as missing `gitea_*` points. A push or a clone in flight across the
-  roll fails and is retried, as for every roll of this Deployment. The lab must measure the window (forge away, scrape gap) on a 0.4.2 to
-  0.4.3 move with the forge on.
+  roll fails and is retried, as for every roll of this Deployment.
 - **Rotation.** Overwrite `secret/forgejo/metrics` in OpenBao; both ExternalSecrets follow within their `refreshInterval` (1 h); then restart the forge
   pod (the environment is read at start; `environment-to-ini` rewrites the key in `app.ini`). Between the Secret change and the restart the
   scrape gets 401. Not exercised.
@@ -415,7 +433,9 @@ The volume's backup and its restore are in "The recurring backup of the reposito
 
 ## What the next lab must prove
 
-Status after labs 27B to 28C (details in "What is NOT delivered" and in the status lines above): items 1 to 3 and the first half of 4 were seen,
+Status after labs 27B to 28C (details in "What is NOT delivered" and in the status lines above), then lab 34 (0.4.3 heads, Scaleway, 3 CP + 6 W, n=1, branch
+ref): on a fresh install with the brick on the forge pod started at the first try, `/metrics` and `//metrics` were refused on the Gateway and the forge was
+scraped with the token (`up` = 1), and a forge moved from 0.4.2 kept its scrape (forge away 50.3 s, scrape gap 65 s). Items 1 to 3 and the first half of 4 were seen,
 and item 5 was run: hard reboots and partitions in lab 28, graceful zone power-offs in labs 28B and 28C, the `core.fsync` cost once in lab 27B, `dirsync`
 on the mount in lab 27D. The list below stays the acceptance list for the rest: the pair restore of 4, 6 and 7, the cost of `dirsync` alone and the lock
 of a REAL interrupted push in 5.

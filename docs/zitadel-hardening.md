@@ -164,14 +164,19 @@ v4.20.1 (2026-11-03) replaces v4.19.5 for the server and the login: the same two
 Read: the release notes of v4.20.0 and v4.20.1 and the source diff v4.19.5 to v4.20.1 (22 commits; nothing under `cmd/setup`,
 `cmd/defaults.yaml` unchanged). Run, in containers against a PostgreSQL 17 fixture with `sslmode disable` and no Kubernetes:
 `scripts/dev/test-zitadel-config.sh` (32 passed) and `scripts/dev/test-zitadel-migration-lock.sh` (16 passed) on v4.20.1, and a
-database set up by v4.19.5 then by v4.20.1 and back. Not run: a cluster, Go 1.26 TLS to CNPG with `sslmode=require`, memory under
-load, arm64, and a browser sign-in with a second factor into Grafana through the Gateway (asked for by apps #195).
+database set up by v4.19.5 then by v4.20.1 and back. Then run on two proof clusters (lab 34: Scaleway, 3 CP + 6 W, n=1, the moving branch ref, not a tag):
+the move from v4.19.5 on cluster A (setup Job 19 s, HelmRelease Ready 4:15 after the apps ref switch, a session created before the move still reads back,
+the PAT works, 0 pods left on v4.19.5, one 503 on 1 of 2,188 probes, cause not shown) and a first install at v4.20.1 on an empty database on cluster B
+(init 7 s, setup 22 s, 170 migrations, HelmRelease Ready 1:07, the PAT and a session work); authorize answered 302 and the login name page 200 on both, and
+TLS 1.3 to CNPG worked on both. Not run: a rollback on a cluster, memory under load, arm64, and a browser sign-in with a second factor into Grafana through
+the Gateway (asked for by apps #195; on a fresh install `grafana-oidc` stays in `SecretSyncedError` with an empty `client_id`, known).
 
 - **No schema step.** `cmd/setup` has the same steps as in v4.19.5. A database that v4.19.5 set up gets, from the setup hook Job,
   the two steps that re-run on every version change, `projection_tables` and `79_backfill_unique_constraint_owners`, plus the
   repeatable steps that run at every setup. In the offline run the Job took about 3 seconds and a second run of v4.20.1 re-ran
   neither of the two. The backfill walks the unique constraints in pages, so its time follows the number of users and
-  organisations; it was not measured on a cluster. If the Job dies inside a step, the trap of `docs/traps.md` (apps #133) applies; on
+  organisations; on cluster A the Job took 19 s on the small database of the lab (it ran `projection_tables`, the six repeatable steps and the
+  backfill), and how it scales with users was not measured. If the Job dies inside a step, the trap of `docs/traps.md` (apps #133) applies; on
   an instance that holds users the recovery there is the CNPG backup, not the script.
 - **Rollback.** v4.19.5 started on the database that v4.20.1 had set up, in two ways: setup, then server, and the server alone.
   The second is what a Helm rollback produces: the chart's init and setup Jobs are hooks of `pre-install` and `pre-upgrade` only
@@ -181,8 +186,8 @@ load, arm64, and a browser sign-in with a second factor into Grafana through the
   near-empty database; not tried on a cluster.
 - **Go 1.26.** The release notes say the server is built with Go 1.26.10. Outbound TLS (SMTP, external identity providers, Actions and webhook targets,
   HTTP SMS providers) no longer accepts chains through the compromised eMudhra intermediates; this platform configures none of them.
-  The database connection is also a Go TLS client (CNPG, `sslmode=require`): the offline runs could not test it, only a cluster
-  can. `GODEBUG=urlstrictcolons=0` and `GODEBUG=tlssecpmlkem=0` restore the previous behaviour if an outbound URL or handshake breaks.
+  The database connection is also a Go TLS client (CNPG, `sslmode=require`): the offline runs could not test it; TLS 1.3 to CNPG worked on both
+  proof clusters of lab 34. `GODEBUG=urlstrictcolons=0` and `GODEBUG=tlssecpmlkem=0` restore the previous behaviour if an outbound URL or handshake breaks.
 - **Login V2.** The device code check is signed with `ZITADEL_SESSION_COOKIE_SECRET` like the other proofs (the secret of the
   previous section, already wired); a person in the middle of a device authorization at the upgrade enters the user code again, and no
   client of this platform uses that flow. The sessions cookie stays within the browser size limit (expired entries, then the least

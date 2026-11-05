@@ -73,8 +73,9 @@ The images are to be replaced in 0.4.4 (planned, owner decision), so the weekly 
 This release's image bumps remove the other reds of 0.4.2: Forgejo 15.0.11 (apps #179, `brotli-libs` CVE-2026-111497; the
 same CVE is open for the Flux image in OpenAether-infra #444, handled in that repository), and the five findings that were
 waived: `alpine/k8s` 1.36.6 and 1.37.2 (CVE-2025-68121 and certifi), `k8s-sidecar` 2.14.3 (certifi), Zitadel and
-`zitadel-login` v4.20.1 (the two Next.js advisories). Read with Trivy 0.69.3 and 0.75.0 on the amd64 images, database of 2026-11-04: **a local scan, not the CI run**;
-the first scan on main after the merge is the proof. A tag pushed while a scan is red gives a red `SBOM` run, and the attach
+`zitadel-login` v4.20.1 (the two Next.js advisories). Read with Trivy 0.69.3 and 0.75.0 on the amd64 images, database of 2026-11-04: **a local scan**. The Actions run on the
+branch named below agrees for the images it scanned (38 of 40 scan jobs green, the two red ones are the PostgreSQL images);
+the first scan on main after the merge is still to come. A tag pushed while a scan is red gives a red `SBOM` run, and the attach
 job is still green: observed at the 0.4.2 tag (run 41842416697: `Attach to a draft release` green, four scan jobs red,
 Forgejo, the CNPG operator and the two PostgreSQL images; the last three failed on a ghcr.io rate limit, #197).
 
@@ -105,9 +106,17 @@ the three are not re-read again or removed.
   and opens, comments on and closes no issue, so an open `[vuln]` issue stays as it was. **Residual:** nothing announces
   an image that then stays unscanned until someone reads the run; there is no retry, and the next chance is the next
   scheduled run (weekly). **The #197 change (the `ghcr.io` login with the workflow token, and the step that tells a
-  finding from a scan that did not run) has never run in Actions** (2026-11-04: the branch is not pushed). The 0.4.2
-  failures read `TOOMANYREQUESTS ... allowed: 44000/minute`, a limit reported per runner address, and a login may not lift
-  it. Not shown: a run on a branch would show that the login works, not that the limit is gone. The `VEX
+  finding from a scan that did not run) has run in Actions, on the branch.** Rung: workflow run 41927056554, a
+  `workflow_dispatch` on `claude/0.4.3-rc1` at 9fb9035 (2026-11-04; six commits before the lab-proven head e8ca37f, and none of
+  the six touches an image, a workflow or the VEX file). The step `Log in to ghcr.io` printed `Login Succeeded` (read in three of
+  the eight ghcr scan jobs: both red ones and one green one), **all eight ghcr scans ran**, and 38 of the 40 scan jobs were
+  green. **The two red scans are `ghcr.io/cloudnative-pg/postgresql:16.15` and `:18.6`**, one CRITICAL each, certifi
+  GHSA-6q48-6c7w-9gw2 (installed 2026.7.22, fixed in 2026.10.18): known, no waiver, apps #162 and #163, deferred to 0.4.4. On
+  both, the step `Tell a finding from a scan that did not run` took its branch "report present, the scan ran". The 0.4.2
+  failures read `TOOMANYREQUESTS ... allowed: 44000/minute`, a limit reported per runner address: none of the eight ghcr
+  scans was refused in this run, but one run does not show that the login is what lifted the limit. **Still not run:** the
+  tag-push attach with the new login (a dispatch without a tag skips the `Attach to a draft release` job), and a `[vuln]`
+  issue opened or closed by the new steps (a dispatch on a branch opens none, by design). The `VEX
   statements` job follows the same rule: its report holds the output of `check-vex.py`, stderr included, so a VEX file
   the script cannot read (exit 2) opens or updates the issue with that message; a run with no output at all is only a
   red job.

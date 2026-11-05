@@ -50,7 +50,9 @@ Forgejo's metrics: 66 metric families, 11,151 bytes, including the build informa
 `/metrics/` and `/debug/metrics` gave 403, and plain HTTP on :80 gave a 301 for the `//` spellings (the redirect, not the metrics).
 What the body lists is the forge's counters and build information, not repository content or a credential. **Who is touched:** a
 cluster that turned the forge brick on at 0.4.1 or 0.4.2. A cluster without the brick is not (no route, no Forgejo). On the four
-other hosts of that sweep no spelling returned metrics.
+other hosts of that sweep no spelling returned metrics. The same was read on a second 0.4.2 cluster, at the arm of the move to 0.4.3 (lab 34,
+cluster A; 540 probes = 54 spellings x 5 hosts x HTTPS and plain HTTP): 200 probes answered 403, 5 returned a Prometheus body, all of them on the
+forge host and on HTTPS (`//metrics`, `///metrics`, `//metrics/`, `//metrics?x=1` and `/\metrics`; 66 families, 11,153 to 11,157 bytes).
 
 **Why it was not seen before.** The policy lists its paths literally and Istio's default normalisation (BASE) removes dot segments
 and decodes `%6D`, but does not merge slashes; Forgejo cleans `//metrics` to `/metrics` itself. The 216-probe sweeps behind the 0.4.1
@@ -66,7 +68,8 @@ served metrics" was true of the hosts swept and false of the forge. It is correc
    this repository uses. ztunnel is L4 and has no path. The visible change: a request path with `//` in it reaches a service merged.
    A route of yours whose service gives a meaning to `//` (an object key, a URL embedded in a path, a signed path) changes behaviour:
    reasoned, not run. Nothing in this repository routes such a service through the Gateway. Istio pushes a changed `meshConfig` to the running proxies by xDS: on the rig the effect came in 2 s with no restart of
-   istiod or of the Gateway pods (NOMINAL; one istiod replica, one Gateway pod, k3s, no ztunnel or waypoint; the repository ships 2 istiod replicas). `DECODE_AND_MERGE_SLASHES` (Istio's recommendation) was measured valid and stricter, and is NOT
+   istiod or of the Gateway pods (NOMINAL; one istiod replica, one Gateway pod, k3s, no ztunnel or waypoint; the repository ships 2 istiod replicas). On the platform the move did not
+   restart istiod or the Gateway pods either (restartCount 0, below), but the push time was not measured there. `DECODE_AND_MERGE_SLASHES` (Istio's recommendation) was measured valid and stricter, and is NOT
    shipped: its extra coverage is `%2F`, no host served metrics on a `%2F` spelling, and it forwards the decoded slash to the
    application, which no client of the Forgejo package registries (scoped npm names, container registry) was run against.
 2. Two more paths in `deny-metrics-paths`: `//*` and `/debug//*`. A path that starts with `//`, or has `//` right after `/debug`, is
@@ -109,12 +112,30 @@ Longhorn), VM operator 0.68.1 and vmagent v1.136.0.
   before the redirect.
 - *Still open after the fix:* `%2F` spellings (`/%2fmetrics`, `/metrics%2f`, `/%2F%2Fmetrics`, `/debug%2Fmetrics`) reach the service
   as written: forge 303, Grafana 302, OpenBao 404, Zitadel 301 or 404, none served metrics, but a service that decodes `%2F` would.
-  The encoded backslash (`/%5Cmetrics`, `/metrics%5C`) is not decoded by `MERGE_SLASHES` either (Istio: only `DECODE_AND_MERGE_SLASHES` decodes `%2F` and `%5C`); not probed on the rig, to be in the next lab's sweep.
+  The encoded backslash (`/%5Cmetrics`, `/metrics%5C`) is not decoded by `MERGE_SLASHES` either (Istio: only `DECODE_AND_MERGE_SLASHES` decodes `%2F` and `%5C`); not probed on the rig, probed in the platform sweep below (forge 303, no body).
   Case (`/Metrics`) and `;param` (`/metrics;a=b`) variants reach the service too; no host served metrics on them.
-- *Not shown:* a platform cluster at the 0.4.3 head. The checks the next lab must make: the sweep on all five hosts including the forge
-  with these extra spellings on both listeners before and after the move; a vmagent scrape of the forge at `up` = 1 with the token; an
-  existing forge, upgraded from 0.4.2, keeps its scrape (and how long the forge pod waits for its token); the Gateway pods and
-  istiod without a restart on the move. The ExternalSecret and the OpenBao path were not run on the rig (its Secrets were made by hand).
+- *On the platform (lab 34: Scaleway, 3 CP + 6 W, one run per figure, the MOVING branch ref at apps e8ca37f and infra d1d268c, NOT a tag).* The sweep is
+  54 spellings x 5 hosts (Grafana, Zitadel, OpenBao, the lab's test application, the forge) x HTTPS and plain HTTP = 540 probes, from the lab host, no
+  credential. **Before**, cluster A at the 0.4.2 tags: 200 probes 403, 5 Prometheus bodies, all on the forge, all on HTTPS (above). **After the move** to
+  the 0.4.3 heads (cluster A): 310 x 403, **0 bodies, run twice with identical results**; all 55 probes of the slash family (11 spellings x 5 hosts) are
+  403 on both listeners, plain HTTP included (the deny runs before the redirect). **Fresh install** at the 0.4.3 heads (cluster B, forge on): 540 probes,
+  310 x 403, 0 bodies, the same code table as cluster A after its move. On cluster A, layer 1 (`MERGE_SLASHES`) was shown alone for about 86 to 89 s before the
+  policy's new paths landed (the 89 s mixes the lab host's clock with the cluster's, which runs 1 to 3 s ahead), and layer 3 alone straight to the pod (no
+  bearer 401, a wrong bearer 401, the right bearer 200; `//metrics` with the Gateway layers alone 403). **The policy layer was never alone on a cluster**
+  (only on the rig). The first 403 on the forge's `//metrics` came **68 s** after the apps ref switch, at the same moment as the istiod upgrade: that is
+  not a measure of the xDS push time and is not comparable with the rig's **2 s** (one istiod, one Gateway pod, no move). On the move istiod (2 pods) and the
+  Gateway (3 pods) kept their names and restartCount 0, and Envoy printed `merge_slashes: true`. The scrape of the forge was `up` = 1 with the bearer
+  (cluster B); on cluster A it had a gap of 65 s at the move and came back with no manual step (`docs/forgejo.md`). On cluster B a repository named
+  `metrics` still reaches Forgejo (the policy refuses no `/x/metrics`), and push, clone and `feat%2Fx` work.
+- *Still open on the platform:* `%2F`, `%5C`, case and `;param` spellings reach the services as written, with the same code table on both clusters (forge
+  303, Grafana 302, OpenBao 404, Zitadel 301, 307 or 404, the test application 200 with its own page); `/%5Cmetrics` and `/metrics%5C` were probed (forge 303,
+  no body). No body was seen, but a service that decodes one of them would leak. The Zitadel `/debug%2Fmetrics` probe changed from 301 to 307 between the
+  arm and the move, unexplained; no body either way.
+- *Not shown:* (1) **redirects were not followed**: 159 of the 540 probes answer 301, 302, 303 or 307, so "0 bodies" on a redirect is true of the first
+  response only (the rig followed none either); (2) the `%2F`, `%5C`, case and `;param` spellings **beyond the first hop**; (3) **the policy layer alone on
+  a cluster**; (4) the xDS push time on a cluster (the 68 s above is not it); (5) the Longhorn opt-in route (not tested) and Zitadel's `/debug/metrics`
+  body (the rig does not serve it, and the platform sweep read 403 or redirects, not the body); (6) a tag-pinned install or move (both clusters ran the
+  branch ref); (7) a failover or zone drill (none ran in this lab). Not a compliance claim.
 
 **Upgrade note.** A route of yours that serves `/metrics` or `/debug/metrics` on purpose (an external uptime or Prometheus
 check, say) gets the 403 too, and no ALLOW overrides a DENY. Serve it under another path, or turn the policy off for the whole
@@ -161,7 +182,8 @@ NOMINAL, from the lab host, no credential):
 2. **Shown.** `up` = 1 for Grafana (2 pods) and Zitadel (2 pods): in the third lab the VictoriaMetrics query
    `up{job=~".*zitadel.*|.*grafana.*"}` returned those 4 series, all 1, at 0.4.0 and twice after the policy (about 3 and 10 minutes
    after it), the raw answers kept with the lab's files. The forge was not deployed in those labs: **not shown** for the forge, and with
-   the token (0.4.3) its scrape is **not shown on a cluster** either: on the rig `up` = 1 with the token, DOWN (401) without it.
+   the token (0.4.3) its scrape was first shown on the rig (`up` = 1 with the token, DOWN (401) without it) and then on a cluster in lab 34 (`up` = 1 with the
+   bearer, cluster B; bullet "On the platform" above).
 3. **Spellings.** The policy matched `/metrics/`, `/metrics/x`, `/metrics?x=1`, `/%6Detrics`, `/%6detrics`, `/./metrics`,
    `/a/../metrics` and `/%2e/metrics` (403): the policy sees the path after Istio's normalisation. It did **not** match `//metrics`,
    `/debug//metrics`, `/Metrics`, `/METRICS`, `/metrics;a=b`, `/metrics.`, `/metrics%20`, `/metrics%2f` and `/%2fmetrics`, which reached
