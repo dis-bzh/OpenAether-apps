@@ -354,10 +354,12 @@ were not run on it.
   right token, `//metrics` answers 200, as expected: the token is the secret. The scrape was UP with the credentials and DOWN without.
 - **An existing forge keeps being scraped after the move, but not without a gap.** On the move from 0.4.2 three things change together: the vault
   script ConfigMap (Flux re-creates the configure Job, which creates `forgejo/metrics`), the two ExternalSecrets, and the Deployment's
-  environment. The Deployment is **Recreate**, so the pod rolls (31 s on the rig with no volume, NOMINAL; the forge was Ready 72 s after its
-  patch in a proof lab, a different measure) and, if the Secret is not there yet, it sits in `CreateContainerConfigError`, with the forge
-  away, until the ExternalSecret has been synced (ESO retries a failed sync; how long that takes after the Job ran was
-  **not measured**). The scrape comes back by itself when both Secrets exist and the new pod is up. Either order is safe: a scrape that sends the bearer to a forge that has
+  environment. The Deployment is **Recreate**, so the pod rolls (31 s on the rig with no volume, NOMINAL, one pod; the forge was Ready 72 s after its
+  patch in lab 34 at the 0.4.2 arm, 3 CP + 6 W, NOMINAL, a different measure) and, if the Secret is not there yet, it sits in `CreateContainerConfigError`, with the forge
+  away, until the ExternalSecret has been synced (ESO retries a failed read with a back-off, not on its `refreshInterval`; how long that takes after the Job ran was
+  **not measured**). Nothing orders the forge behind the vault Job (the `forgejo` Kustomization has no `dependsOn` on `foundation-vault`, which is `wait: false`), so on an
+  upgraded cluster the wait is real. The HelmRelease therefore carries `timeout: 15m` (Flux's default is 5 min): at 5 min Helm would roll the Deployment
+  back to the spec without the token (the forge without layer 3, layers 1 and 2 still holding), and after `retries: 3` the release would stay stalled. The next lab times the whole window. The scrape comes back by itself when both Secrets exist and the new pod is up. Either order is safe: a scrape that sends the bearer to a forge that has
   no token yet is answered 200 (no token configured, the header is ignored, read in Forgejo's documented behaviour and not run), and a forge that has the token before the
   scrape has it answers 401, so the target is DOWN until the twin Secret exists. No alert reads the forge's `up` today (`vmrule-*.yaml` do not name it), so the gap pages nobody and shows only as missing `gitea_*` points. A push or a clone in flight across the
   roll fails and is retried, as for every roll of this Deployment. The lab must measure the window (forge away, scrape gap) on a 0.4.2 to
@@ -365,6 +367,9 @@ were not run on it.
 - **Rotation.** Overwrite `secret/forgejo/metrics` in OpenBao; both ExternalSecrets follow within their `refreshInterval` (1 h); then restart the forge
   pod (the environment is read at start; `environment-to-ini` rewrites the key in `app.ini`). Between the Secret change and the restart the
   scrape gets 401. Not exercised.
+- **The token travels in cleartext inside the cluster.** The scrape goes to the pod on `:3000` over plain HTTP, and `services-git` is outside the mesh with no pod-network
+  encryption claimed anywhere in these docs: a pod or node that can see that traffic reads the bearer. The sensitivity is low (counters and build information), so this is a line here and
+  an issue, not a design change.
 - **Not covered by the token.** The kubelet probes (`/api/healthz`) and every other path are unchanged. Anyone who holds the token reads the metrics
   on any path spelling; the token is no stronger than the OpenBao policy that guards it (`secret/data/*` is readable by the ESO role).
 

@@ -61,12 +61,12 @@ served metrics" was true of the hosts swept and false of the forge. It is correc
 
 1. `meshConfig.pathNormalization.normalization: MERGE_SLASHES` in the `istiod` HelmRelease (`apps/base/istio/istiod.yaml`): runs of
    slashes are merged before the policy, the routes and the service see the path, so `//metrics` is `/metrics` and the existing four
-   paths refuse it. One line, closes the slash family for every host present and future. **Blast radius: mesh-wide.** Every Envoy
+   paths refuse it. One line, closes the literal-slash family (`//`, `///`, and `\\`, which Envoy turns into `/`) for the hosts probed and for a host added later that only cleans slashes. **Blast radius: mesh-wide.** Every Envoy
    istiod configures reads it: the Gateway pods (the only way in for customer requests) and the `istio-waypoint`, which no workload of
    this repository uses. ztunnel is L4 and has no path. The visible change: a request path with `//` in it reaches a service merged.
    A route of yours whose service gives a meaning to `//` (an object key, a URL embedded in a path, a signed path) changes behaviour:
    reasoned, not run. Nothing in this repository routes such a service through the Gateway. Istio pushes a changed `meshConfig` to the running proxies by xDS: on the rig the effect came in 2 s with no restart of
-   istiod or of the Gateway pods. `DECODE_AND_MERGE_SLASHES` (Istio's recommendation) was measured valid and stricter, and is NOT
+   istiod or of the Gateway pods (NOMINAL; one istiod replica, one Gateway pod, k3s, no ztunnel or waypoint; the repository ships 2 istiod replicas). `DECODE_AND_MERGE_SLASHES` (Istio's recommendation) was measured valid and stricter, and is NOT
    shipped: its extra coverage is `%2F`, no host served metrics on a `%2F` spelling, and it forwards the decoded slash to the
    application, which no client of the Forgejo package registries (scoped npm names, container registry) was run against.
 2. Two more paths in `deny-metrics-paths`: `//*` and `/debug//*`. A path that starts with `//`, or has `//` right after `/debug`, is
@@ -99,7 +99,7 @@ Longhorn), VM operator 0.68.1 and vmagent v1.136.0.
   admin, a 404 page, no metrics); OpenBao answers 404. That is safe by each service's router, not by design, which is why the
   Gateway layers exist. The Longhorn opt-in route was not tested.
 - *After the fix:* layer 1 alone, layer 2 alone and the token alone each took the fuzz from 25 leaking to 0 (the token: the 25 answer
-  401); the final run, with the files rendered from this tree, returned 0 bodies of 530. With the right token, `//metrics` answers
+  401); the final run, on a candidate tree whose istiod values, policy and Forgejo environment equal the committed ones (the ExternalSecrets, the twin, the scrape wiring and `configure.sh` were not on it), returned 0 bodies of 530. With the right token, `//metrics` answers
   200, as it must (the token is the secret).
 - *Side effects seen:* normal paths identical before and after (Grafana login and health, Zitadel `openid-configuration` with its
   issuer unchanged and its login page, OpenBao UI and health, the forge home page, API and login, a `git clone`, `git push` and
@@ -109,6 +109,7 @@ Longhorn), VM operator 0.68.1 and vmagent v1.136.0.
   before the redirect.
 - *Still open after the fix:* `%2F` spellings (`/%2fmetrics`, `/metrics%2f`, `/%2F%2Fmetrics`, `/debug%2Fmetrics`) reach the service
   as written: forge 303, Grafana 302, OpenBao 404, Zitadel 301 or 404, none served metrics, but a service that decodes `%2F` would.
+  The encoded backslash (`/%5Cmetrics`, `/metrics%5C`) is not decoded by `MERGE_SLASHES` either (Istio: only `DECODE_AND_MERGE_SLASHES` decodes `%2F` and `%5C`); not probed on the rig, to be in the next lab's sweep.
   Case (`/Metrics`) and `;param` (`/metrics;a=b`) variants reach the service too; no host served metrics on them.
 - *Not shown:* a platform cluster at the 0.4.3 head. The checks the next lab must make: the sweep on all five hosts including the forge
   with these extra spellings on both listeners before and after the move; a vmagent scrape of the forge at `up` = 1 with the token; an

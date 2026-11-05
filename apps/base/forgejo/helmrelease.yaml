@@ -37,6 +37,10 @@ metadata:
     openaether.io/component: forgejo
 spec:
   interval: 1h
+  # 15 minutes, not Flux's default 5: on the move from 0.4.2 the pod can wait in CreateContainerConfigError for the Secret that holds
+  # the metrics token (the configure Job writes it, then ESO syncs it, with a retry back-off on a failed read). At 5 minutes Helm would
+  # roll the Deployment back to the spec without the token, which is the forge without layer 3. Same figure as longhorn and loki here.
+  timeout: 15m
   chart:
     spec:
       chart: forgejo
