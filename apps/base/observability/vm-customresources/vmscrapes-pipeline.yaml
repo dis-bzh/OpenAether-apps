@@ -135,6 +135,11 @@ spec:
 # Scraped so the data exists; no rule reads it yet (its metric names are not checked against a running Forgejo). The
 # Gateway does not route /metrics to the Internet (forgejo/httproute.yaml). Ingress for vmagent is in
 # forgejo/networkpolicy.yaml.
+# Since 0.4.3 the endpoint asks for a bearer token ([metrics] TOKEN): the Gateway's refusal did not cover //metrics at
+# 0.4.1 and 0.4.2. The token is secret/forgejo/metrics, read here from the Secret forgejo-metrics of THIS namespace
+# (the operator resolves a scrape's Secret next to the scrape; the ExternalSecret is
+# apps/base/observability/externalsecret-forgejo-metrics.yaml). Without the Secret the operator skips this scrape only
+# (error log); a wrong token is "unexpected status code 401", up == 0.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
@@ -153,6 +158,10 @@ spec:
   podMetricsEndpoints:
     - port: http
       path: /metrics
+      authorization:
+        credentials:
+          name: forgejo-metrics
+          key: token
 ---
 # CNPG instance pods, port `metrics` (:9187): WAL archiver failures and the last (failed) base backup. The cluster
 # manifests set enablePodMonitor, which needs the Prometheus Operator CRDs this platform does not install.

@@ -3,7 +3,7 @@
 
 Each rule exists because the first version of the brick (PR #173, written to the 0.3.x patterns, never run on a cluster)
 broke it:
-  1. every OpenBao path an ExternalSecret of the brick reads (forgejo/db, forgejo/admin, forgejo/oidc, with its property) is
+  1. every OpenBao path an ExternalSecret of the brick reads (forgejo/db, forgejo/admin, forgejo/oidc, forgejo/metrics, with its property) is
      created by the vault configure Job (configure.sh): otherwise the ExternalSecret stays SecretSyncedError, the CNPG
      bootstrap Secret never exists and the database never starts;
   2. the admin Secret carries `username` AND `password`: the chart reads both keys of gitea.admin.existingSecret, and the pod
@@ -45,6 +45,11 @@ broke it:
      the data volume; both are the SAME script, RUN against a temporary tree (old and fresh locks, ref locks and not, index.lock,
      symlinks, other directories): the init removes every ref/packed-refs/HEAD/config/shallow lock, the sweeper only the old ones; both
      log paths and never contents, exit 0, and the sweeper stops on TERM at once and refuses an age that is not a number.
+  16. /metrics asks for a bearer token (0.4.3: the Gateway's refusal did not cover //metrics at 0.4.1 and 0.4.2, and the forge answered it
+     with its metrics): the Deployment gets GITEA__metrics__TOKEN from a Secret through a NOT optional secretKeyRef (an optional one starts
+     the forge open), the token is not in the chart values, the Secret is written by an ExternalSecret in services-git AND by a twin in
+     services-observability (listed in that brick) from the same OpenBao key and property (seeded by configure.sh, rule 1), and the
+     VMPodScrape `forgejo` sends it as authorization.credentials from the twin: without it the scrape goes 401.
 Static: it proves the wiring, not a cluster. Run: python3 -I scripts/dev/test-forgejo-brick.py [--selftest]
 """
 import copy
@@ -513,6 +518,109 @@ def kyverno_problems():
     return errs, (ky, pod)
 
 
+TOKEN_ENV = "GITEA__metrics__TOKEN"
+
+
+def metrics_token_problems(es_git, es_obs, obs_listed, hr, scrape):
+    """es_git, es_obs: the ExternalSecrets of services-git and of the observability brick; obs_listed: the resources of the
+    observability kustomization.yaml; scrape: the VMPodScrape `forgejo`."""
+    errs = []
+    vals = hr["spec"]["values"]
+    env = {e.get("name"): e for e in (vals.get("deployment") or {}).get("env") or []}
+    ref = ((env.get(TOKEN_ENV) or {}).get("valueFrom") or {}).get("secretKeyRef") or {}
+    if not ref:
+        return [f"the Deployment has no {TOKEN_ENV} from a secretKeyRef (deployment.env in the HelmRelease): /metrics would answer anyone who reaches the pod"]
+    name, key = ref.get("name"), ref.get("key")
+    if ref.get("optional"):
+        errs.append(f"{TOKEN_ENV} is an optional secretKeyRef: a forge started before the Secret exists would serve /metrics with no token")
+    if "value" in env[TOKEN_ENV]:
+        errs.append(f"{TOKEN_ENV} carries a literal value as well as the Secret reference")
+    cfg_metrics = ((((vals.get("gitea") or {}).get("config")) or {}).get("metrics")) or {}
+    if "TOKEN" in cfg_metrics or "token" in {k.lower() for k in cfg_metrics}:
+        errs.append("gitea.config.metrics has a TOKEN: the secret would sit in the HelmRelease values and the chart's config Secret")
+    if (((vals.get("gitea") or {}).get("metrics")) or {}).get("enabled") is not True:
+        errs.append("gitea.metrics.enabled is not true: the scrape would find nothing (and the token would protect nothing)")
+    keys = []
+    for where, ess, ns in (("services-git", es_git, "services-git"), ("the observability brick", es_obs, "services-observability")):
+        mine = [e for e in ess if e["metadata"]["name"] == name and e["metadata"].get("namespace") == ns]
+        if len(mine) != 1:
+            errs.append(f"no ExternalSecret {name} in {ns} ({where}): the Secret {name} would not exist there")
+            continue
+        refs = [(r["secretKey"], r["remoteRef"]["key"], r["remoteRef"]["property"]) for r in mine[0]["spec"].get("data", [])]
+        if [r[0] for r in refs] != [key]:
+            errs.append(f"ExternalSecret {name} in {ns} must write exactly the key {key!r} (the Deployment and the scrape read it), not {[r[0] for r in refs]}")
+        keys.append({(r[1], r[2]) for r in refs})
+    if len(keys) == 2 and keys[0] != keys[1]:
+        errs.append(f"the two ExternalSecrets {name} read different OpenBao keys ({keys[0]} vs {keys[1]}): the forge and vmagent would disagree and the scrape goes 401")
+    if "externalsecret-forgejo-metrics.yaml" not in obs_listed:
+        errs.append("apps/base/observability/kustomization.yaml does not list externalsecret-forgejo-metrics.yaml: the scrape's Secret would not exist")
+    eps = ((scrape or {}).get("spec") or {}).get("podMetricsEndpoints") or []
+    cred = ((eps[0] if eps else {}).get("authorization") or {}).get("credentials") or {}
+    if (cred.get("name"), cred.get("key")) != (name, key):
+        errs.append(f"the VMPodScrape forgejo must send authorization.credentials {{name: {name}, key: {key}}} (found {cred or 'none'}): with the token set the scrape gets 401 and up goes to 0")
+    if scrape and (scrape["metadata"].get("namespace") != "services-observability"):
+        errs.append("the VMPodScrape forgejo must be in services-observability: the operator resolves its Secret in the scrape's namespace")
+    return errs
+
+
+def token_inputs():
+    es_git = [d for d in docs("apps/base/forgejo/externalsecrets.yaml") if d["kind"] == "ExternalSecret"]
+    es_obs = [d for d in docs("apps/base/observability/externalsecret-forgejo-metrics.yaml") if d["kind"] == "ExternalSecret"]
+    obs = (yaml.safe_load((REPO / "apps/base/observability/kustomization.yaml").read_text()) or {}).get("resources") or []
+    hr = next(d for d in docs("apps/base/forgejo/helmrelease.yaml") if d["kind"] == "HelmRelease")
+    scrape = next((d for d in docs("apps/base/observability/vm-customresources/vmscrapes-pipeline.yaml")
+                   if d["kind"] == "VMPodScrape" and d["metadata"]["name"] == "forgejo"), None)
+    return es_git, es_obs, obs, hr, scrape
+
+
+def token_selftest(inp):
+    es_git, es_obs, obs, hr, scrape = inp
+
+    def with_hr(fn):
+        h = copy.deepcopy(hr)
+        fn(h["spec"]["values"])
+        return h
+
+    def env_of(v):
+        return next(e for e in v["deployment"]["env"] if e["name"] == TOKEN_ENV)
+
+    def with_scrape(fn):
+        sc = copy.deepcopy(scrape)
+        fn(sc)
+        return sc
+
+    def with_es(ess, fn):
+        out = copy.deepcopy(ess)
+        fn(out[0] if out else None)
+        return out
+
+    muts = {
+        "no token env": dict(hr=with_hr(lambda v: v["deployment"].update(env=[e for e in v["deployment"]["env"] if e["name"] != TOKEN_ENV]))),
+        "an optional secretKeyRef": dict(hr=with_hr(lambda v: env_of(v)["valueFrom"]["secretKeyRef"].update(optional=True))),
+        "a literal token beside the reference": dict(hr=with_hr(lambda v: env_of(v).update(value="x"))),
+        "the token in the chart values": dict(hr=with_hr(lambda v: v["gitea"]["config"].update(metrics={"TOKEN": "x"}))),
+        "metrics switched off": dict(hr=with_hr(lambda v: v["gitea"].update(metrics={"enabled": False}))),
+        "no ExternalSecret in services-git": dict(es_git=[e for e in es_git if e["metadata"]["name"] != "forgejo-metrics"]),
+        "no twin in services-observability": dict(es_obs=[]),
+        "the twin in another namespace": dict(es_obs=with_es(es_obs, lambda e: e["metadata"].update(namespace="services-git"))),
+        "the twin reading another OpenBao key": dict(es_obs=with_es(es_obs, lambda e: e["spec"]["data"][0]["remoteRef"].update(key="forgejo/admin"))),
+        "the twin writing another key": dict(es_obs=with_es(es_obs, lambda e: e["spec"]["data"][0].update(secretKey="password"))),
+        "the twin not listed in the brick": dict(obs_listed=[r for r in obs if r != "externalsecret-forgejo-metrics.yaml"]),
+        "a scrape with no credentials (401 once the token is set)": dict(scrape=with_scrape(lambda sc: sc["spec"]["podMetricsEndpoints"][0].pop("authorization"))),
+        "a scrape reading another Secret": dict(scrape=with_scrape(lambda sc: sc["spec"]["podMetricsEndpoints"][0]["authorization"]["credentials"].update(name="forgejo-admin"))),
+        "a scrape reading another key": dict(scrape=with_scrape(lambda sc: sc["spec"]["podMetricsEndpoints"][0]["authorization"]["credentials"].update(key="password"))),
+    }
+    ok = not metrics_token_problems(*inp)
+    print(("ok   " if ok else "FAIL ") + "the real metrics token wiring passes")
+    for name, m in muts.items():
+        a = dict(es_git=es_git, es_obs=es_obs, obs_listed=obs, hr=hr, scrape=scrape)
+        a.update(m)
+        caught = bool(metrics_token_problems(**a))
+        print(("ok   " if caught else "FAIL ") + f"caught: {name}")
+        ok = ok and caught
+    return ok
+
+
 def load():
     es = [d for rel in ("apps/base/forgejo/externalsecrets.yaml", "apps/base/forgejo-db/externalsecret.yaml") for d in docs(rel)
           if d["kind"] == "ExternalSecret"]
@@ -534,6 +642,7 @@ def selftest(args):
         "a missing forgejo/db seed": dict(conf=re.sub(r".*kv_create forgejo/db D\n", "", conf)),
         "a missing forgejo/admin seed": dict(conf=re.sub(r".*kv_create forgejo/admin D\n", "", conf)),
         "a missing forgejo/oidc seed": dict(conf=re.sub(r".*kv_create forgejo/oidc D\n", "", conf)),
+        "a missing forgejo/metrics seed": dict(conf=re.sub(r".*kv_create forgejo/metrics D\n", "", conf)),
         "an https chart repository": dict(repos={k: dict(v, spec=dict(v["spec"], type="default", url="https://forgejo-contrib.codeberg.page/forgejo-helm/")) for k, v in repos.items()}),
         "a chart host Flux cannot reach": dict(egress=egress.replace("code.forgejo.org", "elsewhere.example")),
         "a forgejo object in the cnpg directory": dict(cnpg=["apps/base/cnpg/forgejo-db-cluster.yaml"]),
@@ -792,10 +901,11 @@ def main():
     if "--selftest" in sys.argv:
         ok = selftest(args)
         ok = optin_selftest(inp) and ok
+        ok = token_selftest(token_inputs()) and ok
         if kctx:
             ok = kyverno_selftest(*kctx) and ok
         sys.exit(0 if ok else 1)
-    errs = problems(*args) + optin_problems(*inp) + kerrs
+    errs = problems(*args) + optin_problems(*inp) + metrics_token_problems(*token_inputs()) + kerrs
     for e in errs:
         print("FAIL " + e)
     print(f"{len(errs)} failed" if errs else "ok   the Forgejo brick is wired to its secrets, its chart source and its own database Kustomization")

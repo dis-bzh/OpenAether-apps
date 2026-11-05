@@ -349,6 +349,19 @@ spec:
             secretKeyRef:
               name: forgejo-db-credentials
               key: password
+        # /metrics asks for a bearer token ([metrics] TOKEN): without it the endpoint answers anyone who reaches the
+        # pod, and the Gateway's refusal of /metrics did not cover //metrics at 0.4.1 and 0.4.2
+        # (docs/public-exposure.md). The chart has no value for it (gitea.metrics.enabled only renders ENABLED = true)
+        # and gitea.config.metrics.TOKEN would put it in the HelmRelease values and the chart's config Secret, so it
+        # comes from the Secret, as the DB password does. NOT optional on purpose: an optional reference starts the
+        # forge open when the Secret is missing; this one waits in CreateContainerConfigError until the ExternalSecret
+        # has written it. Read at start: a rotation needs a restart of the pod. vmagent sends the same token
+        # (apps/base/observability/vm-customresources/vmscrapes-pipeline.yaml).
+        - name: GITEA__metrics__TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: forgejo-metrics
+              key: token
 
     gitea:
       admin:

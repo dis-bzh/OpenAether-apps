@@ -20,10 +20,16 @@ spec:
   hostnames:
     - "forge.openaether.local"
   rules:
-    # /metrics (gitea.metrics.enabled, scraped in-cluster by vmagent on :3000) is NOT served to the Internet: it answers
-    # without authentication and lists the forge's counters. A rule with no backendRefs makes the Gateway answer 500 to
-    # it (Gateway API: "no valid backends"; seen in an earlier proof lab); the more specific match wins over `/`. The
-    # Gateway-wide DENY (services-gateway/authorizationpolicy-deny-metrics.yaml) answers 403 first; this is a 2nd layer.
+    # /metrics (gitea.metrics.enabled, scraped in-cluster by vmagent on :3000) is NOT served to the Internet: it
+    # lists the forge's counters. A rule with no backendRefs makes the Gateway answer 500 to it (Gateway API: "no
+    # valid backends"; seen in an earlier proof lab); the more specific match wins over `/`. The Gateway-wide DENY
+    # (services-gateway/authorizationpolicy-deny-metrics.yaml) answers 403 first; this is a 2nd layer for the plain
+    # path.
+    # It does NOT cover //metrics, which Forgejo cleans to /metrics and which answered with the metrics at 0.4.1 and
+    # 0.4.2: the Gateway API refuses `//` in a PathPrefix, and on a local rig with Istio 1.31.3 a RegularExpression
+    # rule (/+metrics(/.*)?) was accepted but ordered after the `/` rule, so never reached (not tried on a cluster).
+    # That case is closed by istiod MERGE_SLASHES, the `//*` patterns of the policy, and Forgejo's own [metrics]
+    # TOKEN (helmrelease.yaml).
     - matches:
         - path:
             type: PathPrefix
