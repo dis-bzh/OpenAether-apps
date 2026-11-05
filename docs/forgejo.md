@@ -109,7 +109,7 @@ Each line is a defect of the first version, fixed here and held by `scripts/dev/
    term. It is the `grafana-db` form now. There is **no upgrade path to describe**: `forgejo-db` is new in 0.4.0, nothing of it exists on a
    0.3.x cluster, so the presync of synchronous replication before the apps ref moves (`docs/resilience.md`) does not apply to it.
 6. **Registration was open on a public route** and `/metrics` was served to the Internet (the rule written for it covered the plain path only: `//metrics`
-   was served at 0.4.1 and 0.4.2, fixed in 0.4.3). And the Gateway's egress policy
+   was served at 0.4.2, measured; 0.4.1 inferred, not run; fixed in 0.4.3). And the Gateway's egress policy
    (`apps/base/istio/networkpolicy.yaml`, a whitelist of backends) did not list the forge: the route would have timed out.
 7. The init containers had no limits (Kyverno `require-limits`), the pod ran with no `runAsNonRoot`, `seccompProfile` or
    ServiceAccount of its own, the chart's helm-test Pod (`busybox:latest`) was part of the release, and the image registry
@@ -324,7 +324,7 @@ target. What it does not cover, precisely:
 ## The metrics endpoint and its token (0.4.3)
 
 **Why.** Forgejo serves `/metrics` (`gitea.metrics.enabled`, for vmagent) with no credential unless `[metrics] TOKEN` is set. The Gateway
-refused `/metrics` with a 403 since 0.4.1, but not `//metrics`, which Forgejo cleans to `/metrics`: at 0.4.1 and 0.4.2 a forge behind the app load
+refused `/metrics` with a 403 since 0.4.1, but not `//metrics`, which Forgejo cleans to `/metrics`: at 0.4.2 (measured; 0.4.1 inferred from the same `apps/` tree, not run) a forge behind the app load
 balancer answered `https://forge.<domain>//metrics` with its metrics (66 families, 11 KB, no credential). The Gateway is fixed in two layers
 (`docs/public-exposure.md`: slash merging in istiod, two more paths in the policy); this is the third layer, at the source: the endpoint
 answers 401 without the right bearer, whatever the path.
@@ -379,7 +379,7 @@ d1d268c, NOT a tag): cluster A, a move from 0.4.2 with the forge on, and cluster
     order by construction (the case of a Job still running is not shown): the pod started at the first try with 0 `CreateContainerConfigError` and was Ready
     101 s after the pod was created, which is not comparable with the patch-to-Ready figures above.
 
-  The scrape comes back by itself when both Secrets exist and the new pod is up. Either order is safe: a scrape that sends the bearer to a forge that has
+  The scrape comes back by itself when both Secrets exist and the new pod is up. Either scrape order is safe (this is the order of the scrape and the token, not the order of the Secret and the pod, whose unfavourable case is the INCIDENT above): a scrape that sends the bearer to a forge that has
   no token yet is answered 200 (no token configured, the header is ignored, read in Forgejo's documented behaviour and not run), and a forge that has the token before the
   scrape has it answers 401, so the target is DOWN until the twin Secret exists. No alert reads the forge's `up` today (`vmrule-*.yaml` do not name it), so the gap pages nobody and shows only as missing `gitea_*` points. A push or a clone in flight across the
   roll fails and is retried, as for every roll of this Deployment.

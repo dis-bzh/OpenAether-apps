@@ -38,9 +38,9 @@ the Gateway for `/metrics`, `/metrics/*`, `/debug/metrics` and `/debug/metrics/*
 a 403 from the Gateway's Envoy (read in the second lab, below). One policy rather than a rule per route: it covers a route nobody
 has written yet, and it is the mechanism `allow-gateway-ingress` already uses (`targetRefs` on the Gateway, DENY evaluated before
 ALLOW). The Forgejo rule stays, as a second layer. These four paths are matched as they arrive: the slash spellings (`//metrics`)
-were not covered at 0.4.1 and 0.4.2, and the forge's metrics answered them. Next section.
+were not covered at 0.4.1 and 0.4.2, and the forge's metrics answered them at 0.4.2 (measured; 0.4.1 inferred, not run). Next section.
 
-### Slash spellings: the forge answered `//metrics` at 0.4.1 and 0.4.2 (fixed in 0.4.3)
+### Slash spellings: the forge answered `//metrics` at 0.4.2 (0.4.1 inferred, not run; fixed in 0.4.3)
 
 **What was found.** A later proof lab (Scaleway, 3 CP + 6 W; the released 0.4.2 tags with the forge brick, which is opt-in, turned on by
 the documented live patch; Forgejo 15.0.10) ran the first `/metrics` sweep that included the forge host: 270 probes (27 spellings x 5
@@ -49,8 +49,8 @@ Forgejo's metrics: 66 metric families, 11,151 bytes, including the build informa
 `///metrics`, `//metrics/` and `//metrics?x=1` did the same (200, 11,152 to 11,153 bytes, read in a second file of 20 probes, 10 per listener). `/metrics`,
 `/metrics/` and `/debug/metrics` gave 403, and plain HTTP on :80 gave a 301 for the `//` spellings (the redirect, not the metrics).
 What the body lists is the forge's counters and build information, not repository content or a credential. **Who is touched:** a
-cluster that turned the forge brick on at 0.4.2 (measured) or at 0.4.1 (the same `apps/` tree: `git diff 0.4.1..0.4.2 -- apps scripts`
-prints nothing; not run). A cluster without the brick has no forge route and no Forgejo. On the four other hosts of that sweep no
+cluster that turned the forge brick on at 0.4.2 (measured) or, by inference only, at 0.4.1 (the same `apps/` tree: `git diff 0.4.1..0.4.2 -- apps scripts`
+prints nothing; no 0.4.1 cluster with the forge brick was run or swept). A cluster without the brick has no forge route and no Forgejo. On the four other hosts of that sweep no
 spelling returned metrics (first response only, redirects not followed; the Longhorn opt-in route was not tested). The same was read on a second 0.4.2 cluster, at the arm of the move to 0.4.3 (lab 34,
 cluster A; 540 probes = 54 spellings x 5 hosts x HTTPS and plain HTTP): 200 probes answered 403, 5 returned a Prometheus body, all of them on the
 forge host and on HTTPS (`//metrics`, `///metrics`, `//metrics/`, `//metrics?x=1` and `/\metrics`; 66 families, 11,153 to 11,157 bytes).
@@ -134,7 +134,8 @@ Longhorn), VM operator 0.68.1 and vmagent v1.136.0.
   303, Grafana 302, OpenBao 404, Zitadel 301, 307 or 404, the test application 200 with its own page); `/%5Cmetrics` and `/metrics%5C` were probed (forge 303,
   no body). No body was seen, but a service that decodes one of them would leak. The Zitadel `/debug%2Fmetrics` probe changed from 301 to 307 between the
   arm and the move, unexplained; no body either way.
-- *Not shown:* (1) **redirects were not followed**: 159 of the 540 probes answer 301, 302, 303 or 307, so "0 bodies" on a redirect is true of the first
+- *Not shown:* (1) **redirects were not followed**: 159 of the 540 probes in each after-move sweep and in cluster B's answer 301, 302, 303 or 307 (114 x 301, 22 x 302,
+  22 x 303, 1 x 307), and 257 of 540 at the arm (196 x 301, 33 x 302, 28 x 303), so "0 bodies" on a redirect is true of the first
   response only (the rig followed none either); (2) the `%2F`, `%5C`, case and `;param` spellings **beyond the first hop**; (3) **the policy layer alone on
   a cluster**; (4) the xDS push time on a cluster (the 68 s above is not it); (5) the Longhorn opt-in route (not tested) and Zitadel's `/debug/metrics`
   body (the rig does not serve it, and the platform sweep read 403 or redirects, not the body); (6) a tag-pinned install or move (both clusters ran the
