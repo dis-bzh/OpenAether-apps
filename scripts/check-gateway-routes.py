@@ -10,9 +10,15 @@ to that Gateway is reachable by anyone who sets the Host header. This scans the 
   - a metrics endpoint (METRICS_PATHS) is not refused at the Gateway: no listed DENY AuthorizationPolicy covers it for every
     caller and host (the routes that would forward it are named), or the policy also denies ordinary paths; or a URL scrape
     (VMStaticScrape, VMProbe) names a Gateway host, where the deny would cut it. Pod and service scrapes never pass the Gateway.
+  - the same endpoint written with runs of slashes (//metrics, ///metrics, /debug//metrics, //debug/metrics/) is not refused
+    TWICE, by two layers that fail differently: the policy ALONE (it matches the path as it arrives, and a service such as
+    Forgejo cleans //metrics to /metrics), and istiod's meshConfig.pathNormalization (MERGE_SLASHES or
+    DECODE_AND_MERGE_SLASHES, which hands the policy the merged path). Either one missing is reported.
 
 Usage: python3 scripts/check-gateway-routes.py            Dependency: PyYAML.
 """
+import itertools
+import re
 import sys
 from pathlib import Path
 
@@ -24,10 +30,15 @@ REGISTER = "docs/public-exposure.yaml"
 COMPONENT = "apps/flux/components/private-admin-routes/kustomization.yaml"
 GATEWAY_NS = "services-gateway"
 POLICY_BRICK = "apps/base/services-gateway"
+ISTIOD = "apps/base/istio/istiod.yaml"
+# istiod's meshConfig.pathNormalization.normalization values that merge runs of slashes before the AuthorizationPolicy, the routes
+# and the service see the path (BASE and NONE do not; BASE is what Istio does when nothing is set).
+MERGING = ("MERGE_SLASHES", "DECODE_AND_MERGE_SLASHES")
 # What the services behind the Gateway publish without a login and what vmagent reads pod to pod: /metrics (Grafana, Forgejo,
 # Loki) and /debug/metrics (Zitadel, VMPodScrape zitadel). Each is denied exact and as a prefix.
 METRICS_PATHS = ("/metrics", "/debug/metrics")
-BENIGN_PATHS = ("/", "/login", "/api/health", "/ui/v2/login", "/.well-known/openid-configuration", "/metricsx")
+# /x/metrics: a repository (Forgejo) or a dashboard named "metrics". It is not the endpoint and must be served.
+BENIGN_PATHS = ("/", "/login", "/api/health", "/ui/v2/login", "/.well-known/openid-configuration", "/metricsx", "/x/metrics")
 KINDS = ("HTTPRoute", "AuthorizationPolicy", "VMStaticScrape", "VMProbe")
 
 
@@ -82,8 +93,40 @@ def istio_path(pattern, path):
     return path.endswith(pattern[1:]) if pattern.startswith("*") else path == pattern
 
 
-def gateway_denies(pols, path):
+def slash_spellings(base):
+    """The paths a service that cleans its URL maps back to `base`: each separator written as 1 to 3 slashes, 0 to 2 trailing
+    ones; the plain `base` and `base/` are left out (they have their own checks). //metrics, ///metrics/, /debug//metrics, ..."""
+    segs = base.strip("/").split("/")
+    out = []
+    for runs in itertools.product((1, 2, 3), repeat=len(segs)):
+        for tail in ("", "/", "//"):
+            p = "".join("/" * n + s for n, s in zip(runs, segs)) + tail
+            if p not in (base, base + "/"):
+                out.append(p)
+    return out
+
+
+def merge_slashes(path):
+    """What MERGE_SLASHES hands to the AuthorizationPolicy: runs of slashes in the path become one (the query is not part of it)."""
+    return re.sub(r"/{2,}", "/", path)
+
+
+def mesh_normalisation(root):
+    """istiod's meshConfig.pathNormalization.normalization as the HelmRelease sets it, or None (Istio then applies BASE)."""
+    f = root / ISTIOD
+    if not f.exists():
+        return None
+    for d in yaml.safe_load_all(f.read_text()):
+        if isinstance(d, dict) and d.get("kind") == "HelmRelease" and (d.get("metadata") or {}).get("name") == "istiod":
+            mc = (((d.get("spec") or {}).get("values") or {}).get("meshConfig") or {})
+            return (mc.get("pathNormalization") or {}).get("normalization")
+    return None
+
+
+def gateway_denies(pols, path, merge=False):
     """True when a DENY policy applied to the Gateway refuses EVERY request for `path`, whoever sends it.
+
+    `merge`: the mesh merges slashes (istiod pathNormalization), so the policy is matched against the merged path.
 
     A rule narrowed by `from` or `when` leaves some callers through; an operation narrowed by host, port or method leaves some
     requests through; a policy outside the Gateway's namespace or aimed at another target is inert. A rule with no `to` denies all.
@@ -98,7 +141,8 @@ def gateway_denies(pols, path):
             if rule.get("from") or rule.get("when"):
                 continue
             ops = [t.get("operation") or {} for t in rule.get("to") or []]
-            if not ops or any(set(op) == {"paths"} and any(istio_path(x, path) for x in op["paths"]) for op in ops):
+            seen = merge_slashes(path) if merge else path
+            if not ops or any(set(op) == {"paths"} and any(istio_path(x, seen) for x in op["paths"]) for op in ops):
                 return True
     return False
 
@@ -119,17 +163,34 @@ def forwards(route, path):
     return backends
 
 
-def metrics_problems(pols, routes):
-    """`routes` is [(file, HTTPRoute)]. Every metrics path is refused at the Gateway, and ordinary paths are not."""
+def metrics_problems(pols, routes, normalisation="MERGE_SLASHES"):
+    """`routes` is [(file, HTTPRoute)]; `normalisation` is istiod's pathNormalization (mesh_normalisation).
+
+    Every metrics path is refused at the Gateway, ordinary paths are not, and the slash spellings of a metrics path (the forge
+    answered //metrics with its metrics at 0.4.1 and 0.4.2: Forgejo cleans the path, the policy matched it literally) are refused
+    by two layers each on its own: the policy as it is shipped, and istiod merging the slashes before the policy sees the path.
+    """
     errors = []
+    merges = normalisation in MERGING
     for base in METRICS_PATHS:
         open_ = [p for p in (base, base + "/", base + "/x") if not gateway_denies(pols, p)]
         if open_:
             via = [f"{d['metadata'].get('namespace')}/{d['metadata']['name']}" for _, d in routes if forwards(d, base)]
             errors.append(f"{POLICY_BRICK}: no listed DENY AuthorizationPolicy on {GATEWAY} (ns {GATEWAY_NS}) refuses "
                           f"{', '.join(open_)}" + (f"; routes that forward {base}: {', '.join(via)}" if via else ""))
+        # layer 2: the policy alone, as if the mesh did not merge (the mesh setting can be lost on its own: another file, another Kustomization)
+        slashed = [p for p in slash_spellings(base) if not gateway_denies(pols, p, merge=False)]
+        if slashed:
+            via = [f"{d['metadata'].get('namespace')}/{d['metadata']['name']}" for _, d in routes if forwards(d, slashed[0])]
+            errors.append(f"{POLICY_BRICK}: the policy alone leaves {len(slashed)} slash spelling(s) of {base} open "
+                          f"({', '.join(slashed[:4])}{', ...' if len(slashed) > 4 else ''}): a service that cleans the path serves its metrics "
+                          f"(Forgejo did at 0.4.1 and 0.4.2)" + (f"; routes that forward {slashed[0]}: {', '.join(via)}" if via else ""))
+    # layer 1: istiod hands the policy the merged path
+    if not merges:
+        errors.append(f"{ISTIOD}: meshConfig.pathNormalization.normalization is {normalisation or 'not set (Istio applies BASE)'}, not one of "
+                      f"{', '.join(MERGING)}: //metrics reaches the services with the slashes (Forgejo answers it with its metrics)")
     errors += [f"{POLICY_BRICK}: a DENY policy on {GATEWAY} also refuses {p}, which the services serve"
-               for p in BENIGN_PATHS if gateway_denies(pols, p)]
+               for p in BENIGN_PATHS if gateway_denies(pols, p) or gateway_denies(pols, p, merge=True)]
     return errors
 
 
@@ -185,7 +246,7 @@ def main():
     found, errors = find_routes(REPO, docs)
     register = yaml.safe_load((REPO / REGISTER).read_text()) or {}
     errors += check(found, register, deleted_by_component((REPO / COMPONENT).read_text()))
-    errors += metrics_problems(policies(REPO, docs), gateway_routes(docs))
+    errors += metrics_problems(policies(REPO, docs), gateway_routes(docs), mesh_normalisation(REPO))
     errors += scrape_problems(docs, [r.get("host") for r in register.get("routes") or []])
     if errors:
         print(f"{len(errors)} problem(s):", file=sys.stderr)
@@ -193,7 +254,7 @@ def main():
             print(f"  - {e}", file=sys.stderr)
         sys.exit(1)
     print(f"OK - {len(found)} HTTPRoute(s) on {GATEWAY}, all registered with their authentication; "
-          f"{', '.join(METRICS_PATHS)} refused at the Gateway.")
+          f"{', '.join(METRICS_PATHS)} refused at the Gateway, their slash spellings by the policy alone and by istiod's {mesh_normalisation(REPO)}.")
 
 
 if __name__ == "__main__":
