@@ -3,8 +3,9 @@
 
 Three static facts, each of which was missing or can silently regress:
   - the Zitadel HTTPRoute sends /ui/v2/login to zitadel-login:3000 (without it the authorize step ends on a 404);
-  - /ui/v2/login/_next/image is a longer prefix that goes to the server, which answers 404 (the optimizer carries the Next.js
-    advisories recorded as not affected in the VEX file: keep it unreachable while those statements stand);
+  - /ui/v2/login/_next/image is a longer prefix that goes to the server, which answers 404 (defence in depth: the optimizer
+    is where Next.js advisories land, and the endpoint is still enabled in the login build; no VEX statement rests on it
+    since zitadel-login v4.20.1);
   - the Gateway may reach zitadel-login on its targetPort 3000 (Cilium enforces on the pod port), and no wider than that.
 Static: it proves the manifests, not the browser flow (that is a lab check).
 """

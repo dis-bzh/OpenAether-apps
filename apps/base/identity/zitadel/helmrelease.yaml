@@ -77,17 +77,19 @@ spec:
     # Pinned explicitly instead of auto-derived.
     #
     # Server and login are pinned HERE, ahead of the chart (10.4.0, appVersion v4.19.2; 11.0.0 is still beta): v4.19.5
-    # fixes three HIGH account-takeover advisories (GHSA-mchc-246r-6m76, GHSA-84fg-x5h4-w8xv, GHSA-qj3q-235g-qr6w).
-    # tag@digest: the tag stays readable, the digest makes a re-pushed tag fail instead of reaching the cluster.
-    # Drop the two overrides when a stable chart ships a patched appVersion.
+    # fixed three HIGH account-takeover advisories (GHSA-mchc-246r-6m76, GHSA-84fg-x5h4-w8xv, GHSA-qj3q-235g-qr6w) and
+    # v4.20.1 (2026-11-03) keeps those fixes and ships Next.js 16.4.3 in the login (GHSA-673q-mjm6-r5xr and
+    # GHSA-2464-fhr4-w9xw are fixed from 16.4.1). Server and login move together.
+    # tag@digest: the tag stays readable, the digest (the multi-arch INDEX digest) decides what runs, so a re-pushed tag
+    # changes nothing. Drop the two overrides when a stable chart ships a patched appVersion.
     image:
       # renovate: datasource=docker depName=ghcr.io/zitadel/zitadel
-      tag: "v4.19.5@sha256:a586456a208e0db4c633db0ba43c427c24b37846138b8b13ff16ad8e003a18d3"
+      tag: "v4.20.1@sha256:4817dbd8896306867f28bba63e7dc3526b2d2646ac7111db9524eb3ab6e82301"
     tools:
       kubectl:
         image:
           # renovate: datasource=docker depName=alpine/k8s
-          tag: "1.37.1"
+          tag: "1.37.2"
       # The readiness-wait init container of the login pods had no limit (Kyverno require-limits, lab 11).
       wait4x:
         image:
@@ -126,10 +128,10 @@ spec:
         minAvailable: 1
       image:
         # renovate: datasource=docker depName=ghcr.io/zitadel/zitadel-login
-        tag: "v4.19.5@sha256:2f8e57672fcd4f9a285d99355fae9f85fd7495768c090c07c3bbc2d84fc06617"
+        tag: "v4.20.1@sha256:1508e83275f1471b20ed42b159174e6b3e10e6c2481e64c0aee7ed5bfeeec18b"
       # The key that signs the login's session cookie: a generated secret from OpenBao (secret/zitadel/session-cookie).
-      # Without it the login derives the key from its service key (deprecated fallback), and v4.19.5 asks for a
-      # random value that is not an example one.
+      # Without it the login derives the key from its service key (deprecated fallback), and since v4.19.5 it asks for a
+      # random value that is not an example one. v4.20.0 signs the device code check with the same key.
       sessionCookieSecretName: zitadel-login-session-cookie
       resources:
         requests:

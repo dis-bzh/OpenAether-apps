@@ -59,22 +59,33 @@ The second command runs from the default branch; that run checks out the tag and
 had already created the draft, skip the first command.
 
 **Rung of the attach. This is the one place that states it** (`CHANGELOG.md` and the release notes point here).
-**Checked:** actionlint and yamllint on `sbom.yml`. **Replayed by hand:** the upload step only, with the maintainer's own
-`gh` credentials from a shell on the maintainer's machine, **not as an Actions job**: against a throwaway draft release of
-this repository (the asset was attached, the draft deleted afterwards) and against the published 0.4.1 release (refused,
-exit 1). **Not run:** the `GITHUB_TOKEN` path inside Actions (`contents: write` on the job, the draft creation, the upload
-with that token), the tag-push trigger, the path with no release yet, the run started by the publish (the job `The published
-release carries the SBOM`, and the skipped scan matrix) and the `workflow_dispatch` fallback above. All of it runs for the
-first time at the 0.4.2 tag, so **the 0.4.2 release is the first live proof of this procedure**; if it fails, use the
-fallback before publishing. After that run, update this paragraph and the "not observed yet" sentence below together.
+**Observed in Actions at the 0.4.2 tag** (run 41842416697, 2026-11-04): the tag-push trigger and the path with no release
+yet (the job created the draft, its log prints the draft URL, and uploaded the file with the `GITHUB_TOKEN`; the asset
+`openaether-apps-0.4.2.cdx.json` is on the release), and, in the run the publish started (41842922385), the VEX check and
+the job `The published release carries the SBOM`, both green. **Replayed by hand earlier:** the upload step with the
+maintainer's own `gh` credentials, against a throwaway draft release (the asset was attached, the draft deleted afterwards)
+and against the published 0.4.1 release (refused, exit 1); actionlint and yamllint on `sbom.yml`. **Not observed:** the
+`workflow_dispatch` fallback above, and the refusal of a published release inside Actions.
 
-**Open, 2026-11-04:** the weekly scan is red. The open `[vuln]` issues say on what: apps #179 (the Forgejo image
-`15.0.10-rootless`, `brotli-libs` CVE-2026-111497), apps #162 and #163 (the CNPG PostgreSQL 16.15 and 18.6 images) and
-OpenAether-infra #444 (the Flux kustomize-controller image: the same CVE as #179); `CHANGELOG.md`, `[0.4.2]`, has the
-figures. A tag pushed while they are open gives a red `SBOM` run; by the job graph the attach job (it needs only the
-inventory) can still be green (not observed yet). Not all VEX waivers are long-lived either: two (Next.js on
-`zitadel-login`) run to 2026-12-04, five more and one Trivy ignore entry end on 2026-11-20, and `scripts/check-vex.py` is
-red from 2026-11-21 unless they are re-read or their images fixed.
+**Open, 2026-11-04 (0.4.3).** What is still red: certifi GHSA-6q48-6c7w-9gw2 (fixed in certifi 2026.10.18) in the CNPG
+PostgreSQL 16.15 and 18.6 images (apps #162 and #163). It has no waiver: the backup verifier uses certifi through botocore.
+The images are to be replaced in 0.4.4 (planned, owner decision), so the weekly scan stays red on these two until then.
+This release's image bumps remove the other reds of 0.4.2: Forgejo 15.0.11 (apps #179, `brotli-libs` CVE-2026-111497; the
+same CVE is open for the Flux image in OpenAether-infra #444, handled in that repository), and the five findings that were
+waived: `alpine/k8s` 1.36.6 and 1.37.2 (CVE-2025-68121 and certifi), `k8s-sidecar` 2.14.3 (certifi), Zitadel and
+`zitadel-login` v4.20.1 (the two Next.js advisories). Read with Trivy 0.69.3 and 0.75.0 on the amd64 images, database of 2026-11-04: **a local scan**. The Actions run on the
+branch named below agrees for the images it scanned (38 of 40 scan jobs green, the two red ones are the PostgreSQL images);
+the first scan on main after the merge is still to come. A tag pushed while a scan is red gives a red `SBOM` run, and the attach
+job is still green: observed at the 0.4.2 tag (run 41842416697: `Attach to a draft release` green, four scan jobs red,
+Forgejo, the CNPG operator and the two PostgreSQL images; the last three failed on a ghcr.io rate limit, #197).
+
+**Waivers: two VEX statements and one Trivy ignore entry, all renewed on 2026-11-04 after a re-reading and all ending on
+2026-12-04.** The statements: restic (CVE-2026-60002, OpenSSH in the image's alpine layer, never called; `restic` 0.19.1 is
+still the newest tag) and PyJWT in the CNPG PostgreSQL images (CVE-2026-102268, imported only by `msal`, not used). The
+ignore entry: libexpat in the Longhorn v1.12.1 images (SUSE-SU-2026:4619-1; a reading of package data and file searches: no Longhorn process was run or traced, only `wget --help` and `ldd` in the backing-image-manager image).
+The five statements of the list above were deleted, not renewed, because the fixed images carry no such finding. Nothing
+ends on 2026-11-20 any more: `scripts/check-vex.py` passes on 2026-11-21 and on 2026-12-03, and fails from 2026-12-05 if
+the three are not re-read again or removed.
 
 - **VEX:** a finding that does not apply is an OpenVEX statement in `.vex/openaether-apps.openvex.json`
   (`not_affected` with a justification, an `impact_statement`, an `action_statement` and ONE `Expires: YYYY-MM-DD` in
@@ -82,11 +93,33 @@ red from 2026-11-21 unless they are re-read or their images fixed.
   dates, so `scripts/check-vex.py` (a CI step, and the `VEX statements` job of the SBOM workflow) fails on a missing
   justification or expiry and on an expired statement. A statement never covers a fixable, reachable CRITICAL. Docker Hub products are written with
   Trivy's `index.docker.io` repository URL. `.github/trivy-ignore.yaml` (Trivy's format, with its own `expired_at`) holds the
-  one accepted finding Trivy's VEX matching misses (Longhorn UI and manager); `check-vex.py` holds it to the same rule.
+  one accepted finding Trivy's VEX matching misses (libexpat in the Longhorn v1.12.1 images); `check-vex.py` holds it to the same rule.
+  **Expiry day:** `check-vex.py` accepts a date on that day and fails from the next one, but Trivy stops applying an
+  ignore entry from 00:00 UTC of its `expired_at` day (its source, `ExpiredAt.Before(now)`, read at v0.69.3). So the
+  Longhorn scans can be red on 2026-12-04 while `check-vex.py` is still green. Not fixed (a Friday: the scheduled scan
+  runs on Tuesdays); a tag push or a manual run on that day would show it.
   Whether Trivy matches a product is only seen by scanning the image: `trivy image --config .github/trivy-image-vex.yaml <ref>`.
 - **Failing scans are announced:** a failed scan opens, or comments on, one issue `[vuln] <image>` and closes it when the
   scan passes (`scripts/ops/vuln-issue.sh`); an expired waiver does the same under `[vuln] VEX statements`. Before, a red
-  run was the only signal. HIGH findings are still not scanned.
+  run was the only signal. HIGH findings are still not scanned. Only a scan that wrote a report does this. A scan that
+  did not run (a pull refused or rate limited, #197; no report on disk) is **only a red job**: it fails with a message
+  and opens, comments on and closes no issue, so an open `[vuln]` issue stays as it was. **Residual:** nothing announces
+  an image that then stays unscanned until someone reads the run; there is no retry, and the next chance is the next
+  scheduled run (weekly). **The #197 change (the `ghcr.io` login with the workflow token, and the step that tells a
+  finding from a scan that did not run) has run in Actions, on the branch.** Rung: workflow run 41927056554, a
+  `workflow_dispatch` on `claude/0.4.3-rc1` at 9fb9035 (2026-11-04; six commits before the lab-proven head e8ca37f, and none of
+  the six touches an image, a workflow or the VEX file). The step `Log in to ghcr.io` printed `Login Succeeded` (read in three of
+  the eight ghcr scan jobs: both red ones and one green one), **all eight ghcr scans ran**, and 38 of the 40 scan jobs were
+  green. **The two red scans are `ghcr.io/cloudnative-pg/postgresql:16.15` and `:18.6`**, one CRITICAL each, certifi
+  GHSA-6q48-6c7w-9gw2 (installed 2026.7.22, fixed in 2026.10.18): known, no waiver, apps #162 and #163, deferred to 0.4.4. On
+  both, the step `Tell a finding from a scan that did not run` took its branch "report present, the scan ran". The 0.4.2
+  failures read `TOOMANYREQUESTS ... allowed: 44000/minute`, a limit reported per runner address: none of the eight ghcr
+  scans was refused in this run, but one run does not show that the login is what lifted the limit. **Still not run:** the
+  tag-push attach with the new login (a dispatch without a tag skips the `Attach to a draft release` job), and a `[vuln]`
+  issue opened or closed by the new steps (a dispatch on a branch opens none, by design). The `VEX
+  statements` job follows the same rule: its report holds the output of `check-vex.py`, stderr included, so a VEX file
+  the script cannot read (exit 2) opens or updates the issue with that message; a run with no output at all is only a
+  red job.
 
 ## What is checked on every pull request
 
@@ -117,7 +150,7 @@ external-secrets). Checked against the versions **pinned here**:
 | `ghcr.io/cloudnative-pg/cloudnative-pg:1.23.1` (the former pin; 1.30.1 not re-checked) | **no signature at all** |
 | `quay.io/jetstack/cert-manager-controller:v1.15.3` (the former pin; not re-checked at v1.21.2) | a `.sig` tag exists but no keyless signature matches (key-signed or another scheme) |
 | `docker.io/openbao/openbao:2.7.1` | a signature verifies, identity not recorded here |
-| `docker.io/restic/restic:0.19.1`, `grafana/grafana:11.3.1` (the former pin; 13.2.4 not re-checked), `ghcr.io/zitadel/zitadel:v4.14.0` (the former pin; v4.19.5 not re-checked), `istio/pilot:1.24.2` (the former pin; 1.31.3 not re-checked) | no keyless signature |
+| `docker.io/restic/restic:0.19.1`, `grafana/grafana:11.3.1` (the former pin; 13.2.4 not re-checked), `ghcr.io/zitadel/zitadel:v4.14.0` (the former pin; v4.20.1 not re-checked), `istio/pilot:1.24.2` (the former pin; 1.31.3 not re-checked) | no keyless signature |
 
 So a `verifyImages` policy in Enforce would admit only a minority of what runs, and the largest parts of the audit's
 list cannot be verified at these versions. **No policy is shipped.** The practical order is: pin by digest (Renovate,

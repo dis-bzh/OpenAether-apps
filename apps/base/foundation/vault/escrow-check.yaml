@@ -89,7 +89,7 @@ spec:
             - name: check
               # Same image as openbao-init (kubectl and a shell); the `docker.io/` prefix is mandatory
               # for restrict-image-registries.
-              image: docker.io/alpine/k8s:1.36.5
+              image: docker.io/alpine/k8s:1.36.6
               command: ["/bin/bash", "/scripts/escrow-check.sh"]
               env:
                 - name: HOME

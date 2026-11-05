@@ -5,7 +5,8 @@ and found three defects; labs 27B, 27C, 28B and 28C (Scaleway) and 27D and 28 (O
 and in the status line of each section on the durability of a push. What lab 27 showed: the brick converged in 2 min 30 s
 from the path patch (chart pulled from `code.forgejo.org` under the restricted egress policy, `forgejo-db` 3/3 with synchronous
 replication, archiving and the replica copy), HTTPS through the load balancer and the Gateway worked (`/api/healthz` 200, registration
-refused, anonymous API 403, anonymous clone refused, `/metrics` answers 500 at the Gateway and is scraped by vmagent), the admin
+refused, anonymous API 403, anonymous clone refused, `/metrics` answered 500 at the Gateway in that lab (the route's own rule with no backend; a 403 since
+the Gateway policy of 0.4.1, and `//metrics` is covered since 0.4.3, see "The metrics endpoint and its token") and is scraped by vmagent), the admin
 logged in and was forced to change the password, two repositories were pushed (3 s each) and cloned. The defects: the daily
 volume backup never selected the volume (FG), acknowledged pushes were lost on a zone power-off (FK, DATA LOSS), and enabling the
 brick is a hand patch (FF). FG and FK have a fix below; FF is a documented gap ("Opt-in"). Not a compliance claim. The sections below on
@@ -15,7 +16,7 @@ status line. What is still open (apps #176) is in "What is NOT delivered".
 
 ## What is delivered
 
-- **Forgejo 15.0.10** (LTS, end of support 2027-07-15, `docs/eol-calendar.yaml`), from the chart `forgejo-helm` 17.3.1, a single replica
+- **Forgejo 15.0.11** (LTS, end of support 2027-07-15, `docs/eol-calendar.yaml`), from the chart `forgejo-helm` 17.3.2, a single replica
   with its repositories on a 10 Gi `longhorn-x2-rwo` volume, in the namespace `services-git` (outside the mesh, a `CiliumNetworkPolicy`
   of its own), reached at `https://forge.openaether.local` through the shared Gateway (HTTPS only; no SSH).
 - **`forgejo-db`**, its PostgreSQL: a CNPG Cluster of 3 instances in `foundation-databases`, built from what `grafana-db` is in this
@@ -30,9 +31,10 @@ status line. What is still open (apps #176) is in "What is NOT delivered".
   must not hold `cnpg` (also `wait: true`), identity or observability back.
 - **Secrets from OpenBao**, seeded by the vault configure Job (create only, never printed, never rotated by a re-run):
   `secret/forgejo/db` (32 characters), `secret/forgejo/admin` (the initial admin password, 28 characters and `Aa1!`; Forgejo creates the
-  account once and asks for a change at the first login) and `secret/forgejo/oidc` (a **public placeholder**: the Zitadel auth source
-  ships disabled; an operator overwrites it when rung 3 starts).
-- Metrics scraped by vmagent (`VMPodScrape forgejo`); no rule reads them yet. `/metrics` is not routed on the Gateway.
+  account once and asks for a change at the first login), `secret/forgejo/oidc` (a **public placeholder**: the Zitadel auth source
+  ships disabled; an operator overwrites it when rung 3 starts) and, since 0.4.3, `secret/forgejo/metrics` (40 characters, the bearer token of `/metrics`).
+- Metrics scraped by vmagent (`VMPodScrape forgejo`, with the bearer token since 0.4.3); no rule reads them yet. `/metrics` is not routed on
+  the Gateway (403), `//metrics` neither since 0.4.3, and the endpoint asks for the token anyway (next section but one).
 - A row in `docs/public-exposure.yaml`: Forgejo's own login, **self-registration off, sign-in required to view anything** (the app load
   balancer has no source ACL, so the route answers anyone; Forgejo's defaults would have let that visitor register).
 
@@ -64,12 +66,13 @@ Rollback is the reverse: point back at `management`; Flux prunes both Kustomizat
 the prune (the repository volume, the database volumes) has not been exercised: export what matters first.
 
 **The OpenBao seeding is not conditional, and is harmless with the brick off.** The vault configure Job creates `secret/forgejo/db`,
-`secret/forgejo/admin` and `secret/forgejo/oidc` on every install, whichever profile runs: it has no knowledge of the profile, and the
+`secret/forgejo/admin`, `secret/forgejo/oidc` and (0.4.3) `secret/forgejo/metrics` on every install, whichever profile runs: it has no knowledge of the profile, and the
 repository already seeds the secrets of bricks a profile may not carry in the same way (`minio/root`, `longhorn/encryption`,
 `grafana/*`). Created only if absent, never printed, never rotated. With the brick off nothing reads them: no ExternalSecret, no database
-role, no account exists, so they open nothing; they are three unread entries of the KV store (and of its snapshots). The placeholder of
+role, no account exists, so they open nothing; they are four unread entries of the KV store (and of its snapshots). The one exception is
+`forgejo/metrics`, which has a second ExternalSecret in `services-observability` (the scrape's Secret, one Secret nobody reads without the forge). The placeholder of
 `forgejo/oidc` is a fixed public string and protects nothing. In exchange, enabling the brick later needs no seeding step. An upgraded
-cluster re-runs the Job (the script ConfigMap changed) and gains the three entries whether or not it enables the forge.
+cluster re-runs the Job (the script ConfigMap changed) and gains the entries it lacks (`forgejo/metrics` on a cluster moved from 0.4.2) whether or not it enables the forge.
 "The brick converges unattended" is **not** claimed as a property of a default install, which does not carry it. After the hand patch of the
 path the labs saw it converge by itself in 1 min 17 s to 2 min 33 s (NOMINAL, no fault; Scaleway 3 CP + 5 W and + 6 W and OVH 3 CP + 4 W and + 6 W: "What
 is NOT delivered", "Seen on a cluster since"); a cluster rebuilt from the tfvars starts without it again.
@@ -97,7 +100,7 @@ Each line is a defect of the first version, fixed here and held by `scripts/dev/
    Flux's egress policy admits `code.forgejo.org` (rule 9b). `check-ha.py` was red on this alone.
 2. **Chart 6.1.0 was two years old and rendered two databases and a cache.** It shipped Forgejo 7.0.3 (long past its end of support) and,
    with the values of the PR, a `postgresql-ha` and a `redis-cluster` next to the forge. Chart 17.3.1 renders one Deployment and no
-   sub-chart. Every values key the brick sets was checked against that chart's `values.yaml` and schema by `helm template`.
+   sub-chart (17.3.2, the pin of this change, has the same `values.yaml` and `values.schema.json`). Every values key the brick sets was checked against that chart's `values.yaml` and schema by `helm template`.
 3. **The admin Secret had no `username`.** The chart reads `username` and `password` of `gitea.admin.existingSecret`; the ExternalSecret
    provided only the password, so the `configure-gitea` init container would have stayed in `CreateContainerConfigError`.
 4. **Nothing seeded the three OpenBao paths**, so `forgejo-db-credentials` would never exist, the database would never bootstrap and (it
@@ -105,7 +108,8 @@ Each line is a defect of the first version, fixed here and held by `scripts/dev/
 5. **The database was a 0.3.x one**: two instances, an asynchronous `barmanObjectStore` (CNPG 1.31 removes it), no tolerations, no zone
    term. It is the `grafana-db` form now. There is **no upgrade path to describe**: `forgejo-db` is new in 0.4.0, nothing of it exists on a
    0.3.x cluster, so the presync of synchronous replication before the apps ref moves (`docs/resilience.md`) does not apply to it.
-6. **Registration was open on a public route** and `/metrics` was served to the Internet. And the Gateway's egress policy
+6. **Registration was open on a public route** and `/metrics` was served to the Internet (the rule written for it covered the plain path only: `//metrics`
+   was served at 0.4.2, measured; 0.4.1 inferred, not run; fixed in 0.4.3). And the Gateway's egress policy
    (`apps/base/istio/networkpolicy.yaml`, a whitelist of backends) did not list the forge: the route would have timed out.
 7. The init containers had no limits (Kyverno `require-limits`), the pod ran with no `runAsNonRoot`, `seccompProfile` or
    ServiceAccount of its own, the chart's helm-test Pod (`busybox:latest`) was part of the release, and the image registry
@@ -280,6 +284,114 @@ target. What it does not cover, precisely:
 
 **Change (0.4.0, owner decision 2026-10-27): the platform sets `node-down-pod-deletion-policy` to `delete-both-statefulset-and-deployment-pod`**, with the mechanism, the evidence on what reaches an upgraded cluster, the side effects and the one-line check in [`resilience.md`](resilience.md), "Longhorn: node-down-pod-deletion-policy". Until lab 28, **the figures were 341-372 s measured with the default and 128 s measured with the setting applied by hand, and the shipped path itself was UNVERIFIED.** Lab 28 (OVH, a NOMINAL 3 CP + 6 W cluster, each drill an INCIDENT by design) ran it with the shipped setting: the forge was away 154, 155 and 169 s for three partitions of its node, 85, 115, 116, 126 and 169 s for five hard reboots of its node and 125 s for a simultaneous hard reboot of its whole zone (three nodes), with every acknowledged push present. (The lab's summary line counts four hard cuts, 116, 125, 126 and 169 s; two later stale-lock runs also cut the forge's node and are counted here.) Lab 28B repeated it on Scaleway with the shipped setting (INCIDENT drills on a NOMINAL cluster): away 178 and 174 s for two graceful zone power-offs and 145 s for a partition (3 CP + 6 W), 134 s for a graceful node power-off (3 CP + 7 W), every acknowledged push present. The push gap and the volume stay a single-replica design: the forge is away for this long on a node or zone loss.
 
+## Updating the forge: 15.0.10 to 15.0.11, chart 17.3.1 to 17.3.2 (apps #179)
+
+**Rung: read offline and rendered on 2026-11-04; then run on two proof clusters (lab 34, Scaleway, 3 CP + 6 W, n=1, the moving branch ref, not a tag): the move from 15.0.10 on cluster A (six of six containers on the new image) and a fresh install on cluster B.** What was read, on 2026-11-04:
+
+- **The chart diff is two files.** `Chart.yaml` (`appVersion` 15.0.11) and the `helm test` Pod, which this brick switches off (`test.enabled: false`).
+  `values.yaml`, `values.schema.json`, the templates of the Deployment, the Secrets, the Service and the PVC and the vendored `common` sub-chart
+  are identical. Rendered with the brick's values (`helm template` plus the post-renderer), the two versions differ only by the image tag of the
+  main container and of the three chart init containers, the `version` labels, and the `checksum/config` annotation (a hash that reads those labels;
+  the config Secrets carry the same keys and values). No change in probes, security context, resources, tolerations, strategy (Recreate) or PVC.
+- **Two images are written by hand** (the lock cleaner and the sweeper, `helmrelease.yaml`). A chart bump alone leaves them on the old Forgejo:
+  `test-forgejo-brick.py` went red on exactly that and is green with both moved. The pod therefore runs the Forgejo image in **six containers**:
+  `forgejo` (main), the chart's `init-directories`, `init-app-ini` and `configure-gitea`, the lock cleaner `clean-stale-git-locks` (init) and
+  the sweeper `sweep-stale-git-locks` (sidecar). After the roll all six must read `15.0.11-rootless`; none may read `15.0.10-rootless`.
+- **Upstream notes of 15.0.11** (released 2026-10-26 on endoflife.date, which still gives the 15.0 LTS cycle end of support 2027-07-15). Three security fixes: Actions `pull_request_review` could run a workflow from an arbitrary
+  `commit_id`; the visibility of users was not considered when listing watched and starred repositories; a NuGet `X-NuGet-ApiKey` token did not respect
+  its scopes (package APIs only). Also one dashboard fix, two Actions-log fixes, and updates of the Go toolchain (1.26.10, which clears the `stdlib` HIGH CVE-2026-111943 that the
+  15.0.10 binaries report) and of a build-time dependency. Forgejo 15.0.11 has Actions and Packages on by default and the brick sets no `[actions]`
+  or `[packages]` key, so both are on; what narrows the reach is that no runner is registered (a workflow cannot run), registration is closed and
+  sign-in is required to view. Which of the three fixes applies to this platform was not established.
+- **No schema migration is visible.** 15 commits between `v15.0.10` and `v15.0.11` touch 21 files, none of them a migration. That is a reading of the file
+  list, not a run: a roll back to 15.0.10 was not tried.
+- **The brotli CVE is not in the release notes.** It leaves with the rebuilt Alpine base (3.23.6 to 3.23.7). Trivy 0.75.0, database of 2026-11-04, `linux/amd64`
+  (arm64 not scanned), by index digest: 15.0.10-rootless reports 1 CRITICAL (`brotli-libs` 1.2.0-r0, CVE-2026-111497, fixed in 1.2.1-r0) and 8 HIGH;
+  15.0.11-rootless reports 0 CRITICAL and 3 HIGH, all `libexpat` 2.9.0-r0 (fixed in 2.10.0-r0, not yet in the image),
+  with `brotli-libs` 1.2.1-r0. A second scan with Trivy 0.69.3, the version the SBOM workflow caches, on the same database gave the same figures
+  (15.0.10: 1 CRITICAL, 8 HIGH, 6 of them Alpine and 2 in Go binaries; 15.0.11: 0 CRITICAL, 3 HIGH), so the figure of the CI scanner exists for this
+  image without a cluster; the `SBOM` run on the merged head still confirms it. The scan gate of the SBOM workflow is CRITICAL with a fix, so these 3 HIGH do not fail it.
+- **Pins, to compare with what runs.** The image is pinned by tag, not by digest (see "Still open" below). For the comparison of declared with
+  running, the registry gave on 2026-11-04: `15.0.11-rootless` index `sha256:3cd6bc2b74c87cbde0a0fd527c9665cb416f5a0540dee54fe5afb3fa2df9f40c`, amd64
+  manifest `sha256:ab0b8fd8bfc55b6e0721347c0173c128c6431b3543ff2ab7a863929f1c5d2629`; `15.0.10-rootless` index
+  `sha256:6ffebd9ab9ee9f6677e3523fa60debd9de630ff2a226fa681d6cc0c7ba541d77`. A pod's `imageID` shows either the index or the platform manifest,
+  depending on the runtime: both are correct.
+- **The roll is a downtime.** The Deployment is Recreate on a ReadWriteOnce volume: the old pod stops, then the new pod runs its init containers and
+  starts. A push or a clone in flight at that moment fails and has to be retried. There was **no baseline** for how long. The first figure is lab 34's move
+  on cluster A: the forge was away **50.3 s** (NOMINAL, 3 CP + 6 W), in ONE roll that carried this update and the token environment of 0.4.3
+  ("The metrics endpoint and its token"); it is a first figure for the pair, not a baseline for either change alone, and not better or the same.
+
+## The metrics endpoint and its token (0.4.3)
+
+**Why.** Forgejo serves `/metrics` (`gitea.metrics.enabled`, for vmagent) with no credential unless `[metrics] TOKEN` is set. The Gateway
+refused `/metrics` with a 403 since 0.4.1, but not `//metrics`, which Forgejo cleans to `/metrics`: at 0.4.2 (measured; 0.4.1 inferred from the same `apps/` tree, not run) a forge behind the app load
+balancer answered `https://forge.<domain>//metrics` with its metrics (66 families, 11 KB, no credential). The Gateway is fixed in two layers
+(`docs/public-exposure.md`: slash merging in istiod, two more paths in the policy); this is the third layer, at the source: the endpoint
+answers 401 without the right bearer, whatever the path.
+
+**Rung: rendered and first measured on a LOCAL RIG (k3s in a container, Istio 1.31.3, Forgejo 15.0.11 from chart 17.3.2 with SQLite and `emptyDir`,
+VM operator 0.68.1, vmagent v1.136.0, the Secrets made by hand); the ExternalSecrets, the OpenBao path, the scrape and the upgrade were not run on
+it. Then observed on two proof clusters (lab 34: Scaleway, 3 CP + 6 W, n=1 per figure, the moving branch ref at the heads apps e8ca37f and infra
+d1d268c, NOT a tag): cluster A, a move from 0.4.2 with the forge on, and cluster B, a fresh install with the forge on.** Each item below says which.
+
+- **The token.** `secret/forgejo/metrics` `{token}`, 40 alphanumeric characters, created by the vault configure Job (create only, never rotated by
+  a re-run, never printed). The chart has no value for it: `gitea.metrics.enabled` only renders `[metrics] ENABLED = true`, and
+  `gitea.config.metrics.TOKEN` would put the secret in the HelmRelease values and in the chart's config Secret (the rendered Secret has no
+  `TOKEN` line; `test-forgejo-brick.py` fails if a `TOKEN` is added to the values). So the Deployment gets `GITEA__metrics__TOKEN` from the Secret
+  `forgejo-metrics` through a `secretKeyRef`, as the database password does. **Where the token then is:** in the pod's environment, and in
+  `/data/gitea/conf/app.ini` on the repositories' volume, because the chart's `init-app-ini` runs `environment-to-ini` (read in the rendered
+  chart, as for `GITEA__database__PASSWD`; **observed on both proof clusters: `app.ini` holds exactly 1 `TOKEN` line, equal to the Secret**). The
+  daily Longhorn backup of that volume therefore carries it. **The operator's generated vmagent configuration Secret in `services-observability`
+  contains the token (observed on cluster A)**, and the scrape target's label is `job="services-observability/forgejo"`.
+- **The reference is NOT optional, on purpose.** An optional `secretKeyRef` starts the forge with no token when the Secret is missing, silently
+  open. This one makes the pod wait in `CreateContainerConfigError` until the ExternalSecret has written the Secret, then start by itself.
+- **The scrape.** With the token set, the unchanged `VMPodScrape forgejo` goes DOWN (vmagent: `unexpected status code 401`). It now carries
+  `authorization.credentials` `{name: forgejo-metrics, key: token}`, read from a Secret of its own namespace: the operator resolves a scrape's
+  Secret next to the scrape, and the forge's Kustomization (`services-git`) does not depend on the VM CRDs, so a twin ExternalSecret
+  `forgejo-metrics` in `services-observability` (`apps/base/observability/externalsecret-forgejo-metrics.yaml`) reads the same OpenBao key. On a
+  profile without the forge it is one Secret nobody reads. A scrape whose Secret does not exist is skipped by the operator with an error log
+  ("skip config generation for resource"); vmagent and the other scrapes keep running, and the forge target returns when the Secret appears.
+- **Measured on the rig** (Forgejo 15.0.11, token from a Secret): straight to the pod, no bearer 401, a wrong bearer 401, the right bearer 200
+  (11,110 bytes); `//metrics` without a bearer 401; `/api/healthz` stays 200, so the kubelet probes are unaffected. Through the Gateway with the
+  0.4.2 policy and no merging (the unfixed Gateway), the 25 spellings that leaked all answered 401, 0 of 35 leaking, plain `/metrics` 403. With the
+  right token, `//metrics` answers 200, as expected: the token is the secret. The scrape was UP with the credentials and DOWN without.
+- **An existing forge keeps being scraped after the move, but not without a gap.** On the move from 0.4.2 three things change together: the vault
+  script ConfigMap (Flux re-creates the configure Job, which creates `forgejo/metrics`), the two ExternalSecrets, and the Deployment's
+  environment. The Deployment is **Recreate**, so the pod rolls (31 s on the rig with no volume, NOMINAL, one pod; the forge was Ready 72 s and 79 s after its
+  patch in lab 34 at the 0.4.2 arm, runs 1 and 2, 3 CP + 6 W, NOMINAL, a different measure) and, if the Secret is not there yet, it sits in `CreateContainerConfigError`, with the forge
+  away, until the ExternalSecret has been synced (ESO retries a failed read with a back-off, not on its `refreshInterval`). Nothing orders the forge behind the vault Job (the
+  `forgejo` Kustomization has no `dependsOn` on `foundation-vault`, which is `wait: false`), so on an
+  upgraded cluster the order is luck. The HelmRelease therefore carries `timeout: 15m` (Flux's default is 5 min): at 5 min Helm would roll the Deployment
+  back to the spec without the token (the forge without layer 3, layers 1 and 2 still holding), and after `retries: 3` the release would stay stalled (reasoned from
+  Helm's behaviour, not run: the unfavourable case below was run with `timeout: 15m`). **The window, measured in lab 34 in both orders** (3 CP + 6 W, n=1 per order,
+  the moving branch ref, not a tag):
+  - *Favourable order (cluster A, the move from 0.4.2 with the forge on, NOMINAL).* Flux re-created the vault Jobs inside their TTL, and they wrote
+    `secret/forgejo/metrics` at 12:15:27; both ExternalSecrets synced at 12:16:42 to 12:16:45 (75 to 78 s later, computed from the timestamps; why it took that
+    long is not shown); the forge pod rolled with **0 s in `CreateContainerConfigError` observed** (the watch records changes only, at a resolution of 1 to 3 s; both Secrets existed before the new pod was first seen). The forge was away **50.3 s** (last answer 12:16:45.6, first
+    answer 12:17:35.9, 49 probe failures) and the scrape gap was **65 s**, back with no manual step; 1,284 acknowledged pushes, 0 missing, `git fsck`
+    clean. That order was favourable by 76 s, and nothing enforces it.
+  - *Unfavourable order (cluster B, the forge Secret unavailable during a Helm upgrade; INCIDENT, induced in the lab, 3 CP + 6 W: Flux suspended, the forge
+    ExternalSecret pointed at a missing key, the upgrade triggered by an added env var; not the sequence of a late vault Job).* The pod waited **6 min 30 s** in `CreateContainerConfigError`;
+    the HelmRelease reached `UpgradeSucceeded` with **no rollback** (`timeout: 15m`); the Deployment kept `GITEA__metrics__TOKEN` in 37 of 37 polls; the
+    pod started by itself 19 s after the Secret came back. **A wait beyond 15 minutes is not shown.** During it `up{forgejo}` was 0 for about 7.5 minutes
+    (90 samples), and no rule names the forge scrape (alerts were sampled at two moments only).
+  - *Fresh install (cluster B).* The forge was enabled by the documented live patch 14 s BEFORE the vault Jobs were first created, so this is the favourable
+    order by construction (the case of a Job still running is not shown): the pod started at the first try with 0 `CreateContainerConfigError` and was Ready
+    101 s after the pod was created, which is not comparable with the patch-to-Ready figures above.
+
+  The scrape comes back by itself when both Secrets exist and the new pod is up. Either scrape order is safe (this is the order of the scrape and the token, not the order of the Secret and the pod, whose unfavourable case is the INCIDENT above): a scrape that sends the bearer to a forge that has
+  no token yet is answered 200 (no token configured, the header is ignored, read in Forgejo's documented behaviour and not run), and a forge that has the token before the
+  scrape has it answers 401, so the target is DOWN until the twin Secret exists. No alert reads the forge's `up` today (`vmrule-*.yaml` do not name it), so the gap pages nobody and shows only as missing `gitea_*` points. A push or a clone in flight across the
+  roll fails and is retried, as for every roll of this Deployment.
+- **Rotation.** Overwrite `secret/forgejo/metrics` in OpenBao; both ExternalSecrets follow within their `refreshInterval` (1 h); then restart the forge
+  pod (the environment is read at start; `environment-to-ini` rewrites the key in `app.ini`). Between the Secret change and the restart the
+  scrape gets 401. Not exercised.
+- **The token travels in cleartext inside the cluster.** The scrape goes to the pod on `:3000` over plain HTTP, and `services-git` is outside the mesh with no pod-network
+  encryption claimed anywhere in these docs: a pod or node that can see that traffic reads the bearer. The sensitivity is low (counters and build information), so this is a line here and
+  an issue, not a design change.
+- **Not covered by the token.** The kubelet probes (`/api/healthz`) and every other path are unchanged. Anyone who holds the token reads the metrics
+  on any path spelling; the token is no stronger than the OpenBao policy that guards it (`secret/data/*` is readable by the ESO role).
+
 ## What is NOT delivered (open, each one is for an issue: apps #176)
 
 Checked item by item against the runs that enabled the brick after this page was first written: labs 27B and 27C (Scaleway, 3 control planes +
@@ -305,7 +417,7 @@ The volume's backup and its restore are in "The recurring backup of the reposito
   measured with Kubernetes' 300 s default toleration; 341-372 s with the 30 s toleration and Longhorn's default policy; 128 s with the policy set,
   measured once with the setting applied by hand; 85 to 178 s in labs 28 and 28B with the shipped policy (INCIDENT drills, 3 CP + 6 W, one on 3 CP + 7 W):
   see "How long the forge is away"); the cluster and Flux keep running.
-- Image **digest pinning** (the image is the chart's `appVersion` tag, `15.0.10-rootless`, bumped with the chart).
+- Image **digest pinning** (the image is the chart's `appVersion` tag, `15.0.11-rootless`, bumped with the chart; the two lock-cleaner images are written by hand and bumped with it).
 - **Backups.** (a) The database and the volume are not backed up at the same instant: the window, and how to narrow it by recovering the database to
   the time of the volume's backup, are written above (UNVERIFIED). (b) `forgejo-db` is not in the restic `pg_dump` (`cronjob.yaml`), the canary, or the
   restore tests (`restore_cnpg.py`, `cnpg-recovery-restore-test`), which know `zitadel-db` and `grafana-db`; no restore of `forgejo-db` has been
@@ -316,25 +428,29 @@ The volume's backup and its restore are in "The recurring backup of the reposito
   to prove read-only works needs a run.
 - A rule on Forgejo's metrics. The `VMPodScrape` exists and vmagent scraped Forgejo in lab 27 (`up` = 1, 26 `gitea_*` series), but no rule reads
   the series and their names are not checked against a running Forgejo. Through the Gateway, `/metrics` is refused with a 403 for every route
-  (`docs/public-exposure.md`); the 403 was read on the other hosts of a Scaleway proof lab (Forgejo was not deployed there, so its own
-  route is UNVERIFIED on a cluster). Before that policy the route answered HTTP 500 (the path has no backend, so nothing was exposed): labs 27, 27B and 27C.
+  (`docs/public-exposure.md`). That 403 was read on the other hosts of a Scaleway proof lab, and on the forge only in a later one, which found
+  that `//metrics` was NOT refused (fixed in 0.4.3: next section). Before the policy the route answered HTTP 500 (the path has no backend, so
+  nothing was exposed for the plain path): labs 27, 27B and 27C.
 
 ## What the next lab must prove
 
-Status after labs 27B to 28C (details in "What is NOT delivered" and in the status lines above): items 1 to 3 and the first half of 4 were seen,
+Status after labs 27B to 28C (details in "What is NOT delivered" and in the status lines above), then lab 34 (0.4.3 heads, Scaleway, 3 CP + 6 W, n=1, branch
+ref): on a fresh install with the brick on the forge pod started at the first try, `/metrics` and `//metrics` were refused on the Gateway and the forge was
+scraped with the token (`up` = 1), and a forge moved from 0.4.2 kept its scrape (forge away 50.3 s, scrape gap 65 s). Items 1 to 3 and the first half of 4 were seen,
 and item 5 was run: hard reboots and partitions in lab 28, graceful zone power-offs in labs 28B and 28C, the `core.fsync` cost once in lab 27B, `dirsync`
 on the mount in lab 27D. The list below stays the acceptance list for the rest: the pair restore of 4, 6 and 7, the cost of `dirsync` alone and the lock
 of a REAL interrupted push in 5.
 
 0. **The lab enables the brick explicitly** (`apps/flux/management-forge`, or the instance profile): a default install does not carry it,
    so a lab that does not turn it on proves nothing about it. Also there: the default install still renders and converges without it.
-1. A **fresh install converges** with the brick: `forgejo-db` then `forgejo` Ready, the three OpenBao paths exist and `forgejo-admin` has
+1. A **fresh install converges** with the brick: `forgejo-db` then `forgejo` Ready, the four OpenBao paths exist (`forgejo/metrics` since 0.4.3) and `forgejo-admin` has
    both keys, `cluster-verify` green, the flux-errors Alert quiet. The Flux source controller pulls the chart from `code.forgejo.org`
    under the restricted egress policy (the registry's token request and blob download on 443, no redirect to another host).
 2. **`forgejo-db` synchronous replication and archiving**: `cluster-verify` shows the same lines as for `grafana-db` (sync replicas,
    `ContinuousArchiving`, a first base backup right after the database is healthy: `immediate: true`, not 03:40), `cnpg-store-replicate` copies its archive to the replica store.
 3. A **repository pushed through the forge** over HTTPS at `forge.openaether.local`: admin login, forced password change, create a
-   repository, `git push`, `git clone`; anonymous access refused, registration refused, `/metrics` refused on the Gateway and scraped by vmagent.
+   repository, `git push`, `git clone`; anonymous access refused, registration refused, `/metrics` and `//metrics` refused on the Gateway, and scraped by vmagent
+   with the token (`up` = 1; a forge upgraded from 0.4.2 keeps its scrape: "The metrics endpoint and its token").
 4. A **Longhorn backup of the repositories' volume** by the default job (a volume created from `longhorn-x2-rwo-forgejo` carries
    `oa-forgejo` at once, with no manual label; `forgejo-repos-backup-daily` runs at 03:55 and a backup appears at the target), restored into a scratch volume and the repository cloned
    from it; then the **pair**: the database and the volume restored from their different instants, and what disagrees.

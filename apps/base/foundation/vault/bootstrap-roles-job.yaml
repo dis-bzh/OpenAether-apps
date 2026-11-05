@@ -64,7 +64,7 @@ spec:
             defaultMode: 0555
       containers:
         - name: bootstrap-roles
-          image: docker.io/alpine/k8s:1.36.5
+          image: docker.io/alpine/k8s:1.36.6
           env:
             - name: VAULT_NS
               value: "foundation-vault"

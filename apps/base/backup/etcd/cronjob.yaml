@@ -77,7 +77,7 @@ spec:
                   - downwardAPI: { items: [{ path: namespace, fieldRef: { fieldPath: metadata.namespace } }] }
           initContainers:
             - name: discover-controlplane
-              image: docker.io/alpine/k8s:1.36.5
+              image: docker.io/alpine/k8s:1.36.6
               command:
                 - /bin/sh
                 - -c

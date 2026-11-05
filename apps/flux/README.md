@@ -81,6 +81,41 @@ the `apps/flux/management` render (40 Kustomizations) these 14 have no health ga
 On a real management cluster `OpenAether-infra` adds a 15th (`openaether-platform`), absent from this repository: 15 of 40.
 Adding or removing a `wait`/`healthChecks` changes this list; the test fails until it is updated.
 
+A gate is only as good as the verdict on each object. Two traps, both read in the sources of Flux 2.9.6 and 2.10.0:
+with `wait: true` the controller **ignores** `spec.healthChecks` (an entry next to it gates nothing), and a custom resource
+with no Ready condition yet counts as "Current", so an operator that has not touched its CR would pass the gate. Read in the
+sources, not yet shown on a cluster.
+
+**The `cnpg` gate. This is the one text on it**: `apps/flux/base/20-cnpg.yaml` and `scripts/dev/test-flux-health-gates.sh`
+point here.
+
+- **Why.** `wait: true` also checks `zitadel-db` and `grafana-db`, and a CNPG `Cluster` gets its Ready condition with its
+  FIRST phase (read in CloudNativePG 1.30.1; no run has read the Cluster's Ready condition at its first phase, so this is
+  still not shown on a cluster). Lab 32 (N1) is consistent with it: `cnpg` was Ready after 47 s (its health check passed
+  in 40.75 s), both Clusters were 3 of 3 about 9 minutes later, and the dependents started on databases that did not
+  exist (Grafana restarted 6 times); the cause there is inferred, not observed, and stays so. In labs 29-31 it became
+  Ready 2-6 s after both were 3 of 3.
+- **Seen once with the gate: an observation (n=1), NOT a proof that the race is fixed.** Lab 34, cluster B, a fresh
+  install at the 0.4.3 heads (Scaleway, 3 CP + 6 W, the moving branch ref, not a tag): both Clusters were 3 of 3 at 5:39
+  and 6:05 after `cnpg` went Progressing, and the gate waited ("Health check passed in 6m0.4s"): `cnpg` was Ready 1 s
+  after the last Cluster, where lab 32 lost the race (Ready after a health check of 40.75 s, Clusters still empty). One
+  clean install says nothing on how often the race occurs; Grafana still restarted 3 times there, on the race of its two
+  replicas for the first migration lock, not on `connection refused` (the lab 32 cause). The 0.4.2 to 0.4.3 move on
+  cluster A did not exercise the gate: no Cluster changed.
+- **The entry.** `cnpg` carries a `healthCheckExprs` entry for the `Cluster` kind (kustomize-controller v1.9.6 and v1.10.1,
+  same code). Current only when the Ready condition is `True`, which CNPG sets with the phase "Cluster in healthy state";
+  anything else, an empty status included, is InProgress. With no `status` key at all the expression errors, Flux reads
+  Unknown and keeps waiting, as wanted. Write it with `exists`, never `filter(...).all(...)`: `all` is true on a list with
+  no Ready condition, the very hole. A healthy Cluster is Ready=True and passes at the first poll; one in a rolling update
+  was already InProgress for kstatus (Ready=False), so nothing becomes NotReady that was not before.
+- **The timeout.** `15m` now has to cover the databases: 5:52-6:16 (Scaleway, labs 29-31), 6:06 (Scaleway, lab 34
+  cluster B), 7:19 (OVH, lab 28), 10:02 in lab 32 with the released dependents on the same nodes (not shown to be the
+  cause). Past it the Kustomization fails, is retried every 2m and passes as soon as both are Ready; nothing is rolled
+  back, its dependents only wait. Their wait is
+  silent: the Flux alerts (FluxObjectNotReady, FluxReconciliationStalled) are rules of the observability bricks, which
+  depend on this Kustomization, so read `kubectl -n flux-system get kustomization cnpg` directly when the databases are slow.
+- **The pin.** `scripts/dev/test-flux-health-gates.sh` pins that entry string for string and checks `timeout` >= 15m.
+
 ## Invariant to maintain
 
 **`dependsOn` = real dependencies**, not merely a convergence order. Every new

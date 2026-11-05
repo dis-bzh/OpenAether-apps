@@ -2,7 +2,7 @@
 # One GitHub issue per failing image, found by its title `[vuln] <key>` (sbom.yml). A scan that fails again comments on
 # the open issue instead of opening a second one; a scan that passes closes it. Uses the `gh` CLI with GH_TOKEN
 # (the workflow token, `issues: write`) and GH_REPO or --repo from the checkout.
-#   vuln-issue.sh open  KEY BODYFILE [RUN_URL]   open the issue, or comment on the open one
+#   vuln-issue.sh open  KEY BODYFILE [RUN_URL]   open the issue, or comment on the open one (BODYFILE not empty)
 #   vuln-issue.sh close KEY [RUN_URL]            close the open issue with a comment (nothing to do if none)
 set -euo pipefail
 cmd="${1:?open|close}"; key="${2:?key}"
@@ -13,6 +13,9 @@ number="$(gh issue list --state open --search "\"$title\" in:title" --json numbe
 case "$cmd" in
   open)
     body="${3:?body file}"; url="${4:-}"
+    # No report, no issue: a scan that did not run (#197) must not open an issue with an empty code block. The same file
+    # holds the output of check-vex.py for the `VEX statements` key, hence the neutral wording.
+    [ -s "$body" ] || { echo "vuln-issue.sh: no report in '$body' (missing or empty), nothing to report for $key" >&2; exit 1; }
     text="$(printf 'Scan failed again: %s\n\n%s\n' "$url" "$(head -c 20000 "$body")")"
     if [ -n "$number" ]; then
       gh issue comment "$number" --body "$text" >/dev/null

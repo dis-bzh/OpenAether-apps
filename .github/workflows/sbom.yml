@@ -9,8 +9,11 @@
 # upstream fails the scan job; an accepted one is recorded in .vex/openaether-apps.openvex.json (docs/supply-chain.md),
 # with a reason and an expiry date that scripts/check-vex.py enforces (Trivy itself ignores dates).
 # A failing scan opens (or comments on) ONE issue per image, `[vuln] <image>`, and closes it when the scan passes: a red
-# run alone went unseen for days. Not from a workflow_dispatch on a branch: a test run opens no issue.
-# Never on a pull request, so it joins no required check; no cloud credential, only anonymous registry reads.
+# run alone went unseen for days. Only a scan that ran and wrote a report does that: a scan that did not run (the pull
+# was refused or rate limited, #197) fails the job and opens nothing. Not from a workflow_dispatch on a branch: a test
+# run opens no issue.
+# Never on a pull request, so it joins no required check; no cloud credential, only registry reads (anonymous, and the
+# workflow token for ghcr.io).
 name: SBOM
 
 on:
@@ -121,7 +124,8 @@ jobs:
         id: check
         run: |
           set +e
-          python3 -I scripts/check-vex.py | tee vex-report.txt
+          # 2>&1: a file check-vex.py cannot read (exit 2) says why on stderr; without it the report would be empty
+          python3 -I scripts/check-vex.py 2>&1 | tee vex-report.txt
           echo "rc=${PIPESTATUS[0]}" >>"$GITHUB_OUTPUT"
 
       - name: Open or update the issue when a statement is wrong or expired
@@ -244,6 +248,14 @@ jobs:
             echo "config=" >>"$GITHUB_OUTPUT"
           fi
 
+      # An anonymous pull from ghcr.io was refused with TOOMANYREQUESTS on the 0.4.2 tag run (#197). Trivy reads the
+      # credentials per registry from ~/.docker/config.json, so only ghcr.io gets the token. It MAY lift the limit: not
+      # shown yet, and the limit is reported per runner address. The images are public, so no `packages` scope is asked
+      # for; if a pull is ever refused after this login, that is the first thing to read.
+      - name: Log in to ghcr.io
+        if: startsWith(matrix.image, 'ghcr.io/')
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
       - name: Trivy image scan (CRITICAL with a fix upstream)
         id: trivy
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # 0.35.0
@@ -261,8 +273,25 @@ jobs:
         if: always()
         run: cat trivy-report.txt 2>/dev/null || echo "no report (the scan did not start)"
 
+      # Exit 1 is both "findings" and "Trivy stopped before it scanned": only a report on disk tells them apart.
+      - name: Tell a finding from a scan that did not run
+        id: report
+        if: always() && steps.trivy.outcome == 'failure'
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          if [ -s trivy-report.txt ]; then
+            echo "report present, the scan ran: a finding of ${IMAGE}"
+            echo "complete=true" >>"$GITHUB_OUTPUT"
+          else
+            msg="Trivy wrote no report for ${IMAGE}: the scan did not run (pull refused or rate limited, DB download)."
+            msg="$msg A failed run, not a finding: no [vuln] issue is opened. Read the Trivy step, then re-run the job."
+            echo "::error::$msg"
+            exit 1
+          fi
+
       - name: Open or update the issue for this image
-        if: failure() && steps.trivy.outcome == 'failure' && env.REPORT_ISSUES == 'true'
+        if: failure() && steps.report.outputs.complete == 'true' && env.REPORT_ISSUES == 'true'
         env:
           IMAGE: ${{ matrix.image }}
         run: scripts/ops/vuln-issue.sh open "$IMAGE" trivy-report.txt "$RUN_URL"

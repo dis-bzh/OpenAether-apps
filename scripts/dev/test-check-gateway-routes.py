@@ -79,7 +79,12 @@ with tempfile.TemporaryDirectory() as tmp:
 
 
 # --- the metrics endpoints are refused at the Gateway (Grafana /metrics answered 200 to anyone on the public Gateway) ---
-def policy(paths=("/metrics", "/metrics/*", "/debug/metrics", "/debug/metrics/*"), action="DENY", target=chk.GATEWAY,
+# The policy as shipped since 0.4.3, and the one of 0.4.1 and 0.4.2 (four literal paths: //metrics reached the forge's metrics).
+SHIPPED = ("/metrics", "/metrics/*", "/debug/metrics", "/debug/metrics/*", "//*", "/debug//*")
+V042 = SHIPPED[:4]
+
+
+def policy(paths=SHIPPED, action="DENY", target=chk.GATEWAY,
            ns=chk.GATEWAY_NS, rule=None, group="gateway.networking.k8s.io"):
     return {"kind": "AuthorizationPolicy", "metadata": {"name": "deny-metrics", "namespace": ns}, "spec": {
         "action": action, "targetRefs": [{"group": group, "kind": "Gateway", "name": target}],
@@ -98,10 +103,12 @@ ROUTES = [route("grafana", [backend("/", name="grafana")]),
           route("forgejo", [{"matches": [{"path": {"type": "PathPrefix", "value": "/metrics"}}]}, backend("/", name="forgejo-http")])]
 
 
-def mcase(desc, pols, want=None, routes=ROUTES):
+def mcase(desc, pols, want=None, routes=ROUTES, norm="MERGE_SLASHES", absent=None):
     global PASS, FAIL
-    errs = chk.metrics_problems(pols, routes)
+    errs = chk.metrics_problems(pols, routes, norm)
     good = (not errs) if want is None else any(want in e for e in errs)
+    if absent:
+        good = good and not any(absent in e for e in errs)
     PASS += good
     FAIL += not good
     print(("  ok   " if good else "  FAIL ") + desc + ("" if good else f" -> {errs}"))
@@ -129,6 +136,63 @@ mcase("an operation narrowed by port leaves the other port open",
 mcase("a DENY with an empty rule refuses every request: caught as too wide", [policy(rule={})], "also refuses /,")
 mcase("a DENY on /* is too wide", [policy(("/*",))], "also refuses /login")
 mcase("a prefix /metrics* would refuse /metricsx: too wide", [policy(("/metrics*", "/debug/metrics*"))], "also refuses /metricsx")
+
+# --- slash spellings: the forge answered https://forge.<domain>//metrics with its metrics at 0.4.1 and 0.4.2 (the policy listed /metrics
+# literally, nothing merged slashes, Forgejo cleans //metrics to /metrics). Two layers, each on its own, and the checker pins both. ---
+mcase("DECODE_AND_MERGE_SLASHES merges too: passes", [policy()], norm="DECODE_AND_MERGE_SLASHES")
+mcase("RED FIRST, the 0.4.2 policy (four literal paths) with a merging mesh: the policy alone leaves //metrics open",
+      [policy(V042)], "the policy alone leaves", absent="pathNormalization")
+mcase("the 0.4.2 policy names the routes that would forward //metrics, the forge's among them", [policy(V042)], "services-git/forgejo", routes=[
+    ("f.yaml", {"kind": "HTTPRoute", "metadata": {"name": "forgejo", "namespace": "services-git"}, "spec": {"rules": [backend("/", name="forgejo-http")]}})])
+mcase("the 0.4.2 policy leaves /debug//metrics open too (Zitadel's path)", [policy(V042)], "slash spelling(s) of /debug/metrics")
+mcase("without //*: //metrics and ///metrics stay open", [policy(tuple(x for x in SHIPPED if x != "//*"))], "slash spelling(s) of /metrics")
+mcase("without //*: //debug/metrics stays open", [policy(tuple(x for x in SHIPPED if x != "//*"))], "//debug/metrics")
+mcase("without /debug//*: /debug//metrics stays open and /metrics does not", [policy(tuple(x for x in SHIPPED if x != "/debug//*"))],
+      "slash spelling(s) of /debug/metrics", absent="slash spelling(s) of /metrics")
+mcase("RED FIRST, no pathNormalization: the mesh keeps the slashes", [policy()], "pathNormalization", norm=None, absent="the policy alone")
+mcase("BASE is Istio's default and merges nothing", [policy()], "is BASE", norm="BASE")
+mcase("NONE merges nothing", [policy()], "is NONE", norm="NONE")
+mcase("both layers gone: both reported", [policy(V042)], "pathNormalization", norm=None)
+mcase("both layers gone: the policy reported too", [policy(V042)], "the policy alone leaves", norm=None)
+mcase("a suffix */metrics would close the slash spellings and refuse a repository named metrics", [policy(SHIPPED + ("*/metrics",))], "also refuses /x/metrics")
+mcase("a suffix pattern is too wide even with the mesh merging", [policy(("*/metrics", "/metrics", "/metrics/*", "/debug/metrics", "/debug/metrics/*"))],
+      "also refuses /x/metrics", norm="MERGE_SLASHES")
+mcase("a rule narrowed by host also loses the slash spellings", [policy(rule={"to": [{"operation": {"hosts": ["forge.example"], "paths": list(SHIPPED)}}]})],
+      "slash spelling(s)")
+
+# the model itself: which spellings exist, what merging does to them
+sp = chk.slash_spellings("/metrics")
+dsp = chk.slash_spellings("/debug/metrics")
+ok = ({"//metrics", "///metrics", "//metrics/", "///metrics/"} <= set(sp) and "/metrics" not in sp and "/metrics/" not in sp
+      and {"/debug//metrics", "//debug/metrics", "//debug//metrics", "///debug///metrics//"} <= set(dsp) and "/debug/metrics" not in dsp)
+PASS += ok
+FAIL += not ok
+print(("  ok   " if ok else "  FAIL ") + f"slash_spellings(): //metrics, ///metrics/, /debug//metrics, //debug//metrics are all there, the plain forms are not ({len(sp)} + {len(dsp)})")
+p42, p43 = [policy(V042)], [policy()]
+ok = (not chk.gateway_denies(p42, "//metrics") and chk.gateway_denies(p42, "//metrics", merge=True) and chk.gateway_denies(p43, "//metrics")
+      and chk.gateway_denies(p43, "///metrics", merge=True) and not chk.gateway_denies(p43, "/x//metrics") and not chk.gateway_denies(p43, "/x/metrics"))
+PASS += ok
+FAIL += not ok
+print(("  ok   " if ok else "  FAIL ") + "gateway_denies(): the 0.4.2 policy lets //metrics through unless the mesh merges it; the shipped one refuses it either way")
+ok = chk.merge_slashes("//debug///metrics//") == "/debug/metrics/" and chk.merge_slashes("/metrics") == "/metrics"
+PASS += ok
+FAIL += not ok
+print(("  ok   " if ok else "  FAIL ") + "merge_slashes(): runs of slashes become one")
+
+# mesh_normalisation(): read from the istiod HelmRelease, None when absent
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    (root / "apps/base/istio").mkdir(parents=True)
+    got = [chk.mesh_normalisation(root)]
+    hr = lambda mc: yaml.safe_dump({"kind": "HelmRelease", "metadata": {"name": "istiod"}, "spec": {"values": {"meshConfig": mc}}})  # noqa: E731
+    for text in (hr({"pathNormalization": {"normalization": "MERGE_SLASHES"}}), hr({"enableAutoMtls": True}), hr({"pathNormalization": {}}),
+                 yaml.safe_dump({"kind": "HelmRelease", "metadata": {"name": "other"}, "spec": {"values": {"meshConfig": {"pathNormalization": {"normalization": "MERGE_SLASHES"}}}}})):
+        (root / chk.ISTIOD).write_text(text)
+        got.append(chk.mesh_normalisation(root))
+    ok = got == [None, "MERGE_SLASHES", None, None, None]
+    PASS += ok
+    FAIL += not ok
+    print(("  ok   " if ok else "  FAIL ") + f"mesh_normalisation(): no file, MERGE_SLASHES, no key, an empty key, another HelmRelease ({got})")
 
 # the HTTPRoute matcher: Exact, then the longest prefix; whole path elements only; a rule without backend or a redirect forwards nothing
 zit = {"spec": {"rules": [backend("/", name="server"), backend("/ui/v2/login", name="login"), backend("/ui/v2/login/_next/image", name="server2")]}}
@@ -180,15 +244,18 @@ FAIL += not ok
 print(("  ok   " if ok else "  FAIL ") + "a VMStaticScrape or VMProbe of a Gateway host is reported, a VMPodScrape is not")
 
 # main() must CALL the checks: the unit cases above stay green if a call is dropped, the real-tree run in CI too once the policy is gone
-def run_main(with_policy, scrape=None):
+def run_main(with_policy, scrape=None, norm="MERGE_SLASHES", paths=SHIPPED):
     files = {"apps/base/app/route.yaml": {"kind": "HTTPRoute", "metadata": {"name": "app", "namespace": "ns"}, "spec": {
                  "parentRefs": [{"name": chk.GATEWAY}], "rules": [backend("/")]}},
              "apps/base/app/kustomization.yaml": {"resources": ["route.yaml"]},
              chk.REGISTER: {"routes": [{"route": "ns/app", "host": "app.example", "authentication": "a login", "default": True}]},
              chk.COMPONENT: {"patches": []}}
     if with_policy:
-        files[f"{chk.POLICY_BRICK}/policy.yaml"] = policy()
+        files[f"{chk.POLICY_BRICK}/policy.yaml"] = policy(paths)
         files[f"{chk.POLICY_BRICK}/kustomization.yaml"] = {"resources": ["policy.yaml"]}
+    if norm:
+        files[chk.ISTIOD] = {"kind": "HelmRelease", "metadata": {"name": "istiod"},
+                             "spec": {"values": {"meshConfig": {"pathNormalization": {"normalization": norm}}}}}
     if scrape:
         files["apps/base/obs/scrape.yaml"] = scrape
     out, err, old = io.StringIO(), io.StringIO(), chk.REPO
@@ -224,6 +291,22 @@ ok = code == 1 and "reads a Gateway host" in err
 PASS += ok
 FAIL += not ok
 print(("  ok   " if ok else "  FAIL ") + "main(): a URL scrape of a registered host fails (scrape_problems is called, with the register's hosts)")
+
+code, out, err = run_main(True, norm=None)
+ok = code == 1 and "pathNormalization" in err and "the policy alone" not in err
+PASS += ok
+FAIL += not ok
+print(("  ok   " if ok else "  FAIL ") + "main(): a tree whose istiod does not merge slashes fails (mesh_normalisation is read and passed on)")
+code, out, err = run_main(True, paths=V042)
+ok = code == 1 and "the policy alone leaves" in err and "pathNormalization" not in err
+PASS += ok
+FAIL += not ok
+print(("  ok   " if ok else "  FAIL ") + "main(): a tree with the 0.4.2 policy fails on the slash spellings")
+code, out, err = run_main(True, norm="DECODE_AND_MERGE_SLASHES")
+ok = code == 0 and "DECODE_AND_MERGE_SLASHES" in out
+PASS += ok
+FAIL += not ok
+print(("  ok   " if ok else "  FAIL ") + "main(): the passing line says which normalisation it read")
 
 print(f"{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

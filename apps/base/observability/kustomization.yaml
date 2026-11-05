@@ -48,6 +48,9 @@ resources:
   - externalsecret-alertmanager-slack.yaml
   # Dead-man's switch: the only signal that survives this cluster dying.
   - externalsecret-alertmanager-dms.yaml
+  # The token of Forgejo's /metrics, for the VMPodScrape forgejo (vm-customresources); the forge's own copy is in
+  # apps/base/forgejo.
+  - externalsecret-forgejo-metrics.yaml
   - httproute-grafana.yaml
   # Network
   - networkpolicy.yaml

@@ -56,7 +56,7 @@ spec:
           configMap: { name: backup-restore-scripts, defaultMode: 0555 }
       containers:
         - name: httpd
-          image: docker.io/alpine/k8s:1.36.5
+          image: docker.io/alpine/k8s:1.36.6
           command: ["python3", "/scripts/serve_metrics.py", "9101", "/www", "/www-restore"]
           env:
             - { name: PYTHONDONTWRITEBYTECODE, value: "1" }

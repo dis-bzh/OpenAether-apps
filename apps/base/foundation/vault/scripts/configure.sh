@@ -160,6 +160,11 @@ application_secrets() {
   d="$(P="$(rand 32 32)" jq -nc '{password:$ENV.P}')";                    D="$d" kv_create forgejo/db D
   d="$(P="$(rand 28 28)Aa1!" jq -nc '{password:$ENV.P}')";                D="$d" kv_create forgejo/admin D
   d='{"key":"oidc-not-configured","secret":"oidc-not-configured"}';       D="$d" kv_create forgejo/oidc D
+  # The bearer token of Forgejo's /metrics ([metrics] TOKEN): the forge answered /metrics without a credential and, through
+  # //metrics, reached the Internet at 0.4.1 and 0.4.2. The forge (GITEA__metrics__TOKEN) and vmagent (the VMPodScrape
+  # forgejo) both read this one value, through two ExternalSecrets. Create only: a re-run never rotates it, an upgraded
+  # cluster gains it when this Job runs again; a rotation is an operator's edit followed by a restart of the forge pod.
+  d="$(P="$(rand 40 40)" jq -nc '{token:$ENV.P}')";                       D="$d" kv_create forgejo/metrics D
   d=""
 }
 

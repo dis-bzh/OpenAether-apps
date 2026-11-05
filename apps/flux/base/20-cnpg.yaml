@@ -37,6 +37,13 @@ spec:
         name: cnpg-archive-generation
         optional: true
   wait: true
+  # Gate: a Cluster is Current only when its Ready condition is True; `wait: true` alone may pass before the databases
+  # exist (a reading of the sources, not shown on a cluster). The why, the timeout figures and the silent wait of the
+  # dependents: apps/flux/README.md ("The cnpg gate"). Pinned by scripts/dev/test-flux-health-gates.sh.
+  healthCheckExprs:
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      current: "has(status.conditions) && status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')"
   dependsOn:
     - name: external-secrets
     - name: external-secrets-stores  # ClusterSecretStore openbao (#38)
