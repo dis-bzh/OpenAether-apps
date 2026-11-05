@@ -370,7 +370,8 @@ d1d268c, NOT a tag): cluster A, a move from 0.4.2 with the forge on, and cluster
     long is not shown); the forge pod rolled with **0 s in `CreateContainerConfigError`**. The forge was away **50.3 s** (last answer 12:16:45.6, first
     answer 12:17:35.9, 49 probe failures) and the scrape gap was **65 s**, back with no manual step; 1,284 acknowledged pushes, 0 missing, `git fsck`
     clean. That order was favourable by 76 s, and nothing enforces it.
-  - *Unfavourable order (cluster B, the forge Secret unavailable during a Helm upgrade).* The pod waited **6 min 30 s** in `CreateContainerConfigError`;
+  - *Unfavourable order (cluster B, the forge Secret unavailable during a Helm upgrade; INCIDENT, induced in the lab, 3 CP + 6 W: Flux suspended, the forge
+    ExternalSecret pointed at a missing key, the upgrade triggered by an added env var; not the sequence of a late vault Job).* The pod waited **6 min 30 s** in `CreateContainerConfigError`;
     the HelmRelease reached `UpgradeSucceeded` with **no rollback** (`timeout: 15m`); the Deployment kept `GITEA__metrics__TOKEN` in 37 of 37 polls; the
     pod started by itself 19 s after the Secret came back. **A wait beyond 15 minutes is not shown.** During it `up{forgejo}` was 0 for about 7.5 minutes
     (90 samples), and no rule names the forge scrape (alerts were sampled at two moments only).

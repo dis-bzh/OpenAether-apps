@@ -49,15 +49,18 @@ Forgejo's metrics: 66 metric families, 11,151 bytes, including the build informa
 `///metrics`, `//metrics/` and `//metrics?x=1` did the same (200, 11,152 to 11,153 bytes, read in a second file of 20 probes, 10 per listener). `/metrics`,
 `/metrics/` and `/debug/metrics` gave 403, and plain HTTP on :80 gave a 301 for the `//` spellings (the redirect, not the metrics).
 What the body lists is the forge's counters and build information, not repository content or a credential. **Who is touched:** a
-cluster that turned the forge brick on at 0.4.1 or 0.4.2. A cluster without the brick is not (no route, no Forgejo). On the four
-other hosts of that sweep no spelling returned metrics. The same was read on a second 0.4.2 cluster, at the arm of the move to 0.4.3 (lab 34,
+cluster that turned the forge brick on at 0.4.2 (measured) or at 0.4.1 (the same `apps/` tree: `git diff 0.4.1..0.4.2 -- apps scripts`
+prints nothing; not run). A cluster without the brick has no forge route and no Forgejo. On the four other hosts of that sweep no
+spelling returned metrics (first response only, redirects not followed; the Longhorn opt-in route was not tested). The same was read on a second 0.4.2 cluster, at the arm of the move to 0.4.3 (lab 34,
 cluster A; 540 probes = 54 spellings x 5 hosts x HTTPS and plain HTTP): 200 probes answered 403, 5 returned a Prometheus body, all of them on the
 forge host and on HTTPS (`//metrics`, `///metrics`, `//metrics/`, `//metrics?x=1` and `/\metrics`; 66 families, 11,153 to 11,157 bytes).
 
 **Why it was not seen before.** The policy lists its paths literally and Istio's default normalisation (BASE) removes dot segments
 and decodes `%6D`, but does not merge slashes; Forgejo cleans `//metrics` to `/metrics` itself. The 216-probe sweeps behind the 0.4.1
-and 0.4.2 notes had no forge host (the brick was not deployed in those labs), so their sentence "the variants reach the service, none
-served metrics" was true of the hosts swept and false of the forge. It is corrected in the 0.4.3 notes.
+and 0.4.2 notes had no forge host (the brick was not deployed in those labs), so the 0.4.2 sentence "answer 403 on every Gateway host"
+and the 0.4.1 sentence "reach the service; none served metrics there" were true of the hosts swept; the first was wrong for the forge, and
+the second already said "the forge is NOT shown" in its Limits clause, but a reader could take it as covering every host. Both are corrected
+in the 0.4.3 notes.
 
 **The fix, three layers, each of which stopped every spelling on its own on the rig below:**
 
@@ -117,8 +120,8 @@ Longhorn), VM operator 0.68.1 and vmagent v1.136.0.
 - *On the platform (lab 34: Scaleway, 3 CP + 6 W, one run per figure, the MOVING branch ref at apps e8ca37f and infra d1d268c, NOT a tag).* The sweep is
   54 spellings x 5 hosts (Grafana, Zitadel, OpenBao, the lab's test application, the forge) x HTTPS and plain HTTP = 540 probes, from the lab host, no
   credential. **Before**, cluster A at the 0.4.2 tags: 200 probes 403, 5 Prometheus bodies, all on the forge, all on HTTPS (above). **After the move** to
-  the 0.4.3 heads (cluster A): 310 x 403, **0 bodies, run twice with identical results**; all 55 probes of the slash family (11 spellings x 5 hosts) are
-  403 on both listeners, plain HTTP included (the deny runs before the redirect). **Fresh install** at the 0.4.3 heads (cluster B, forge on): 540 probes,
+  the 0.4.3 heads (cluster A): 310 x 403, **0 bodies, run twice with identical results**; all 110 probes of the slash family (11 spellings x 5 hosts x 2 listeners)
+  are 403, plain HTTP included (the deny runs before the redirect). **Fresh install** at the 0.4.3 heads (cluster B, forge on): 540 probes,
   310 x 403, 0 bodies, the same code table as cluster A after its move. On cluster A, layer 1 (`MERGE_SLASHES`) was shown alone for about 86 to 89 s before the
   policy's new paths landed (the 89 s mixes the lab host's clock with the cluster's, which runs 1 to 3 s ahead), and layer 3 alone straight to the pod (no
   bearer 401, a wrong bearer 401, the right bearer 200; `//metrics` with the Gateway layers alone 403). **The policy layer was never alone on a cluster**
