@@ -357,7 +357,9 @@ were not run on it.
   environment. The Deployment is **Recreate**, so the pod rolls (31 s on the rig with no volume, NOMINAL; the forge was Ready 72 s after its
   patch in a proof lab, a different measure) and, if the Secret is not there yet, it sits in `CreateContainerConfigError`, with the forge
   away, until the ExternalSecret has been synced (ESO retries a failed sync; how long that takes after the Job ran was
-  **not measured**). The scrape comes back by itself when both Secrets exist and the new pod is up. A push or a clone in flight across the
+  **not measured**). The scrape comes back by itself when both Secrets exist and the new pod is up. Either order is safe: a scrape that sends the bearer to a forge that has
+  no token yet is answered 200 (no token configured, the header is ignored, read in Forgejo's documented behaviour and not run), and a forge that has the token before the
+  scrape has it answers 401, so the target is DOWN until the twin Secret exists. No alert reads the forge's `up` today (`vmrule-*.yaml` do not name it), so the gap pages nobody and shows only as missing `gitea_*` points. A push or a clone in flight across the
   roll fails and is retried, as for every roll of this Deployment. The lab must measure the window (forge away, scrape gap) on a 0.4.2 to
   0.4.3 move with the forge on.
 - **Rotation.** Overwrite `secret/forgejo/metrics` in OpenBao; both ExternalSecrets follow within their `refreshInterval` (1 h); then restart the forge
