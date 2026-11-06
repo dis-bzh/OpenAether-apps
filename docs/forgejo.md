@@ -70,7 +70,7 @@ the prune (the repository volume, the database volumes) has not been exercised: 
 repository already seeds the secrets of bricks a profile may not carry in the same way (`minio/root`, `longhorn/encryption`,
 `grafana/*`). Created only if absent, never printed, never rotated. With the brick off nothing reads them: no ExternalSecret, no database
 role, no account exists, so they open nothing; they are four unread entries of the KV store (and of its snapshots). The one exception is
-`forgejo/metrics`, which has a second ExternalSecret in `services-observability` (the scrape's Secret, one Secret nobody reads without the forge). The placeholder of
+`forgejo/metrics`, which has a second ExternalSecret in `services-observability` (the scrape's Secret; without the forge the unconditional `VMPodScrape` still reads it). The placeholder of
 `forgejo/oidc` is a fixed public string and protects nothing. In exchange, enabling the brick later needs no seeding step. An upgraded
 cluster re-runs the Job (the script ConfigMap changed) and gains the entries it lacks (`forgejo/metrics` on a cluster moved from 0.4.2) whether or not it enables the forge.
 "The brick converges unattended" is **not** claimed as a property of a default install, which does not carry it. After the hand patch of the
@@ -349,7 +349,8 @@ d1d268c, NOT a tag): cluster A, a move from 0.4.2 with the forge on, and cluster
   `authorization.credentials` `{name: forgejo-metrics, key: token}`, read from a Secret of its own namespace: the operator resolves a scrape's
   Secret next to the scrape, and the forge's Kustomization (`services-git`) does not depend on the VM CRDs, so a twin ExternalSecret
   `forgejo-metrics` in `services-observability` (`apps/base/observability/externalsecret-forgejo-metrics.yaml`) reads the same OpenBao key. On a
-  profile without the forge it is one Secret nobody reads. A scrape whose Secret does not exist is skipped by the operator with an error log
+  profile without the forge the unconditional `VMPodScrape` `forgejo` still reads it (a scrape with no target; a reading of the manifests, not run
+  on such a profile). A scrape whose Secret does not exist is skipped by the operator with an error log
   ("skip config generation for resource"); vmagent and the other scrapes keep running, and the forge target returns when the Secret appears.
 - **Measured on the rig** (Forgejo 15.0.11, token from a Secret): straight to the pod, no bearer 401, a wrong bearer 401, the right bearer 200
   (11,110 bytes); `//metrics` without a bearer 401; `/api/healthz` stays 200, so the kubelet probes are unaffected. Through the Gateway with the
