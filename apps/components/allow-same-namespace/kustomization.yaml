@@ -1,6 +1,7 @@
 # The pods of a namespace may reach each other (apps #112). The platform denies all ingress cluster-wide
 # (apps/base/platform/network-policies/default-deny-all.yaml), so the pods of a NEW namespace are reachable by nobody,
-# their own namespace included (lab 11; lab 25: the HBONE port 15008 timed out until a policy allowed it).
+# their own namespace included (lab 11). An ambient namespace also needs an Istio ALLOW AuthorizationPolicy (lab 25: not
+# shown that this component alone is enough for it).
 #
 # Include it from the Kustomization of the namespace's workloads; that Kustomization sets `namespace:`, which this
 # component leaves open on purpose:

@@ -58,8 +58,8 @@ acme_issuer = any(d.get("kind") in ("ClusterIssuer", "Issuer") and "acme" in d.g
                   for d in yaml.safe_load_all(p.read_text()) if isinstance(d, dict))
 check("no ACME host in the egress allow-list while no issuer is ACME", acme_issuer or not any("letsencrypt" in h for h in hosts))
 
-# apps #112: the default-deny ingress also blocks a new namespace's own pods (lab 11, lab 25: HBONE 15008 timed out until a CNP
-# allowed it). The ready-made allow is a Kustomize component, one CNP; the including Kustomization sets the namespace.
+# apps #112: the default-deny ingress also blocks a new namespace's own pods (lab 11). The ready-made allow is a Kustomize
+# component, one CNP; the including Kustomization sets the namespace. An ambient namespace needs an Istio ALLOW policy too (lab 25).
 with tempfile.TemporaryDirectory() as t:
     (Path(t) / "kustomization.yaml").write_text(yaml.safe_dump({
         "apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "namespace": "demo-ns",
