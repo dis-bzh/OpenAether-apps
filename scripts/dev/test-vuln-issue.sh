@@ -55,6 +55,9 @@ before="$(cat "$W/log")"
 : > "$W/fails"; echo 1 > "$W/fail.issue.list"; echo 1 > "$W/fail.issue.create"
 "$S" open docker.io/new/img:1 "$W/body" http://run/9 >/dev/null 2>&1; rc4=$?
 [ "$rc4" = 0 ] && [ "$(grep -c '^create \[vuln\] docker.io/new/img:1$' "$W/log")" = 1 ] && [ "$(wc -l < "$W/fails")" = 2 ] && ok "a 503 on issue list and on issue create is retried, one issue is opened" || bad "503 on open: rc $rc4"
+: > "$W/fails"; echo 1 > "$W/fail.issue.comment"; before="$(grep -c '^comment' "$W/log")"
+"$S" open docker.io/new/img:1 "$W/body" http://run/9b >/dev/null 2>&1; rc4b=$?
+[ "$rc4b" = 0 ] && [ "$(grep -c '^comment' "$W/log")" = $((before + 1)) ] && [ "$(cat "$W/fails")" = "issue comment" ] && ok "a 503 on issue comment is retried, one comment is added" || bad "503 on comment: rc $rc4b"
 : > "$W/fails"; echo 99 > "$W/fail.issue.close"; before="$(cat "$W/log")"
 "$S" close docker.io/new/img:1 http://run/10 >/dev/null 2>&1; rc5=$?
 [ "$rc5" != 0 ] && [ "$(wc -l < "$W/fails")" = 3 ] && [ "$(cat "$W/log")" = "$before" ] && ok "a 503 that never clears fails after three attempts, not more" || bad "permanent 503: rc $rc5, $(wc -l < "$W/fails") attempts"
