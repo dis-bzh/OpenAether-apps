@@ -29,7 +29,7 @@ spec:
   prune: true
   wait: false
   dependsOn:
-    - name: forgejo-db         # backend Postgres (Ready = the Cluster is Ready), and through it cnpg
+    - name: forgejo-db         # backend Postgres (Ready = its Cluster's Ready is True, the gate of group 36), and cnpg
     - name: external-secrets   # DB password + initial admin + OIDC client
     - name: services-gateway   # HTTPRoute → openaether-gateway
     - name: storage            # longhorn-x2-rwo (repository PVC)
