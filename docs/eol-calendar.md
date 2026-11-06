@@ -63,7 +63,7 @@ or a vendored dump has no row.
 - **A waiver is an accepted risk, not a fix.** Five lines were past upstream support when this calendar was
   written (cert-manager 1.15, Kyverno 1.12, the CloudNativePG operator 1.23, Grafana 11.3, Loki 3.3); Istio left that
   list with the move to 1.31 (apps #96; a fresh install and the in-place hop ran on Scaleway in labs 25 to 27). All of
-  them are on supported lines now (`patching.md`, "Where it stands"), so one waiver is left: MinIO until 2026-12-31,
+  them are on supported lines now (the table above; `scripts/check-eol.py` gives 0 warnings on 2026-11-06), so one waiver is left: MinIO until 2026-12-31,
   the owner's decision of 2026-10-16 (the local/dev S3 only, never part of a production profile); its replacement is
   tracked in apps #104.
 - **The upgrades themselves are not done here.** Each hop is a cluster exercise (see the fix review of the audit:

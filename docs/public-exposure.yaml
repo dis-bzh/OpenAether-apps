@@ -43,8 +43,8 @@ routes:
       on the forge in a proof lab at 0.4.2) and answers 401 without the bearer token since 0.4.3. At 0.4.2 //metrics
       was NOT refused and returned the metrics (measured; 0.4.1 has the same apps/ tree, not run); since 0.4.3 the slash
       spellings are refused by istiod (MERGE_SLASHES), by the policy and by the token, measured on a local rig and on
-      two clusters that followed a branch ref, not on a tag, first hop only (docs/public-exposure.md). No ACL in
-      front; the login page answers anyone.
+      two clusters that followed a branch ref, not on a tag, first hop only; the policy layer was never alone on a
+      cluster, only on the rig (docs/public-exposure.md). No ACL in front; the login page answers anyone.
     default: true
     private_admin: false
   - route: services-gateway/global-http-redirect

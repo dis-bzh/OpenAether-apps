@@ -135,10 +135,17 @@ anyone. The real mitigation is the 90-day leaf life and the new key at each rene
 that does not check, for up to 90 days. Revocation is therefore best combined with replacement.
 
 - **A leaf is compromised**: `bao_admin write pki/revoke serial_number=<aa:bb:...>` (the serial is in `kubectl get secret openaether-tls -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -serial`), then `cmctl renew openaether-tls -n services-gateway` to issue a new certificate with a new key.
-  Which list shows the revocation, and when (OVH, 3 CP + 2 workers, NOMINAL, one drill, apps #130): OCSP (`/v1/pki/ocsp`) answered "revoked" at once;
-  the delta CRL (`/v1/pki/crl/delta/pem`, rebuilt every 15 minutes) listed the serial about 8 minutes later; the full CRL (`/v1/pki/crl/pem`) still had
-  0 entries 20 minutes later and shows it only at its next scheduled rebuild (not measured; its validity is 72 h, `configure.sh`). So read OCSP or
-  the delta CRL in the first hours, not the full one: `curl -s --cacert <openbao-ca> https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/crl/delta/pem | openssl crl -noout -text`
+  Which list shows the revocation, and when: OCSP (`/v1/pki/ocsp`) answers "revoked" at once; the delta CRL (`/v1/pki/crl/delta/pem`) is rebuilt
+  every 15 minutes (`delta_rebuild_interval`, `configure.sh`), so allow up to that long; the full CRL (`/v1/pki/crl/pem`) shows the serial only at
+  its next scheduled rebuild (not measured; its validity is 72 h, `configure.sh`). So read OCSP or the delta CRL in the first hours, not the full one.
+  One drill reported this (OVH, 3 CP + 2 workers, NOMINAL, apps #130: OCSP at once, the delta CRL about 8 minutes later, the full CRL still empty 20
+  minutes later). The stored evidence of that drill keeps only the OCSP answer, the 403 on `pki/crl/rotate` and the empty full CRL, without check
+  times, and the lab 15A results table says the delta CRL was also empty "minutes later": take the 15 minutes as the bound, not the 8.
+  OCSP: `openssl ocsp -issuer <int.crt> -serial 0x<serial without colons> -url https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/ocsp -CAfile <openbao-ca> -VAfile <int.crt>`
+  (`<int.crt>` is the issuing intermediate, which the AIA URL of the leaf points at, `/v1/pki/ca`; without `-VAfile` the answer still reads "revoked" but is
+  followed by "Response Verify Failure", because the listener CA does not vouch for the PKI. The shape of this command was run offline against a
+  local `openssl ocsp` responder behind TLS, not against OpenBao.)
+  Delta CRL: `curl -s --cacert <openbao-ca> https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/crl/delta/pem | openssl crl -noout -text`
   (the endpoints are not authenticated). The admin identity cannot force a rebuild (`pki/crl/rotate` answers 403): that takes a break-glass root token.
 
 - **Intermediate compromised or suspected** (the seal key leaked together with a snapshot, a readable backup, an admin
