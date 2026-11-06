@@ -95,6 +95,36 @@ with tempfile.TemporaryDirectory() as d:
     again, _ = gen.build(gen.load_docs(d), "t", "2026-01-01T00:00:00Z", False, False)
     check("the output is deterministic", json.dumps(bom, sort_keys=True) == json.dumps(again, sort_keys=True))
 
+# Images that pass as arguments or env values (the Longhorn manager DaemonSet and driver deployer, apps #210): found with
+# the lookalikes left out (a flag or a variable that merely has "image" in its name, a flag with no value, a template).
+ARGS = textwrap.dedent("""\
+    apiVersion: apps/v1
+    kind: DaemonSet
+    metadata: {name: mgr}
+    spec:
+      template:
+        spec:
+          containers:
+            - name: m
+              image: "docker.io/acme/mgr:v1"
+              command: [mgr, --engine-image, "docker.io/acme/engine:v1", --instance-manager-image, "docker.io/acme/im:v1",
+                        --image-pull-policy, Always, "--backing-image-manager-image=docker.io/acme/bim:v1",
+                        --support-bundle-manager-image, "{{ .Values.sb }}", --manager-image]
+              env:
+                - {name: CSI_ATTACHER_IMAGE, value: "docker.io/acme/attacher:v4"}
+                - {name: CSI_ATTACHER_IMAGE_PULL_POLICY, value: Always}
+                - {name: CSI_RESIZER_IMAGE, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+    """)
+with tempfile.TemporaryDirectory() as d:
+    (Path(d) / "x.yaml").write_text(ARGS)
+    bom, _ = gen.build(gen.load_docs(d), "t", "2026-01-01T00:00:00Z", False, False)
+    got = {(c["name"], c["version"]) for c in bom["components"] if c["type"] == "container"}
+    check("images behind --*-image flags and *_IMAGE env values are found",
+          got >= {("docker.io/acme/engine", "v1"), ("docker.io/acme/im", "v1"), ("docker.io/acme/bim", "v1"), ("docker.io/acme/attacher", "v4")})
+    check("a flag or variable with image in its name but no image is not an image",
+          got == {("docker.io/acme/mgr", "v1"), ("docker.io/acme/engine", "v1"), ("docker.io/acme/im", "v1"),
+                  ("docker.io/acme/bim", "v1"), ("docker.io/acme/attacher", "v4")})
+
 with tempfile.TemporaryDirectory() as d:
     r = subprocess.run([sys.executable, str(HERE / "gen-sbom.py"), "--rendered", d], capture_output=True, text=True)
     check("an empty tree is an error, not an empty inventory", r.returncode == 1)

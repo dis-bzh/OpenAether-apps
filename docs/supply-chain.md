@@ -8,7 +8,8 @@
 ## The inventory (SBOM)
 
 `scripts/dev/gen-sbom.py` writes a CycloneDX 1.5 file from the **rendered** DAG (`scripts/dev/render-dag.py`: what Flux
-applies, not the source tree): every Helm chart a HelmRelease installs, every image the manifests name, and with `--helm`
+applies, not the source tree): every Helm chart a HelmRelease installs, every image the manifests name (an image handed to
+another one as a `--*-image` argument or a `*_IMAGE` env value counts), and with `--helm`
 the images the charts render with the release's own values (a `valuesFrom` target gets a placeholder, as Flux fills it
 at run time). The `SBOM` workflow runs it weekly and on every pushed release tag, attaches it as
 `openaether-apps-<tag>.cdx.json` to the DRAFT release (it creates the draft when there is none: an immutable release takes no
@@ -18,8 +19,10 @@ checks that the asset is there. The releases 0.3.2, 0.4.0 and 0.4.1 went out wit
 published immutable release takes no asset).
 
 `gen-sbom.py` does not read image layers (Trivy does), the images controllers create at run time (Cluster API machines,
-CNPG pods), or what the child clusters' own profile deploys. On the 0.4.1 tag it lists 16 images from the manifests and
-40 with the charts (`--helm`).
+CNPG pods), or what the child clusters' own profile deploys. On the 0.4.3 tag it listed 16 images from the manifests and
+40 with the charts (`--helm`), three of Longhorn's images among them (manager, ui, share-manager). Since it reads the images passed as arguments or env values
+(apps #210) it lists 51 with `--helm`: Longhorn's engine, instance-manager, backing-image-manager, support-bundle-kit and six
+CSI sidecars, and cert-manager's ACME solver. Each is a new scan job; the first scan of them was not run when this was written.
 
 **Rebuilding an inventory by hand**, from a checkout of any tag, to keep elsewhere: the two commands of the workflow's
 inventory step.
