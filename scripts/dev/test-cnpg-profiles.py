@@ -234,6 +234,9 @@ def main():
     ic =(ps["template"]["spec"].get("initContainers") or [{}])[0]
     check(ic.get("name") == "bootstrap-controller" and ic.get("resources", {}).get("limits", {}).get("memory"),
           "pooler: the operator's init container has a memory limit (require-limits reported it in lab 23)")
+    # apps #205: OOMKilled at 64Mi on one fresh install. 128Mi is a mitigation (the peak was never read), the same as pgbouncer's.
+    check(ic.get("resources", {}).get("limits", {}).get("memory") == "128Mi",
+          "pooler: the init container's memory limit is 128Mi (64Mi was OOMKilled at install, #205; a mitigation, peak not measured)")
     check(ic.get("securityContext", {}).get("readOnlyRootFilesystem") is True and ic["securityContext"].get("allowPrivilegeEscalation") is False
           and ic["securityContext"].get("capabilities") == {"drop": ["ALL"]},
           "pooler: the operator's init container has the restricted container security context (the platform policies read the manifest)")
