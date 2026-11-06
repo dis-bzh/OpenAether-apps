@@ -60,7 +60,7 @@ spec:
           containers:
             - name: canary
               # The image of the dump (its psql), kept in step by scripts/dev/check-pg-dump-version.sh.
-              image: ghcr.io/cloudnative-pg/postgresql:18.6
+              image: ghcr.io/cloudnative-pg/postgresql:18.6-202611030838-system-bookworm
               command: ["/bin/sh", "/scripts/canary-write.sh"]
               env:
                 - { name: HOME, value: /tmp }

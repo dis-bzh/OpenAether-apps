@@ -14,7 +14,7 @@ metadata:
     openaether.io/db-profile: ha
 spec:
   instances: 3
-  imageName: ghcr.io/cloudnative-pg/postgresql:18.6
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-202611030838-system-bookworm
   # No superuser over the network: the application uses its owner; CNPG keeps the postgres password out of reach.
   enableSuperuserAccess: false
   primaryUpdateStrategy: unsupervised
