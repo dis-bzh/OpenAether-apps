@@ -96,7 +96,7 @@ re-vendored), grafana-db PostgreSQL 16.15, External Secrets 2.13.0 (re-vendored 
 `grafana-community` chart repository, the old one no longer carries them), and the children's Cilium 1.19.9. **These pins describe a fresh install.**
 A cluster that already runs the old versions follows each project's own hop rule (one minor at a time for Longhorn, cert-manager and CNPG; a CNPG
 Backup before Zitadel or Grafana; the order above for the rest): the observations, rollbacks and the data-safety gates are the lab checklist's, not
-this page's. Not moved, with the reason: Istio (waived, needs the Gateway API CRDs and a chart repository decision), MinIO (dev profile, no maintained
+this page's. Not moved, with the reason: Istio (waived, needs the Gateway API CRDs and a chart repository decision; moved to 1.31.3 in 0.4.0), MinIO (dev profile, no maintained
 upstream), OpenBao (stays 2.7.1), talos-cloud-controller-manager on the children (0.5.8 follows Talos 1.14, the children run 1.13).
 
 Two follow-ups these bumps create and that nothing in the repository enforces yet: CNPG 1.30.x is the last line with the in-tree `barmanObjectStore`
@@ -180,9 +180,11 @@ Not shown without a cluster: that step 2 always clears the stale address. The te
 
 ## Kubernetes 1.37 against the add-ons' support matrices (decision, apps #105, #120)
 
-The management cluster runs Kubernetes 1.37.1 (the infra default). Upstream matrices list up to 1.36 for cert-manager 1.21 (1.33-1.36), Flux 2.9
-(1.34-1.36) and Cilium 1.20 (e2e 1.33-1.36); CloudNativePG 1.30 lists 1.34-1.36 and tests 1.37; Istio 1.31 is the one line that covers it. **Decision
-(owner, 2026-10-16): keep 1.37.1** and let real-cloud labs prove the pairing; the labs 15a to 15c ran this repository's pins on 1.37.1 on three
+The management cluster runs Kubernetes 1.37.1 (the infra default). Upstream matrices list up to 1.36 for cert-manager 1.21 (1.33-1.36) and
+Cilium 1.20 (e2e 1.33-1.36); CloudNativePG 1.30 lists 1.34-1.36 and tests 1.37; Istio 1.31 is the one line that covers it. The management
+cluster's own Flux is 2.10 since 0.4.3 and needs Kubernetes 1.37.0 or later on the 1.37 line (OpenAether-infra `docs/upgrade.md`, "From 0.4.2 to
+0.4.3"); the Flux 2.9.6 that this repository pushes to CAPI children (`cluster-api-clusters/flux-gotk`) keeps the 2.9 matrix (1.34-1.36),
+against the children's 1.35/1.36. **Decision (owner, 2026-10-16): keep 1.37.1** and let real-cloud labs prove the pairing; the labs 15a to 15c ran this repository's pins on 1.37.1 on three
 providers without a Kubernetes-version failure being attributed to an add-on. That is evidence for these pins on that version, not an upstream
 statement of support: a problem on 1.37 is reported upstream as outside the tested range, and the fallback is the children's 1.35/1.36. At every
 hop, re-read the target's matrix for 1.37 before merging and note the result in the PR. No automated check exists: the matrices are prose on each
@@ -192,9 +194,11 @@ project's site, not data (a check that parsed them would be guessing); `docs/eol
 
 
 
-After phase 2 the pins in [`eol-calendar.yaml`](eol-calendar.yaml) are on supported lines except Istio 1.24 (EOL 2025-06-24, waived to 2026-12-31; the tree has since moved to Istio 1.31.3, offline only, apps #96),
+After phase 2 the pins in [`eol-calendar.yaml`](eol-calendar.yaml) are on supported lines except Istio 1.24 (EOL 2025-06-24, waived to 2026-12-31; the tree moved to Istio 1.31.3 in 0.4.0, apps #96),
 MinIO (dev profile only) and the rows whose upstream publishes no schedule. The 30-day rule was therefore **not met for Istio** at 0.3.0. The new pins **ran on real
 clouds as a fresh install** (labs 12 to 15, Scaleway, OVH, Outscale) and, on Scaleway only, as in-place hops from 0.2.0 for cert-manager, Longhorn, CNPG,
-Zitadel, Kyverno, External Secrets, the VM operator and the first Loki steps (lab 15c). **Not rehearsed in place:** Loki 6.55 -> 18, Grafana, Alloy, the
-Gateway API CRDs, Flux on the children, Cilium and Talos patches, Istio (#121). Whether the releases still pinned (Istio 1.24) have unpatched advisories was
-**not checked**; the dependency graph and the OSV feed the Renovate blocks above read are where to look.
+Zitadel, Kyverno, External Secrets, the VM operator and the first Loki steps (lab 15c). **Not rehearsed in place at 0.3.0:** Loki 6.55 -> 18, Grafana, Alloy, the
+Gateway API CRDs, Flux on the children, Cilium and Talos patches, Istio. #121, which tracked those hops, is closed as not planned: under the owner's
+policy of 2026-10-24 only the move from the previous minor to the current one is rehearsed, and each future bump rehearses its own hop. Since then Istio's
+in-place hop 1.24.2 -> 1.31.3 with the Gateway API CRDs v1.6.0 ran on Scaleway in labs 25 to 27 (the rebuild-aside path was not run). Whether the releases
+still pinned at 0.3.0 (Istio 1.24) had unpatched advisories was **not checked**; the dependency graph and the OSV feed the Renovate blocks above read are where to look.

@@ -17,7 +17,8 @@ components:
   cycle: Istio 1.31
   eol: '2027-02-28'
   eol_source: https://endoflife.date/api/istio.json
-  note: a fresh install lands on 1.31.3 (not yet shown on a cluster); 2027-02-28 read on endoflife.date 2026-10-23, istio.io
+  note: a fresh install on 1.31.3 (lab 25) and the in-place hop from 1.24.2 (labs 25 to 27) ran on Scaleway, on branch heads
+    of the 0.4.0 release candidate; the rebuild-aside path was not run; 2027-02-28 read on endoflife.date 2026-10-23, istio.io
     supported-releases says '~Feb 2027 (Expected)', so it can move once 1.32 ships
   owner: '@vde-dis'
   next_review: '2026-12-14'
@@ -30,7 +31,8 @@ components:
   cycle: Istio 1.31
   eol: '2027-02-28'
   eol_source: https://endoflife.date/api/istio.json
-  note: a fresh install lands on 1.31.3 (not yet shown on a cluster); 2027-02-28 read on endoflife.date 2026-10-23, istio.io
+  note: a fresh install on 1.31.3 (lab 25) and the in-place hop from 1.24.2 (labs 25 to 27) ran on Scaleway, on branch heads
+    of the 0.4.0 release candidate; the rebuild-aside path was not run; 2027-02-28 read on endoflife.date 2026-10-23, istio.io
     supported-releases says '~Feb 2027 (Expected)', so it can move once 1.32 ships
   owner: '@vde-dis'
   next_review: '2026-12-14'
@@ -43,7 +45,8 @@ components:
   cycle: Istio 1.31
   eol: '2027-02-28'
   eol_source: https://endoflife.date/api/istio.json
-  note: a fresh install lands on 1.31.3 (not yet shown on a cluster); 2027-02-28 read on endoflife.date 2026-10-23, istio.io
+  note: a fresh install on 1.31.3 (lab 25) and the in-place hop from 1.24.2 (labs 25 to 27) ran on Scaleway, on branch heads
+    of the 0.4.0 release candidate; the rebuild-aside path was not run; 2027-02-28 read on endoflife.date 2026-10-23, istio.io
     supported-releases says '~Feb 2027 (Expected)', so it can move once 1.32 ships
   owner: '@vde-dis'
   next_review: '2026-12-14'
@@ -56,7 +59,8 @@ components:
   cycle: Istio 1.31
   eol: '2027-02-28'
   eol_source: https://endoflife.date/api/istio.json
-  note: a fresh install lands on 1.31.3 (not yet shown on a cluster); 2027-02-28 read on endoflife.date 2026-10-23, istio.io
+  note: a fresh install on 1.31.3 (lab 25) and the in-place hop from 1.24.2 (labs 25 to 27) ran on Scaleway, on branch heads
+    of the 0.4.0 release candidate; the rebuild-aside path was not run; 2027-02-28 read on endoflife.date 2026-10-23, istio.io
     supported-releases says '~Feb 2027 (Expected)', so it can move once 1.32 ships
   owner: '@vde-dis'
   next_review: '2026-12-14'
