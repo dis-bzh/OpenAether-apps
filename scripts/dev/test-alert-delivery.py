@@ -7,7 +7,8 @@ Static: reads the manifests and renders the opt-in component, never a cluster. C
   - the probe label of the opt-in rule is the one the quiet receiver is routed on, and that receiver sends no "resolved";
   - the inhibit rule stops the Watchdog on an alert the opt-in rules define;
   - the component is OFF in the default profiles and adds exactly one Flux Kustomization, which waits for the VMRule CRDs;
-  - the egress policy of Alertmanager still allows the chat and heartbeat hosts it is configured with.
+  - the egress policy of Alertmanager still allows the chat and heartbeat hosts it is configured with;
+  - vmalert hands its alerts to EVERY Alertmanager pod, one URL per replica, not through the headless Service (apps #207).
 Each rule has a self-test that proves it would catch the regression.
 """
 import copy
@@ -35,6 +36,18 @@ def load():
     cfg = yaml.safe_load(am["spec"]["configRawYaml"])
     rules = {r["alert"]: r for d in docs(PROBE) for g in d["spec"]["groups"] for r in g["rules"]}
     return am, cfg, rules
+
+
+def notifier_problems(vma, am):
+    """apps #207: a Service URL is resolved to one pod, so one replica held the alerts and the other none (n=1, 0.4.3 candidate).
+    The pods share silences and the notification log, not an alert that was never delivered to them. The URL is the pod FQDN the
+    VM operator builds itself (asPodFQDN, operator 0.75, for its own notifier discovery); vmalert sends to every URL it is given."""
+    sts = "vmalertmanager-" + am["metadata"]["name"]
+    want = sorted(f"http://{sts}-{i}.{sts}.{am['metadata']['namespace']}.svc:9093" for i in range(int(am["spec"]["replicaCount"])))
+    got = sorted(str(n.get("url")) for n in vma["spec"].get("notifiers") or [])
+    if got != want:
+        return [f"vmalert notifiers must be exactly one URL per Alertmanager pod {want}, found {got}"]
+    return []
 
 
 def problems(am, cfg, rules, egress_fqdns):
@@ -114,9 +127,10 @@ def problems_component():
 
 def main():
     am, cfg, rules = load()
+    vma = next(d for d in docs(VMA) if d["kind"] == "VMAlert")
     fq = {m["matchName"] for d in docs(NETPOL) if d["metadata"]["name"] == "vmalertmanager"
           for e in d["spec"]["egress"] for m in e.get("toFQDNs", [])}
-    bad = problems(am, cfg, rules, fq) + problems_component()
+    bad = problems(am, cfg, rules, fq) + notifier_problems(vma, am) + problems_component()
     for b in bad:
         print("FAIL", b)
     if "--selftest" in sys.argv:
@@ -142,6 +156,17 @@ def main():
         if not problems(am, cfg, rules, set()):
             print("selftest FAIL (egress not caught)")
             bad.append("egress")
+        base = "http://vmalertmanager-alertmanager-%d.vmalertmanager-alertmanager.services-observability.svc:9093"
+        for name, urls, replicas in (
+                ("notifier is the headless Service", ["http://vmalertmanager-alertmanager.services-observability:9093"], 2),
+                ("notifier misses one pod", [base % 0], 2),
+                ("a replica was added without its URL", [base % 0, base % 1], 3)):
+            a, v = copy.deepcopy(am), copy.deepcopy(vma)
+            a["spec"]["replicaCount"] = replicas
+            v["spec"]["notifiers"] = [{"url": u} for u in urls]
+            got = notifier_problems(v, a)
+            print(("selftest ok   " if got else "selftest FAIL (not caught) ") + name)
+            bad += [] if got else [name]
     print(f"{len(bad)} failed")
     sys.exit(1 if bad else 0)
 

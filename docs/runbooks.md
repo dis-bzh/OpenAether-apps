@@ -373,7 +373,8 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 ### VMAlertNotifierErrors
 
-- Check: `kubectl -n services-observability get pods -l app.kubernetes.io/name=vmalertmanager`; vmalert log; the vmalert CiliumNetworkPolicy.
+- Fires when vmalert fails to send to EVERY Alertmanager pod (it sends to each pod itself, `docs/alert-delivery.md`). One pod failing is `AlertmanagerClusterDegraded`, not this alert: the other pod still receives every alert.
+- Check: `kubectl -n services-observability get pods -l app.kubernetes.io/name=vmalertmanager`; vmalert log (`failed to send alerts to addr`, one line per pod address); the vmalert CiliumNetworkPolicy; that `vmalertmanager-alertmanager-0.vmalertmanager-alertmanager.services-observability.svc` resolves from a vmalert pod.
 - Do: restore Alertmanager or the policy. Meanwhile nothing leaves the cluster, the heartbeat included.
 
 ### VMAlertRuleEvaluationErrors

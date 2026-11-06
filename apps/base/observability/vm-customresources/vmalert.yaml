@@ -55,8 +55,14 @@ spec:
     url: http://vminsert-victoria-metrics.services-observability:8480/insert/0/prometheus
   remoteRead:
     url: http://vmselect-victoria-metrics.services-observability:8481/select/0/prometheus
+  # One URL per Alertmanager pod (apps #207). Through the headless Service vmalert resolves ONE pod at a time and sends
+  # there; the two Alertmanagers share silences and the notification log, not an alert that was never delivered to them,
+  # so one replica held the alerts and the other none (n=1, 0.4.3 candidate). vmalert sends to every URL it is given.
+  # The form is the pod FQDN the VM operator builds itself (<sts>-<i>.<sts>.<ns>.svc; the cluster peers use it too).
+  # Two URLs for the two replicas of `alertmanager` below: scripts/dev/test-alert-delivery.py fails when they disagree.
   notifiers:
-    - url: http://vmalertmanager-alertmanager.services-observability:9093
+    - url: http://vmalertmanager-alertmanager-0.vmalertmanager-alertmanager.services-observability.svc:9093
+    - url: http://vmalertmanager-alertmanager-1.vmalertmanager-alertmanager.services-observability.svc:9093
   resources:
     requests:
       cpu: 50m
@@ -83,8 +89,8 @@ spec:
     minAvailable: 1
 ---
 # Two replicas on two workers (0.4.0 M4): a lost worker must not silence the alerts that announce it. The peers gossip
-# on :9094 (networkpolicy.yaml) so a notification is sent once; VMAlert's notifier is the headless Service, which lists
-# the Ready replicas only. Whether both replicas see each other is checked by AlertmanagerClusterDegraded.
+# on :9094 (networkpolicy.yaml) so a notification is sent once; VMAlert sends to each replica itself (notifiers above),
+# so either one holds every alert. Whether both replicas see each other is checked by AlertmanagerClusterDegraded.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMAlertmanager
 metadata:

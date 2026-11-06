@@ -13,6 +13,22 @@ visible in Alertmanager and Grafana, and the delivery to the outside fails by de
 needing nothing external, are the rules that watch the chain itself (`vmrule-alerting.yaml`): VMAlert cannot reach
 Alertmanager, rule evaluation errors, alert state not persisted, Alertmanager config not reloaded, Alertmanager absent.
 
+## Both Alertmanager replicas receive every alert
+
+Alertmanager runs two replicas that gossip (silences, the notification log), but an alert is held only by the replicas
+vmalert sent it to. Through the headless Service vmalert resolved one pod at a time: in one sample (n=1, Scaleway, 3 CP + 6 W,
+the 0.4.3 candidate, 2026-11-05) pod 0 held 5 alerts and pod 1 none (apps #207). So `notifiers` of `vmalert.yaml` now lists
+one URL per Alertmanager pod (`http://vmalertmanager-alertmanager-<i>.vmalertmanager-alertmanager.services-observability.svc:9093`,
+the pod FQDN the VM operator builds for its own discovery), and vmalert sends to all of them. `test-alert-delivery.py` fails
+when the list and the `replicaCount` of the VMAlertmanager disagree: raise one, raise the other.
+
+- `VMAlertNotifierErrors` (critical) now means every address fails. A single pod being replaced fails its own sends for a
+  while and is `AlertmanagerClusterDegraded` (warning) only; before, it would have paged "every alert is lost".
+- Mocked/offline: the manifest, the rule on synthetic series, the operator and vmalert sources read. Never run on a cluster.
+  The drill is still to do and is the proof: delete the Alertmanager pod that holds an alert, read `/api/v2/alerts` on the
+  other (it must show the alert), and read that the per-pod names resolve from a vmalert pod. Label the figures NOMINAL or
+  INCIDENT with the cluster shape.
+
 ## Heartbeat (dead-man's-switch)
 
 `Watchdog` fires forever. Alertmanager sends it about every 4 minutes (route `repeat_interval` 3m + `group_interval` 1m: a ping goes out at the first tick of the group interval after the repeat interval, so the gap is at most 4 min; with 5m it was measured at 360 s in lab 19) to the URL in `secret/observability/alertmanager-deadmansswitch`

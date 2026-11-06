@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Flux failures must reach Alertmanager (#139). Static: it proves the manifests and the two network openings, not the delivery.
 
-Checks: a Provider of type alertmanager whose address is the notifier vmalert uses (host, port, /api/v2/alerts); an Alert on it with
+Checks: a Provider of type alertmanager whose address is the Service of the Alertmanager vmalert sends to (host, port, /api/v2/alerts); an Alert on it with
 eventSeverity error that covers GitRepository, Kustomization and a HelmRelease source in EVERY namespace where apps/base has a
 HelmRelease (the controller matches one namespace per source); the flux-system egress and the Alertmanager ingress on :9093; the
 Slack template that reads Flux's `message` annotation. `--selftest` mutates the manifests and requires a failure.
@@ -47,7 +47,7 @@ def check(objs, egress, ingress, am_cfg, hr_ns, notifier):
     p, a = prov[0], alert[0]
     m = re.fullmatch(r"(http://[^/]+:9093)/api/v2/alerts", p["spec"].get("address", ""))
     if not m or m.group(1) != notifier:
-        bad.append("Provider address %r is not %s/api/v2/alerts (the notifier of vmalert)" % (p["spec"].get("address"), notifier))
+        bad.append("Provider address %r is not %s/api/v2/alerts (the Service of the Alertmanager vmalert sends to)" % (p["spec"].get("address"), notifier))
     if a["spec"]["providerRef"]["name"] != p["metadata"]["name"] or a["metadata"]["namespace"] != p["metadata"]["namespace"]:
         bad.append("the Alert does not reference the Provider")
     if a["spec"].get("eventSeverity") != "error":
@@ -78,7 +78,11 @@ def inputs():
                    if d["kind"] == "CiliumNetworkPolicy" and d["metadata"]["name"] == "vmalertmanager")["spec"]["ingress"]
     va = load(B / "observability/vm-customresources/vmalert.yaml")
     am_cfg = next(d for d in va if d["kind"] == "VMAlertmanager")["spec"]["configRawYaml"]
-    notifier = next(d for d in va if d["kind"] == "VMAlert")["spec"]["notifiers"][0]["url"]
+    # vmalert sends to each Alertmanager pod (apps #207: http://<sts>-<i>.<sts>.<ns>.svc:9093). A Provider takes ONE address, so it
+    # keeps the headless Service of the same StatefulSet: http://<sts>.<ns>:9093.
+    pod_url = next(d for d in va if d["kind"] == "VMAlert")["spec"]["notifiers"][0]["url"]
+    m = re.fullmatch(r"(http://)(\S+?)-\d+\.\2\.([\w-]+)\.svc(:\d+)", pod_url)
+    notifier = m[1] + m[2] + "." + m[3] + m[4] if m else pod_url
     kust = yaml.safe_load((B / "flux/kustomization.yaml").read_text())["resources"]
     return objs, egress, ingress, am_cfg, helmrelease_namespaces(), notifier, kust
 
