@@ -59,9 +59,14 @@ values full of `$` expressions that it would blank. `test-alert-delivery.py` fai
 when a host is written in full in the policy or in `vmalertmanager`, when the substitution is not optional, when
 `observability` itself substitutes, or when a key is not documented here.
 
-- Mocked/offline: the manifests and the test. Not run on a cluster: after the move, read that the Watchdog ping still arrives (the
-  external service shows the last ping) and that `alertmanager_notification_requests_failed_total` does not rise; the policy is
-  removed from `vmalertmanager` and re-created by the new Kustomization a few seconds later, so a notification may be retried once.
+- Coming from 0.4.3: the `vmalertmanager` policy has no `toFQDNs` rule any more (it is `vmalertmanager-egress-hosts`). Remove any
+  overlay patch of that rule, which 0.4.3 told you to make for another host: a patch by index can fail the build of
+  `observability` or land on another rule. Set `ALERT_CHAT_HOST` and `ALERT_HEARTBEAT_HOST` instead.
+- Mocked/offline: the manifests and the test. Not run on a cluster: the policy is removed from `vmalertmanager` when
+  `observability` applies the new revision and re-created by the new Kustomization once that dependency is satisfied (the
+  dependency requeue is 30 s by default; the gap was not measured), so a notification may be retried once. After the move, read
+  the largest gap between two Watchdog pings in the external service (4 minutes at most in nominal running, see Heartbeat) and
+  that `alertmanager_notification_requests_failed_total` does not rise. Label the figures NOMINAL or INCIDENT with the cluster shape.
 - Not done here: the keys are not written by the infrastructure repository from the tfvars yet. Until they are, set them with a
   patch of `cluster-identity` or of the `observability-alert-egress` Kustomization (`postBuild.substitute`) in your overlay;
   an infrastructure apply that rewrites `cluster-identity` drops a key set by hand on that ConfigMap.
