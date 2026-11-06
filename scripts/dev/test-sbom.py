@@ -116,6 +116,16 @@ check("an image with no tag is an error", any("acme/a" in e and "floats" in e fo
 check("a moving tag is an error", any("acme/b" in e and "moves" in e for e in errs))
 check("a tag-only image is counted, a digest-pinned one is not", tag_only == ["docker.io/acme/c:1.0"])
 
+# The CNPG PostgreSQL image: a dated system build only (the plain MM.mm tag is frozen and deprecated upstream), one tag per major.
+pg = "ghcr.io/cloudnative-pg/postgresql:"
+errs, _ = pins.audit([pod(pg + "18.6-202611030838-system-bookworm", pg + "16.15")])
+check("the plain PostgreSQL tag is an error, the dated build is not",
+      len(errs) == 1 and "postgresql:16.15" in errs[0] and "dated" in errs[0])
+errs, _ = pins.audit([pod(pg + "18.6-202611030838-system-bookworm", pg + "18.6-202611100810-system-bookworm",
+                          pg + "16.15-202611020810-system-bookworm")])
+check("two tags for one PostgreSQL major are an error, one tag for the other major is not",
+      len(errs) == 1 and "PostgreSQL 18" in errs[0])
+
 if shutil.which("kubectl"):
     with tempfile.TemporaryDirectory() as d:
         subprocess.run([sys.executable, str(HERE / "render-dag.py"), d], check=True, capture_output=True)

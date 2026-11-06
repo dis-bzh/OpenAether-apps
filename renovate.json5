@@ -33,8 +33,8 @@
   // Images in our own manifests (backup jobs, OpenBao, restic, alpine/k8s) were not tracked at all: the kubernetes
   // manager has no default file pattern. Enabled here for the hand-written bricks, with digest pinning, so a bump
   // is a reviewed PR that writes `tag@sha256:...` (a re-pushed tag then no longer reaches the cluster unnoticed).
-  // The vendored dumps stay out (ignorePaths), and so do the Postgres images, which the custom managers below
-  // bump and which scripts read as `postgresql:<major>.<minor>`.
+  // The vendored dumps stay out (ignorePaths), and so do the Postgres images, which are bumped by hand
+  // (docs/patching.md) and which scripts read as `postgresql:<major>.<minor>-<12 digits>-system-bookworm`.
   kubernetes: {
     managerFilePatterns: ["/^apps/base/(backup|foundation)/.*\\.ya?ml$/"],
   },
@@ -70,7 +70,7 @@
       labels: ["dependencies", "container-image"],
     },
     {
-      description: "The Postgres images are bumped by the custom managers below (check-pg-dump-version.sh reads their tag).",
+      description: "The Postgres images (dated tags, <major>.<minor>-<12 digits>-system-bookworm) are bumped by hand with each PostgreSQL minor, not by Renovate: a regex bump of the minor would write a tag that does not exist. See docs/patching.md; scripts/check-image-pins.py checks the form and one tag per major.",
       matchManagers: ["kubernetes"],
       matchPackageNames: ["ghcr.io/cloudnative-pg/postgresql"],
       enabled: false,
@@ -211,16 +211,6 @@
     },
     {
       customType: "regex",
-      description: "CNPG Cluster's own Postgres engine image — self-authored, single value, safe to bump directly (unlike the vendored operator dump above).",
-      fileMatch: ["^apps/base/cnpg/cluster\\.yaml$", "^apps/components/cnpg-profile-[a-z]+/cluster\\.yaml$"],
-      matchStrings: [
-        "imageName:\\s*ghcr\\.io/cloudnative-pg/postgresql:(?<currentValue>[0-9.]+)",
-      ],
-      datasourceTemplate: "docker",
-      depNameTemplate: "ghcr.io/cloudnative-pg/postgresql",
-    },
-    {
-      customType: "regex",
       description: "PgBouncer image of the ha database profile's Pooler (apps #157).",
       fileMatch: ["^apps/components/cnpg-profile-pooler/pooler\\.yaml$"],
       matchStrings: [
@@ -228,16 +218,6 @@
       ],
       datasourceTemplate: "docker",
       depNameTemplate: "ghcr.io/cloudnative-pg/pgbouncer",
-    },
-    {
-      customType: "regex",
-      description: "Backup brick's Postgres client images (pg_dump, pg_restore): must stay >= the Cluster majors, which scripts/dev/check-pg-dump-version.sh enforces in CI.",
-      fileMatch: ["^apps/base/backup/databases/(restore-test-)?cronjob\\.yaml$"],
-      matchStrings: [
-        "image:\\s*ghcr\\.io/cloudnative-pg/postgresql:(?<currentValue>[0-9.]+)",
-      ],
-      datasourceTemplate: "docker",
-      depNameTemplate: "ghcr.io/cloudnative-pg/postgresql",
     },
     {
       customType: "regex",
