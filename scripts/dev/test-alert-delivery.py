@@ -7,12 +7,15 @@ Static: reads the manifests and renders the opt-in component, never a cluster. C
   - the probe label of the opt-in rule is the one the quiet receiver is routed on, and that receiver sends no "resolved";
   - the inhibit rule stops the Watchdog on an alert the opt-in rules define;
   - the component is OFF in the default profiles and adds exactly one Flux Kustomization, which waits for the VMRule CRDs;
-  - the egress policy of Alertmanager still allows the chat and heartbeat hosts it is configured with;
+  - the egress policy of Alertmanager still allows the chat and heartbeat hosts it is configured with, and those hosts are ONE
+    documented input (cluster-identity: ALERT_CHAT_HOST, ALERT_HEARTBEAT_HOST, defaults hooks.slack.com and hc-ping.com), read
+    by a Kustomization of their own because Flux substitution would blank the `$` expressions of the files around (apps #146);
   - vmalert hands its alerts to EVERY Alertmanager pod, one URL per replica, not through the headless Service (apps #207).
 Each rule has a self-test that proves it would catch the regression.
 """
 import copy
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -25,6 +28,10 @@ VMA = REPO / "apps/base/observability/vm-customresources/vmalert.yaml"
 PROBE = REPO / "apps/base/observability-alert-probe/vmrule.yaml"
 COMPONENT = REPO / "apps/flux/components/alert-delivery-probe"
 NETPOL = REPO / "apps/base/observability/networkpolicy.yaml"
+EGRESS = REPO / "apps/base/observability-alert-egress/networkpolicy.yaml"
+OBS_FLUX = REPO / "apps/flux/base/30-observability.yaml"
+DOC = REPO / "docs/alert-delivery.md"
+HOST_VARS = ("ALERT_CHAT_HOST", "ALERT_HEARTBEAT_HOST")
 
 
 def docs(path):
@@ -48,6 +55,44 @@ def notifier_problems(vma, am):
     if got != want:
         return [f"vmalert notifiers must be exactly one URL per Alertmanager pod {want}, found {got}"]
     return []
+
+
+def egress_hosts(policy):
+    """{matchName as written: the host with the default of its `${VAR:=default}` applied} of a policy's toFQDNs."""
+    out = {}
+    for e in policy["spec"].get("egress", []):
+        for m in e.get("toFQDNs", []):
+            n = m["matchName"]
+            out[n] = (re.fullmatch(r"\$\{(\w+):=([^}]+)\}", n) or [None, None, n])[2]
+    return out
+
+
+def egress_problems(main_cnp, egress_cnp, kusts, doc):
+    """apps #146: the hosts Alertmanager may reach are one input of cluster-identity with defaults, in a policy of its own."""
+    out = []
+    if any("toFQDNs" in e for e in main_cnp["spec"].get("egress", [])):
+        out.append("the vmalertmanager policy lists hosts itself: a second list defeats the single input (observability-alert-egress)")
+    written = list(egress_hosts(egress_cnp))
+    if sorted(re.findall(r"\$\{(\w+):=", " ".join(written))) != sorted(HOST_VARS) or len(written) != len(HOST_VARS):
+        out.append(f"the egress policy must allow exactly ${{{HOST_VARS[0]}:=...}} and ${{{HOST_VARS[1]}:=...}}, no host written in full: {written}")
+    k = kusts.get("observability-alert-egress")
+    if not k:
+        out.append("no Flux Kustomization observability-alert-egress")
+    else:
+        sub = (k["spec"].get("postBuild") or {}).get("substituteFrom") or []
+        if not any(x.get("kind") == "ConfigMap" and x.get("name") == "cluster-identity" and x.get("optional") is True for x in sub):
+            out.append("observability-alert-egress must substitute from cluster-identity, optional: a cluster without the keys keeps the defaults")
+        if k["spec"].get("path") != "./apps/base/observability-alert-egress":
+            out.append("observability-alert-egress must read ./apps/base/observability-alert-egress")
+    # The reason for the separate brick: substitution applies to the WHOLE render, and these files are full of `$` (Grafana
+    # dashboards `${datasource}`, VMRule templates `$labels`, Loki/Alloy configs).
+    for name in ("observability", "observability-vm-customresources"):
+        if "postBuild" in (kusts.get(name) or {}).get("spec", {}):
+            out.append(f"{name} must not substitute: its files hold `$` expressions (dashboards, VMRule templates) that would be blanked")
+    for v in HOST_VARS:
+        if v not in doc:
+            out.append(f"docs/alert-delivery.md does not name {v}: the input must be documented")
+    return out
 
 
 def problems(am, cfg, rules, egress_fqdns):
@@ -128,9 +173,13 @@ def problems_component():
 def main():
     am, cfg, rules = load()
     vma = next(d for d in docs(VMA) if d["kind"] == "VMAlert")
-    fq = {m["matchName"] for d in docs(NETPOL) if d["metadata"]["name"] == "vmalertmanager"
-          for e in d["spec"]["egress"] for m in e.get("toFQDNs", [])}
-    bad = problems(am, cfg, rules, fq) + notifier_problems(vma, am) + problems_component()
+    main_cnp = next(d for d in docs(NETPOL) if d["metadata"]["name"] == "vmalertmanager")
+    egress_cnp = next(d for d in docs(EGRESS) if d["kind"] == "CiliumNetworkPolicy")
+    kusts = {d["metadata"]["name"]: d for d in docs(OBS_FLUX) if d["kind"] == "Kustomization"}
+    doc = DOC.read_text()
+    fq = set(egress_hosts(egress_cnp).values())
+    bad = (problems(am, cfg, rules, fq) + notifier_problems(vma, am) + egress_problems(main_cnp, egress_cnp, kusts, doc)
+           + problems_component())
     for b in bad:
         print("FAIL", b)
     if "--selftest" in sys.argv:
@@ -156,6 +205,23 @@ def main():
         if not problems(am, cfg, rules, set()):
             print("selftest FAIL (egress not caught)")
             bad.append("egress")
+        def egress_mut(f):
+            m, e, k = copy.deepcopy(main_cnp), copy.deepcopy(egress_cnp), copy.deepcopy(kusts)
+            f(m, e, k)
+            return egress_problems(m, e, k, doc)
+        for name, f in {
+                "the main policy lists a host again": lambda m, e, k: m["spec"]["egress"].append({"toFQDNs": [{"matchName": "hooks.slack.com"}]}),
+                "a host written in full in the egress policy": lambda m, e, k: e["spec"]["egress"][-1]["toFQDNs"].append({"matchName": "example.org"}),
+                "the substitution is not optional": lambda m, e, k: k["observability-alert-egress"]["spec"]["postBuild"]["substituteFrom"][0].update(optional=False),
+                "no substitution at all": lambda m, e, k: k["observability-alert-egress"]["spec"].pop("postBuild"),
+                "observability substitutes (dashboards would be blanked)": lambda m, e, k: k["observability"]["spec"].update(postBuild={"substituteFrom": []}),
+        }.items():
+            got = egress_mut(f)
+            print(("selftest ok   " if got else "selftest FAIL (not caught) ") + name)
+            bad += [] if got else [name]
+        if not [x for x in egress_problems(main_cnp, egress_cnp, kusts, "") if "does not name" in x]:
+            print("selftest FAIL (undocumented input not caught)")
+            bad.append("doc")
         base = "http://vmalertmanager-alertmanager-%d.vmalertmanager-alertmanager.services-observability.svc:9093"
         for name, urls, replicas in (
                 ("notifier is the headless Service", ["http://vmalertmanager-alertmanager.services-observability:9093"], 2),

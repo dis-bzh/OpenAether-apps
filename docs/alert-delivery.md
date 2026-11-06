@@ -34,9 +34,34 @@ when the list and the `replicaCount` of the VMAlertmanager disagree: raise one, 
 `Watchdog` fires forever. Alertmanager sends it about every 4 minutes (route `repeat_interval` 3m + `group_interval` 1m: a ping goes out at the first tick of the group interval after the repeat interval, so the gap is at most 4 min; with 5m it was measured at 360 s in lab 19) to the URL in `secret/observability/alertmanager-deadmansswitch`
 (`OA_DEADMANSSWITCH_URL` of the seed script). The **service** pages you when the pings stop, which covers the cluster, the
 node, vmalert or Alertmanager dying, and the egress being cut: the only signal that does not need the cluster. Set its grace
-period above 5 minutes (15 is a floor). One URL, any ping-on-absence service. The egress policy allows `hc-ping.com` and
-`hooks.slack.com` only; **another host needs one edit of the `vmalertmanager` CiliumNetworkPolicy in your overlay** (a
-FQDN rule cannot read a Secret): a known manual step, tracked with the first lab.
+period above 5 minutes (15 is a floor). One URL, any ping-on-absence service.
+
+## Which hosts Alertmanager may reach
+
+The egress policy allows the chat host and the heartbeat host on 443, nothing else outside the cluster: `hooks.slack.com` and
+`hc-ping.com` by default. A policy cannot read a Secret, so a different host is **one input each**, in the `cluster-identity`
+ConfigMap (namespace `flux-system`):
+
+| Key | Default | The host of |
+|---|---|---|
+| `ALERT_CHAT_HOST` | `hooks.slack.com` | the chat webhook (`alertmanager-slack`, `webhook-url`) |
+| `ALERT_HEARTBEAT_HOST` | `hc-ping.com` | the dead-man's-switch URL (`alertmanager-deadmansswitch`, `url`) |
+
+Set the key to the host name of the URL you seeded (no scheme, no path), then let Flux reconcile `observability-alert-egress`
+(`flux reconcile kustomization observability-alert-egress`). Change the host and the secret URL **together**: a host that is
+not the receiver's drops the notification on the wire, and a heartbeat host that does not match pages you for an outage that
+is not happening. The policy lives in `apps/base/observability-alert-egress/` and is a Kustomization of its own on purpose:
+Flux substitution applies to the whole render, and `observability` holds Grafana dashboards, VMRule templates and chart
+values full of `$` expressions that it would blank. `test-alert-delivery.py` fails when the default hosts are not allowed,
+when a host is written in full in the policy or in `vmalertmanager`, when the substitution is not optional, when
+`observability` itself substitutes, or when a key is not documented here.
+
+- Mocked/offline: the manifests and the test. Not run on a cluster: after the move, read that the Watchdog ping still arrives (the
+  external service shows the last ping) and that `alertmanager_notification_requests_failed_total` does not rise; the policy is
+  removed from `vmalertmanager` and re-created by the new Kustomization a few seconds later, so a notification may be retried once.
+- Not done here: the keys are not written by the infrastructure repository from the tfvars yet. Until they are, set them with a
+  patch of `cluster-identity` or of the `observability-alert-egress` Kustomization (`postBuild.substitute`) in your overlay;
+  an infrastructure apply that rewrites `cluster-identity` drops a key set by hand on that ConfigMap.
 
 ## Scheduled delivery test (opt-in)
 

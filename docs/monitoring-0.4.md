@@ -24,8 +24,9 @@ availability, and one heartbeat service plus one chat receiver as the only out-o
 - **No new always-on external dependency.** The default install still alerts inside the cluster (Alertmanager, vmalert,
   Grafana). The delivery test needs a real chat webhook and heartbeat URL (the existing seed keys) and is an opt-in component,
   off in every profile: with the seed placeholders it would only raise `AlertDeliveryFailing` for ever.
-- **A different chat or heartbeat host needs one edit of the `vmalertmanager` CiliumNetworkPolicy** (FQDN rules cannot read
-  a Secret). Known manual step; only `hooks.slack.com` and `hc-ping.com` are allowed today.
+- **A different chat or heartbeat host is an input, not an edit of the policy** (FQDN rules cannot read a Secret). By default only
+  `hooks.slack.com` and `hc-ping.com` are allowed; another host is `ALERT_CHAT_HOST` or `ALERT_HEARTBEAT_HOST` of `cluster-identity`
+  (`docs/alert-delivery.md`). The infrastructure repository does not write the keys from the tfvars yet.
 - **Alloy WAL (#119) is not enabled.** `scripts/dev/probe-alloy-wal.sh` ran the shipped `loki.write` block with a `wal` block in
   the real Alloy of the pinned chart (v1.20.1): after a hard restart the unsent lines were NOT replayed, and with retries
   exhausted they were dropped ("no retries left, dropping data"), with and without the WAL. Enabling it would cost disk and an
