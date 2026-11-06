@@ -1,7 +1,7 @@
 # No route of the Gateway should serve a metrics endpoint: Grafana's /metrics answered 200 to any caller that reached
 # the Gateway (Zitadel's is /debug/metrics). vmagent scrapes pod to pod. DENY runs before allow-gateway-ingress.
 # Refusal seen on a cluster in a proof lab for Grafana and Zitadel; the forge's //metrics answered with its metrics at
-# 0.4.1 and 0.4.2 (below). Opt-out and limits: docs/public-exposure.md.
+# 0.4.2 (measured; 0.4.1 has the same apps/ tree, not run; below). Opt-out and limits: docs/public-exposure.md.
 #
 # SLASH SPELLINGS. This policy matches the path as it arrives, after Istio's BASE normalisation (dot segments, %2e,
 # %6D, and the backslash, which becomes a slash). It does not merge slashes, and Forgejo cleans //metrics to /metrics,
@@ -14,8 +14,8 @@
 #      `/debug//*` covers /debug//metrics. No suffix pattern (`*/metrics`): it would also refuse a repository or a
 #      dashboard named metrics. No service gives a meaning to a path that starts with `//` (layer 1 merges it anyway).
 # Not covered: a %2F spelling (/%2fmetrics) and case or ;param variants reach the service as written; no service of
-# this repository served metrics on one (measured on a local rig, not on a cluster). scripts/check-gateway-routes.py
-# pins layers 1 and 2.
+# this repository served metrics on one (measured on a local rig and, first hop only, on two clusters that followed a
+# branch ref). scripts/check-gateway-routes.py pins layers 1 and 2.
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
