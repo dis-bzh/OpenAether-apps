@@ -3,7 +3,8 @@
 
 Built from the RENDERED output of every DAG path (scripts/dev/render-dag.py), because that is what Flux applies:
   - every Helm chart a HelmRelease installs (name, version, repository),
-  - every container image named in the rendered manifests (Pods, Deployments, CronJobs, the vendored dumps...),
+  - every container image named in the rendered manifests (Pods, Deployments, CronJobs, the vendored dumps...), and the
+    ones handed to another image as a `--*-image` argument or a `*_IMAGE` env value (Longhorn's engine and CSI sidecars),
   - with --helm, the images the charts themselves render (`helm template` with the HelmRelease's values; needs
     helm and the network; a chart that does not render is listed on stderr and fails the run unless --allow-chart-failures).
 
@@ -39,9 +40,18 @@ def load_docs(rendered):
     return docs
 
 
+# Images that pass as run-time settings of another image (Longhorn: `--engine-image <ref>` on the manager, CSI_*_IMAGE in the
+# driver deployer's env). Only a flag that ends in `-image` and a variable that ends in `_IMAGE`: `--image-pull-policy` is not one.
+IMAGE_FLAG = re.compile(r"^--(?:\w+-)*image(?:=(.+))?$")
+IMAGE_ENV = re.compile(r"_IMAGE$")
+
+
 def walk_images(node, out):
-    """Every string under a key named `image`, and every {repository, tag} pair: Pod specs and chart values."""
+    """Every string under a key named `image`, every {repository, tag} pair (Pod specs and chart values), and the
+    references passed as `--*-image` arguments or `*_IMAGE` env values."""
     if isinstance(node, dict):
+        if isinstance(node.get("name"), str) and IMAGE_ENV.search(node["name"]) and isinstance(node.get("value"), str):
+            out.add(node["value"])
         for k, v in node.items():
             if k in ("image", "imageName") and isinstance(v, str):  # imageName: a CNPG Cluster's Postgres image
                 out.add(v)
@@ -52,7 +62,12 @@ def walk_images(node, out):
             else:
                 walk_images(v, out)
     elif isinstance(node, list):
-        for v in node:
+        for i, v in enumerate(node):
+            m = IMAGE_FLAG.match(v) if isinstance(v, str) else None
+            if m and m.group(1):
+                out.add(m.group(1))
+            elif m and i + 1 < len(node) and isinstance(node[i + 1], str):
+                out.add(node[i + 1])
             walk_images(v, out)
 
 

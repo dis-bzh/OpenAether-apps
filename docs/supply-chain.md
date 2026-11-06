@@ -8,7 +8,8 @@
 ## The inventory (SBOM)
 
 `scripts/dev/gen-sbom.py` writes a CycloneDX 1.5 file from the **rendered** DAG (`scripts/dev/render-dag.py`: what Flux
-applies, not the source tree): every Helm chart a HelmRelease installs, every image the manifests name, and with `--helm`
+applies, not the source tree): every Helm chart a HelmRelease installs, every image the manifests name (an image handed to
+another one as a `--*-image` argument or a `*_IMAGE` env value counts), and with `--helm`
 the images the charts render with the release's own values (a `valuesFrom` target gets a placeholder, as Flux fills it
 at run time). The `SBOM` workflow runs it weekly and on every pushed release tag, attaches it as
 `openaether-apps-<tag>.cdx.json` to the DRAFT release (it creates the draft when there is none: an immutable release takes no
@@ -18,8 +19,10 @@ checks that the asset is there. The releases 0.3.2, 0.4.0 and 0.4.1 went out wit
 published immutable release takes no asset).
 
 `gen-sbom.py` does not read image layers (Trivy does), the images controllers create at run time (Cluster API machines,
-CNPG pods), or what the child clusters' own profile deploys. On the 0.4.1 tag it lists 16 images from the manifests and
-40 with the charts (`--helm`).
+CNPG pods), or what the child clusters' own profile deploys. On the 0.4.3 tag it listed 16 images from the manifests and
+40 with the charts (`--helm`), three of Longhorn's images among them (manager, ui, share-manager). Since it reads the images passed as arguments or env values
+(apps #210) it lists 51 with `--helm`: Longhorn's engine, instance-manager, backing-image-manager, support-bundle-kit and six
+CSI sidecars, and cert-manager's ACME solver. Each is a new scan job; the first scan of them was not run when this was written.
 
 **Rebuilding an inventory by hand**, from a checkout of any tag, to keep elsewhere: the two commands of the workflow's
 inventory step.
@@ -84,8 +87,8 @@ Forgejo, the CNPG operator and the two PostgreSQL images; the last three failed 
 still the newest tag) and PyJWT in the CNPG PostgreSQL images (CVE-2026-102268, imported only by `msal`, not used). The
 ignore entry: libexpat in the Longhorn v1.12.1 images (SUSE-SU-2026:4619-1; a reading of package data and file searches: no Longhorn process was run or traced, only `wget --help` and `ldd` in the backing-image-manager image).
 The five statements of the list above were deleted, not renewed, because the fixed images carry no such finding. Nothing
-ends on 2026-11-20 any more: `scripts/check-vex.py` passes on 2026-11-21 and on 2026-12-03, and fails from 2026-12-05 if
-the three are not re-read again or removed.
+ends on 2026-11-20 any more: `scripts/check-vex.py` passes on 2026-11-21 and on 2026-12-03, fails on 2026-12-04 for the
+ignore entry (see **Expiry day** below) and from 2026-12-05 for the two statements, if the three are not re-read again or removed.
 
 - **VEX:** a finding that does not apply is an OpenVEX statement in `.vex/openaether-apps.openvex.json`
   (`not_affected` with a justification, an `impact_statement`, an `action_statement` and ONE `Expires: YYYY-MM-DD` in
@@ -94,18 +97,19 @@ the three are not re-read again or removed.
   justification or expiry and on an expired statement. A statement never covers a fixable, reachable CRITICAL. Docker Hub products are written with
   Trivy's `index.docker.io` repository URL. `.github/trivy-ignore.yaml` (Trivy's format, with its own `expired_at`) holds the
   one accepted finding Trivy's VEX matching misses (libexpat in the Longhorn v1.12.1 images); `check-vex.py` holds it to the same rule.
-  **Expiry day:** `check-vex.py` accepts a date on that day and fails from the next one, but Trivy stops applying an
-  ignore entry from 00:00 UTC of its `expired_at` day (its source, `ExpiredAt.Before(now)`, read at v0.69.3). So the
-  Longhorn scans can be red on 2026-12-04 while `check-vex.py` is still green. Not fixed (a Friday: the scheduled scan
-  runs on Tuesdays); a tag push or a manual run on that day would show it.
+  **Expiry day:** Trivy stops applying an ignore entry from 00:00 UTC of its `expired_at` day (its source,
+  `ExpiredAt.Before(now)`, read at v0.69.3), so `check-vex.py` fails an ignore entry on its `expired_at` day, the same
+  day the Longhorn scans can turn red (2026-12-04, a Friday: the scheduled scan runs on Tuesdays). A VEX statement still
+  passes on its last day and fails from the next one, because Trivy does not read the dates of OpenVEX.
   Whether Trivy matches a product is only seen by scanning the image: `trivy image --config .github/trivy-image-vex.yaml <ref>`.
 - **Failing scans are announced:** a failed scan opens, or comments on, one issue `[vuln] <image>` and closes it when the
   scan passes (`scripts/ops/vuln-issue.sh`); an expired waiver does the same under `[vuln] VEX statements`. Before, a red
-  run was the only signal. HIGH findings are still not scanned. Only a scan that wrote a report does this. A scan that
+  run was the only signal. Each `gh` call of the script is tried three times (5 s, then 10 s apart) before the step fails: a
+  single 503 on `gh issue close` turned a clean weekly scan red on 2026-11-03 (#209). HIGH findings are still not scanned. Only a scan that wrote a report does this. A scan that
   did not run (a pull refused or rate limited, #197; no report on disk) is **only a red job**: it fails with a message
   and opens, comments on and closes no issue, so an open `[vuln]` issue stays as it was. **Residual:** nothing announces
-  an image that then stays unscanned until someone reads the run; there is no retry, and the next chance is the next
-  scheduled run (weekly). **The #197 change (the `ghcr.io` login with the workflow token, and the step that tells a
+  an image that then stays unscanned until someone reads the run; there is no retry of the scan itself (apps #208), and the
+  next chance is the next scheduled run (weekly). **The #197 change (the `ghcr.io` login with the workflow token, and the step that tells a
   finding from a scan that did not run) has run in Actions, on the branch.** Rung: workflow run 41927056554, a
   `workflow_dispatch` on `claude/0.4.3-rc1` at 9fb9035 (2026-11-04; six commits before the lab-proven head e8ca37f, and none of
   the six touches an image, a workflow or the VEX file). The step `Log in to ghcr.io` printed `Login Succeeded` (read in three of
