@@ -146,6 +146,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `talosctl time -n <node>`.
 - Do: Same as NodeClockSkew; informational until it persists.
+- Reads (#94): `node_timex_sync_status == 0` for 1 hour, severity info. Mocked with `vmalert-tool` only: the series exists on real clusters (the node-exporter timex collector is on by default, no flag turns it off) but its VALUE on a healthy Talos node has not been read. If every node fires this alert while `talosctl time` shows a synchronised clock, the value is the cause, not the clock: read `node_timex_sync_status` on each node type in the next real-cloud lab and delete this rule, its two `vmrules-unittest.yaml` cases and this entry if a healthy node reads 0.
 
 ### PodCrashLooping
 
