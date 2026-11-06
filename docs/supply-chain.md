@@ -101,7 +101,8 @@ ignore entry (see **Expiry day** below) and from 2026-12-05 for the two statemen
   Whether Trivy matches a product is only seen by scanning the image: `trivy image --config .github/trivy-image-vex.yaml <ref>`.
 - **Failing scans are announced:** a failed scan opens, or comments on, one issue `[vuln] <image>` and closes it when the
   scan passes (`scripts/ops/vuln-issue.sh`); an expired waiver does the same under `[vuln] VEX statements`. Before, a red
-  run was the only signal. HIGH findings are still not scanned. Only a scan that wrote a report does this. A scan that
+  run was the only signal. Each `gh` call of the script is tried three times (5 s, then 10 s apart) before the step fails: a
+  single 503 on `gh issue close` turned a clean weekly scan red on 2026-11-03 (#209). HIGH findings are still not scanned. Only a scan that wrote a report does this. A scan that
   did not run (a pull refused or rate limited, #197; no report on disk) is **only a red job**: it fails with a message
   and opens, comments on and closes no issue, so an open `[vuln]` issue stays as it was. **Residual:** nothing announces
   an image that then stays unscanned until someone reads the run; there is no retry, and the next chance is the next

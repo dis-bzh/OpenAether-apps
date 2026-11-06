@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # scripts/ops/vuln-issue.sh against a stub `gh` that keeps issues in a file: one issue per key, a second failure comments,
-# a pass closes, a near-match title is not taken for the key, a missing or empty report opens and comments on nothing.
+# a pass closes, a near-match title is not taken for the key, a missing or empty report opens and comments on nothing,
+# a transient API error (503) is retried a bounded number of times (#209).
 # No network. Usage: scripts/dev/test-vuln-issue.sh
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -13,6 +14,11 @@ cat > "$W/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 # stub: issue list | create | comment | close
 db="$STUB_DIR/issues.json"
+# failure injection (#209): a file fail.<word>.<word> holding N makes the next N calls of that subcommand answer 503
+f="$STUB_DIR/fail.$1.$2"
+if [ -s "$f" ] && [ "$(cat "$f")" -gt 0 ]; then
+  echo $(( $(cat "$f") - 1 )) > "$f"; echo "$1 $2" >> "$STUB_DIR/fails"; echo "HTTP 503: Service Unavailable" >&2; exit 1
+fi
 case "$1 $2" in
   "issue list") jq -c '[.[] | select(.state == "open") | {number, title}]' "$db" ;;
   "issue create") t=""; while [ $# -gt 0 ]; do [ "$1" = --title ] && t="$2"; shift; done
@@ -22,7 +28,7 @@ case "$1 $2" in
 esac
 STUB
 chmod +x "$W/bin/gh"
-export STUB_DIR="$W" PATH="$W/bin:$PATH"
+export STUB_DIR="$W" PATH="$W/bin:$PATH" GH_RETRY_SLEEP=0
 echo "table" > "$W/body"
 S="$ROOT/scripts/ops/vuln-issue.sh"
 "$S" open docker.io/restic/restic:0.19.1 "$W/body" http://run/1 >/dev/null
@@ -42,4 +48,14 @@ grep -q '^close 1$' "$W/log" && [ "$(jq -r '.[1].state' "$W/issues.json")" = ope
 before="$(cat "$W/log")"
 "$S" open docker.io/other/never:1 "$W/missing" http://run/7 >/dev/null 2>"$W/err"; rc2=$?
 [ "$rc2" != 0 ] && [ "$(cat "$W/log")" = "$before" ] && grep -q 'no report in' "$W/err" && ok "a missing report opens nothing and fails" || bad "missing report: rc $rc2, log changed or no message"
+# #209: a transient 503 on a gh call is retried, a permanent one still fails after a bounded number of attempts.
+: > "$W/fails"; echo 1 > "$W/fail.issue.close"
+"$S" close docker.io/restic/restic:0.19.10 http://run/8 >/dev/null 2>&1; rc3=$?
+[ "$rc3" = 0 ] && [ "$(jq -r '.[1].state' "$W/issues.json")" = closed ] && [ "$(grep -c '^issue close$' "$W/fails")" = 1 ] && ok "a 503 on issue close is retried, the issue is closed, the step is green" || bad "503 on close: rc $rc3, state $(jq -r '.[1].state' "$W/issues.json")"
+: > "$W/fails"; echo 1 > "$W/fail.issue.list"; echo 1 > "$W/fail.issue.create"
+"$S" open docker.io/new/img:1 "$W/body" http://run/9 >/dev/null 2>&1; rc4=$?
+[ "$rc4" = 0 ] && [ "$(grep -c '^create \[vuln\] docker.io/new/img:1$' "$W/log")" = 1 ] && [ "$(wc -l < "$W/fails")" = 2 ] && ok "a 503 on issue list and on issue create is retried, one issue is opened" || bad "503 on open: rc $rc4"
+: > "$W/fails"; echo 99 > "$W/fail.issue.close"; before="$(cat "$W/log")"
+"$S" close docker.io/new/img:1 http://run/10 >/dev/null 2>&1; rc5=$?
+[ "$rc5" != 0 ] && [ "$(wc -l < "$W/fails")" = 3 ] && [ "$(cat "$W/log")" = "$before" ] && ok "a 503 that never clears fails after three attempts, not more" || bad "permanent 503: rc $rc5, $(wc -l < "$W/fails") attempts"
 echo "$PASS passed, $FAIL failed"; [ "$FAIL" = 0 ]
