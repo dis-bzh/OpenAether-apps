@@ -39,6 +39,10 @@ spec:
             openaether.io/component: backup
         spec:
           serviceAccountName: openbao-snapshot
+          # No token for the pod (apps #74): the auto-mounted ServiceAccount token went to BOTH containers, and only the
+          # init container `snapshot` logs in with it. restic-push has no business with the API or OpenBao, so it gets none;
+          # the `snapshot` token below is a projected one, mounted in that container alone.
+          automountServiceAccountToken: false
           # Never, not OnFailure: with OnFailure the Job controller deletes the pod when the backoff limit is reached, and the
           # log that says why the backup failed goes with it (lab 27 part B, D13: a table the dump role could not read, no pod,
           # no log). With Never every failed attempt stays as a Failed pod, up to failedJobsHistoryLimit Jobs.
@@ -61,6 +65,12 @@ spec:
               emptyDir: {}
             - name: tmp
               emptyDir: {}
+            # The login token of the `snapshot` init container, the same projection as backup/databases/verify-cronjob.yaml
+            # (the default audience, as the auto-mounted one had; the backup-snapshot role sets none).
+            - name: sa-token
+              projected:
+                sources:
+                  - serviceAccountToken: { path: token, expirationSeconds: 3600 }
           initContainers:
             # 1) Raft snapshot — auth/kubernetes login (backup-snapshot role),
             #    leader resolution (the snapshot must target the active node),
@@ -104,6 +114,7 @@ spec:
               volumeMounts:
                 - { name: backup, mountPath: /backup }
                 - { name: openbao-tls, mountPath: /bao/tls, readOnly: true }
+                - { name: sa-token, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true }
                 - { name: tmp, mountPath: /tmp }
               resources:
                 requests: { cpu: 50m, memory: 64Mi }
