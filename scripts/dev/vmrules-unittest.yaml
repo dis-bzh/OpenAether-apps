@@ -1497,7 +1497,7 @@ tests:
                 Runbook: docs/runbooks.md.
   # apps #94: the two clock alerts existed since 0.3.0 with no behaviour case. Offsets are in seconds, as node-exporter's timex collector
   # reports them. vmalert-tool evaluates every 10 minutes (evaluation_interval above): a `for` is checked up to that granularity only.
-  - name: a node clock off by more than half a second alerts at the end of its ten minutes, ahead or behind; a smaller offset does not (apps #94)
+  - name: a node clock off by more than half a second alerts at the end of its ten minutes, ahead or behind; a smaller offset does not (apps issue 94)
     interval: 1m
     input_series:
       - series: 'node_timex_offset_seconds{instance="n1:9100"}'
@@ -1512,7 +1512,7 @@ tests:
         exp_alerts:
           - exp_labels: {instance: "n1:9100", severity: warning, component: node}
           - exp_labels: {instance: "n2:9100", severity: warning, component: node}
-  - name: a node whose kernel reports an undisciplined clock alerts after an hour, a synchronised node does not (apps #94)
+  - name: a node whose kernel reports an undisciplined clock alerts after an hour, a synchronised node does not (apps issue 94)
     interval: 1m
     input_series:
       - series: 'node_timex_sync_status{instance="n1:9100"}'
@@ -1527,7 +1527,7 @@ tests:
           - exp_labels: {instance: "n1:9100", severity: info, component: node}
   # apps #203: the forge scrape (VMPodScrape forgejo, job services-observability/forgejo). `up == 0` needs a target: a profile without the
   # forge has the scrape and no pod, so no `up` series, and the alert stays silent there (an absent() rule would fire).
-  - name: a forge scrape down alerts for that pod only; another job down is not the forge (apps #203)
+  - name: a forge scrape down alerts for that pod only; another job down is not the forge (apps issue 203)
     interval: 1m
     input_series:
       - series: 'up{job="services-observability/forgejo", namespace="services-git", pod="forgejo-a"}'
@@ -1542,7 +1542,7 @@ tests:
         alertname: ForgejoScrapeDown
         exp_alerts:
           - exp_labels: {job: services-observability/forgejo, namespace: services-git, pod: forgejo-a, severity: warning, component: forgejo}
-  - name: a profile without the forge has no forge target and no alert (apps #203)
+  - name: a profile without the forge has no forge target and no alert (apps issue 203)
     interval: 1m
     input_series:
       - series: 'up{job="services-observability/kubelet", node="w1"}'
