@@ -1495,3 +1495,33 @@ tests:
               description: >-
                 oa_audit_sink_ok has no series for 15 minutes: audit-sink-check is down or not scraped, so a stopped sink would not be seen.
                 Runbook: docs/runbooks.md.
+  # apps #94: the two clock alerts existed since 0.3.0 with no behaviour case. Offsets are in seconds, as node-exporter's timex collector
+  # reports them. vmalert-tool evaluates every 10 minutes (evaluation_interval above): a `for` is checked up to that granularity only.
+  - name: a node clock off by more than half a second alerts at the end of its ten minutes, ahead or behind; a smaller offset does not (apps #94)
+    interval: 1m
+    input_series:
+      - series: 'node_timex_offset_seconds{instance="n1:9100"}'
+        values: '0.7x30'
+      - series: 'node_timex_offset_seconds{instance="n2:9100"}'
+        values: '-0.9x30'   # behind: the rule reads abs()
+      - series: 'node_timex_offset_seconds{instance="n3:9100"}'
+        values: '0.4x30'    # under the threshold
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: NodeClockSkew
+        exp_alerts:
+          - exp_labels: {instance: "n1:9100", severity: warning, component: node}
+          - exp_labels: {instance: "n2:9100", severity: warning, component: node}
+  - name: a node whose kernel reports an undisciplined clock alerts after an hour, a synchronised node does not (apps #94)
+    interval: 1m
+    input_series:
+      - series: 'node_timex_sync_status{instance="n1:9100"}'
+        values: '0x120'
+      - series: 'node_timex_sync_status{instance="n2:9100"}'
+        values: '1x120'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: NodeClockNotSynchronised, exp_alerts: []}
+      - eval_time: 100m
+        alertname: NodeClockNotSynchronised
+        exp_alerts:
+          - exp_labels: {instance: "n1:9100", severity: info, component: node}
