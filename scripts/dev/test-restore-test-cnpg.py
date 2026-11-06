@@ -264,6 +264,12 @@ rcode, out, calls, left, cm, _ = flow("latest", good, key_prev=kept, env_extra=d
 check("a skipping run that cannot read the published results fails (not exit 0), publishes nothing and keeps the last success",
       rcode == 1 and len(lines(out, "SKIP")) == 4 and "cannot read the results published before" in out and "not publishing" in out
       and cm == kept and not any(c.startswith("patch configmap") for c in calls), out[-600:])
+# ...unless a dataset FAILED in that run: nothing else alerts on the Job (BackupJobFailed ignores it, RestoreTestNotSucceeding waits 37 days),
+# so the FAIL is published (ok=0 raises RestoreTestFailed) at the price of the last success of what was skipped. The 0.4.3 behaviour.
+rcode, out, calls, left, cm, _ = flow("latest", flip, key_prev=kept, env_extra=dict(FAKE_CM_GET="fail"))
+check("a failing run that cannot read the published results still publishes its FAIL (ok=0 for exactly that dataset)",
+      rcode == 1 and "cannot read the results published before" in out and "not publishing" not in out
+      and 'oa_restore_test_ok{kind="cnpg",dataset="zitadel-db",store="replica",mode="latest"} 0' in cm, out[-600:])
 
 print("=== dump load: no dump pushed yet (a fresh install before the first cnpg-dump) ===")
 # Stage 2 (dump_load.py) on the /restore tree stage 1 (restic-dump.sh) leaves: an `absent` marker is a repository that does not exist

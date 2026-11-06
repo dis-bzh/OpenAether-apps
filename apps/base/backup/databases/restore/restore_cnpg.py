@@ -494,9 +494,10 @@ def main():
     text = build_metrics(results, float(os.environ.get("NOW") or time.time()), previous)
     if a.out:
         open(a.out, "w").write(text)
-    if a.publish and not readable and a.mode != "dump":
+    if a.publish and not readable and a.mode != "dump" and all(r["ok"] is not False for r in results):
         # `previous` is {} here: publishing would drop the last success of every dataset this run skipped or did not reach (apps #190).
-        # The dump flow publishes anyway: it turns a skipped store into a FAIL when it cannot tell (dump_gone), and must show it.
+        # A run with a FAIL publishes anyway, as before: nothing else alerts on this Job, and ok=0 is what raises RestoreTestFailed.
+        # The dump flow publishes anyway too: it turns a skipped store into a FAIL when it cannot tell (dump_gone), and must show it.
         print("ERROR: not publishing: the results published before cannot be read, so their last success would be lost; the next run retries")
         return 1
     rc = 0 if all(r["ok"] is not False for r in results) and len(results) == len(CLUSTERS) * len(STORES) else 1
