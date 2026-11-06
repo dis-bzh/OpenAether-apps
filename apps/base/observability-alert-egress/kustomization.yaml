@@ -1,0 +1,16 @@
+# yamllint disable rule:line-length
+# The external hosts Alertmanager may reach, alone in their Kustomization (apps #146). A CiliumNetworkPolicy cannot read a Secret, so
+# the chat and heartbeat hosts come from Flux substitution (cluster-identity: ALERT_CHAT_HOST, ALERT_HEARTBEAT_HOST, defaults
+# hooks.slack.com and hc-ping.com), and substitution applies to the WHOLE render of a Kustomization: `observability` holds Grafana
+# dashboards (`${datasource}`), VMRule templates (`$labels`) and chart values that it would blank. Same reason as
+# observability-audit-sink-policy and backup/*-identity. Documented in docs/alert-delivery.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - networkpolicy.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      openaether.io/managed: "true"

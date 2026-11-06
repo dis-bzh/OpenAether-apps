@@ -85,11 +85,19 @@ SHIPPED = ("/metrics", "/metrics/*", "/debug/metrics", "/debug/metrics/*", "//*"
 V042 = SHIPPED[:4]
 
 
+# apps #192: the shipped policy names the ports of the Gateway's HTTP and HTTPS listeners (80 and 443), or Istio warns it denies
+# all TCP traffic under its scope. `ports=None` is the 0.4.3 form (no port).
+LISTENERS = frozenset({"80", "443"})
+
+
 def policy(paths=SHIPPED, action="DENY", target=chk.GATEWAY,
-           ns=chk.GATEWAY_NS, rule=None, group="gateway.networking.k8s.io"):
+           ns=chk.GATEWAY_NS, rule=None, group="gateway.networking.k8s.io", ports=("80", "443")):
+    op = {"paths": list(paths)}
+    if ports is not None:
+        op["ports"] = list(ports)
     return {"kind": "AuthorizationPolicy", "metadata": {"name": "deny-metrics", "namespace": ns}, "spec": {
         "action": action, "targetRefs": [{"group": group, "kind": "Gateway", "name": target}],
-        "rules": [rule if rule is not None else {"to": [{"operation": {"paths": list(paths)}}]}]}}
+        "rules": [rule if rule is not None else {"to": [{"operation": op}]}]}}
 
 
 def route(name, rules):
@@ -104,9 +112,9 @@ ROUTES = [route("grafana", [backend("/", name="grafana")]),
           route("forgejo", [{"matches": [{"path": {"type": "PathPrefix", "value": "/metrics"}}]}, backend("/", name="forgejo-http")])]
 
 
-def mcase(desc, pols, want=None, routes=ROUTES, norm="MERGE_SLASHES", absent=None):
+def mcase(desc, pols, want=None, routes=ROUTES, norm="MERGE_SLASHES", absent=None, listeners=LISTENERS):
     global PASS, FAIL
-    errs = chk.metrics_problems(pols, routes, norm)
+    errs = chk.metrics_problems(pols, routes, norm, listeners)
     good = (not errs) if want is None else any(want in e for e in errs)
     if absent:
         good = good and not any(absent in e for e in errs)
@@ -134,6 +142,19 @@ mcase("an operation narrowed by host leaves the other hosts open",
       [policy(rule={"to": [{"operation": {"hosts": ["grafana.openaether.local"], "paths": ["/metrics", "/metrics/*", "/debug/metrics", "/debug/metrics/*"]}}]})], "refuses /metrics")
 mcase("an operation narrowed by port leaves the other port open",
       [policy(rule={"to": [{"operation": {"ports": ["443"], "paths": ["/metrics", "/metrics/*", "/debug/metrics", "/debug/metrics/*"]}}]})], "refuses /metrics")
+mcase("ports given as numbers are reported: the Istio CRD types them as strings and apply refuses the policy (the whole Kustomization)",
+      [policy(ports=(80, 443))], "ports must be strings")
+mcase("RED FIRST, the 0.4.3 policy names no port: Istio denies all TCP traffic under its scope (#192)", [policy(ports=None)], "names no port")
+mcase("...and a rule with only `hosts`/`methods` and no port is reported too",
+      [policy(rule={"to": [{"operation": {"methods": ["GET"]}}]})], "names no port")
+mcase("the ports must cover EVERY listener port: 443 alone leaves 80 open", [policy(ports=("443",))], "refuses /metrics")
+mcase("a listener added later (HTTP on 8080) that the ports do not name leaves /metrics open on it", [policy()], "refuses /metrics",
+      listeners=LISTENERS | {"8080"})
+mcase("...and the policy that names it passes", [policy(ports=("80", "443", "8080"))], listeners=LISTENERS | {"8080"})
+mcase("no HTTP or HTTPS listener of the Gateway found: the ports cannot be checked, which is reported", [policy()], "no HTTP or HTTPS listener",
+      listeners=frozenset())
+mcase("notPorts also names the ports (Istio stops warning): a rule on every port but 15021 is not narrowed to a few",
+      [policy(rule={"to": [{"operation": {"paths": list(SHIPPED), "notPorts": ["15021"]}}]})], "refuses /metrics", absent="names no port")
 mcase("a DENY with an empty rule refuses every request: caught as too wide", [policy(rule={})], "also refuses /,")
 mcase("a DENY on /* is too wide", [policy(("/*",))], "also refuses /login")
 mcase("a prefix /metrics* would refuse /metricsx: too wide", [policy(("/metrics*", "/debug/metrics*"))], "also refuses /metricsx")
@@ -171,8 +192,9 @@ PASS += ok
 FAIL += not ok
 print(("  ok   " if ok else "  FAIL ") + f"slash_spellings(): //metrics, ///metrics/, /debug//metrics, //debug//metrics are all there, the plain forms are not ({len(sp)} + {len(dsp)})")
 p42, p43 = [policy(V042)], [policy()]
-ok = (not chk.gateway_denies(p42, "//metrics") and chk.gateway_denies(p42, "//metrics", merge=True) and chk.gateway_denies(p43, "//metrics")
-      and chk.gateway_denies(p43, "///metrics", merge=True) and not chk.gateway_denies(p43, "/x//metrics") and not chk.gateway_denies(p43, "/x/metrics"))
+gd = lambda pols, path, merge=False: chk.gateway_denies(pols, path, merge, LISTENERS)  # noqa: E731
+ok = (not gd(p42, "//metrics") and gd(p42, "//metrics", merge=True) and gd(p43, "//metrics")
+      and gd(p43, "///metrics", merge=True) and not gd(p43, "/x//metrics") and not gd(p43, "/x/metrics"))
 PASS += ok
 FAIL += not ok
 print(("  ok   " if ok else "  FAIL ") + "gateway_denies(): the 0.4.2 policy lets //metrics through unless the mesh merges it; the shipped one refuses it either way")
@@ -246,14 +268,17 @@ FAIL += not ok
 print(("  ok   " if ok else "  FAIL ") + "a VMStaticScrape or VMProbe of a Gateway host is reported, a VMPodScrape is not")
 
 # main() must CALL the checks: the unit cases above stay green if a call is dropped, the real-tree run in CI too once the policy is gone
-def run_main(with_policy, scrape=None, norm="MERGE_SLASHES", paths=SHIPPED):
-    files = {"apps/base/app/route.yaml": {"kind": "HTTPRoute", "metadata": {"name": "app", "namespace": "ns"}, "spec": {
+def run_main(with_policy, scrape=None, norm="MERGE_SLASHES", paths=SHIPPED, ports=("80", "443"), listeners=(80, 443)):
+    files = {f"{chk.POLICY_BRICK}/gateway.yaml": {"kind": "Gateway", "metadata": {"name": chk.GATEWAY, "namespace": chk.GATEWAY_NS},
+                                                  "spec": {"listeners": [{"name": f"l{n}", "port": n, "protocol": "HTTPS" if n == 443 else "HTTP"}
+                                                                         for n in listeners]}},
+             "apps/base/app/route.yaml": {"kind": "HTTPRoute", "metadata": {"name": "app", "namespace": "ns"}, "spec": {
                  "parentRefs": [{"name": chk.GATEWAY}], "rules": [backend("/")]}},
              "apps/base/app/kustomization.yaml": {"resources": ["route.yaml"]},
              chk.REGISTER: {"routes": [{"route": "ns/app", "host": "app.example", "authentication": "a login", "default": True}]},
              chk.COMPONENT: {"patches": []}}
     if with_policy:
-        files[f"{chk.POLICY_BRICK}/policy.yaml"] = policy(paths)
+        files[f"{chk.POLICY_BRICK}/policy.yaml"] = policy(paths, ports=ports)
         files[f"{chk.POLICY_BRICK}/kustomization.yaml"] = {"resources": ["policy.yaml"]}
     if norm:
         files[chk.ISTIOD] = {"kind": "HelmRelease", "metadata": {"name": "istiod"},
@@ -304,6 +329,16 @@ ok = code == 1 and "the policy alone leaves" in err and "pathNormalization" not 
 PASS += ok
 FAIL += not ok
 print(("  ok   " if ok else "  FAIL ") + "main(): a tree with the 0.4.2 policy fails on the slash spellings")
+code, out, err = run_main(True, ports=None)
+ok = code == 1 and "names no port" in err
+PASS += ok
+FAIL += not ok
+print(("  ok   " if ok else "  FAIL ") + "main(): a tree whose policy names no port fails (the Gateway's listener ports are read and passed on)")
+code, out, err = run_main(True, listeners=(80, 443, 8080))
+ok = code == 1 and "refuses /metrics" in err
+PASS += ok
+FAIL += not ok
+print(("  ok   " if ok else "  FAIL ") + "main(): a Gateway listener the policy's ports do not name fails")
 code, out, err = run_main(True, norm="DECODE_AND_MERGE_SLASHES")
 ok = code == 0 and "DECODE_AND_MERGE_SLASHES" in out
 PASS += ok

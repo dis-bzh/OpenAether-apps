@@ -631,24 +631,63 @@ tests:
         values: '0+0x100'
     alert_rule_test:
       - {eval_time: 5h, alertname: AlertDeliveryNotAcknowledged, exp_alerts: []}
-  - name: vmalert cannot reach Alertmanager
+  - name: vmalert cannot reach any Alertmanager pod
     interval: 10m
     input_series:
-      - series: 'vmalert_alerts_send_errors_total{addr="http://alertmanager:9093"}'
+      - series: 'vmalert_alerts_send_errors_total{addr="http://vmalertmanager-alertmanager-0:9093"}'
         values: '0+2x20'
+      - series: 'vmalert_alerts_send_errors_total{addr="http://vmalertmanager-alertmanager-1:9093"}'
+        values: '0+3x20'
     alert_rule_test:
       - {eval_time: 5m, alertname: VMAlertNotifierErrors, exp_alerts: []}
       - eval_time: 1h
         alertname: VMAlertNotifierErrors
         exp_alerts:
-          - exp_labels: {addr: "http://alertmanager:9093", severity: critical, component: alerting}
+          - exp_labels: {severity: critical, component: alerting}
             exp_annotations:
-              summary: "VMAlert cannot hand alerts to Alertmanager (http://alertmanager:9093)"
+              summary: "VMAlert cannot hand alerts to any Alertmanager pod"
               description: >-
-                Every alert evaluated here is lost on its way to Alertmanager. Check the Alertmanager pod, the Service
-                and the vmalert egress policy.
+                Every alert evaluated here is lost on its way to Alertmanager: each pod it sends to fails. Check the
+                Alertmanager pods, the Service and the vmalert egress policy.
               runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
                 vmalertnotifiererrors"
+  # apps #207: vmalert sends to each Alertmanager pod itself. A pod that is being replaced fails its own sends for a while: the
+  # other still receives every alert, so this is AlertmanagerClusterDegraded's case and must not page as "every alert is lost".
+  - name: vmalert cannot reach one Alertmanager pod, the other answers
+    interval: 10m
+    input_series:
+      - series: 'vmalert_alerts_send_errors_total{addr="http://vmalertmanager-alertmanager-0:9093"}'
+        values: '0+2x20'
+      - series: 'vmalert_alerts_send_errors_total{addr="http://vmalertmanager-alertmanager-1:9093"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - {eval_time: 1h, alertname: VMAlertNotifierErrors, exp_alerts: []}
+      # ...but a pod that stays unreachable for 30 minutes while it is up (its name does not resolve, a policy drops vmalert's
+      # sends) is in no other alert: AlertmanagerClusterDegraded reads the scrape and the gossip, not what vmalert sends.
+      - {eval_time: 20m, alertname: VMAlertNotifierPodErrors, exp_alerts: []}
+      - eval_time: 1h
+        alertname: VMAlertNotifierPodErrors
+        exp_alerts:
+          - exp_labels: {addr: "http://vmalertmanager-alertmanager-0:9093", severity: warning, component: alerting}
+            exp_annotations:
+              summary: "VMAlert cannot hand alerts to one Alertmanager pod (http://vmalertmanager-alertmanager-0:9093)"
+              description: >-
+                The other pod still receives every alert, but the redundancy is gone: losing it now loses the alerts. A pod
+                that is down is also AlertmanagerClusterDegraded; for a pod that is up, check that its name resolves from a
+                vmalert pod and the vmalert egress policy.
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+                vmalertnotifierpoderrors"
+  # A pod replaced in less than 30 minutes (errors for 20 minutes, then none) pages nobody.
+  - name: vmalert cannot reach one Alertmanager pod for a short while only
+    interval: 10m
+    input_series:
+      - series: 'vmalert_alerts_send_errors_total{addr="http://vmalertmanager-alertmanager-0:9093"}'
+        values: '0 2 4 4 4 4 4 4 4 4'
+      - series: 'vmalert_alerts_send_errors_total{addr="http://vmalertmanager-alertmanager-1:9093"}'
+        values: '0+0x9'
+    alert_rule_test:
+      - {eval_time: 1h, alertname: VMAlertNotifierPodErrors, exp_alerts: []}
+      - {eval_time: 1h, alertname: VMAlertNotifierErrors, exp_alerts: []}
   - name: Alertmanager gone
     interval: 10m
     input_series:

@@ -458,7 +458,7 @@ metadata:
     openaether.io/managed: "true"
     openaether.io/component: vmalertmanager
 spec:
-  description: "VMAlertmanager: ingress VMAlert + VMAgent :9093, egress DNS + Slack webhook."
+  description: "VMAlertmanager: ingress VMAlert + VMAgent :9093, egress DNS + gossip + kube-apiserver."
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: vmalertmanager
@@ -509,8 +509,8 @@ spec:
             - port: "9094"
               protocol: UDP
     # ⚠️ `rules.dns` is what makes toFQDNs work at all: without the DNS proxy
-    # observing the lookup, Cilium never learns the IP behind hooks.slack.com
-    # and the rule below matches nothing. Same trap as the CAPI policies.
+    # observing the lookup, Cilium never learns the IP behind the chat host and the
+    # rule of vmalertmanager-egress-hosts matches nothing. Same trap as the CAPI policies.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -524,18 +524,10 @@ spec:
           rules:
             dns:
               - matchPattern: "*"
-    # The two destinations outside the cluster: Slack for humans, and the
-    # dead-man's-switch ping. An alert that cannot leave is the failure this
-    # whole stack exists to remove.
-    # ⚠️ Change the DMS provider and this list must change with it, or the ping
-    # is dropped and the service pages you for an outage that is not happening.
-    - toFQDNs:
-        - matchName: hooks.slack.com
-        - matchName: hc-ping.com
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
+    # The two destinations outside the cluster (the chat webhook and the dead-man's-switch ping) are NOT here: their
+    # hosts come from Flux substitution, which this Kustomization cannot use (dashboards and rules hold `$`
+    # expressions). See ../observability-alert-egress and docs/alert-delivery.md. DNS above stays.
+    #
     # The config-reloader INIT container reads the config Secret through the API
     # and blocks the pod until it succeeds — with DNS-only egress, Alertmanager
     # never starts (Init:CrashLoopBackOff, "dial 10.96.0.1:443: i/o timeout").
@@ -543,9 +535,8 @@ spec:
     # Cilium enforces on the post-DNAT port. Same trap as VMAgent above.
     - toEntities:
         - kube-apiserver
-    # No egress to the outside: the receiver is empty. Adding a real one (SMTP,
-    # Slack, webhook) means adding its egress here, or the notification is
-    # dropped on the wire with nothing to show for it.
+    # Another kind of receiver (SMTP, say) needs its egress added: the notification is dropped on the wire with
+    # nothing to show for it. A chat or heartbeat host is an input, not an edit here (observability-alert-egress).
 
 # ── Loki ──────────────────────────────────────────────────────────
 # ingress: Alloy (push logs) + Grafana (query) + Loki peers

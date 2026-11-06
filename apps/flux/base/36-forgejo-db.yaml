@@ -31,6 +31,13 @@ spec:
         name: cnpg-archive-generation
         optional: true
   wait: true
+  # Gate: the same entry as `cnpg` (20-cnpg.yaml), for the same reason. With `wait: true` alone this Kustomization was
+  # Ready within 7 s of the patch (once after a 41 ms health check), its Cluster at 0 of 3: 3 installs, n=1 each (#204).
+  # The why and the figures: apps/flux/README.md ("The cnpg gate"). Pinned by scripts/dev/test-flux-health-gates.sh.
+  healthCheckExprs:
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      current: "has(status.conditions) && status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')"
   dependsOn:
     - name: cnpg                      # the operator, the plugin, the ObjectStore CRD, cnpg-backup-s3
     - name: external-secrets-stores   # ClusterSecretStore openbao (forgejo-db-credentials)

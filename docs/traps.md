@@ -15,6 +15,14 @@ belong to. What follows has no skill of its own yet.
   instance pods need it for `barmanObjectStore`; a replica JOIN calling
   `restore_command` blocks for ever instead of erroring.
 
+- **A pod of a new namespace is reachable by nobody, its own namespace included** (apps #112). `default-deny-all-ingress` is
+  cluster-wide and every pod needs its own ingress policy (lab 11). Include `apps/components/allow-same-namespace` (one
+  CiliumNetworkPolicy, the same namespace on any port) in the Kustomization of the namespace's workloads, then add a policy for
+  whatever is served from outside it. An AMBIENT namespace needs more: in lab 25 the HBONE port 15008 timed out until an open
+  CiliumNetworkPolicy was added, then ztunnel rejected the connection ("allow policies exist, but none allowed") until an Istio
+  ALLOW AuthorizationPolicy was added too. It is not shown that this component is enough for an ambient namespace. Rendered and
+  checked offline (`scripts/dev/test-in-cluster-transport.py`); not applied to a namespace on a cluster.
+
 ## Storage
 
 - **Never reboot (or `talosctl reboot`/`shutdown`) a node undrained when it hosts a Longhorn RWX share-manager and a pod that mounts that volume** (apps #124).

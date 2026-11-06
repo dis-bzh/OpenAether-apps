@@ -1,0 +1,41 @@
+# yamllint disable rule:line-length
+# Egress of Alertmanager to the two hosts outside the cluster: the chat webhook and the dead-man's-switch ping (apps #146). The rest of
+# its policy (gossip, the API server, the ingress) is `vmalertmanager` in ../observability/networkpolicy.yaml; Cilium policies add up.
+# The hosts are ONE input each: ALERT_CHAT_HOST and ALERT_HEARTBEAT_HOST of the cluster-identity ConfigMap, or the defaults below.
+# A host that is not the one of your receiver drops the notification on the wire with nothing to show for it, and a heartbeat host
+# changed in the secret but not here pages you for an outage that is not happening: change them together (docs/alert-delivery.md).
+# DNS first, with rules.dns (the toFQDNs need the DNS proxy; "*" as everywhere else), then the two hosts on 443 and nothing else.
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vmalertmanager-egress-hosts
+  namespace: services-observability
+  labels:
+    openaether.io/component: vmalertmanager
+spec:
+  description: "VMAlertmanager: egress DNS and the chat and heartbeat hosts on 443 (ALERT_CHAT_HOST, ALERT_HEARTBEAT_HOST)."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vmalertmanager
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: "${ALERT_CHAT_HOST:=hooks.slack.com}"
+        - matchName: "${ALERT_HEARTBEAT_HOST:=hc-ping.com}"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

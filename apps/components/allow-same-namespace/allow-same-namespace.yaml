@@ -1,0 +1,13 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-same-namespace
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: platform
+spec:
+  description: "Ingress from the pods of the same namespace on any port (default-deny-all-ingress denies it otherwise)."
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {}

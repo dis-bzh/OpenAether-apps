@@ -1,0 +1,18 @@
+# The pods of a namespace may reach each other (apps #112). The platform denies all ingress cluster-wide
+# (apps/base/platform/network-policies/default-deny-all.yaml), so the pods of a NEW namespace are reachable by nobody,
+# their own namespace included (lab 11). An ambient namespace also needs an Istio ALLOW AuthorizationPolicy (lab 25: not
+# shown that this component alone is enough for it).
+#
+# Include it from the Kustomization of the namespace's workloads; that Kustomization sets `namespace:`, which this
+# component leaves open on purpose:
+#
+#   components:
+#     - ../../components/allow-same-namespace
+#
+# One CiliumNetworkPolicy, any port, the same namespace only (in a CiliumNetworkPolicy `fromEndpoints: [{}]` matches the
+# pods of the policy's own namespace, not every namespace). It opens nothing to another namespace, the Gateway or the
+# world: a workload served from outside its namespace still needs its own ingress policy.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - allow-same-namespace.yaml

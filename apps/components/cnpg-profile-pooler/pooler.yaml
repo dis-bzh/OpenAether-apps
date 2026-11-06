@@ -66,11 +66,13 @@ spec:
       # The operator adds an init container, bootstrap-controller (it copies its binary), with no resources:
       # the platform policy require-limits reported every pooler pod (lab 23). Naming it here sets them, and its
       # restricted security context, which the policies read from the manifest and not from what the operator adds.
+      # 64Mi was OOMKilled at install (apps #205: one fresh install, 3 restarts over 2 pods, then both ran). 128Mi, the
+      # limit of pgbouncer below, is a MITIGATION: the peak of this init container was never read. Count its restarts.
       initContainers:
         - name: bootstrap-controller
           resources:
             requests: {cpu: 10m, memory: 32Mi}
-            limits: {memory: 64Mi}
+            limits: {memory: 128Mi}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
