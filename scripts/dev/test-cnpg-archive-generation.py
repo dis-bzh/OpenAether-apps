@@ -235,6 +235,41 @@ check("a hole in the NEW archive fails the verifier although the old archive is 
 rows = run_main(broken)
 check("...and the same hole is invisible when the verifier still reads the old path (what lab 20 had: the stale path was read)", rows[0][2] == "1", str(rows))
 
+# apps #151: the replica check lists the PRIMARY to compute the lag. When the primary store refuses the pair (an outage drill:
+# AccessDenied), the replica row used to say "store unreachable or unreadable" although the replica was read fine.
+class Refusing(FakeS3):
+    def list_objects_v2(self, **kw):
+        raise PermissionError("AccessDenied: the primary store refuses this key")
+
+
+def run_pair(primary, replica):
+    env = {"NOW": str(NOW), "PRIMARY_ENDPOINT": "http://p", "PRIMARY_BUCKET": "b", "PRIMARY_ACCESS_KEY": "a", "PRIMARY_SECRET_KEY": "s",
+           "REPLICA_ENDPOINT": "http://r", "REPLICA_BUCKET": "b", "REPLICA_ACCESS_KEY": "a", "REPLICA_SECRET_KEY": "s", "CLUSTERS": "zitadel-db"}
+    saved = (dict(os.environ), bc.client)
+    os.environ.clear(); os.environ.update(env)
+    bc.client = lambda endpoint, *a, **k: primary if endpoint == "http://p" else replica
+    buf = io.StringIO()
+    try:
+        with redirect_stdout(buf):
+            bc.main()
+    finally:
+        os.environ.clear(); os.environ.update(saved[0]); bc.client = saved[1]
+    return {l.split("\t")[1]: l.split("\t") for l in buf.getvalue().splitlines()}
+
+
+good = {}
+archive(good, OLD)
+rows = run_pair(FakeS3(good), FakeS3(good))
+check("both stores complete: both rows pass", rows["primary"][2] == "1" and rows["replica"][2] == "1", str(rows))
+rows = run_pair(Refusing({}), FakeS3(good))
+check("the primary refuses the pair: its own row says it is unreadable", rows["primary"][2] == "0" and "unreachable or unreadable" in rows["primary"][4], str(rows))
+check("...and the replica row says it could not COMPARE, not that the replica is unreadable (#151)",
+      "could not compare" in rows["replica"][4] and "unreadable" not in rows["replica"][4] and "AccessDenied" in rows["replica"][4], str(rows["replica"]))
+check("...it is not reported as a pass: the lag against the primary was not checked", rows["replica"][2] == "0", str(rows["replica"]))
+rows = run_pair(FakeS3(good), Refusing({}))
+check("the REPLICA refusing is still an unreadable replica (the guard covers the primary listing only)",
+      rows["replica"][2] == "0" and "unreachable or unreadable" in rows["replica"][4] and "could not compare" not in rows["replica"][4], str(rows["replica"]))
+
 print("=== the restore tests recover from the current archive ===")
 rc = load("restore_cnpg", "apps/base/backup/databases/restore/restore_cnpg.py")
 base = {"spec": {"imageName": "img", "storage": {"size": "5Gi"},

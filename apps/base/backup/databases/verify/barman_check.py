@@ -199,9 +199,17 @@ def check_cluster(st, base, server, now, sample=None, archive=None):
     return 1, age, f"backup {bid} readable, WAL {first}..{top} contiguous ({len(mine)} segments)" + (f"; {'; '.join(notes)}" if notes else "")
 
 
+class CannotCompare(Exception):
+    """The primary store would not list: the replica's lag against it is unknown (apps #151). Not an unreadable replica."""
+
+
 def replica_gap(prim, repl, prefix, now, grace_s):
-    """Keys the primary holds for longer than grace_s that the replica lacks (or holds with another size)."""
-    po, _ = prim.list(prefix)
+    """Keys the primary holds for longer than grace_s that the replica lacks (or holds with another size).
+    Raises CannotCompare when the primary refuses the listing; a failure of the replica's own listing stays what it is."""
+    try:
+        po, _ = prim.list(prefix)
+    except Exception as ex:  # noqa: BLE001 - AccessDenied, a timeout, a missing bucket: whatever the primary store answers
+        raise CannotCompare(f"{type(ex).__name__}: {str(ex)[:150]}") from ex
     ro, _ = repl.list(prefix)
     have = {o["Key"]: o["Size"] for o in ro}
     return [o["Key"] for o in po if now - o["LastModified"].timestamp() > grace_s and have.get(o["Key"]) != o["Size"]]
@@ -232,7 +240,11 @@ def main():
             try:
                 status, age, msg = check_cluster(st, "cnpg", server, now, archive=server + suffix)
                 if name == "replica" and status == 1 and "primary" in stores:
-                    gap = replica_gap(stores["primary"], st, f"cnpg/{server}/", now, grace)
+                    try:
+                        gap = replica_gap(stores["primary"], st, f"cnpg/{server}/", now, grace)
+                    except CannotCompare as ex:
+                        # The replica itself was read fine; what is unknown is its lag. Not a pass either: the primary row says why.
+                        status, gap, msg = 0, [], f"could not compare with the primary store ({ex}); the replica's own archive is readable, its lag was not checked"
                     if gap:
                         status, msg = 0, f"{len(gap)} object(s) older than {grace // 60} min on the primary are missing from the replica (first: {gap[0]})"
             except Exception as ex:  # noqa: BLE001 - an unreachable store is a failed verification, not a crash
