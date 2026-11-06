@@ -256,6 +256,15 @@ rcode, out, calls, left, cm, _ = flow("pitr", {n: cut for n in NAMES}, env_extra
 check("PITR with an old scheduled Backup and a manual one of 5 minutes ago: no target before the manual one, SKIP, nothing restored",
       rcode == 0 and len(lines(out, "SKIP")) == 4 and "after the last base backup" in out and not any(c.startswith("apply") for c in calls), out[-500:])
 
+print("=== the results published before cannot be read (apps #190) ===")
+# A failed read left `previous` empty: the run still published, and a skip (exit 0) or a failure dropped the last success of every dataset
+# it kept. Nothing is published now, the Job fails, and the log says why. (The dump flow keeps publishing: it must show its FAILs.)
+kept = rc.build_metrics([{"labels": rc.labels("cnpg", "zitadel-db", "replica", "latest"), "ok": True, "duration": 1, "recovery": 1, "lag": 1, "missing": 0}], 1234.0, {})
+rcode, out, calls, left, cm, _ = flow("latest", good, key_prev=kept, env_extra=dict(YOUNG, FAKE_BACKUPS="none", FAKE_CM_GET="fail"))
+check("a skipping run that cannot read the published results fails (not exit 0), publishes nothing and keeps the last success",
+      rcode == 1 and len(lines(out, "SKIP")) == 4 and "cannot read the results published before" in out and "not publishing" in out
+      and cm == kept and not any(c.startswith("patch configmap") for c in calls), out[-600:])
+
 print("=== dump load: no dump pushed yet (a fresh install before the first cnpg-dump) ===")
 # Stage 2 (dump_load.py) on the /restore tree stage 1 (restic-dump.sh) leaves: an `absent` marker is a repository that does not exist
 # (restic exit code 10, proven with a real restic in test-restore-test-dumps.sh), an `error` file any other failure. No PostgreSQL is

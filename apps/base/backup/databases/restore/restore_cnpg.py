@@ -494,6 +494,11 @@ def main():
     text = build_metrics(results, float(os.environ.get("NOW") or time.time()), previous)
     if a.out:
         open(a.out, "w").write(text)
+    if a.publish and not readable and a.mode != "dump":
+        # `previous` is {} here: publishing would drop the last success of every dataset this run skipped or did not reach (apps #190).
+        # The dump flow publishes anyway: it turns a skipped store into a FAIL when it cannot tell (dump_gone), and must show it.
+        print("ERROR: not publishing: the results published before cannot be read, so their last success would be lost; the next run retries")
+        return 1
     rc = 0 if all(r["ok"] is not False for r in results) and len(results) == len(CLUSTERS) * len(STORES) else 1
     if a.publish and not publish(key, text):
         rc = 1
