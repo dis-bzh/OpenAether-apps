@@ -132,7 +132,8 @@ spec:
       path: /debug/metrics
 ---
 # Forgejo (the git forge, apps/base/forgejo): /metrics on its HTTP port, enabled by gitea.metrics in the HelmRelease.
-# Scraped so the data exists; no rule reads it yet (its metric names are not checked against a running Forgejo). The
+# Scraped so the data exists; only ForgejoScrapeDown (vmrule-platform.yaml, `up == 0`) reads it, not the metric names
+# (not checked against a running Forgejo). The
 # Gateway does not route /metrics to the Internet (forgejo/httproute.yaml). Ingress for vmagent is in
 # forgejo/networkpolicy.yaml.
 # Since 0.4.3 the endpoint asks for a bearer token ([metrics] TOKEN): the Gateway's refusal did not cover //metrics at

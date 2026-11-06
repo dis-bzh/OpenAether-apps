@@ -1525,3 +1525,27 @@ tests:
         alertname: NodeClockNotSynchronised
         exp_alerts:
           - exp_labels: {instance: "n1:9100", severity: info, component: node}
+  # apps #203: the forge scrape (VMPodScrape forgejo, job services-observability/forgejo). `up == 0` needs a target: a profile without the
+  # forge has the scrape and no pod, so no `up` series, and the alert stays silent there (an absent() rule would fire).
+  - name: a forge scrape down alerts for that pod only; another job down is not the forge (apps #203)
+    interval: 1m
+    input_series:
+      - series: 'up{job="services-observability/forgejo", namespace="services-git", pod="forgejo-a"}'
+        values: '1x5 0x15'      # a wrong token (401) or a pod waiting for its Secret: the target stays, up is 0
+      - series: 'up{job="services-observability/forgejo", namespace="services-git", pod="forgejo-b"}'
+        values: '1x20'
+      - series: 'up{job="services-observability/kubelet", node="w1"}'
+        values: '0x20'          # NodeScrapeDown's business
+    alert_rule_test:
+      - {eval_time: 5m, alertname: ForgejoScrapeDown, exp_alerts: []}      # up was 1
+      - eval_time: 20m
+        alertname: ForgejoScrapeDown
+        exp_alerts:
+          - exp_labels: {job: services-observability/forgejo, namespace: services-git, pod: forgejo-a, severity: warning, component: forgejo}
+  - name: a profile without the forge has no forge target and no alert (apps #203)
+    interval: 1m
+    input_series:
+      - series: 'up{job="services-observability/kubelet", node="w1"}'
+        values: '1x20'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: ForgejoScrapeDown, exp_alerts: []}

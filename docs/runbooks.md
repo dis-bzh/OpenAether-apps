@@ -620,6 +620,14 @@ Critical: the Cluster's writes are BLOCKED, not lost. Both Clusters keep `dataDu
 - Check: `kubectl cnpg status`; archive log; replication slots.
 - Do: Fix the archive (see CnpgWalArchiveFailing) or the lagging slot; grow the volume if time is short.
 
+## Forge (opt-in brick)
+
+### ForgejoScrapeDown
+
+- Check: `kubectl -n services-git get pods` (a pod in `CreateContainerConfigError` waits for the Secret `forgejo-metrics`: `kubectl -n services-git get externalsecret`), then the target's error in vmagent (`unexpected status code 401` is a wrong or rotated token) and `kubectl -n services-observability get secret forgejo-metrics`.
+- Do: Pod not Ready: the forge is down or starting, fix that first (`docs/forgejo.md`, "The metrics endpoint and its token"). Pod Ready and 401: the token the forge reads (its environment, set at pod start) and the one vmagent reads (`forgejo-metrics` in `services-observability`) differ; both come from OpenBao `secret/forgejo/metrics`. A rotation needs a new forge pod (`kubectl -n services-git rollout restart deploy/forgejo`) and a vmagent configuration refresh (reading from the manifests, not run).
+- Reads: `up{job="services-observability/forgejo"} == 0` for 3 minutes (the label is `<namespace>/<name>` of the VMPodScrape, observed on a cluster). It fires only where a forge target exists: a profile without the forge has no pod, hence no `up` series, hence no alert. **Limits:** a MISSING `forgejo-metrics` Secret makes the operator skip the scrape (error log, no `up` series at all), and a forge at 0 replicas has no target: neither fires. Seen without a rule: `up` was 0 for about 7.5 minutes during an induced upgrade (INCIDENT, one run, Scaleway, 3 CP + 6 W). The alert firing itself has not been seen on a cluster; the rule is mocked with `vmalert-tool` (evaluation every 10 minutes: `for: 3m` is not told from a shorter one).
+
 ## Logging retention
 
 ### LokiRetentionNotSwept
