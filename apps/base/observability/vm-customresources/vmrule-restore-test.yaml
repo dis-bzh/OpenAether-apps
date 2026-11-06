@@ -47,21 +47,28 @@ spec:
               The daily restore tests have no pass in 3 days, the weekly ones (point in time, volumes) none in 10. A test that
               no longer runs proves nothing.
 
+        # Two kinds, each with its own CronJob: `cnpg` (recovery and point-in-time tests) and `dump` (the dump-load test, which SKIPS
+        # while a restic repository does not exist yet, and a skip never reports; apps #190). The Longhorn kind has its own alert below.
         - alert: RestoreTestNeverReported
           expr: |
-            (absent(oa_restore_test_last_run_timestamp_seconds{kind="cnpg"}) == 1)
-            and on ()
-            (time() - max(kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}) > 3 * 86400)
+            ((absent(oa_restore_test_last_run_timestamp_seconds{kind="cnpg"}) == 1)
+              and on ()
+              (time() - max(kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}) > 3 * 86400))
+            or
+            ((absent(oa_restore_test_last_run_timestamp_seconds{kind="dump"}) == 1)
+              and on ()
+              (time() - max(kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-dump-load-restore-test"}) > 3 * 86400))
           for: 1h
           labels:
             severity: warning
             component: backup
           annotations:
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#restoretestneverreported"
-            summary: "The CNPG restore test has never reported a result"
+            summary: "The {{ $labels.kind }} restore test has never reported a result"
             description: >-
-              The CronJob exists since more than 3 days and the exporter has no oa_restore_test_* series: the test never
-              ran to its end, or the exporter is not scraped. Silent until the CronJob is 3 days old.
+              The CronJob of the {{ $labels.kind }} test exists since more than 3 days and the exporter has no
+              oa_restore_test_* series of that kind: the test never ran to its end, it skips every time (a dump test with no
+              restic repository to load), or the exporter is not scraped. Silent until the CronJob is 3 days old.
 
         - alert: RestoreRecoverySlow
           expr: max by (kind, dataset, store, mode) (oa_restore_test_recovery_seconds) > 900

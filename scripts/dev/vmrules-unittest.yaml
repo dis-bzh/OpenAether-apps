@@ -1138,6 +1138,32 @@ tests:
         values: '946681200+0x30'
     alert_rule_test:
       - {eval_time: 3h, alertname: RestoreTestNeverReported, exp_alerts: []}
+  # apps #190: the dump-load test skips (no restic repository yet) and never reports; `kind="dump"` has its own CronJob and its own series.
+  - name: a dump-load restore test that never reported while its CronJob is older than three days alerts, a CNPG one that reports does not (apps issue 190)
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-dump-load-restore-test"}'
+        values: '946384800+0x30'
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}'
+        values: '946384800+0x30'
+      - series: 'oa_restore_test_last_run_timestamp_seconds{kind="cnpg",dataset="grafana-db",store="primary",mode="latest"}'
+        values: '946684800+0x30'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: RestoreTestNeverReported
+        exp_alerts:
+          - exp_labels: {kind: dump, severity: warning, component: backup}
+  - name: a reporting dump-load restore test, or a young CronJob, is not a never-reported one (apps issue 190)
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-dump-load-restore-test"}'
+        values: '946384800+0x30'
+      - series: 'oa_restore_test_last_run_timestamp_seconds{kind="dump",dataset="grafana-db",store="primary",mode="latest"}'
+        values: '946684800+0x30'
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}'
+        values: '946681200+0x30'
+    alert_rule_test:
+      - {eval_time: 3h, alertname: RestoreTestNeverReported, exp_alerts: []}
   - name: a scratch pod that stays 3 hours and a canary writer that stopped
     interval: 10m
     input_series:
