@@ -10,7 +10,8 @@ written as a 30-day waiver would hide a finding forever. So each statement must 
 It fails on a statement whose date is before today (UTC). Renew by re-reading the finding, not by moving the date.
 
 The Trivy ignore file .github/trivy-ignore.yaml (accepted findings the VEX matching misses) is held to the same rule:
-every entry needs a `statement` and an `expired_at` within 90 days from today. Trivy enforces that date itself.
+every entry needs a `statement` and an `expired_at` within 90 days from today. Trivy enforces that date itself, from 00:00 UTC
+of the day, so an entry is expired here on its `expired_at` day (a VEX statement still passes on its last day: Trivy ignores its date).
 
 Usage: python3 scripts/check-vex.py [--file PATH] [--ignore-file PATH] [--today YYYY-MM-DD]
 Exit: 0 ok, 1 a statement is wrong or expired, 2 the file cannot be read.
@@ -80,7 +81,7 @@ def check_ignore(doc, today):
             exp = e.get("expired_at")
             if not isinstance(exp, dt.date):
                 errors.append(f"{who}: no expired_at date")
-            elif exp < today:
+            elif exp <= today:  # Trivy stops applying an entry from 00:00 UTC of its expired_at day, so that day is already red
                 errors.append(f"{who}: EXPIRED on {exp} - Trivy no longer ignores it; fix the image or re-read the finding")
             elif (exp - today).days > MAX_DAYS:
                 errors.append(f"{who}: expired_at {exp} is more than {MAX_DAYS} days away")

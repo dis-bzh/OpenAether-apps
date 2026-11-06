@@ -84,8 +84,8 @@ Forgejo, the CNPG operator and the two PostgreSQL images; the last three failed 
 still the newest tag) and PyJWT in the CNPG PostgreSQL images (CVE-2026-102268, imported only by `msal`, not used). The
 ignore entry: libexpat in the Longhorn v1.12.1 images (SUSE-SU-2026:4619-1; a reading of package data and file searches: no Longhorn process was run or traced, only `wget --help` and `ldd` in the backing-image-manager image).
 The five statements of the list above were deleted, not renewed, because the fixed images carry no such finding. Nothing
-ends on 2026-11-20 any more: `scripts/check-vex.py` passes on 2026-11-21 and on 2026-12-03, and fails from 2026-12-05 if
-the three are not re-read again or removed.
+ends on 2026-11-20 any more: `scripts/check-vex.py` passes on 2026-11-21 and on 2026-12-03, fails on 2026-12-04 for the
+ignore entry (see **Expiry day** below) and from 2026-12-05 for the two statements, if the three are not re-read again or removed.
 
 - **VEX:** a finding that does not apply is an OpenVEX statement in `.vex/openaether-apps.openvex.json`
   (`not_affected` with a justification, an `impact_statement`, an `action_statement` and ONE `Expires: YYYY-MM-DD` in
@@ -94,10 +94,10 @@ the three are not re-read again or removed.
   justification or expiry and on an expired statement. A statement never covers a fixable, reachable CRITICAL. Docker Hub products are written with
   Trivy's `index.docker.io` repository URL. `.github/trivy-ignore.yaml` (Trivy's format, with its own `expired_at`) holds the
   one accepted finding Trivy's VEX matching misses (libexpat in the Longhorn v1.12.1 images); `check-vex.py` holds it to the same rule.
-  **Expiry day:** `check-vex.py` accepts a date on that day and fails from the next one, but Trivy stops applying an
-  ignore entry from 00:00 UTC of its `expired_at` day (its source, `ExpiredAt.Before(now)`, read at v0.69.3). So the
-  Longhorn scans can be red on 2026-12-04 while `check-vex.py` is still green. Not fixed (a Friday: the scheduled scan
-  runs on Tuesdays); a tag push or a manual run on that day would show it.
+  **Expiry day:** Trivy stops applying an ignore entry from 00:00 UTC of its `expired_at` day (its source,
+  `ExpiredAt.Before(now)`, read at v0.69.3), so `check-vex.py` fails an ignore entry on its `expired_at` day, the same
+  day the Longhorn scans can turn red (2026-12-04, a Friday: the scheduled scan runs on Tuesdays). A VEX statement still
+  passes on its last day and fails from the next one, because Trivy does not read the dates of OpenVEX.
   Whether Trivy matches a product is only seen by scanning the image: `trivy image --config .github/trivy-image-vex.yaml <ref>`.
 - **Failing scans are announced:** a failed scan opens, or comments on, one issue `[vuln] <image>` and closes it when the
   scan passes (`scripts/ops/vuln-issue.sh`); an expired waiver does the same under `[vuln] VEX statements`. Before, a red

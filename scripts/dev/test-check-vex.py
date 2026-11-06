@@ -51,6 +51,8 @@ check("an unknown status fails", any("status" in e for e in run(lambda s: s.upda
 IG = {"vulnerabilities": [{"id": "X-1", "purls": ["pkg:rpm/x"], "expired_at": dt.date(2026, 11, 20), "statement": "why"}]}
 check("an ignore entry with a statement and a date passes", vex.check_ignore(IG, TODAY) == [])
 check("an expired ignore entry fails", any("EXPIRED" in e for e in vex.check_ignore(IG, dt.date(2026, 11, 21))))
+check("an ignore entry fails on its last day (Trivy stops applying it from 00:00 UTC of that day)", any("EXPIRED" in e for e in vex.check_ignore(IG, dt.date(2026, 11, 20))))
+check("an ignore entry still passes the day before its last day", vex.check_ignore(IG, dt.date(2026, 11, 19)) == [])
 check("an ignore entry with no date fails", any("expired_at" in e for e in vex.check_ignore({"vulnerabilities": [{"id": "X", "statement": "s"}]}, TODAY)))
 check("an ignore entry with no statement fails", any("statement" in e for e in vex.check_ignore({"vulnerabilities": [{"id": "X", "expired_at": dt.date(2026, 11, 1)}]}, TODAY)))
 check("an ignore entry months away fails", any("days away" in e for e in vex.check_ignore({"vulnerabilities": [{"id": "X", "statement": "s", "expired_at": dt.date(2027, 6, 1)}]}, TODAY)))
