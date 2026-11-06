@@ -6,12 +6,14 @@ Static: reads the manifests and renders the opt-in component, never a cluster. C
   - every route names a receiver that exists, and every url_file/api_url_file comes from a secret the CR mounts;
   - the probe label of the opt-in rule is the one the quiet receiver is routed on, and that receiver sends no "resolved";
   - the inhibit rule stops the Watchdog on an alert the opt-in rules define;
+  - CnpgWalArchiveFailing is muted while CnpgWalNeverArchived fires for the same Cluster, on labels both alerts carry;
   - the component is OFF in the default profiles and adds exactly one Flux Kustomization, which waits for the VMRule CRDs;
   - the egress policy of Alertmanager still allows the chat and heartbeat hosts it is configured with.
 Each rule has a self-test that proves it would catch the regression.
 """
 import copy
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -22,6 +24,7 @@ import yaml
 REPO = Path(__file__).resolve().parents[2]
 VMA = REPO / "apps/base/observability/vm-customresources/vmalert.yaml"
 PROBE = REPO / "apps/base/observability-alert-probe/vmrule.yaml"
+BACKUP = REPO / "apps/base/observability/vm-customresources/vmrule-backup.yaml"
 COMPONENT = REPO / "apps/flux/components/alert-delivery-probe"
 NETPOL = REPO / "apps/base/observability/networkpolicy.yaml"
 
@@ -96,6 +99,23 @@ def render(component):
         return [d for d in yaml.safe_load_all(r.stdout) if d]
 
 
+def problems_wal(cfg, backup):
+    """One Cluster, one fault, two critical alerts (apps #188): the quicker one mutes the later one. `equal` must name labels BOTH
+    alerts keep: CnpgWalArchiveFailing is `sum by (cnpg_io_cluster)` and has no namespace, so a rule that also asked for it never matches."""
+    inh = [i for i in cfg.get("inhibit_rules") or [] if i.get("target_matchers") == ['alertname="CnpgWalArchiveFailing"']]
+    if len(inh) != 1 or inh[0].get("source_matchers") != ['alertname="CnpgWalNeverArchived"']:
+        return ["one inhibit rule must mute CnpgWalArchiveFailing while CnpgWalNeverArchived fires"]
+    equal = set(inh[0].get("equal") or [])
+    if not equal:
+        return ["the CnpgWalArchiveFailing inhibit rule needs `equal`: without it one Cluster's alert mutes every Cluster's"]
+    out = []
+    for name in ("CnpgWalNeverArchived", "CnpgWalArchiveFailing"):
+        kept = set.intersection(*(set(re.split(r"\s*,\s*", m.strip())) for m in re.findall(r"\bby \(([^)]*)\)", backup[name]["expr"])))
+        if equal - kept:
+            out.append(f"{name} keeps {sorted(kept)} but the inhibit rule is equal on {sorted(equal)}: it would never match")
+    return out
+
+
 def problems_component():
     out = []
     off = {d["metadata"]["name"] for d in render(False) if d["kind"] == "Kustomization"}
@@ -116,7 +136,8 @@ def main():
     am, cfg, rules = load()
     fq = {m["matchName"] for d in docs(NETPOL) if d["metadata"]["name"] == "vmalertmanager"
           for e in d["spec"]["egress"] for m in e.get("toFQDNs", [])}
-    bad = problems(am, cfg, rules, fq) + problems_component()
+    backup = {r["alert"]: r for d in docs(BACKUP) for g in d["spec"]["groups"] for r in g["rules"]}
+    bad = problems(am, cfg, rules, fq) + problems_wal(cfg, backup) + problems_component()
     for b in bad:
         print("FAIL", b)
     if "--selftest" in sys.argv:
@@ -137,6 +158,19 @@ def main():
         }
         for name, f in cases.items():
             got = mut(f)
+            print(("selftest ok   " if got else "selftest FAIL (not caught) ") + name)
+            bad += [] if got else [name]
+        wal = lambda c: next(x for x in c["inhibit_rules"] if x["target_matchers"] == ['alertname="CnpgWalArchiveFailing"'])  # noqa: E731
+        for name, f in {
+            "WAL inhibit gone": lambda c: c["inhibit_rules"].remove(wal(c)),
+            "WAL inhibit without equal": lambda c: wal(c).pop("equal"),
+            "WAL inhibit equal on a label ArchiveFailing lacks": lambda c: wal(c).update(equal=["namespace", "cnpg_io_cluster"]),
+            "WAL inhibit reversed": lambda c: wal(c).update(source_matchers=['alertname="CnpgWalArchiveFailing"'],
+                                                           target_matchers=['alertname="CnpgWalNeverArchived"']),
+        }.items():
+            c = yaml.safe_load(yaml.safe_dump(cfg))
+            f(c)
+            got = problems_wal(c, backup)
             print(("selftest ok   " if got else "selftest FAIL (not caught) ") + name)
             bad += [] if got else [name]
         if not problems(am, cfg, rules, set()):

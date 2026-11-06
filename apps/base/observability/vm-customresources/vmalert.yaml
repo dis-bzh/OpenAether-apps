@@ -198,6 +198,20 @@ spec:
           - alertname="AlertDeliveryNotAcknowledged"
         target_matchers:
           - alertname="Watchdog"
+      # One fault, two critical pages (apps #188, infra #430): a Cluster over the WAL of another database system, or
+      # with S3 keys not seeded, fails its archiver from the start. CnpgWalNeverArchived says so after about 10 to 15
+      # minutes, CnpgWalArchiveFailing again about 10 minutes later (one observation, Scaleway 3 CP + 6 W, NOMINAL).
+      # The first one stays; the second is muted while it fires for the same Cluster. Nothing is lost: both alerts read
+      # the same fault, and a Cluster for which the first alert is not firing (it archived before and its counters were
+      # not reset) still pages through CnpgWalArchiveFailing. `equal` is cnpg_io_cluster alone, because
+      # CnpgWalArchiveFailing is `sum by (cnpg_io_cluster)` and has no namespace label (two Clusters of the same name
+      # in two namespaces would share it; the profiles name theirs apart). scripts/dev/test-alert-delivery.py pins
+      # the labels.
+      - source_matchers:
+          - alertname="CnpgWalNeverArchived"
+        target_matchers:
+          - alertname="CnpgWalArchiveFailing"
+        equal: [cnpg_io_cluster]
     receivers:
       # The dead-man's switch. Its URL is a ping endpoint (healthchecks.io,
       # PagerDuty DMS, Better Stack…) that raises the alarm when pings STOP.

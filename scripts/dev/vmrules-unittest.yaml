@@ -1138,6 +1138,32 @@ tests:
         values: '946681200+0x30'
     alert_rule_test:
       - {eval_time: 3h, alertname: RestoreTestNeverReported, exp_alerts: []}
+  # apps #190: the dump-load test skips (no restic repository yet) and never reports; `kind="dump"` has its own CronJob and its own series.
+  - name: a dump-load restore test that never reported while its CronJob is older than three days alerts, a CNPG one that reports does not (apps issue 190)
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-dump-load-restore-test"}'
+        values: '946384800+0x30'
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}'
+        values: '946384800+0x30'
+      - series: 'oa_restore_test_last_run_timestamp_seconds{kind="cnpg",dataset="grafana-db",store="primary",mode="latest"}'
+        values: '946684800+0x30'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: RestoreTestNeverReported
+        exp_alerts:
+          - exp_labels: {kind: dump, severity: warning, component: backup}
+  - name: a reporting dump-load restore test, or a young CronJob, is not a never-reported one (apps issue 190)
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-dump-load-restore-test"}'
+        values: '946384800+0x30'
+      - series: 'oa_restore_test_last_run_timestamp_seconds{kind="dump",dataset="grafana-db",store="primary",mode="latest"}'
+        values: '946684800+0x30'
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}'
+        values: '946681200+0x30'
+    alert_rule_test:
+      - {eval_time: 3h, alertname: RestoreTestNeverReported, exp_alerts: []}
   - name: a scratch pod that stays 3 hours and a canary writer that stopped
     interval: 10m
     input_series:
@@ -1495,3 +1521,57 @@ tests:
               description: >-
                 oa_audit_sink_ok has no series for 15 minutes: audit-sink-check is down or not scraped, so a stopped sink would not be seen.
                 Runbook: docs/runbooks.md.
+  # apps #94: the two clock alerts existed since 0.3.0 with no behaviour case. Offsets are in seconds, as node-exporter's timex collector
+  # reports them. vmalert-tool evaluates every 10 minutes (evaluation_interval above): a `for` is checked up to that granularity only.
+  - name: a node clock off by more than half a second alerts at the end of its ten minutes, ahead or behind; a smaller offset does not (apps issue 94)
+    interval: 1m
+    input_series:
+      - series: 'node_timex_offset_seconds{instance="n1:9100"}'
+        values: '0.7x30'
+      - series: 'node_timex_offset_seconds{instance="n2:9100"}'
+        values: '-0.9x30'   # behind: the rule reads abs()
+      - series: 'node_timex_offset_seconds{instance="n3:9100"}'
+        values: '0.4x30'    # under the threshold
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: NodeClockSkew
+        exp_alerts:
+          - exp_labels: {instance: "n1:9100", severity: warning, component: node}
+          - exp_labels: {instance: "n2:9100", severity: warning, component: node}
+  - name: a node whose kernel reports an undisciplined clock alerts after an hour, a synchronised node does not (apps issue 94)
+    interval: 1m
+    input_series:
+      - series: 'node_timex_sync_status{instance="n1:9100"}'
+        values: '0x120'
+      - series: 'node_timex_sync_status{instance="n2:9100"}'
+        values: '1x120'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: NodeClockNotSynchronised, exp_alerts: []}
+      - eval_time: 100m
+        alertname: NodeClockNotSynchronised
+        exp_alerts:
+          - exp_labels: {instance: "n1:9100", severity: info, component: node}
+  # apps #203: the forge scrape (VMPodScrape forgejo, job services-observability/forgejo). `up == 0` needs a target: a profile without the
+  # forge has the scrape and no pod, so no `up` series, and the alert stays silent there (an absent() rule would fire).
+  - name: a forge scrape down alerts for that pod only; another job down is not the forge (apps issue 203)
+    interval: 1m
+    input_series:
+      - series: 'up{job="services-observability/forgejo", namespace="services-git", pod="forgejo-a"}'
+        values: '1x5 0x15'      # a wrong token (401) or a pod waiting for its Secret: the target stays, up is 0
+      - series: 'up{job="services-observability/forgejo", namespace="services-git", pod="forgejo-b"}'
+        values: '1x20'
+      - series: 'up{job="services-observability/kubelet", node="w1"}'
+        values: '0x20'          # NodeScrapeDown's business
+    alert_rule_test:
+      - {eval_time: 5m, alertname: ForgejoScrapeDown, exp_alerts: []}      # up was 1
+      - eval_time: 20m
+        alertname: ForgejoScrapeDown
+        exp_alerts:
+          - exp_labels: {job: services-observability/forgejo, namespace: services-git, pod: forgejo-a, severity: warning, component: forgejo}
+  - name: a profile without the forge has no forge target and no alert (apps issue 203)
+    interval: 1m
+    input_series:
+      - series: 'up{job="services-observability/kubelet", node="w1"}'
+        values: '1x20'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: ForgejoScrapeDown, exp_alerts: []}

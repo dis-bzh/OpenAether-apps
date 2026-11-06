@@ -188,3 +188,27 @@ spec:
               kubectl delete pod -n {{ $labels.namespace }} {{ $labels.pod }}
               (the PVC stays; the operator recreates the pod). Never delete the PVC. docs/traps.md, Databases.
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/traps.md"
+
+    # The forge (opt-in brick apps/base/forgejo, scraped by the VMPodScrape `forgejo` in vmscrapes-pipeline.yaml). No
+    # rule named it before (apps #203): in an induced upgrade `up` was 0 for about 7.5 minutes (INCIDENT, one run,
+    # Scaleway) and nothing could page.
+    - name: openaether-forge
+      interval: 1m
+      rules:
+        # `up == 0` needs a target. Without the forge brick the VMPodScrape matches no pod, so there is no `up` series
+        # and this stays silent: an absent() rule would fire on every profile without the forge. Like NodeScrapeDown,
+        # the job label is the one vmagent gives a VMPodScrape, <namespace>/<name>. The limits are in
+        # docs/runbooks.md: no `up` series at all while the scrape's Secret is missing (the operator skips the
+        # scrape), and none with the Deployment at 0 replicas.
+        - alert: ForgejoScrapeDown
+          expr: up{job="services-observability/forgejo"} == 0
+          for: 3m
+          labels:
+            severity: warning
+            component: forgejo
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#forgejoscrapedown"
+            summary: "The forge {{ $labels.pod }} is not scraped for 3 min"
+            description: >-
+              vmagent cannot read the forge's /metrics (a wrong or rotated bearer token answers 401, the pod is not
+              Ready, or the NetworkPolicy refuses vmagent). Procedure: docs/runbooks.md#forgejoscrapedown.
