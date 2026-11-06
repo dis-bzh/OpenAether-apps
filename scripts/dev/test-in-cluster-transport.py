@@ -2,9 +2,13 @@
 """In-cluster transport and network-policy hygiene (B25, static rung: reads manifests, proves nothing about a cluster).
 
 Zitadel and Grafana reach CNPG with TLS (`require`), Istio states its TLS floor, pods are denied the cloud metadata
-endpoints, and the cert-manager egress rule names no ACME host while no issuer is ACME.
+endpoints, the cert-manager egress rule names no ACME host while no issuer is ACME, and the ready-made same-namespace allow
+(apps/components/allow-same-namespace) renders what the default-deny header says it is (apps #112).
 """
+import os
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -53,5 +57,22 @@ acme_issuer = any(d.get("kind") in ("ClusterIssuer", "Issuer") and "acme" in d.g
                   for p in (REPO / "apps").rglob("*.yaml") if "gotk" not in str(p)
                   for d in yaml.safe_load_all(p.read_text()) if isinstance(d, dict))
 check("no ACME host in the egress allow-list while no issuer is ACME", acme_issuer or not any("letsencrypt" in h for h in hosts))
+
+# apps #112: the default-deny ingress also blocks a new namespace's own pods (lab 11, lab 25: HBONE 15008 timed out until a CNP
+# allowed it). The ready-made allow is a Kustomize component, one CNP; the including Kustomization sets the namespace.
+with tempfile.TemporaryDirectory() as t:
+    (Path(t) / "kustomization.yaml").write_text(yaml.safe_dump({
+        "apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "namespace": "demo-ns",
+        "components": [os.path.relpath(REPO / "apps/components/allow-same-namespace", t)]}))
+    r = subprocess.run(["kubectl", "kustomize", "--load-restrictor", "LoadRestrictionsNone", t], capture_output=True, text=True)
+rendered = [d for d in yaml.safe_load_all(r.stdout) if d] if r.returncode == 0 else []
+one = rendered[0] if len(rendered) == 1 else {}
+rule = (one.get("spec") or {}).get("ingress") or []
+check("allow-same-namespace renders exactly one CiliumNetworkPolicy in the namespace that includes it",
+      r.returncode == 0 and one.get("kind") == "CiliumNetworkPolicy" and one["metadata"].get("namespace") == "demo-ns")
+check("...it selects every pod of the namespace and admits `fromEndpoints: [{}]` (the same namespace) on any port, nothing else",
+      one.get("spec", {}).get("endpointSelector") == {} and rule == [{"fromEndpoints": [{}]}])
+check("the default-deny header points at the component, not at a template that is 'not shipped yet'",
+      "not shipped yet" not in (np / "default-deny-all.yaml").read_text() and "allow-same-namespace" in (np / "default-deny-all.yaml").read_text())
 
 sys.exit(1 if failures else 0)
