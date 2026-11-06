@@ -11,7 +11,8 @@ to that Gateway is reachable by anyone who sets the Host header. This scans the 
     caller and host (the routes that would forward it are named), or the policy also denies ordinary paths; or a URL scrape
     (VMStaticScrape, VMProbe) names a Gateway host, where the deny would cut it. Pod and service scrapes never pass the Gateway.
   - the deny policy names no port (Istio then warns that it denies ALL TCP traffic under its scope, apps #192), or its ports leave
-    a port of the Gateway's HTTP or HTTPS listeners out (a metrics path served there would not be refused);
+    a port of the Gateway's HTTP or HTTPS listeners out (a metrics path served there would not be refused), or are not strings (the
+    CRD types them as strings: apply refuses a number);
   - the same endpoint written with runs of slashes (//metrics, ///metrics, /debug//metrics, //debug/metrics/) is not refused
     TWICE, by two layers that fail differently: the policy ALONE (it matches the path as it arrives, and a service such as
     Forgejo cleans //metrics to /metrics), and istiod's meshConfig.pathNormalization (MERGE_SLASHES or
@@ -163,7 +164,7 @@ def _denies(op, seen, ports):
     """One `to.operation` refuses `seen` on every port of the Gateway: paths only, plus `ports` when they cover all its listeners."""
     if "paths" not in op or set(op) - {"paths", "ports"}:
         return False
-    if "ports" in op and not (ports and ports <= {str(p) for p in op["ports"]}):
+    if "ports" in op and not (ports and all(isinstance(p, str) for p in op["ports"]) and ports <= set(op["ports"])):
         return False
     return any(istio_path(x, seen) for x in op["paths"])
 
@@ -180,6 +181,9 @@ def port_problems(pols, ports):
             continue
         for rule in s.get("rules") or []:
             for op in (t.get("operation") or {} for t in rule.get("to") or []):
+                if not all(isinstance(x, str) for k in ("ports", "notPorts") for x in op.get(k) or []):
+                    out.append(f"{POLICY_BRICK}: {(p.get('metadata') or {}).get('name')}: ports must be strings (\"80\", not 80): the Istio CRD types "
+                               f"them as strings and apply refuses the policy, which fails the whole Kustomization")
                 if set(op) & {"paths", "notPaths", "hosts", "notHosts", "methods", "notMethods"} and not set(op) & {"ports", "notPorts"}:
                     out.append(f"{POLICY_BRICK}: {(p.get('metadata') or {}).get('name')} names no port in a rule with HTTP attributes: Istio "
                                f"denies ALL TCP traffic under its scope. Name the ports of the HTTP and HTTPS listeners ({', '.join(sorted(ports, key=int)) or '?'})")

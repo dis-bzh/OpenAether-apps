@@ -141,8 +141,8 @@ mcase("an operation narrowed by host leaves the other hosts open",
       [policy(rule={"to": [{"operation": {"hosts": ["grafana.openaether.local"], "paths": ["/metrics", "/metrics/*", "/debug/metrics", "/debug/metrics/*"]}}]})], "refuses /metrics")
 mcase("an operation narrowed by port leaves the other port open",
       [policy(rule={"to": [{"operation": {"ports": ["443"], "paths": ["/metrics", "/metrics/*", "/debug/metrics", "/debug/metrics/*"]}}]})], "refuses /metrics")
-mcase("a port-narrowed rule that names every listener port is a deny (80 and 443 given as numbers or as strings)",
-      [policy(ports=(80, 443))])
+mcase("ports given as numbers are reported: the Istio CRD types them as strings and apply refuses the policy (the whole Kustomization)",
+      [policy(ports=(80, 443))], "ports must be strings")
 mcase("RED FIRST, the 0.4.3 policy names no port: Istio denies all TCP traffic under its scope (#192)", [policy(ports=None)], "names no port")
 mcase("...and a rule with only `hosts`/`methods` and no port is reported too",
       [policy(rule={"to": [{"operation": {"methods": ["GET"]}}]})], "names no port")
