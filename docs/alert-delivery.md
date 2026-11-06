@@ -22,8 +22,11 @@ one URL per Alertmanager pod (`http://vmalertmanager-alertmanager-<i>.vmalertman
 the pod FQDN the VM operator builds for its own discovery), and vmalert sends to all of them. `test-alert-delivery.py` fails
 when the list and the `replicaCount` of the VMAlertmanager disagree: raise one, raise the other.
 
-- `VMAlertNotifierErrors` (critical) now means every address fails. A single pod being replaced fails its own sends for a
-  while and is `AlertmanagerClusterDegraded` (warning) only; before, it would have paged "every alert is lost".
+- `VMAlertNotifierErrors` (critical) now means every address fails; before, one pod being replaced would have paged "every alert
+  is lost". `VMAlertNotifierPodErrors` (warning) means ONE address has failed for 30 minutes: the redundancy is gone. A pod that
+  is down is also `AlertmanagerClusterDegraded`; a pod that is up but that vmalert cannot reach (its name does not resolve, a
+  policy drops the sends) is only `VMAlertNotifierPodErrors`, because `AlertmanagerClusterDegraded` reads the scrape and the
+  gossip, not what vmalert sends. A pod replaced in less than 30 minutes fires neither.
 - Mocked/offline: the manifest, the rule on synthetic series, the operator and vmalert sources read. Never run on a cluster.
   The drill is still to do and is the proof: delete the Alertmanager pod that holds an alert, read `/api/v2/alerts` on the
   other (it must show the alert), and read that the per-pod names resolve from a vmalert pod. Label the figures NOMINAL or

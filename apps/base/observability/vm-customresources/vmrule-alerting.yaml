@@ -17,8 +17,7 @@ spec:
       rules:
         # vmalert sends to each Alertmanager pod itself (vmalert.yaml, apps #207). This alert is "every alert is lost":
         # it needs EVERY address failing. One pod that fails is a replica being replaced, the other still receives
-        # (the case of AlertmanagerClusterDegraded below). Both counters exist from the start of vmalert, at 0, one
-        # series per address.
+        # (VMAlertNotifierPodErrors below). Both counters exist from the start of vmalert, at 0, one series per address.
         - alert: VMAlertNotifierErrors
           expr: |
             count(sum by (addr) (increase(vmalert_alerts_send_errors_total[10m])) > 0)
@@ -33,6 +32,22 @@ spec:
             description: >-
               Every alert evaluated here is lost on its way to Alertmanager: each pod it sends to fails. Check the
               Alertmanager pods, the Service and the vmalert egress policy.
+        # ONE address failing for 30 minutes: the redundancy is gone. A pod that is down is also AlertmanagerClusterDegraded;
+        # a pod that is up but that vmalert cannot reach (its name does not resolve, a policy drops the sends) is only this one.
+        - alert: VMAlertNotifierPodErrors
+          expr: sum by (addr) (increase(vmalert_alerts_send_errors_total[10m])) > 0
+          for: 30m
+          labels:
+            severity: warning
+            component: alerting
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              vmalertnotifierpoderrors"
+            summary: "VMAlert cannot hand alerts to one Alertmanager pod ({{ $labels.addr }})"
+            description: >-
+              The other pod still receives every alert, but the redundancy is gone: losing it now loses the alerts. A pod
+              that is down is also AlertmanagerClusterDegraded; for a pod that is up, check that its name resolves from a
+              vmalert pod and the vmalert egress policy.
         - alert: VMAlertRuleEvaluationErrors
           expr: sum(increase(vmalert_execution_errors_total[10m])) > 0
           for: 15m
