@@ -24,8 +24,8 @@ status line. What is still open (apps #176) is in "What is NOT delivered".
   through the Barman Cloud plugin (a primary and a replica `ObjectStore`, the `${BACKUP_*}` defaults of `cluster-identity` including the
   `.invalid` placeholders of the replica store, the Outscale checksum variables on the sidecar), a daily `ScheduledBackup` at 03:40, zone
   and host anti-affinity, 30 s tolerations, the operator's `PodDisruptionBudget`, the `switchover` update method, and the same image
-  line as `grafana-db` (`postgresql:16.15`; #162 and #163, the open scans of the 16.15 and 18.6 images, apply to it as to the others,
-  and no image was added to the inventory).
+  line as `grafana-db` (`postgresql:16.15-202611020810-system-bookworm`, the dated Debian 12 build of the same minor; it follows
+  what `grafana-db` does and no image was added to the inventory).
 - **Its own Flux Kustomization**, `forgejo-db` (group 36, `wait: true`), which `forgejo` (group 37) depends on. Not in `cnpg`: a profile
   without the forge (the `workload` profile) must not install three database pods it does not use, and a slow or failed `forgejo-db`
   must not hold `cnpg` (also `wait: true`), identity or observability back.

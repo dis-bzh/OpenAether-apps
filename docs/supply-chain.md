@@ -67,10 +67,17 @@ maintainer's own `gh` credentials, against a throwaway draft release (the asset 
 and against the published 0.4.1 release (refused, exit 1); actionlint and yamllint on `sbom.yml`. **Not observed:** the
 `workflow_dispatch` fallback above, and the refusal of a published release inside Actions.
 
-**Open, 2026-11-04 (0.4.3).** What is still red: certifi GHSA-6q48-6c7w-9gw2 (fixed in certifi 2026.10.18) in the CNPG
-PostgreSQL 16.15 and 18.6 images (apps #162 and #163). It has no waiver: the backup verifier uses certifi through botocore.
-The images are to be replaced in 0.4.4 (planned, owner decision), so the weekly scan stays red on these two until then.
-This release's image bumps remove the other reds of 0.4.2: Forgejo 15.0.11 (apps #179, `brotli-libs` CVE-2026-111497; the
+**PostgreSQL images, 2026-11-06 (0.4.4).** Until 0.4.3 the weekly scan was red on certifi GHSA-6q48-6c7w-9gw2 (fixed in
+certifi 2026.10.18) in the CNPG `postgresql:16.15` and `:18.6` images (apps #162 and #163; no waiver: the backup verifier uses
+certifi through botocore). Those plain tags are the last Debian 11 build (2026-08-31), deprecated upstream and never rebuilt.
+0.4.4 pins the dated `system` builds on Debian 12 instead, same minors: `18.6-202611030838-system-bookworm` (index
+`sha256:605c6e45e733...b1e`) and `16.15-202611020810-system-bookworm` (index `sha256:639ef58e1ecc...8d6`). **Verified, a local
+scan:** Trivy 0.69.3 (the CI version) in a container, the CI flags (`--severity CRITICAL --ignore-unfixed --exit-code 1 --config
+.github/trivy-image-vex.yaml`), amd64, database of 2026-11-06: exit 0 on both, certifi 2026.10.23, PyJWT 2.15.1. Without the VEX
+file the only HIGH findings with a fix are `apt` and `libapt-pkg6.0` 2.6.1 (CVE-2026-109518, fixed in 2.6.2), below the gate.
+**Not verified:** the Actions scan (the weekly scan closes nothing by itself: its issue key is the image reference, so the PR
+carries `Closes #162` and `Closes #163`), the arm64 images, and the rolling update of the databases, which only a cluster
+shows. This release's image bumps remove the other reds of 0.4.2: Forgejo 15.0.11 (apps #179, `brotli-libs` CVE-2026-111497; the
 same CVE is open for the Flux image in OpenAether-infra #444, handled in that repository), and the five findings that were
 waived: `alpine/k8s` 1.36.6 and 1.37.2 (CVE-2025-68121 and certifi), `k8s-sidecar` 2.14.3 (certifi), Zitadel and
 `zitadel-login` v4.20.1 (the two Next.js advisories). Read with Trivy 0.69.3 and 0.75.0 on the amd64 images, database of 2026-11-04: **a local scan**. The Actions run on the
@@ -79,13 +86,14 @@ the first scan on main after the merge is still to come. A tag pushed while a sc
 job is still green: observed at the 0.4.2 tag (run 41842416697: `Attach to a draft release` green, four scan jobs red,
 Forgejo, the CNPG operator and the two PostgreSQL images; the last three failed on a ghcr.io rate limit, #197).
 
-**Waivers: two VEX statements and one Trivy ignore entry, all renewed on 2026-11-04 after a re-reading and all ending on
-2026-12-04.** The statements: restic (CVE-2026-60002, OpenSSH in the image's alpine layer, never called; `restic` 0.19.1 is
-still the newest tag) and PyJWT in the CNPG PostgreSQL images (CVE-2026-102268, imported only by `msal`, not used). The
+**Waivers: one VEX statement and one Trivy ignore entry, both renewed on 2026-11-04 after a re-reading and both ending on
+2026-12-04.** The statement: restic (CVE-2026-60002, OpenSSH in the image's alpine layer, never called; `restic` 0.19.1 is
+still the newest tag). The PyJWT statement for the CNPG PostgreSQL images (CVE-2026-102268) was dropped on 2026-11-06: the
+new images carry PyJWT 2.15.1 and Trivy reports no PyJWT finding at CRITICAL or HIGH on them. The
 ignore entry: libexpat in the Longhorn v1.12.1 images (SUSE-SU-2026:4619-1; a reading of package data and file searches: no Longhorn process was run or traced, only `wget --help` and `ldd` in the backing-image-manager image).
 The five statements of the list above were deleted, not renewed, because the fixed images carry no such finding. Nothing
 ends on 2026-11-20 any more: `scripts/check-vex.py` passes on 2026-11-21 and on 2026-12-03, and fails from 2026-12-05 if
-the three are not re-read again or removed.
+the two are not re-read again or removed.
 
 - **VEX:** a finding that does not apply is an OpenVEX statement in `.vex/openaether-apps.openvex.json`
   (`not_affected` with a justification, an `impact_statement`, an `action_statement` and ONE `Expires: YYYY-MM-DD` in
@@ -110,8 +118,8 @@ the three are not re-read again or removed.
   `workflow_dispatch` on `claude/0.4.3-rc1` at 9fb9035 (2026-11-04; six commits before the lab-proven head e8ca37f, and none of
   the six touches an image, a workflow or the VEX file). The step `Log in to ghcr.io` printed `Login Succeeded` (read in three of
   the eight ghcr scan jobs: both red ones and one green one), **all eight ghcr scans ran**, and 38 of the 40 scan jobs were
-  green. **The two red scans are `ghcr.io/cloudnative-pg/postgresql:16.15` and `:18.6`**, one CRITICAL each, certifi
-  GHSA-6q48-6c7w-9gw2 (installed 2026.7.22, fixed in 2026.10.18): known, no waiver, apps #162 and #163, deferred to 0.4.4. On
+  green. **The two red scans were `ghcr.io/cloudnative-pg/postgresql:16.15` and `:18.6`**, one CRITICAL each, certifi
+  GHSA-6q48-6c7w-9gw2 (installed 2026.7.22, fixed in 2026.10.18): known, no waiver, apps #162 and #163, replaced in 0.4.4 (above). On
   both, the step `Tell a finding from a scan that did not run` took its branch "report present, the scan ran". The 0.4.2
   failures read `TOOMANYREQUESTS ... allowed: 44000/minute`, a limit reported per runner address: none of the eight ghcr
   scans was refused in this run, but one run does not show that the login is what lifted the limit. **Still not run:** the
@@ -124,10 +132,12 @@ the three are not re-read again or removed.
 ## What is checked on every pull request
 
 - `scripts/check-image-pins.py`: no image floats (no tag, or `latest`/`main`...). It prints how many are pinned by
-  tag only (16 of 16 today). `--require-digest` is the next step, after Renovate has rewritten the lines.
+  tag only (16 of 16 today). `--require-digest` is the next step, after Renovate has rewritten the lines. For the CNPG
+  PostgreSQL image it also refuses a tag that is not `<major>.<minor>-<12 digits>-system-bookworm|trixie` (the plain
+  `MM.mm` tag is frozen) and two different tags for one major.
 - `kubeconform` (strict) and `trivy config` on the rendered DAG, with the accepted findings in `.trivyignore.yaml`.
 - Renovate: `pinDigests` for the images of the hand-written bricks (`backup`, `foundation`), so a bump writes
-  `tag@sha256:...`. The Postgres images stay on the custom managers. Vendored dumps stay a human re-vendor.
+  `tag@sha256:...`. The Postgres images are bumped by hand ([`patching.md`](patching.md)). Vendored dumps stay a human re-vendor.
 
 ## The registry allow-list
 
