@@ -135,7 +135,11 @@ anyone. The real mitigation is the 90-day leaf life and the new key at each rene
 that does not check, for up to 90 days. Revocation is therefore best combined with replacement.
 
 - **A leaf is compromised**: `bao_admin write pki/revoke serial_number=<aa:bb:...>` (the serial is in `kubectl get secret openaether-tls -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -serial`), then `cmctl renew openaether-tls -n services-gateway` to issue a new certificate with a new key.
-  Check the CRL: `curl -s --cacert <openbao-ca> https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/crl/pem | openssl crl -noout -text` (the endpoint is not authenticated).
+  Which list shows the revocation, and when (OVH, 3 CP + 2 workers, NOMINAL, one drill, apps #130): OCSP (`/v1/pki/ocsp`) answered "revoked" at once;
+  the delta CRL (`/v1/pki/crl/delta/pem`, rebuilt every 15 minutes) listed the serial about 8 minutes later; the full CRL (`/v1/pki/crl/pem`) still had
+  0 entries 20 minutes later and shows it only at its next scheduled rebuild (not measured; its validity is 72 h, `configure.sh`). So read OCSP or
+  the delta CRL in the first hours, not the full one: `curl -s --cacert <openbao-ca> https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/crl/delta/pem | openssl crl -noout -text`
+  (the endpoints are not authenticated). The admin identity cannot force a rebuild (`pki/crl/rotate` answers 403): that takes a break-glass root token.
 
 - **Intermediate compromised or suspected** (the seal key leaked together with a snapshot, a readable backup, an admin
   token): with a break-glass root token (the admin identity can not touch mounts) disable and re-enable the `pki/` mount, which
