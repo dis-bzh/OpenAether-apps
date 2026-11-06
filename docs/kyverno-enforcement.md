@@ -65,8 +65,8 @@ Steps to switch a namespace, policy by policy (order in the next section):
    (`kubectl rollout restart`) and, on a lab, reboot a node.
 4. Roll back at once with `kubectl label ns <namespace> kyverno.openaether.io/enforce-<policy>-` (or revert the commit).
 
-The Audit noise that remains (what a flip would still hit) is tracked in apps #47: the next lab lists the remaining violations per policy and
-namespace on an idle cluster, then fixes or exempts them.
+The Audit noise that remains (what a flip would still hit) is tracked in apps #82, which took over the residuals of #47: the table "Left, and
+why" below lists them as lab 22 read them (`alloy-audit` was suspended there). Fix or exempt them before flipping the pair concerned.
 
 ## What Audit reported on a fresh cluster (lab 11, Scaleway, after an install and two worker reboots)
 

@@ -5,9 +5,9 @@
 #   - CABPT  v0.6.12 → bootstrap.cluster.x-k8s.io/v1alpha3
 # Exercised for real on edge-1 and mgmt-capi (2026-07-28).
 #
-# Prerequisite: the `scaleway-capi-credentials` Secret in capi-clusters
-# (SCW_ACCESS_KEY/SCW_SECRET_KEY/SCW_DEFAULT_PROJECT_ID — through ESO, OpenBao
-# key secret/capi/scaleway, to be seeded by the operator).
+# Prerequisite outside git: the `scaleway-capi-credentials` Secret in capi-clusters
+# (SCW_ACCESS_KEY and SCW_SECRET_KEY), created by hand with kubectl: no ExternalSecret
+# and no OpenBao path exist for it (apps/clusters/README.md, docs/key-inventory.md).
 #
 # Variables (postBuild.substitute, see apps/clusters/README.md):
 #   ${CLUSTER_NAME}      — child cluster name (e.g. edge-1)

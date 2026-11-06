@@ -167,8 +167,8 @@ def metrics_problems(pols, routes, normalisation="MERGE_SLASHES"):
     """`routes` is [(file, HTTPRoute)]; `normalisation` is istiod's pathNormalization (mesh_normalisation).
 
     Every metrics path is refused at the Gateway, ordinary paths are not, and the slash spellings of a metrics path (the forge
-    answered //metrics with its metrics at 0.4.1 and 0.4.2: Forgejo cleans the path, the policy matched it literally) are refused
-    by two layers each on its own: the policy as it is shipped, and istiod merging the slashes before the policy sees the path.
+    answered //metrics with its metrics at 0.4.2, measured, 0.4.1 not run: Forgejo cleans the path, the policy matched it literally)
+    are refused by two layers each on its own: the policy as it is shipped, and istiod merging the slashes before the policy sees the path.
     """
     errors = []
     merges = normalisation in MERGING
@@ -184,7 +184,7 @@ def metrics_problems(pols, routes, normalisation="MERGE_SLASHES"):
             via = [f"{d['metadata'].get('namespace')}/{d['metadata']['name']}" for _, d in routes if forwards(d, slashed[0])]
             errors.append(f"{POLICY_BRICK}: the policy alone leaves {len(slashed)} slash spelling(s) of {base} open "
                           f"({', '.join(slashed[:4])}{', ...' if len(slashed) > 4 else ''}): a service that cleans the path serves its metrics "
-                          f"(Forgejo did at 0.4.1 and 0.4.2)" + (f"; routes that forward {slashed[0]}: {', '.join(via)}" if via else ""))
+                          f"(Forgejo did at 0.4.2; 0.4.1 not run)" + (f"; routes that forward {slashed[0]}: {', '.join(via)}" if via else ""))
     # layer 1: istiod hands the policy the merged path
     if not merges:
         errors.append(f"{ISTIOD}: meshConfig.pathNormalization.normalization is {normalisation or 'not set (Istio applies BASE)'}, not one of "

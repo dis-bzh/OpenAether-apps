@@ -137,10 +137,10 @@ spec:
 # Gateway does not route /metrics to the Internet (forgejo/httproute.yaml). Ingress for vmagent is in
 # forgejo/networkpolicy.yaml.
 # Since 0.4.3 the endpoint asks for a bearer token ([metrics] TOKEN): the Gateway's refusal did not cover //metrics at
-# 0.4.1 and 0.4.2. The token is secret/forgejo/metrics, read here from the Secret forgejo-metrics of THIS namespace
-# (the operator resolves a scrape's Secret next to the scrape; the ExternalSecret is
-# apps/base/observability/externalsecret-forgejo-metrics.yaml). Without the Secret the operator skips this scrape only
-# (error log); a wrong token is "unexpected status code 401", up == 0.
+# 0.4.2 (measured; 0.4.1 has the same apps/ tree, not run). The token is secret/forgejo/metrics, read here from the
+# Secret forgejo-metrics of THIS namespace (the operator resolves a scrape's Secret next to the scrape; the
+# ExternalSecret is apps/base/observability/externalsecret-forgejo-metrics.yaml). Without the Secret the operator
+# skips this scrape only (error log); a wrong token is "unexpected status code 401", up == 0.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:

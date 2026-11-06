@@ -372,6 +372,11 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: `bao status` on each of the three pods, `openbao-0` (the pod the restore ran on) included; every standby must show an `Active Node Address` (#184: lab 28B noted "no active address"; the exact field name was not re-read on a cluster).
 - Do: restart a pod that shows none (logins answer 500, `local node not active but active cluster node not found`): `kubectl -n foundation-vault delete pod openbao-N`, the PVC stays. No alert sees it while another pod is active (`docs/detection.md`). In lab 28B (Scaleway, 3 CP + 6 W, DR chain, INCIDENT) it was `openbao-0`, and logins failed for 25+ minutes, the time until a person restarted it. `apps/base/foundation/vault/README.md`, Disaster recovery, step 3.
 
+### After revoking a certificate of the OpenBao PKI (no alert)
+
+- Check: which list the consumer reads. OCSP answers "revoked" at once; the delta CRL is rebuilt every 15 minutes (`configure.sh`; #130 reported about 8 minutes, but the stored evidence of that drill has no check times and the lab 15A results table says the delta CRL was also empty "minutes later"); the full CRL only at its next scheduled rebuild (reported still empty 20 minutes after the revoke; OVH, 3 CP + 2 workers, NOMINAL, one drill, #130). A consumer that reads only the full CRL does not see the revocation yet.
+- Do: read OCSP or the delta CRL in the first hours, not the full CRL (OCSP and delta CRL commands: `apps/base/foundation/vault/pki-root-offline-runbook.md`, section 6). The admin identity cannot force a rebuild (`pki/crl/rotate` answers 403 for it): that takes a break-glass root token. No client of the platform checks revocation anyway, so replace the certificate (`cmctl renew`) rather than wait for a list.
+
 ## Alerting chain
 
 ### VMAlertNotifierErrors

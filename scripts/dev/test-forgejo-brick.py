@@ -45,9 +45,9 @@ broke it:
      the data volume; both are the SAME script, RUN against a temporary tree (old and fresh locks, ref locks and not, index.lock,
      symlinks, other directories): the init removes every ref/packed-refs/HEAD/config/shallow lock, the sweeper only the old ones; both
      log paths and never contents, exit 0, and the sweeper stops on TERM at once and refuses an age that is not a number.
-  16. /metrics asks for a bearer token (0.4.3: the Gateway's refusal did not cover //metrics at 0.4.1 and 0.4.2, and the forge answered it
-     with its metrics): the Deployment gets GITEA__metrics__TOKEN from a Secret through a NOT optional secretKeyRef (an optional one starts
-     the forge open), the token is not in the chart values, the Secret is written by an ExternalSecret in services-git AND by a twin in
+  16. /metrics asks for a bearer token (0.4.3: the Gateway's refusal did not cover //metrics at 0.4.2, and the forge answered it
+     with its metrics; 0.4.1 has the same tree, not run): the Deployment gets GITEA__metrics__TOKEN from a Secret through a NOT
+     optional secretKeyRef (an optional one starts the forge open), the token is not in the chart values, the Secret is written by an ExternalSecret in services-git AND by a twin in
      services-observability (listed in that brick) from the same OpenBao key and property (seeded by configure.sh, rule 1), and the
      VMPodScrape `forgejo` sends it as authorization.credentials from the twin: without it the scrape goes 401.
 Static: it proves the wiring, not a cluster. Run: python3 -I scripts/dev/test-forgejo-brick.py [--selftest]

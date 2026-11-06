@@ -77,9 +77,9 @@ spec:
       trustDomain: cluster.local
       # Runs of slashes in a request path are merged BEFORE the AuthorizationPolicies, the routes and the services see
       # it (//metrics becomes /metrics). Without it the forge answered https://forge.<domain>//metrics with its
-      # Prometheus metrics at 0.4.1 and 0.4.2: deny-metrics-paths matched /metrics literally and Forgejo cleans
-      # //metrics to /metrics itself. The policy lists the // spellings too (services-gateway), so this is one of two
-      # layers that each stop it; scripts/check-gateway-routes.py pins both.
+      # Prometheus metrics at 0.4.2 (measured; 0.4.1 has the same apps/ tree, not run): deny-metrics-paths matched
+      # /metrics literally and Forgejo cleans //metrics to /metrics itself. The policy lists the // spellings too
+      # (services-gateway), so this is one of two layers that each stop it; scripts/check-gateway-routes.py pins both.
       #
       # MERGE_SLASHES, not DECODE_AND_MERGE_SLASHES: the latter also unescapes %2F and forwards the decoded slash,
       # which no host needed here (none served metrics on a %2F spelling) and which would change what a client that
@@ -91,6 +91,7 @@ spec:
       # networking.istio.io/use-waypoint). ztunnel is L4 and has no path. A route of yours whose service gives a
       # meaning to `//` in a path (an object key, a URL embedded in a path) receives it merged:
       # docs/public-exposure.md. Istio pushes a changed meshConfig to the running proxies by xDS: no restart (seen on
-      # a local rig, not on a cluster).
+      # a local rig and on one cluster move, n=1: after the apps-ref move of a proof lab the istiod and Gateway pods
+      # kept their names with restartCount 0, and Envoy's configuration dump holds "merge_slashes": true).
       pathNormalization:
         normalization: MERGE_SLASHES

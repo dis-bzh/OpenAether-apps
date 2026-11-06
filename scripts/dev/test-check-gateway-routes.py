@@ -79,7 +79,8 @@ with tempfile.TemporaryDirectory() as tmp:
 
 
 # --- the metrics endpoints are refused at the Gateway (Grafana /metrics answered 200 to anyone on the public Gateway) ---
-# The policy as shipped since 0.4.3, and the one of 0.4.1 and 0.4.2 (four literal paths: //metrics reached the forge's metrics).
+# The policy as shipped since 0.4.3, and the one of 0.4.1 and 0.4.2 (four literal paths: //metrics reached the forge's metrics
+# at 0.4.2, measured; 0.4.1 has the same tree and was not run).
 SHIPPED = ("/metrics", "/metrics/*", "/debug/metrics", "/debug/metrics/*", "//*", "/debug//*")
 V042 = SHIPPED[:4]
 
@@ -137,8 +138,9 @@ mcase("a DENY with an empty rule refuses every request: caught as too wide", [po
 mcase("a DENY on /* is too wide", [policy(("/*",))], "also refuses /login")
 mcase("a prefix /metrics* would refuse /metricsx: too wide", [policy(("/metrics*", "/debug/metrics*"))], "also refuses /metricsx")
 
-# --- slash spellings: the forge answered https://forge.<domain>//metrics with its metrics at 0.4.1 and 0.4.2 (the policy listed /metrics
-# literally, nothing merged slashes, Forgejo cleans //metrics to /metrics). Two layers, each on its own, and the checker pins both. ---
+# --- slash spellings: the forge answered https://forge.<domain>//metrics with its metrics at 0.4.2, measured, 0.4.1 not run
+# (the policy listed /metrics literally, nothing merged slashes, Forgejo cleans //metrics to /metrics). Two layers, each on its
+# own, and the checker pins both. ---
 mcase("DECODE_AND_MERGE_SLASHES merges too: passes", [policy()], norm="DECODE_AND_MERGE_SLASHES")
 mcase("RED FIRST, the 0.4.2 policy (four literal paths) with a merging mesh: the policy alone leaves //metrics open",
       [policy(V042)], "the policy alone leaves", absent="pathNormalization")
