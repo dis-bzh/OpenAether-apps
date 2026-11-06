@@ -108,8 +108,8 @@ ignore entry (see **Expiry day** below) and from 2026-12-05 for the two statemen
   single 503 on `gh issue close` turned a clean weekly scan red on 2026-11-03 (#209). HIGH findings are still not scanned. Only a scan that wrote a report does this. A scan that
   did not run (a pull refused or rate limited, #197; no report on disk) is **only a red job**: it fails with a message
   and opens, comments on and closes no issue, so an open `[vuln]` issue stays as it was. **Residual:** nothing announces
-  an image that then stays unscanned until someone reads the run; there is no retry, and the next chance is the next
-  scheduled run (weekly). **The #197 change (the `ghcr.io` login with the workflow token, and the step that tells a
+  an image that then stays unscanned until someone reads the run; there is no retry of the scan itself (apps #208), and the
+  next chance is the next scheduled run (weekly). **The #197 change (the `ghcr.io` login with the workflow token, and the step that tells a
   finding from a scan that did not run) has run in Actions, on the branch.** Rung: workflow run 41927056554, a
   `workflow_dispatch` on `claude/0.4.3-rc1` at 9fb9035 (2026-11-04; six commits before the lab-proven head e8ca37f, and none of
   the six touches an image, a workflow or the VEX file). The step `Log in to ghcr.io` printed `Login Succeeded` (read in three of
