@@ -205,7 +205,8 @@ spec:
       # the same fault, and a Cluster for which the first alert is not firing (it archived before and its counters were
       # not reset) still pages through CnpgWalArchiveFailing. `equal` is cnpg_io_cluster alone, because
       # CnpgWalArchiveFailing is `sum by (cnpg_io_cluster)` and has no namespace label (two Clusters of the same name
-      # in two namespaces would share it; the profiles name theirs apart). scripts/dev/test-alert-delivery.py pins the labels.
+      # in two namespaces would share it; the profiles name theirs apart). scripts/dev/test-alert-delivery.py pins
+      # the labels.
       - source_matchers:
           - alertname="CnpgWalNeverArchived"
         target_matchers:
