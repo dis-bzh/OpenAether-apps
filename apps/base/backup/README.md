@@ -176,8 +176,8 @@ The dump-load test has the same window on a fresh install, with another cause: `
 nothing to load. A restic repository that does not exist (`restic cat config` exits 10, which is that case and no other) is a SKIP for that store: `SKIP <cluster>/<store>/dump: the <store> restic repository does not exist yet`
 in the log of the `load` init container; the store reports no `ok` series and the Job succeeds. Kept as FAILURES: a store that passed before and has no repository now (the publishing stage reads the last success it published;
 if it cannot read it, every skipped store fails), a refused key, a wrong password, a missing bucket (restic is stopped by the timeout, not exit 10), a repository that exists with no snapshot, a dump missing from the snapshot, a dump that
-does not load or is stale. Limit: a skip that lasts usually means `cnpg-dump` never succeeds, which `BackupNotSucceededRecently` reports (about 37 hours after the CronJob was created); but a wrong bucket or prefix on the test
-side exits 10 too, and nothing reports that (`RestoreTestNeverReported` watches the CNPG test only). Rung: mocked stores with a real restic (`test-restore-test-dumps.sh`) and the Python stages (`test-restore-test-cnpg.py`), not run on a cluster.
+does not load or is stale. Limit: a skip that lasts usually means `cnpg-dump` never succeeds, which `BackupNotSucceededRecently` reports (about 37 hours after the CronJob was created); and a wrong bucket or prefix on the test
+side exits 10 too: since 0.4.4 `RestoreTestNeverReported` also watches this test (kind `dump`, its CronJob older than 3 days with no series), so a skip that lasts is reported without waiting for the dump. Rung: mocked stores with a real restic (`test-restore-test-dumps.sh`) and the Python stages (`test-restore-test-cnpg.py`), not run on a cluster.
 
 Lab pass criteria (M3; observed in lab 20, results below). On a cluster with both stores seeded: (1) after the first night `oa_restore_test_ok` is 1 for the four
 `kind="cnpg"` label sets (2 clusters x 2 stores, `mode="latest"`), the four `kind="dump"` ones and, after the first Sunday, the four `mode="pitr"` ones,
