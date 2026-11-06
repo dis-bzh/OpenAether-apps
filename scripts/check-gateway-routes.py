@@ -10,6 +10,8 @@ to that Gateway is reachable by anyone who sets the Host header. This scans the 
   - a metrics endpoint (METRICS_PATHS) is not refused at the Gateway: no listed DENY AuthorizationPolicy covers it for every
     caller and host (the routes that would forward it are named), or the policy also denies ordinary paths; or a URL scrape
     (VMStaticScrape, VMProbe) names a Gateway host, where the deny would cut it. Pod and service scrapes never pass the Gateway.
+  - the deny policy names no port (Istio then warns that it denies ALL TCP traffic under its scope, apps #192), or its ports leave
+    a port of the Gateway's HTTP or HTTPS listeners out (a metrics path served there would not be refused);
   - the same endpoint written with runs of slashes (//metrics, ///metrics, /debug//metrics, //debug/metrics/) is not refused
     TWICE, by two layers that fail differently: the policy ALONE (it matches the path as it arrives, and a service such as
     Forgejo cleans //metrics to /metrics), and istiod's meshConfig.pathNormalization (MERGE_SLASHES or
@@ -39,7 +41,7 @@ MERGING = ("MERGE_SLASHES", "DECODE_AND_MERGE_SLASHES")
 METRICS_PATHS = ("/metrics", "/debug/metrics")
 # /x/metrics: a repository (Forgejo) or a dashboard named "metrics". It is not the endpoint and must be served.
 BENIGN_PATHS = ("/", "/login", "/api/health", "/ui/v2/login", "/.well-known/openid-configuration", "/metricsx", "/x/metrics")
-KINDS = ("HTTPRoute", "AuthorizationPolicy", "VMStaticScrape", "VMProbe")
+KINDS = ("HTTPRoute", "AuthorizationPolicy", "VMStaticScrape", "VMProbe", "kind: Gateway")
 
 
 def load_docs(root):
@@ -61,6 +63,14 @@ def gateway_routes(docs):
     """[(file, HTTPRoute)] for every HTTPRoute whose parentRef is the Gateway."""
     return [(f, d) for f, d in docs if d.get("kind") == "HTTPRoute" and any(
         r.get("name") == GATEWAY and r.get("kind", "Gateway") == "Gateway" for r in (d.get("spec") or {}).get("parentRefs") or [])]
+
+
+def gateway_ports(docs):
+    """The ports of the Gateway's HTTP and HTTPS listeners, as strings (a TLS or TCP listener is not read: HTTP attributes cannot
+    match there, which is why the policy names ports at all)."""
+    return frozenset(str(l["port"]) for _, d in docs if d.get("kind") == "Gateway" and (d.get("metadata") or {}).get("name") == GATEWAY
+                     and (d.get("metadata") or {}).get("namespace") == GATEWAY_NS
+                     for l in (d.get("spec") or {}).get("listeners") or [] if l.get("protocol") in ("HTTP", "HTTPS") and l.get("port"))
 
 
 def find_routes(root, docs=None):
@@ -123,10 +133,12 @@ def mesh_normalisation(root):
     return None
 
 
-def gateway_denies(pols, path, merge=False):
+def gateway_denies(pols, path, merge=False, ports=frozenset()):
     """True when a DENY policy applied to the Gateway refuses EVERY request for `path`, whoever sends it.
 
     `merge`: the mesh merges slashes (istiod pathNormalization), so the policy is matched against the merged path.
+    `ports`: the ports of the Gateway's HTTP and HTTPS listeners (gateway_ports). An operation with `ports` refuses the request
+    only if it names all of them; with none known it refuses nothing. `notPorts` narrows to an unknown set: it never counts.
 
     A rule narrowed by `from` or `when` leaves some callers through; an operation narrowed by host, port or method leaves some
     requests through; a policy outside the Gateway's namespace or aimed at another target is inert. A rule with no `to` denies all.
@@ -142,9 +154,36 @@ def gateway_denies(pols, path, merge=False):
                 continue
             ops = [t.get("operation") or {} for t in rule.get("to") or []]
             seen = merge_slashes(path) if merge else path
-            if not ops or any(set(op) == {"paths"} and any(istio_path(x, seen) for x in op["paths"]) for op in ops):
+            if not ops or any(_denies(op, seen, ports) for op in ops):
                 return True
     return False
+
+
+def _denies(op, seen, ports):
+    """One `to.operation` refuses `seen` on every port of the Gateway: paths only, plus `ports` when they cover all its listeners."""
+    if "paths" not in op or set(op) - {"paths", "ports"}:
+        return False
+    if "ports" in op and not (ports and ports <= {str(p) for p in op["ports"]}):
+        return False
+    return any(istio_path(x, seen) for x in op["paths"])
+
+
+def port_problems(pols, ports):
+    """Apps #192: a DENY rule that carries HTTP attributes and no port makes Istio warn that it denies all TCP traffic under its
+    scope ("it is recommended to explicitly specify the port"); a TCP or TLS listener added to the Gateway would be cut."""
+    out = []
+    if not ports:
+        out.append(f"{POLICY_BRICK}: no HTTP or HTTPS listener of {GATEWAY} (ns {GATEWAY_NS}) found: the ports of the deny policy cannot be checked")
+    for p in pols:
+        s = p.get("spec") or {}
+        if s.get("action") != "DENY" or not any(t.get("kind") == "Gateway" and t.get("name") == GATEWAY for t in s.get("targetRefs") or []):
+            continue
+        for rule in s.get("rules") or []:
+            for op in (t.get("operation") or {} for t in rule.get("to") or []):
+                if set(op) & {"paths", "notPaths", "hosts", "notHosts", "methods", "notMethods"} and not set(op) & {"ports", "notPorts"}:
+                    out.append(f"{POLICY_BRICK}: {(p.get('metadata') or {}).get('name')} names no port in a rule with HTTP attributes: Istio "
+                               f"denies ALL TCP traffic under its scope. Name the ports of the HTTP and HTTPS listeners ({', '.join(sorted(ports, key=int)) or '?'})")
+    return out
 
 
 def forwards(route, path):
@@ -163,8 +202,9 @@ def forwards(route, path):
     return backends
 
 
-def metrics_problems(pols, routes, normalisation="MERGE_SLASHES"):
-    """`routes` is [(file, HTTPRoute)]; `normalisation` is istiod's pathNormalization (mesh_normalisation).
+def metrics_problems(pols, routes, normalisation="MERGE_SLASHES", ports=frozenset()):
+    """`routes` is [(file, HTTPRoute)]; `normalisation` is istiod's pathNormalization (mesh_normalisation); `ports` are the
+    Gateway's HTTP and HTTPS listener ports (gateway_ports).
 
     Every metrics path is refused at the Gateway, ordinary paths are not, and the slash spellings of a metrics path (the forge
     answered //metrics with its metrics at 0.4.1 and 0.4.2: Forgejo cleans the path, the policy matched it literally) are refused
@@ -173,13 +213,13 @@ def metrics_problems(pols, routes, normalisation="MERGE_SLASHES"):
     errors = []
     merges = normalisation in MERGING
     for base in METRICS_PATHS:
-        open_ = [p for p in (base, base + "/", base + "/x") if not gateway_denies(pols, p)]
+        open_ = [p for p in (base, base + "/", base + "/x") if not gateway_denies(pols, p, ports=ports)]
         if open_:
             via = [f"{d['metadata'].get('namespace')}/{d['metadata']['name']}" for _, d in routes if forwards(d, base)]
             errors.append(f"{POLICY_BRICK}: no listed DENY AuthorizationPolicy on {GATEWAY} (ns {GATEWAY_NS}) refuses "
                           f"{', '.join(open_)}" + (f"; routes that forward {base}: {', '.join(via)}" if via else ""))
         # layer 2: the policy alone, as if the mesh did not merge (the mesh setting can be lost on its own: another file, another Kustomization)
-        slashed = [p for p in slash_spellings(base) if not gateway_denies(pols, p, merge=False)]
+        slashed = [p for p in slash_spellings(base) if not gateway_denies(pols, p, merge=False, ports=ports)]
         if slashed:
             via = [f"{d['metadata'].get('namespace')}/{d['metadata']['name']}" for _, d in routes if forwards(d, slashed[0])]
             errors.append(f"{POLICY_BRICK}: the policy alone leaves {len(slashed)} slash spelling(s) of {base} open "
@@ -190,8 +230,8 @@ def metrics_problems(pols, routes, normalisation="MERGE_SLASHES"):
         errors.append(f"{ISTIOD}: meshConfig.pathNormalization.normalization is {normalisation or 'not set (Istio applies BASE)'}, not one of "
                       f"{', '.join(MERGING)}: //metrics reaches the services with the slashes (Forgejo answers it with its metrics)")
     errors += [f"{POLICY_BRICK}: a DENY policy on {GATEWAY} also refuses {p}, which the services serve"
-               for p in BENIGN_PATHS if gateway_denies(pols, p) or gateway_denies(pols, p, merge=True)]
-    return errors
+               for p in BENIGN_PATHS if gateway_denies(pols, p, ports=ports) or gateway_denies(pols, p, merge=True, ports=ports)]
+    return errors + port_problems(pols, ports)
 
 
 def scrape_problems(docs, hosts):
@@ -246,7 +286,7 @@ def main():
     found, errors = find_routes(REPO, docs)
     register = yaml.safe_load((REPO / REGISTER).read_text()) or {}
     errors += check(found, register, deleted_by_component((REPO / COMPONENT).read_text()))
-    errors += metrics_problems(policies(REPO, docs), gateway_routes(docs), mesh_normalisation(REPO))
+    errors += metrics_problems(policies(REPO, docs), gateway_routes(docs), mesh_normalisation(REPO), gateway_ports(docs))
     errors += scrape_problems(docs, [r.get("host") for r in register.get("routes") or []])
     if errors:
         print(f"{len(errors)} problem(s):", file=sys.stderr)

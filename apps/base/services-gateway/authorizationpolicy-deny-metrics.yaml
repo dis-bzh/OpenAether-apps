@@ -16,6 +16,16 @@
 # Not covered: a %2F spelling (/%2fmetrics) and case or ;param variants reach the service as written; no service of
 # this repository served metrics on one (measured on a local rig, not on a cluster). scripts/check-gateway-routes.py
 # pins layers 1 and 2.
+#
+# PORTS (apps #192). A DENY rule with only HTTP attributes and no port makes Istio warn that it denies ALL traffic to
+# TCP ports under its scope, so a TCP or TLS listener added to the Gateway would be cut. The operation therefore names
+# the ports of the two listeners of gateway-openaether.yaml, 80 (http) and 443 (https): the ports of the Gateway PODS,
+# which is what the policy matches. Read in Istio 1.31.3: the generated Service has port == targetPort, and the pod
+# binds them (sysctl ip_unprivileged_port_start=0, kept because istiod.yaml sets no gateways.securityContext). The
+# repository agrees: the targetPort of service-nodeport.yaml and the ingress ports of the openaether-gateway
+# CiliumNetworkPolicy are 80 and 443. A listener added to the Gateway must be added here:
+# scripts/check-gateway-routes.py fails when a port is left out (a metrics path served there would not be refused).
+# NOT RUN on a cluster: the proof is a sweep that still reads 403 on /metrics.
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
@@ -33,6 +43,7 @@ spec:
   rules:
     - to:
         - operation:
+            ports: ["80", "443"]
             paths:
               - /metrics
               - /metrics/*
