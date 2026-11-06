@@ -35,7 +35,7 @@ Component `apps/flux/components/alert-delivery-probe`, off in every profile, for
 - While `AlertDeliveryNotAcknowledged` fires, Alertmanager **inhibits the Watchdog**: the heartbeat stops and the external
   service pages you through its own channel. So a broken chat leg is reported out of band without a second URL.
 - A second inhibit rule mutes `CnpgWalArchiveFailing` while `CnpgWalNeverArchived` fires for the same Cluster (`equal: [cnpg_io_cluster]`): one fault, one critical page instead of two
-  ten minutes apart. The configuration is read, not run: no Alertmanager was started for it.
+  ten minutes apart (one observation, Scaleway 3 CP + 6 W, NOMINAL). The configuration is read, not run: no Alertmanager was started for it.
 
 Limits, stated: the failing-chat alert cannot reach the chat; an Alertmanager restart is covered because counters keep their
 history in the window, but a lost counter series is not; the alert names above are tested on synthetic counters, the real

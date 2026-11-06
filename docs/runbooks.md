@@ -80,7 +80,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `kubectl -n <ns> logs <cluster>-1 -c postgres | grep -i archive`; the S3 secret and bucket.
 - Do: Restore the archive credentials or bucket; a stuck WAL fills the primary disk, so act within hours.
-- Reads: muted by an Alertmanager inhibit rule while `CnpgWalNeverArchived` fires for the same Cluster (`equal: [cnpg_io_cluster]`, `vmalert.yaml`): one fault, one page. Mocked only (`scripts/dev/test-alert-delivery.py` reads the configuration; no Alertmanager was run). This alert has no namespace label (`sum by (cnpg_io_cluster)`), so two Clusters of the same name in two namespaces would share the mute. It pages by itself for a Cluster that archived before, and when the first alert has resolved.
+- Reads: muted by an Alertmanager inhibit rule while `CnpgWalNeverArchived` fires for the same Cluster (`equal: [cnpg_io_cluster]`, `vmalert.yaml`): one fault, one page. Mocked only (`scripts/dev/test-alert-delivery.py` reads the configuration; no Alertmanager was run). This alert has no namespace label (`sum by (cnpg_io_cluster)`), so two Clusters of the same name in two namespaces would share the mute. It pages by itself for a Cluster for which the first alert is not firing (one that archived before and whose archiver counters were not reset), and when the first alert has resolved.
 
 ### CnpgWalNeverArchived
 
