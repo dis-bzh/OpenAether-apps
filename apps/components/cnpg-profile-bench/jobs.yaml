@@ -42,7 +42,7 @@ spec:
           emptyDir: {sizeLimit: 1Gi}
       containers:
         - name: bench
-          image: ghcr.io/cloudnative-pg/postgresql:18.6
+          image: ghcr.io/cloudnative-pg/postgresql:18.6-202611030838-system-bookworm
           # -P is the profile label of the row, -T the endpoints: the Service of the primary and the pooler (ha
           # only: delete the
           # second -T for light and standard). Scale 10 is about 160 MB; raise -s so the data exceeds shared_buffers
@@ -136,7 +136,7 @@ spec:
           persistentVolumeClaim: {claimName: NAME-zeroloss-log}
       containers:
         - name: writer
-          image: ghcr.io/cloudnative-pg/postgresql:18.6
+          image: ghcr.io/cloudnative-pg/postgresql:18.6-202611030838-system-bookworm
           # RUN SECS LOGDIR WORKERS RATE: 300 s covers 60 s before the fault, the fault and the recovery. PGHOST is
           # the Service
           # under test: NAME-rw, or NAME-pooler-rw to measure what the pooler hides.
@@ -212,7 +212,7 @@ spec:
           persistentVolumeClaim: {claimName: NAME-zeroloss-log}
       containers:
         - name: checker
-          image: ghcr.io/cloudnative-pg/postgresql:18.6
+          image: ghcr.io/cloudnative-pg/postgresql:18.6-202611030838-system-bookworm
           command: [bash, -c, 'bash /scripts/db-zeroloss.sh check "$RUN" /log/$RUN']
           env:
             - {name: RUN, value: lab1}

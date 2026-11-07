@@ -92,7 +92,7 @@ spec:
             # Stage 1: the live side of the comparison, read before anything is restored. Only this container holds the
             # database credentials, and only the next one holds the ServiceAccount token (apps #74).
             - name: source
-              image: ghcr.io/cloudnative-pg/postgresql:18.6
+              image: ghcr.io/cloudnative-pg/postgresql:18.6-202611030838-system-bookworm
               command: ["/bin/sh", "/scripts/source-snapshot.sh"]
               env:
                 - { name: HOME, value: /tmp }
@@ -194,7 +194,7 @@ spec:
             # Stage 1: the live side of the comparison, read before anything is restored. Only this container holds the
             # database credentials, and only the next one holds the ServiceAccount token (apps #74).
             - name: source
-              image: ghcr.io/cloudnative-pg/postgresql:18.6
+              image: ghcr.io/cloudnative-pg/postgresql:18.6-202611030838-system-bookworm
               command: ["/bin/sh", "/scripts/source-snapshot.sh"]
               env:
                 - { name: HOME, value: /tmp }

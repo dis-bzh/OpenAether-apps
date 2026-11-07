@@ -25,7 +25,7 @@ metadata:
     openaether.io/component: grafana-db
 spec:
   instances: 3
-  imageName: ghcr.io/cloudnative-pg/postgresql:16.15
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.15-202611020810-system-bookworm
   primaryUpdateStrategy: unsupervised
   # See cluster.yaml: replicas first, then a switchover, instead of restarting the only writer in place.
   primaryUpdateMethod: switchover

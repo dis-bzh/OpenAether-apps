@@ -139,8 +139,8 @@ def main():
         check(not c["metadata"]["name"].startswith("rt-") and "openaether.io/restore-test" not in c["metadata"].get("labels", {}),
               "%s: the Cluster is not mistaken for a restore-test scratch Cluster (Kyverno guard)" % p)
         check(spec.get("enableSuperuserAccess") is False, "%s: enableSuperuserAccess is false" % p)
-        check(spec["imageName"].startswith("ghcr.io/cloudnative-pg/postgresql:") and re.search(r":\d+\.\d+$", spec["imageName"]),
-              "%s: the engine image is the pinned CNPG image" % p)
+        check(re.fullmatch(r"ghcr\.io/cloudnative-pg/postgresql:\d+\.\d+-\d{12}-system-(bookworm|trixie)", spec["imageName"]),
+              "%s: the engine image is a dated CNPG system build (the plain MM.mm tag is deprecated)" % p)
         hba = spec["postgresql"]["pg_hba"]
         check(hba[0] == "hostnossl all all all reject" and "md5" not in " ".join(hba) and "trust" not in " ".join(hba)
               and hba[-1] == "hostssl all all all scram-sha-256", "%s: TLS and SCRAM only (no md5, no trust, plain TCP rejected)" % p)
