@@ -70,7 +70,7 @@
       labels: ["dependencies", "container-image"],
     },
     {
-      description: "The Postgres images (dated tags, <major>.<minor>-<12 digits>-system-bookworm) are bumped by hand with each PostgreSQL minor, not by Renovate: a regex bump of the minor would write a tag that does not exist. See docs/patching.md; scripts/check-image-pins.py checks the form and one tag per major.",
+      description: "The Postgres images (dated tags, <major>.<minor>-<12 digits>-system-bookworm) are bumped by hand with each PostgreSQL minor, not by Renovate: a regex on the minor goes silent on a dated tag, and one on the whole tag opens a PR (and a database roll) per weekly build. See docs/patching.md; scripts/check-image-pins.py checks the form and one tag per major over the rendered DAG.",
       matchManagers: ["kubernetes"],
       matchPackageNames: ["ghcr.io/cloudnative-pg/postgresql"],
       enabled: false,

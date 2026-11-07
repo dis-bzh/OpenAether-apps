@@ -31,12 +31,20 @@ Every bump is a reviewed PR, never auto-merged: Flux only reconciles what a pers
 **The PostgreSQL image is bumped by hand, each quarter with the PostgreSQL minor.** It is a dated system build,
 `ghcr.io/cloudnative-pg/postgresql:<major>.<minor>-<12 digits>-system-bookworm`, the same tag on every line of a major
 (`grep -rn 'cloudnative-pg/postgresql:' apps/`). The plain `MM.mm` tags are a frozen Debian 11 build and the undated
-`MM.mm-system-bookworm` is rebuilt every Monday: neither is used. Renovate is off for these lines, because it would write
-`18.7-<old date>-system-bookworm`, a tag that does not exist. To bump: take the newest `<major>.<minor>-<12 digits>-system-bookworm`
+`MM.mm-system-bookworm` is rebuilt every Monday: neither is used. Renovate is off for these lines: a regex that reads only
+`MM.mm` goes silent on a dated tag, and one that reads the whole tag would open a PR per weekly build, each merge rolling
+the databases. Also bump when the weekly SBOM scan opens a `[vuln]` issue on this image: Renovate no longer sees it, so
+the scan is what says a fix is due between two quarters. To bump: take the newest `<major>.<minor>-<12 digits>-system-bookworm`
 of the new minor from the registry's `tags/list`, scan it with the CI Trivy flags ([`supply-chain.md`](supply-chain.md)), replace
 the tag on every line, and run `scripts/check-image-pins.py` (form, one tag per major) and `scripts/dev/check-pg-dump-version.sh`.
+`check-image-pins.py` reads the rendered DAG, which holds 10 of the 16 lines (the backup jobs, `cnpg`, `forgejo-db`): the three
+profile Clusters and the three bench Jobs are not in it, so the grep above is what covers them.
 Both majors may go in one commit, but change the image and nothing else in a Cluster: with `primaryUpdateMethod: switchover` the
 CNPG webhook refuses an image change together with a `postgresql.parameters` change. A lab proves the rolling update, not this page.
+
+Two follow-ups are due. Bookworm: CNPG full support ended 2026-06-10 and Debian LTS ends 2028-06-30, so plan the trixie move
+before then. The `system` flavour is deprecated upstream, and the `verify` and `dump-load-test` CronJobs and the bench Job
+need its python3 (and `verify` its boto3): the `standard` flavour has none.
 
 ## How a fix is noticed
 

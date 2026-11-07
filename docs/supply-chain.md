@@ -134,7 +134,9 @@ the two are not re-read again or removed.
 - `scripts/check-image-pins.py`: no image floats (no tag, or `latest`/`main`...). It prints how many are pinned by
   tag only (16 of 16 today). `--require-digest` is the next step, after Renovate has rewritten the lines. For the CNPG
   PostgreSQL image it also refuses a tag that is not `<major>.<minor>-<12 digits>-system-bookworm|trixie` (the plain
-  `MM.mm` tag is frozen) and two different tags for one major.
+  `MM.mm` tag is frozen) and two different tags for one major. It reads the rendered DAG: the three database-profile
+  Clusters and the bench Jobs are not in it, so the grep of [`patching.md`](patching.md) is what covers them
+  (`scripts/dev/test-cnpg-profiles.py` checks the form of the three Clusters, not that they equal the others).
 - `kubeconform` (strict) and `trivy config` on the rendered DAG, with the accepted findings in `.trivyignore.yaml`.
 - Renovate: `pinDigests` for the images of the hand-written bricks (`backup`, `foundation`), so a bump writes
   `tag@sha256:...`. The Postgres images are bumped by hand ([`patching.md`](patching.md)). Vendored dumps stay a human re-vendor.
