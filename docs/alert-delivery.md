@@ -1,7 +1,9 @@
 # Alert delivery: what is proven, what is not
 
-Rung: written and tested on synthetic series (`scripts/dev/test-vmrules.sh`, `scripts/dev/test-alert-delivery.py`);
-**never run on a cluster**. Nothing here claims ANSSI compliance. The lab pass criteria are in `docs/monitoring-0.4.md`.
+Rung: written and tested on synthetic series (`scripts/dev/test-vmrules.sh`, `scripts/dev/test-alert-delivery.py`), then
+**read once on a cluster in lab 35** (2026-11-07; Scaleway, 3 CP + 6 W; n=1; a moving branch ref, not a tag) for the per-pod
+notifiers, the egress policy and the inhibit rule, against the lab's stand-in receiver: each section below says which rung it
+reached and what was not exercised. Nothing here claims ANSSI compliance. The lab pass criteria are in `docs/monitoring-0.4.md`.
 
 ## The chain
 
@@ -27,10 +29,12 @@ when the list and the `replicaCount` of the VMAlertmanager disagree: raise one, 
   is down is also `AlertmanagerClusterDegraded`; a pod that is up but that vmalert cannot reach (its name does not resolve, a
   policy drops the sends) is only `VMAlertNotifierPodErrors`, because `AlertmanagerClusterDegraded` reads the scrape and the
   gossip, not what vmalert sends. A pod replaced in less than 30 minutes fires neither.
-- Mocked/offline: the manifest, the rule on synthetic series, the operator and vmalert sources read. Never run on a cluster.
-  The drill is still to do and is the proof: delete the Alertmanager pod that holds an alert, read `/api/v2/alerts` on the
-  other (it must show the alert), and read that the per-pod names resolve from a vmalert pod. Label the figures NOMINAL or
-  INCIDENT with the cluster shape.
+- Mocked/offline: the manifest, the rule on synthetic series, the operator and vmalert sources read. Read once on a cluster
+  (lab 35 move 1; NOMINAL; n=1; a moving branch ref): both per-pod names resolved from a vmalert pod, and with `alertmanager-0`
+  deleted the other pod answered at every 2-s sample for 41 s and nothing fired. The failing-send path was NOT exercised: the
+  21 s the pod took to come back was shorter than vmalert's send cycle. To repeat the drill: delete the Alertmanager pod that
+  holds an alert, read `/api/v2/alerts` on the other (it must show the alert), and read that the per-pod names resolve from a
+  vmalert pod. Label the figures NOMINAL or INCIDENT with the cluster shape.
 
 ## Heartbeat (dead-man's-switch)
 
@@ -62,14 +66,19 @@ when a host is written in full in the policy or in `vmalertmanager`, when the su
 - Coming from 0.4.3: the `vmalertmanager` policy has no `toFQDNs` rule any more (it is `vmalertmanager-egress-hosts`). Remove any
   overlay patch of that rule, which 0.4.3 told you to make for another host: a patch by index can fail the build of
   `observability` or land on another rule. Set `ALERT_CHAT_HOST` and `ALERT_HEARTBEAT_HOST` instead.
-- Mocked/offline: the manifests and the test. Not run on a cluster: the policy is removed from `vmalertmanager` when
+- Mocked/offline: the manifests and the test. Read once on a cluster (lab 35 move 1; n=1): `vmalertmanager` had no `toFQDNs`
+  rule left, `vmalertmanager-egress-hosts` existed and `observability-alert-egress` was Ready 3 s after `observability`. The
+  largest gap between two Watchdog pings was 210 s, on the lab's stand-in receiver reached through a lab-only additive policy:
+  the by-FQDN path to a real host and the gap of the swap were NOT measured. The policy is removed from `vmalertmanager` when
   `observability` applies the new revision and re-created by the new Kustomization once that dependency is satisfied (the
-  dependency requeue is 30 s by default; the gap was not measured), so a notification may be retried once. After the move, read
+  dependency requeue is 30 s by default), so a notification may be retried once. After the move, read
   the largest gap between two Watchdog pings in the external service (4 minutes at most in nominal running, see Heartbeat) and
   that `alertmanager_notification_requests_failed_total` does not rise. Label the figures NOMINAL or INCIDENT with the cluster shape.
 - Not done here: the keys are not written by the infrastructure repository from the tfvars yet. Until they are, set them with a
-  patch of `cluster-identity` or of the `observability-alert-egress` Kustomization (`postBuild.substitute`) in your overlay;
-  an infrastructure apply that rewrites `cluster-identity` drops a key set by hand on that ConfigMap.
+  patch of `cluster-identity` or of the `observability-alert-egress` Kustomization (`postBuild.substitute`) in your overlay.
+  Nothing in the infrastructure repository removes a key you set by hand (a reading of its sources, not run): the Talos inline
+  manifest creates the ConfigMap once and never updates it, and `cluster-identity-sync` merge-patches only the keys it renders.
+  A cluster built from scratch gets neither key: set them after the install.
 
 ## Scheduled delivery test (opt-in)
 
@@ -84,7 +93,9 @@ Component `apps/flux/components/alert-delivery-probe`, off in every profile, for
 - While `AlertDeliveryNotAcknowledged` fires, Alertmanager **inhibits the Watchdog**: the heartbeat stops and the external
   service pages you through its own channel. So a broken chat leg is reported out of band without a second URL.
 - A second inhibit rule mutes `CnpgWalArchiveFailing` while `CnpgWalNeverArchived` fires for the same Cluster (`equal: [cnpg_io_cluster]`): one fault, one critical page instead of two
-  ten minutes apart (one observation, Scaleway 3 CP + 6 W, NOMINAL). The configuration is read, not run: no Alertmanager was started for it.
+  ten minutes apart (one observation, Scaleway 3 CP + 6 W, NOMINAL). Read once on a cluster (lab 35, n=1): the configuration was
+  loaded with both inhibit rules, and a SYNTHETIC pair showed the second alert inhibited while the alert of another Cluster stayed
+  active. The real WAL fault was not run against it, and the route grouping was not read.
 
 Limits, stated: the failing-chat alert cannot reach the chat; an Alertmanager restart is covered because counters keep their
 history in the window, but a lost counter series is not; the alert names above are tested on synthetic counters, the real

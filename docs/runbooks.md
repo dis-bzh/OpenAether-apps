@@ -80,7 +80,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `kubectl -n <ns> logs <cluster>-1 -c postgres | grep -i archive`; the S3 secret and bucket.
 - Do: Restore the archive credentials or bucket; a stuck WAL fills the primary disk, so act within hours.
-- Reads: muted by an Alertmanager inhibit rule while `CnpgWalNeverArchived` fires for the same Cluster (`equal: [cnpg_io_cluster]`, `vmalert.yaml`): one fault, one page. Mocked only (`scripts/dev/test-alert-delivery.py` reads the configuration; no Alertmanager was run). This alert has no namespace label (`sum by (cnpg_io_cluster)`), so two Clusters of the same name in two namespaces would share the mute. It pages by itself for a Cluster for which the first alert is not firing (one that archived before and whose archiver counters were not reset), and when the first alert has resolved.
+- Reads: muted by an Alertmanager inhibit rule while `CnpgWalNeverArchived` fires for the same Cluster (`equal: [cnpg_io_cluster]`, `vmalert.yaml`): one fault, one page. Mocked (`scripts/dev/test-alert-delivery.py` reads the configuration), then read once on a cluster (lab 35, n=1): the configuration was loaded and a SYNTHETIC pair showed the second alert inhibited while the alert of another Cluster stayed active; the real WAL fault was not run against it. This alert has no namespace label (`sum by (cnpg_io_cluster)`), so two Clusters of the same name in two namespaces would share the mute. It pages by itself for a Cluster for which the first alert is not firing (one that archived before and whose archiver counters were not reset), and when the first alert has resolved.
 
 ### CnpgWalNeverArchived
 
@@ -146,7 +146,7 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 
 - Check: `talosctl time -n <node>`.
 - Do: Same as NodeClockSkew; informational until it persists.
-- Reads (#94): `node_timex_sync_status == 0` for 1 hour, severity info. Mocked with `vmalert-tool` only: the series exists on real clusters (the node-exporter timex collector is on by default, no flag turns it off) but its VALUE on a healthy Talos node has not been read. If every node fires this alert while `talosctl time` shows a synchronised clock, the value is the cause, not the clock: read `node_timex_sync_status` on each node type in the next real-cloud lab and delete this rule, its two `vmrules-unittest.yaml` cases and this entry if a healthy node reads 0.
+- Reads (#94): `node_timex_sync_status == 0` for 1 hour, severity info. Mocked with `vmalert-tool`, then the VALUE was read on healthy Talos nodes (lab 35, n=1 on each of two clusters): `node_timex_sync_status` was 1 on 9 of 9 nodes, so the rule is kept; no skew was induced and the alert was not seen firing. The series exists on real clusters (the node-exporter timex collector is on by default, no flag turns it off). If every node fires this alert while `talosctl time` shows a synchronised clock, the value is the cause, not the clock: read `node_timex_sync_status` on each node type, and delete this rule, its two `vmrules-unittest.yaml` cases and this entry if a healthy node reads 0.
 
 ### PodCrashLooping
 

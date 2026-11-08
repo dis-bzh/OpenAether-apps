@@ -131,7 +131,7 @@ policy per release. Note `KyvernoPolicyViolation` ignores `require-security-cont
 No alert is shipped for those denials (apps #82, still open). The label `policy_validation_mode` of that metric is computed from the policy's
 `spec.validationFailureAction` and the rules' `failureAction` (Kyverno 1.19.1, `Spec.HasValidateEnforce` in `api/kyverno/v1/spec_types.go`, used by
 `pkg/metrics/policy_engine.go`), not from `failureActionOverrides`. These policies are Audit with an override per labelled namespace, so a denial there
-would be counted as `policy_validation_mode="audit"` (read from the source, not seen on a cluster), and a rule on `"enforce"` would never fire.
+is counted as `policy_validation_mode="audit"` (read from the source, then seen once on a cluster: lab 35 move 1, n=1, a really denied Pod was counted `audit`), and a rule on `"enforce"` would never fire.
 `kyverno_admission_requests_total{request_allowed="false"}` counts the denials of every policy together and names none.
 
 ## Pod Security Admission
