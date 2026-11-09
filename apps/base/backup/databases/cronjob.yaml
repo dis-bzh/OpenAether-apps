@@ -66,7 +66,7 @@ spec:
             #    on 18); an 18 client also dumps the 16 server (grafana-db).
             #    scripts/dev/check-pg-dump-version.sh enforces it in CI.
             - name: pg-dump
-              image: ghcr.io/cloudnative-pg/postgresql:18.6
+              image: ghcr.io/cloudnative-pg/postgresql:18.6-202611030838-system-bookworm
               command:
                 - /bin/sh
                 - -c

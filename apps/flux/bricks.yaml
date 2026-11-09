@@ -26,6 +26,7 @@ companions:
   - kyverno-policies-cnpg            # Enforce guard on the restore-test Clusters (if kyverno AND CNPG picked)
   - observability-vm-customresources  # VMCluster/VMAgent (if observability picked)
   - observability-openbao            # OpenBao scrape + alerts (if observability AND OpenBao picked)
+  - observability-alert-egress       # chat + heartbeat hosts Alertmanager may reach (if observability picked)
   - storage-backup-target            # S3 target for volume backups (if storage + ESO picked)
   - backup-openbao-identity          # CLUSTER_NAME ConfigMap (restic repository prefix)
   - backup-databases-identity        # same, on the CNPG side
@@ -90,6 +91,7 @@ descriptions:
   observability: VictoriaMetrics + Loki + Grafana + Alloy
   observability-vm-customresources: VMCluster/VMAgent/VM*Scrape
   observability-openbao: OpenBao VMServiceScrape (TLS-verified, metrics listener) and VMRule alerts
+  observability-alert-egress: Alertmanager egress to the chat and heartbeat hosts (cluster-identity keys ALERT_*_HOST)
   identity: Zitadel (IAM/SSO, CNPG backend)
   forgejo-db: Forgejo's PostgreSQL (CNPG, 3 instances, synchronous replication, Barman Cloud plugin)
   forgejo: Forgejo (self-hosted git forge, CNPG backend)

@@ -684,6 +684,9 @@ jobs:
       # -strict rejects unknown fields; core kinds come from the Kubernetes schemas, the CRDs from the community
       # catalog pinned to a commit (data only, nothing executes). A CRD the catalog lacks is skipped, not failed:
       # the Skipped count in the summary says how much goes unchecked.
+      # A toFQDNs matchName is a hostname that the schema checks with a pattern, and Flux fills it in at apply
+      # time (`matchName: ${ALERT_CHAT_HOST:=hooks.slack.com}`, apps #146): the copy below carries the shipped
+      # default, the value an unconfigured cluster gets. Only matchName is rewritten; every other `${...}` stays.
       - name: kubeconform
         env:
           # The Kubernetes minor of OpenAether-infra's kubernetes_version.
@@ -692,10 +695,15 @@ jobs:
           CRD_CATALOG: "https://raw.githubusercontent.com/datreeio/CRDs-catalog/63669a570e231d4f1f8396d229a1de512bcf0a34"
         run: |
           set -euo pipefail
+          mkdir "$RUNNER_TEMP/kubeconform-in"
+          for f in "$RUNNER_TEMP"/rendered/*.yaml; do
+            sed -E 's/(matchName: )\$\{[A-Za-z_0-9]+:=([^}]*)\}/\1\2/' "$f" \
+              >"$RUNNER_TEMP/kubeconform-in/$(basename "$f")"
+          done
           kubeconform -kubernetes-version "${K8S_SCHEMA_VERSION}" -strict -ignore-missing-schemas -summary \
             -schema-location default \
             -schema-location "${CRD_CATALOG}/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
-            "$RUNNER_TEMP"/rendered/*.yaml
+            "$RUNNER_TEMP"/kubeconform-in/*.yaml
 
       # HIGH and CRITICAL fail the job except what .trivyignore.yaml accepts: the vendored upstream dumps
       # (operators that manage Secrets by design) and one false positive, each with its reason.

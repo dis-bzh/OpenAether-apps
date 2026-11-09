@@ -4,9 +4,10 @@
 # receiver
 # was not wired showed nothing from Flux itself.
 #
-# The Provider is of type `alertmanager` and points at the in-cluster VMAlertmanager (the same notifier as vmalert):
-# Alertmanager
-# is the one place that knows the receivers (Slack, the dead-man's switch). No URL or credential is needed here, so
+# The Provider is of type `alertmanager` and points at the in-cluster VMAlertmanager, through its headless Service
+# (vmalert sends to each pod; a Provider takes ONE address, so an event reaches one Alertmanager pod at a time, apps
+# #207): Alertmanager is the one place that knows the receivers (Slack, the dead-man's switch). No URL or credential
+# is needed here, so
 # there is
 # nothing to seed. If the receiver is not configured, Alertmanager is the component that says so.
 # Only `error` events are sent. A HelmRelease is listed per namespace because the notification controller matches an

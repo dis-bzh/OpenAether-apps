@@ -15,6 +15,14 @@ belong to. What follows has no skill of its own yet.
   instance pods need it for `barmanObjectStore`; a replica JOIN calling
   `restore_command` blocks for ever instead of erroring.
 
+- **A pod of a new namespace is reachable by nobody, its own namespace included** (apps #112). `default-deny-all-ingress` is
+  cluster-wide and every pod needs its own ingress policy (lab 11). Include `apps/components/allow-same-namespace` (one
+  CiliumNetworkPolicy, the same namespace on any port) in the Kustomization of the namespace's workloads, then add a policy for
+  whatever is served from outside it. An AMBIENT namespace needs more: in lab 25 the HBONE port 15008 timed out until an open
+  CiliumNetworkPolicy was added, then ztunnel rejected the connection ("allow policies exist, but none allowed") until an Istio
+  ALLOW AuthorizationPolicy was added too. It is not shown that this component is enough for an ambient namespace. Rendered and
+  checked offline (`scripts/dev/test-in-cluster-transport.py`); not applied to a namespace on a cluster.
+
 ## Storage
 
 - **Never reboot (or `talosctl reboot`/`shutdown`) a node undrained when it hosts a Longhorn RWX share-manager and a pod that mounts that volume** (apps #124).
@@ -236,6 +244,6 @@ belong to. What follows has no skill of its own yet.
 - **Moving a workload from root to non-root leaves its local-path volume root-owned.** `fsGroup` does nothing on those volumes.
   `vmstorage` and `vmselect` then crash on their lock file / cache (apps 0.2.0 Upgrade notes, #71).
 - **`Gateway.spec.infrastructure` needs Gateway API v1.2.** On the v1.1.0 CRDs this repository vendors, the dry-run of the `istio`
-  Kustomization fails and everything behind it stays not Ready until the change is reverted (#70). The vendored CRDs are v1.2.1 since the 0.3.0 upgrade campaign; the CRDs are v1.6.0 with Istio 1.31.3 (apps #96, not yet shown on a cluster); they must not be paired with Istio 1.24 to 1.29 (see docs/patching.md).
+  Kustomization fails and everything behind it stays not Ready until the change is reverted (#70). The vendored CRDs are v1.2.1 since the 0.3.0 upgrade campaign; the CRDs are v1.6.0 with Istio 1.31.3 (apps #96, run on Scaleway in labs 25 to 27); they must not be paired with Istio 1.24 to 1.29 (see docs/patching.md).
 - **A policy report keeps results for pods a changed `exclude` no longer covers**, at least for the first hour on a cluster
   moved from an earlier tree; a fresh cluster does not show them (#37).

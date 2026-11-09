@@ -24,8 +24,8 @@ status line. What is still open (apps #176) is in "What is NOT delivered".
   through the Barman Cloud plugin (a primary and a replica `ObjectStore`, the `${BACKUP_*}` defaults of `cluster-identity` including the
   `.invalid` placeholders of the replica store, the Outscale checksum variables on the sidecar), a daily `ScheduledBackup` at 03:40, zone
   and host anti-affinity, 30 s tolerations, the operator's `PodDisruptionBudget`, the `switchover` update method, and the same image
-  line as `grafana-db` (`postgresql:16.15`; #162 and #163, the open scans of the 16.15 and 18.6 images, apply to it as to the others,
-  and no image was added to the inventory).
+  line as `grafana-db` (`postgresql:16.15-202611020810-system-bookworm`, the dated Debian 12 build of the same minor; it follows
+  what `grafana-db` does and no image was added to the inventory).
 - **Its own Flux Kustomization**, `forgejo-db` (group 36, `wait: true`), which `forgejo` (group 37) depends on. Not in `cnpg`: a profile
   without the forge (the `workload` profile) must not install three database pods it does not use, and a slow or failed `forgejo-db`
   must not hold `cnpg` (also `wait: true`), identity or observability back.
@@ -33,7 +33,7 @@ status line. What is still open (apps #176) is in "What is NOT delivered".
   `secret/forgejo/db` (32 characters), `secret/forgejo/admin` (the initial admin password, 28 characters and `Aa1!`; Forgejo creates the
   account once and asks for a change at the first login), `secret/forgejo/oidc` (a **public placeholder**: the Zitadel auth source
   ships disabled; an operator overwrites it when rung 3 starts) and, since 0.4.3, `secret/forgejo/metrics` (40 characters, the bearer token of `/metrics`).
-- Metrics scraped by vmagent (`VMPodScrape forgejo`, with the bearer token since 0.4.3); no rule reads them yet. `/metrics` is not routed on
+- Metrics scraped by vmagent (`VMPodScrape forgejo`, with the bearer token since 0.4.3); since 0.4.4 the alert `ForgejoScrapeDown` (`up == 0` for 3 minutes, only where the forge runs; `docs/runbooks.md`) says when the scrape is down, no rule reads the metrics themselves. `/metrics` is not routed on
   the Gateway (403), `//metrics` neither since 0.4.3, and the endpoint asks for the token anyway (next section but one).
 - A row in `docs/public-exposure.yaml`: Forgejo's own login, **self-registration off, sign-in required to view anything** (the app load
   balancer has no source ACL, so the route answers anyone; Forgejo's defaults would have let that visitor register).
@@ -70,7 +70,7 @@ the prune (the repository volume, the database volumes) has not been exercised: 
 repository already seeds the secrets of bricks a profile may not carry in the same way (`minio/root`, `longhorn/encryption`,
 `grafana/*`). Created only if absent, never printed, never rotated. With the brick off nothing reads them: no ExternalSecret, no database
 role, no account exists, so they open nothing; they are four unread entries of the KV store (and of its snapshots). The one exception is
-`forgejo/metrics`, which has a second ExternalSecret in `services-observability` (the scrape's Secret, one Secret nobody reads without the forge). The placeholder of
+`forgejo/metrics`, which has a second ExternalSecret in `services-observability` (the scrape's Secret; without the forge the unconditional `VMPodScrape` still reads it). The placeholder of
 `forgejo/oidc` is a fixed public string and protects nothing. In exchange, enabling the brick later needs no seeding step. An upgraded
 cluster re-runs the Job (the script ConfigMap changed) and gains the entries it lacks (`forgejo/metrics` on a cluster moved from 0.4.2) whether or not it enables the forge.
 "The brick converges unattended" is **not** claimed as a property of a default install, which does not carry it. After the hand patch of the
@@ -349,7 +349,8 @@ d1d268c, NOT a tag): cluster A, a move from 0.4.2 with the forge on, and cluster
   `authorization.credentials` `{name: forgejo-metrics, key: token}`, read from a Secret of its own namespace: the operator resolves a scrape's
   Secret next to the scrape, and the forge's Kustomization (`services-git`) does not depend on the VM CRDs, so a twin ExternalSecret
   `forgejo-metrics` in `services-observability` (`apps/base/observability/externalsecret-forgejo-metrics.yaml`) reads the same OpenBao key. On a
-  profile without the forge it is one Secret nobody reads. A scrape whose Secret does not exist is skipped by the operator with an error log
+  profile without the forge the unconditional `VMPodScrape` `forgejo` still reads it (a scrape with no target; a reading of the manifests, not run
+  on such a profile). A scrape whose Secret does not exist is skipped by the operator with an error log
   ("skip config generation for resource"); vmagent and the other scrapes keep running, and the forge target returns when the Secret appears.
 - **Measured on the rig** (Forgejo 15.0.11, token from a Secret): straight to the pod, no bearer 401, a wrong bearer 401, the right bearer 200
   (11,110 bytes); `//metrics` without a bearer 401; `/api/healthz` stays 200, so the kubelet probes are unaffected. Through the Gateway with the
@@ -374,7 +375,7 @@ d1d268c, NOT a tag): cluster A, a move from 0.4.2 with the forge on, and cluster
     ExternalSecret pointed at a missing key, the upgrade triggered by an added env var; not the sequence of a late vault Job).* The pod waited **6 min 30 s** in `CreateContainerConfigError`;
     the HelmRelease reached `UpgradeSucceeded` with **no rollback** (`timeout: 15m`); the Deployment kept `GITEA__metrics__TOKEN` in 37 of 37 polls; the
     pod started by itself 19 s after the Secret came back. **A wait beyond 15 minutes is not shown.** During it `up{forgejo}` was 0 for about 7.5 minutes
-    (90 samples), and no rule names the forge scrape (alerts were sampled at two moments only).
+    (90 samples), and no rule named the forge scrape then (alerts were sampled at two moments only; `ForgejoScrapeDown` was added after, 3 minutes of `up == 0`, not yet seen firing on a cluster).
   - *Fresh install (cluster B).* The forge was enabled by the documented live patch 14 s BEFORE the vault Jobs were first created, so this is the favourable
     order by construction (the case of a Job still running is not shown): the pod started at the first try with 0 `CreateContainerConfigError` and was Ready
     101 s after the pod was created, which is not comparable with the patch-to-Ready figures above.
@@ -426,7 +427,7 @@ The volume's backup and its restore are in "The recurring backup of the reposito
   instance pod). The verifier (`barman_check.py`) is no longer on this list: it covers `forgejo-db` (above).
 - `readOnlyRootFilesystem` on the Forgejo containers: the one Kyverno finding left (Audit). The chart's init containers write under `/`;
   to prove read-only works needs a run.
-- A rule on Forgejo's metrics. The `VMPodScrape` exists and vmagent scraped Forgejo in lab 27 (`up` = 1, 26 `gitea_*` series), but no rule reads
+- A rule on Forgejo's metrics (the scrape being down is covered by `ForgejoScrapeDown` since 0.4.4). The `VMPodScrape` exists and vmagent scraped Forgejo in lab 27 (`up` = 1, 26 `gitea_*` series), but no rule reads
   the series and their names are not checked against a running Forgejo. Through the Gateway, `/metrics` is refused with a 403 for every route
   (`docs/public-exposure.md`). That 403 was read on the other hosts of a Scaleway proof lab, and on the forge only in a later one, which found
   that `//metrics` was NOT refused (fixed in 0.4.3: next section). Before the policy the route answered HTTP 500 (the path has no backend, so

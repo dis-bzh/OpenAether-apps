@@ -6,7 +6,7 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 D="$ROOT/apps/components/cnpg-profile-bench"
-IMG="$(grep -rhoE 'ghcr.io/cloudnative-pg/postgresql:[0-9.]+' "$ROOT/apps/components/cnpg-profile-ha/cluster.yaml" | head -n 1)"
+IMG="$(grep -rhoE 'ghcr.io/cloudnative-pg/postgresql:[^[:space:]]+' "$ROOT/apps/components/cnpg-profile-ha/cluster.yaml" | head -n 1)"
 N=oa-dbbench-$$
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); echo "  ok   $*"; }

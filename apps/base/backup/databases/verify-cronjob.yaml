@@ -88,7 +88,7 @@ spec:
                 limits: { cpu: "1", memory: 1Gi }
             # Same image as the dump job (check-pg-dump-version.sh): its python3 has boto3 and it carries barman-cloud.
             - name: barman-stage
-              image: ghcr.io/cloudnative-pg/postgresql:18.6
+              image: ghcr.io/cloudnative-pg/postgresql:18.6-202611030838-system-bookworm
               command: ["/bin/sh", "-c", "python3 /scripts/barman_check.py > /results/cnpg.tsv"]
               env:
                 - { name: PYTHONWARNINGS, value: ignore }

@@ -631,24 +631,63 @@ tests:
         values: '0+0x100'
     alert_rule_test:
       - {eval_time: 5h, alertname: AlertDeliveryNotAcknowledged, exp_alerts: []}
-  - name: vmalert cannot reach Alertmanager
+  - name: vmalert cannot reach any Alertmanager pod
     interval: 10m
     input_series:
-      - series: 'vmalert_alerts_send_errors_total{addr="http://alertmanager:9093"}'
+      - series: 'vmalert_alerts_send_errors_total{addr="http://vmalertmanager-alertmanager-0:9093"}'
         values: '0+2x20'
+      - series: 'vmalert_alerts_send_errors_total{addr="http://vmalertmanager-alertmanager-1:9093"}'
+        values: '0+3x20'
     alert_rule_test:
       - {eval_time: 5m, alertname: VMAlertNotifierErrors, exp_alerts: []}
       - eval_time: 1h
         alertname: VMAlertNotifierErrors
         exp_alerts:
-          - exp_labels: {addr: "http://alertmanager:9093", severity: critical, component: alerting}
+          - exp_labels: {severity: critical, component: alerting}
             exp_annotations:
-              summary: "VMAlert cannot hand alerts to Alertmanager (http://alertmanager:9093)"
+              summary: "VMAlert cannot hand alerts to any Alertmanager pod"
               description: >-
-                Every alert evaluated here is lost on its way to Alertmanager. Check the Alertmanager pod, the Service
-                and the vmalert egress policy.
+                Every alert evaluated here is lost on its way to Alertmanager: each pod it sends to fails. Check the
+                Alertmanager pods, the Service and the vmalert egress policy.
               runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
                 vmalertnotifiererrors"
+  # apps #207: vmalert sends to each Alertmanager pod itself. A pod that is being replaced fails its own sends for a while: the
+  # other still receives every alert, so this is AlertmanagerClusterDegraded's case and must not page as "every alert is lost".
+  - name: vmalert cannot reach one Alertmanager pod, the other answers
+    interval: 10m
+    input_series:
+      - series: 'vmalert_alerts_send_errors_total{addr="http://vmalertmanager-alertmanager-0:9093"}'
+        values: '0+2x20'
+      - series: 'vmalert_alerts_send_errors_total{addr="http://vmalertmanager-alertmanager-1:9093"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - {eval_time: 1h, alertname: VMAlertNotifierErrors, exp_alerts: []}
+      # ...but a pod that stays unreachable for 30 minutes while it is up (its name does not resolve, a policy drops vmalert's
+      # sends) is in no other alert: AlertmanagerClusterDegraded reads the scrape and the gossip, not what vmalert sends.
+      - {eval_time: 20m, alertname: VMAlertNotifierPodErrors, exp_alerts: []}
+      - eval_time: 1h
+        alertname: VMAlertNotifierPodErrors
+        exp_alerts:
+          - exp_labels: {addr: "http://vmalertmanager-alertmanager-0:9093", severity: warning, component: alerting}
+            exp_annotations:
+              summary: "VMAlert cannot hand alerts to one Alertmanager pod (http://vmalertmanager-alertmanager-0:9093)"
+              description: >-
+                The other pod still receives every alert, but the redundancy is gone: losing it now loses the alerts. A pod
+                that is down is also AlertmanagerClusterDegraded; for a pod that is up, check that its name resolves from a
+                vmalert pod and the vmalert egress policy.
+              runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+                vmalertnotifierpoderrors"
+  # A pod replaced in less than 30 minutes (errors for 20 minutes, then none) pages nobody.
+  - name: vmalert cannot reach one Alertmanager pod for a short while only
+    interval: 10m
+    input_series:
+      - series: 'vmalert_alerts_send_errors_total{addr="http://vmalertmanager-alertmanager-0:9093"}'
+        values: '0 2 4 4 4 4 4 4 4 4'
+      - series: 'vmalert_alerts_send_errors_total{addr="http://vmalertmanager-alertmanager-1:9093"}'
+        values: '0+0x9'
+    alert_rule_test:
+      - {eval_time: 1h, alertname: VMAlertNotifierPodErrors, exp_alerts: []}
+      - {eval_time: 1h, alertname: VMAlertNotifierErrors, exp_alerts: []}
   - name: Alertmanager gone
     interval: 10m
     input_series:
@@ -1138,6 +1177,32 @@ tests:
         values: '946681200+0x30'
     alert_rule_test:
       - {eval_time: 3h, alertname: RestoreTestNeverReported, exp_alerts: []}
+  # apps #190: the dump-load test skips (no restic repository yet) and never reports; `kind="dump"` has its own CronJob and its own series.
+  - name: a dump-load restore test that never reported while its CronJob is older than three days alerts, a CNPG one that reports does not (apps issue 190)
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-dump-load-restore-test"}'
+        values: '946384800+0x30'
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}'
+        values: '946384800+0x30'
+      - series: 'oa_restore_test_last_run_timestamp_seconds{kind="cnpg",dataset="grafana-db",store="primary",mode="latest"}'
+        values: '946684800+0x30'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: RestoreTestNeverReported
+        exp_alerts:
+          - exp_labels: {kind: dump, severity: warning, component: backup}
+  - name: a reporting dump-load restore test, or a young CronJob, is not a never-reported one (apps issue 190)
+    interval: 10m
+    input_series:
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-dump-load-restore-test"}'
+        values: '946384800+0x30'
+      - series: 'oa_restore_test_last_run_timestamp_seconds{kind="dump",dataset="grafana-db",store="primary",mode="latest"}'
+        values: '946684800+0x30'
+      - series: 'kube_cronjob_created{namespace="foundation-databases", cronjob="cnpg-recovery-restore-test"}'
+        values: '946681200+0x30'
+    alert_rule_test:
+      - {eval_time: 3h, alertname: RestoreTestNeverReported, exp_alerts: []}
   - name: a scratch pod that stays 3 hours and a canary writer that stopped
     interval: 10m
     input_series:
@@ -1495,3 +1560,57 @@ tests:
               description: >-
                 oa_audit_sink_ok has no series for 15 minutes: audit-sink-check is down or not scraped, so a stopped sink would not be seen.
                 Runbook: docs/runbooks.md.
+  # apps #94: the two clock alerts existed since 0.3.0 with no behaviour case. Offsets are in seconds, as node-exporter's timex collector
+  # reports them. vmalert-tool evaluates every 10 minutes (evaluation_interval above): a `for` is checked up to that granularity only.
+  - name: a node clock off by more than half a second alerts at the end of its ten minutes, ahead or behind; a smaller offset does not (apps issue 94)
+    interval: 1m
+    input_series:
+      - series: 'node_timex_offset_seconds{instance="n1:9100"}'
+        values: '0.7x30'
+      - series: 'node_timex_offset_seconds{instance="n2:9100"}'
+        values: '-0.9x30'   # behind: the rule reads abs()
+      - series: 'node_timex_offset_seconds{instance="n3:9100"}'
+        values: '0.4x30'    # under the threshold
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: NodeClockSkew
+        exp_alerts:
+          - exp_labels: {instance: "n1:9100", severity: warning, component: node}
+          - exp_labels: {instance: "n2:9100", severity: warning, component: node}
+  - name: a node whose kernel reports an undisciplined clock alerts after an hour, a synchronised node does not (apps issue 94)
+    interval: 1m
+    input_series:
+      - series: 'node_timex_sync_status{instance="n1:9100"}'
+        values: '0x120'
+      - series: 'node_timex_sync_status{instance="n2:9100"}'
+        values: '1x120'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: NodeClockNotSynchronised, exp_alerts: []}
+      - eval_time: 100m
+        alertname: NodeClockNotSynchronised
+        exp_alerts:
+          - exp_labels: {instance: "n1:9100", severity: info, component: node}
+  # apps #203: the forge scrape (VMPodScrape forgejo, job services-observability/forgejo). `up == 0` needs a target: a profile without the
+  # forge has the scrape and no pod, so no `up` series, and the alert stays silent there (an absent() rule would fire).
+  - name: a forge scrape down alerts for that pod only; another job down is not the forge (apps issue 203)
+    interval: 1m
+    input_series:
+      - series: 'up{job="services-observability/forgejo", namespace="services-git", pod="forgejo-a"}'
+        values: '1x5 0x15'      # a wrong token (401) or a pod waiting for its Secret: the target stays, up is 0
+      - series: 'up{job="services-observability/forgejo", namespace="services-git", pod="forgejo-b"}'
+        values: '1x20'
+      - series: 'up{job="services-observability/kubelet", node="w1"}'
+        values: '0x20'          # NodeScrapeDown's business
+    alert_rule_test:
+      - {eval_time: 5m, alertname: ForgejoScrapeDown, exp_alerts: []}      # up was 1
+      - eval_time: 20m
+        alertname: ForgejoScrapeDown
+        exp_alerts:
+          - exp_labels: {job: services-observability/forgejo, namespace: services-git, pod: forgejo-a, severity: warning, component: forgejo}
+  - name: a profile without the forge has no forge target and no alert (apps issue 203)
+    interval: 1m
+    input_series:
+      - series: 'up{job="services-observability/kubelet", node="w1"}'
+        values: '1x20'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: ForgejoScrapeDown, exp_alerts: []}

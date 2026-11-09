@@ -65,8 +65,8 @@ Steps to switch a namespace, policy by policy (order in the next section):
    (`kubectl rollout restart`) and, on a lab, reboot a node.
 4. Roll back at once with `kubectl label ns <namespace> kyverno.openaether.io/enforce-<policy>-` (or revert the commit).
 
-The Audit noise that remains (what a flip would still hit) is tracked in apps #47: the next lab lists the remaining violations per policy and
-namespace on an idle cluster, then fixes or exempts them.
+The Audit noise that remains (what a flip would still hit) is tracked in apps #82, which took over the residuals of #47: the table "Left, and
+why" below lists them as lab 22 read them (`alloy-audit` was suspended there). Fix or exempt them before flipping the pair concerned.
 
 ## What Audit reported on a fresh cluster (lab 11, Scaleway, after an install and two worker reboots)
 
@@ -128,6 +128,11 @@ namespace the webhook matches, `kube-system` and `kyverno` excepted (`resourceFi
 install runs one admission replica: **Kyverno HA is not done here** and belongs with the Kyverno upgrade. Until then, flip no more than one
 policy per release. Note `KyvernoPolicyViolation` ignores `require-security-context`, so a denial by that policy does not page: watch
 `kyverno_policy_results_total{rule_result="fail"}` and the Events of the namespace by hand after its flip.
+No alert is shipped for those denials (apps #82, still open). The label `policy_validation_mode` of that metric is computed from the policy's
+`spec.validationFailureAction` and the rules' `failureAction` (Kyverno 1.19.1, `Spec.HasValidateEnforce` in `api/kyverno/v1/spec_types.go`, used by
+`pkg/metrics/policy_engine.go`), not from `failureActionOverrides`. These policies are Audit with an override per labelled namespace, so a denial there
+is counted as `policy_validation_mode="audit"` (read from the source, then seen once on a cluster: lab 35 move 1, n=1, a really denied Pod was counted `audit`), and a rule on `"enforce"` would never fire.
+`kyverno_admission_requests_total{request_allowed="false"}` counts the denials of every policy together and names none.
 
 ## Pod Security Admission
 

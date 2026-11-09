@@ -5,8 +5,9 @@
 # scripts/check-vex.py requires a statement and a date on every entry. Not a fix: see the CHANGELOG.
 vulnerabilities:
   # libexpat in the SLES base image of the Longhorn v1.12.1 images: all six (manager, ui, share-manager, engine,
-  # instance-manager, backing-image-manager) carry 2.7.1-150700.3.12.1, read 2026-11-04. The image scan (sbom.yml) sees
-  # only three of them, the ones the chart renders as `image:` (manager, ui, share-manager). Wait for Longhorn v1.12.2
+  # instance-manager, backing-image-manager) carry 2.7.1-150700.3.12.1, read 2026-11-04. The image scan (sbom.yml) saw
+  # only three of them (manager, ui, share-manager) until apps #210: gen-sbom.py now also reads the images the chart
+  # passes as arguments and env values. Wait for Longhorn v1.12.2
   # (only rc3 on 2026-11-04) and rescan; no jump to 1.13.0 for this (docs/patching.md).
   - id: SUSE-SU-2026:4619-1
     purls:

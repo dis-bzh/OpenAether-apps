@@ -139,8 +139,8 @@ def main():
         check(not c["metadata"]["name"].startswith("rt-") and "openaether.io/restore-test" not in c["metadata"].get("labels", {}),
               "%s: the Cluster is not mistaken for a restore-test scratch Cluster (Kyverno guard)" % p)
         check(spec.get("enableSuperuserAccess") is False, "%s: enableSuperuserAccess is false" % p)
-        check(spec["imageName"].startswith("ghcr.io/cloudnative-pg/postgresql:") and re.search(r":\d+\.\d+$", spec["imageName"]),
-              "%s: the engine image is the pinned CNPG image" % p)
+        check(re.fullmatch(r"ghcr\.io/cloudnative-pg/postgresql:\d+\.\d+-\d{12}-system-(bookworm|trixie)", spec["imageName"]),
+              "%s: the engine image is a dated CNPG system build (the plain MM.mm tag is deprecated)" % p)
         hba = spec["postgresql"]["pg_hba"]
         check(hba[0] == "hostnossl all all all reject" and "md5" not in " ".join(hba) and "trust" not in " ".join(hba)
               and hba[-1] == "hostssl all all all scram-sha-256", "%s: TLS and SCRAM only (no md5, no trust, plain TCP rejected)" % p)
@@ -234,6 +234,9 @@ def main():
     ic =(ps["template"]["spec"].get("initContainers") or [{}])[0]
     check(ic.get("name") == "bootstrap-controller" and ic.get("resources", {}).get("limits", {}).get("memory"),
           "pooler: the operator's init container has a memory limit (require-limits reported it in lab 23)")
+    # apps #205: OOMKilled at 64Mi on one fresh install. 128Mi is a mitigation (the peak was never read), the same as pgbouncer's.
+    check(ic.get("resources", {}).get("limits", {}).get("memory") == "128Mi",
+          "pooler: the init container's memory limit is 128Mi (64Mi was OOMKilled at install, #205; a mitigation, peak not measured)")
     check(ic.get("securityContext", {}).get("readOnlyRootFilesystem") is True and ic["securityContext"].get("allowPrivilegeEscalation") is False
           and ic["securityContext"].get("capabilities") == {"drop": ["ALL"]},
           "pooler: the operator's init container has the restricted container security context (the platform policies read the manifest)")

@@ -158,19 +158,28 @@ none got a body after the first 403.
 **Istio warns when it applies the policy, and a TCP listener would be denied.** Flux applied `deny-metrics-paths` without error
 and the admission answered a warning (kustomize-controller log, third lab): `configured AuthorizationPolicy will deny all traffic
 to TCP ports under its scope due to the use of only HTTP attributes in a DENY rule; it is recommended to explicitly specify the
-port`. The policy names no port, so it covers every listener of `openaether-gateway`. Harmless today: that Gateway has an HTTP
-listener on 80 and an HTTPS listener on 443 (`gateway-openaether.yaml`) and `apps/` holds no `TCPRoute` or `TLSRoute` resource (the
-live listeners were not read back in the lab). A TCP or TLS listener added to it later would, by Istio's own warning, be denied.
-Narrow the policy to ports 80 and 443 before adding one (`ports` in the operation; not tried on a cluster, and
-`scripts/check-gateway-routes.py` counts a policy narrowed by port as no policy, so the checker needs an edit with it).
+port`. Until 0.4.3 the policy named no port, so it covered every listener of `openaether-gateway`. Harmless then: that Gateway has an
+HTTP listener on 80 and an HTTPS listener on 443 (`gateway-openaether.yaml`) and `apps/` holds no `TCPRoute` or `TLSRoute` resource.
+A TCP or TLS listener added to it later would, by Istio's own warning, have been denied (apps #192).
+
+Since 0.4.4 (apps #192) the operation names `ports: ["80", "443"]`, the ports of the Gateway **pods**, which is what the policy matches.
+Read in the sources of Istio 1.31.3 (not run): the Service it generates for a Gateway has port equal to targetPort and the pod binds
+the listener ports (sysctl `ip_unprivileged_port_start=0`, kept because `istiod.yaml` sets no `gateways.securityContext`), and Istio
+turns `ports` into an Envoy `destination_port` test. The repository says the same: the NodePort Service targets 80 and 443 and the
+`openaether-gateway` CiliumNetworkPolicy admits 80 and 443. A wrong port would NOT fail loudly: the policy would match nothing and
+`/metrics` would be served again. So `scripts/check-gateway-routes.py` now also fails when a rule with HTTP attributes names no port,
+and when the ports leave out a port of the Gateway's HTTP or HTTPS listeners (a listener added later must be added to the policy). It
+counts a policy narrowed by `notPorts`, or by a port list that misses a listener, as no policy. **Not shown on a cluster:** that
+`/metrics` and its slash spellings still answer 403 on both listeners with the narrowed policy, and that the warning is gone. That sweep
+is the lab step of this change; if it reads a body, revert the commit.
 
 **The scrapes are not affected**: vmagent reads `VMPodScrape` and `VMServiceScrape` targets pod to pod, and none crosses the
 Gateway. `scripts/check-gateway-routes.py` (CI, job "Flux DAG") fails when a `VMStaticScrape` or `VMProbe` names a Gateway host
 (a `VMScrapeConfig` or an inline scrape config of the VMAgent is not read), when the policy loses one of the four paths or the slash
 spellings of them (the policy alone, as if the mesh did not merge), when istiod's `pathNormalization` is not a merging one, when
-the policy is not listed in its brick, is narrowed (caller, host, port, condition), aims elsewhere, or refuses ordinary paths
+the policy is not listed in its brick, is narrowed (caller, host, a port list that misses a listener, condition), aims elsewhere, or refuses ordinary paths
 (`/x/metrics`, a repository or a dashboard named `metrics`, included); on a missing policy it names the routes that would forward each
-path. Its fixture cases, `main()`'s wiring included, are in `scripts/dev/test-check-gateway-routes.py` (62 cases; the 0.4.2 policy and
+path. Its fixture cases, `main()`'s wiring included, are in `scripts/dev/test-check-gateway-routes.py` (72 cases; the 0.4.2 policy and
 a tree without the setting fail it for the right reason). It reads manifests, not what a service does with a path: it could not have
 seen the forge.
 

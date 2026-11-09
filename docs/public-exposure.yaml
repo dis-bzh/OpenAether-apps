@@ -40,10 +40,11 @@ routes:
     authentication: >-
       Forgejo's own: local accounts, the initial admin password comes from OpenBao; Zitadel OIDC lands at rung 3.
       Self-registration is off and sign-in is required to view anything; /metrics is refused at the Gateway (403, read
-      on the forge in a proof lab at 0.4.2) and answers 401 without the bearer token since 0.4.3. At 0.4.1 and 0.4.2
-      //metrics was NOT refused and returned the metrics; since 0.4.3 the slash spellings are refused by istiod
-      (MERGE_SLASHES), by the policy and by the token, measured on a local rig and UNVERIFIED on a cluster
-      (docs/public-exposure.md). No ACL in front; the login page answers anyone.
+      on the forge in a proof lab at 0.4.2) and answers 401 without the bearer token since 0.4.3. At 0.4.2 //metrics
+      was NOT refused and returned the metrics (measured; 0.4.1 has the same apps/ tree, not run); since 0.4.3 the slash
+      spellings are refused by istiod (MERGE_SLASHES), by the policy and by the token, measured on a local rig and on
+      two clusters that followed a branch ref, not on a tag, first hop only; the policy layer was never alone on a
+      cluster, only on the rig (docs/public-exposure.md). No ACL in front; the login page answers anyone.
     default: true
     private_admin: false
   - route: services-gateway/global-http-redirect

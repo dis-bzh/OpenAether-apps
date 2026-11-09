@@ -27,4 +27,4 @@ Use `<cluster>-rw.foundation-databases.svc` (the read-write Service follows the 
 
 ## Checking your own client
 
-Run the writer of `resilience.md` ("Zero-loss proof"; the script is `scripts/ops/db-zeroloss.sh`, checker included) against your Cluster, or your application's own workload, while you delete the primary pod (`kubectl cnpg promote` for a planned switchover, `kubectl delete pod <primary> --grace-period=0 --force` for a crash). Pass: no error reaches the user beyond the gap, no duplicate row, no lost row.
+Run the writer of `resilience.md` ("Zero-loss proof"; the script is `scripts/ops/db-zeroloss.sh`, checker included) against your Cluster, or your application's own workload, while you delete the primary pod (`kubectl cnpg promote` for a planned switchover, whose output is not to be trusted: read the Cluster, and it was not re-measured on the vendored operator 1.30.1, `traps.md`; `kubectl delete pod <primary> --grace-period=0 --force` for a crash). Pass: no error reaches the user beyond the gap, no duplicate row, no lost row.

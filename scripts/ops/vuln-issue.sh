@@ -5,10 +5,21 @@
 #   vuln-issue.sh open  KEY BODYFILE [RUN_URL]   open the issue, or comment on the open one (BODYFILE not empty)
 #   vuln-issue.sh close KEY [RUN_URL]            close the open issue with a comment (nothing to do if none)
 set -euo pipefail
+# A transient API error (a 503 on `gh issue close` turned a clean scan red, #209) is retried: three attempts, with
+# GH_RETRY_SLEEP seconds (default 5) times the attempt number between them. A permanent error still fails, after about 15 s.
+# Not idempotent for `issue create`: a 503 sent after GitHub created the issue can leave two issues; the next run comments on the first.
+gh_retry() {
+  local i
+  for i in 1 2 3; do
+    "$@" && return 0
+    [ "$i" = 3 ] || { echo "vuln-issue.sh: gh $2 $3 failed (attempt $i of 3), retrying" >&2; sleep $((i * ${GH_RETRY_SLEEP:-5})); }
+  done
+  return 1
+}
 cmd="${1:?open|close}"; key="${2:?key}"
 title="[vuln] $key"
 # Exact title match: `gh issue list --search` is a text search and returns near matches.
-number="$(gh issue list --state open --search "\"$title\" in:title" --json number,title --limit 50 \
+number="$(gh_retry gh issue list --state open --search "\"$title\" in:title" --json number,title --limit 50 \
   | jq -r --arg t "$title" '[.[] | select(.title == $t)][0].number // empty')"
 case "$cmd" in
   open)
@@ -18,16 +29,16 @@ case "$cmd" in
     [ -s "$body" ] || { echo "vuln-issue.sh: no report in '$body' (missing or empty), nothing to report for $key" >&2; exit 1; }
     text="$(printf 'Scan failed again: %s\n\n%s\n' "$url" "$(head -c 20000 "$body")")"
     if [ -n "$number" ]; then
-      gh issue comment "$number" --body "$text" >/dev/null
+      gh_retry gh issue comment "$number" --body "$text" >/dev/null
       echo "commented on #$number"
     else
-      gh issue create --title "$title" --body "$(printf 'The image scan (CRITICAL with a fix upstream) fails for `%s`.\n\nRun: %s\n\nSeverity clock: docs/patching.md. Fix the image, or record a reasoned, dated waiver in `.vex/openaether-apps.openvex.json` (`scripts/check-vex.py` fails on an expired one).\n\n```\n%s\n```\n' "$key" "$url" "$(head -c 20000 "$body")")" >/dev/null
+      gh_retry gh issue create --title "$title" --body "$(printf 'The image scan (CRITICAL with a fix upstream) fails for `%s`.\n\nRun: %s\n\nSeverity clock: docs/patching.md. Fix the image, or record a reasoned, dated waiver in `.vex/openaether-apps.openvex.json` (`scripts/check-vex.py` fails on an expired one).\n\n```\n%s\n```\n' "$key" "$url" "$(head -c 20000 "$body")")" >/dev/null
       echo "opened an issue for $key"
     fi ;;
   close)
     url="${3:-}"
     if [ -n "$number" ]; then
-      gh issue close "$number" --comment "The scan passes again: $url" >/dev/null
+      gh_retry gh issue close "$number" --comment "The scan passes again: $url" >/dev/null
       echo "closed #$number"
     fi ;;
   *) echo "usage: $0 open|close KEY ..." >&2; exit 2 ;;

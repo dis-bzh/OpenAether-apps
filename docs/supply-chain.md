@@ -8,7 +8,8 @@
 ## The inventory (SBOM)
 
 `scripts/dev/gen-sbom.py` writes a CycloneDX 1.5 file from the **rendered** DAG (`scripts/dev/render-dag.py`: what Flux
-applies, not the source tree): every Helm chart a HelmRelease installs, every image the manifests name, and with `--helm`
+applies, not the source tree): every Helm chart a HelmRelease installs, every image the manifests name (an image handed to
+another one as a `--*-image` argument or a `*_IMAGE` env value counts), and with `--helm`
 the images the charts render with the release's own values (a `valuesFrom` target gets a placeholder, as Flux fills it
 at run time). The `SBOM` workflow runs it weekly and on every pushed release tag, attaches it as
 `openaether-apps-<tag>.cdx.json` to the DRAFT release (it creates the draft when there is none: an immutable release takes no
@@ -18,8 +19,10 @@ checks that the asset is there. The releases 0.3.2, 0.4.0 and 0.4.1 went out wit
 published immutable release takes no asset).
 
 `gen-sbom.py` does not read image layers (Trivy does), the images controllers create at run time (Cluster API machines,
-CNPG pods), or what the child clusters' own profile deploys. On the 0.4.1 tag it lists 16 images from the manifests and
-40 with the charts (`--helm`).
+CNPG pods), or what the child clusters' own profile deploys. On the 0.4.3 tag it listed 16 images from the manifests and
+40 with the charts (`--helm`), three of Longhorn's images among them (manager, ui, share-manager). Since it reads the images passed as arguments or env values
+(apps #210) it lists 51 with `--helm`: Longhorn's engine, instance-manager, backing-image-manager, support-bundle-kit and six
+CSI sidecars, and cert-manager's ACME solver. Each is a new scan job; the first scan of them was not run when this was written.
 
 **Rebuilding an inventory by hand**, from a checkout of any tag, to keep elsewhere: the two commands of the workflow's
 inventory step.
@@ -67,10 +70,17 @@ maintainer's own `gh` credentials, against a throwaway draft release (the asset 
 and against the published 0.4.1 release (refused, exit 1); actionlint and yamllint on `sbom.yml`. **Not observed:** the
 `workflow_dispatch` fallback above, and the refusal of a published release inside Actions.
 
-**Open, 2026-11-04 (0.4.3).** What is still red: certifi GHSA-6q48-6c7w-9gw2 (fixed in certifi 2026.10.18) in the CNPG
-PostgreSQL 16.15 and 18.6 images (apps #162 and #163). It has no waiver: the backup verifier uses certifi through botocore.
-The images are to be replaced in 0.4.4 (planned, owner decision), so the weekly scan stays red on these two until then.
-This release's image bumps remove the other reds of 0.4.2: Forgejo 15.0.11 (apps #179, `brotli-libs` CVE-2026-111497; the
+**PostgreSQL images, 2026-11-06 (0.4.4).** Until 0.4.3 the weekly scan was red on certifi GHSA-6q48-6c7w-9gw2 (fixed in
+certifi 2026.10.18) in the CNPG `postgresql:16.15` and `:18.6` images (apps #162 and #163; no waiver: the backup verifier uses
+certifi through botocore). Those plain tags are the last Debian 11 build (2026-08-31), deprecated upstream and never rebuilt.
+0.4.4 pins the dated `system` builds on Debian 12 instead, same minors: `18.6-202611030838-system-bookworm` (index
+`sha256:605c6e45e733...b1e`) and `16.15-202611020810-system-bookworm` (index `sha256:639ef58e1ecc...8d6`). **Verified, a local
+scan:** Trivy 0.69.3 (the CI version) in a container, the CI flags (`--severity CRITICAL --ignore-unfixed --exit-code 1 --config
+.github/trivy-image-vex.yaml`), amd64, database of 2026-11-06: exit 0 on both, certifi 2026.10.23, PyJWT 2.15.1. Without the VEX
+file the only HIGH findings with a fix are `apt` and `libapt-pkg6.0` 2.6.1 (CVE-2026-109518, fixed in 2.6.2), below the gate.
+**Not verified:** the Actions scan (the weekly scan closes nothing by itself: its issue key is the image reference, so the PR
+carries `Closes #162` and `Closes #163`), the arm64 images, and the rolling update of the databases, which only a cluster
+shows. This release's image bumps remove the other reds of 0.4.2: Forgejo 15.0.11 (apps #179, `brotli-libs` CVE-2026-111497; the
 same CVE is open for the Flux image in OpenAether-infra #444, handled in that repository), and the five findings that were
 waived: `alpine/k8s` 1.36.6 and 1.37.2 (CVE-2025-68121 and certifi), `k8s-sidecar` 2.14.3 (certifi), Zitadel and
 `zitadel-login` v4.20.1 (the two Next.js advisories). Read with Trivy 0.69.3 and 0.75.0 on the amd64 images, database of 2026-11-04: **a local scan**. The Actions run on the
@@ -79,13 +89,14 @@ the first scan on main after the merge is still to come. A tag pushed while a sc
 job is still green: observed at the 0.4.2 tag (run 41842416697: `Attach to a draft release` green, four scan jobs red,
 Forgejo, the CNPG operator and the two PostgreSQL images; the last three failed on a ghcr.io rate limit, #197).
 
-**Waivers: two VEX statements and one Trivy ignore entry, all renewed on 2026-11-04 after a re-reading and all ending on
-2026-12-04.** The statements: restic (CVE-2026-60002, OpenSSH in the image's alpine layer, never called; `restic` 0.19.1 is
-still the newest tag) and PyJWT in the CNPG PostgreSQL images (CVE-2026-102268, imported only by `msal`, not used). The
+**Waivers: one VEX statement and one Trivy ignore entry, both renewed on 2026-11-04 after a re-reading and both ending on
+2026-12-04.** The statement: restic (CVE-2026-60002, OpenSSH in the image's alpine layer, never called; `restic` 0.19.1 is
+still the newest tag). The PyJWT statement for the CNPG PostgreSQL images (CVE-2026-102268) was dropped on 2026-11-06: the
+new images carry PyJWT 2.15.1 and Trivy reports no PyJWT finding at CRITICAL or HIGH on them. The
 ignore entry: libexpat in the Longhorn v1.12.1 images (SUSE-SU-2026:4619-1; a reading of package data and file searches: no Longhorn process was run or traced, only `wget --help` and `ldd` in the backing-image-manager image).
 The five statements of the list above were deleted, not renewed, because the fixed images carry no such finding. Nothing
-ends on 2026-11-20 any more: `scripts/check-vex.py` passes on 2026-11-21 and on 2026-12-03, and fails from 2026-12-05 if
-the three are not re-read again or removed.
+ends on 2026-11-20 any more: `scripts/check-vex.py` passes on 2026-11-21 and on 2026-12-03, fails on 2026-12-04 for the
+ignore entry (see **Expiry day** below) and from 2026-12-05 for the statement, if the two are not re-read again or removed.
 
 - **VEX:** a finding that does not apply is an OpenVEX statement in `.vex/openaether-apps.openvex.json`
   (`not_affected` with a justification, an `impact_statement`, an `action_statement` and ONE `Expires: YYYY-MM-DD` in
@@ -94,24 +105,25 @@ the three are not re-read again or removed.
   justification or expiry and on an expired statement. A statement never covers a fixable, reachable CRITICAL. Docker Hub products are written with
   Trivy's `index.docker.io` repository URL. `.github/trivy-ignore.yaml` (Trivy's format, with its own `expired_at`) holds the
   one accepted finding Trivy's VEX matching misses (libexpat in the Longhorn v1.12.1 images); `check-vex.py` holds it to the same rule.
-  **Expiry day:** `check-vex.py` accepts a date on that day and fails from the next one, but Trivy stops applying an
-  ignore entry from 00:00 UTC of its `expired_at` day (its source, `ExpiredAt.Before(now)`, read at v0.69.3). So the
-  Longhorn scans can be red on 2026-12-04 while `check-vex.py` is still green. Not fixed (a Friday: the scheduled scan
-  runs on Tuesdays); a tag push or a manual run on that day would show it.
+  **Expiry day:** Trivy stops applying an ignore entry from 00:00 UTC of its `expired_at` day (its source,
+  `ExpiredAt.Before(now)`, read at v0.69.3), so `check-vex.py` fails an ignore entry on its `expired_at` day, the same
+  day the Longhorn scans can turn red (2026-12-04, a Friday: the scheduled scan runs on Tuesdays). A VEX statement still
+  passes on its last day and fails from the next one, because Trivy does not read the dates of OpenVEX.
   Whether Trivy matches a product is only seen by scanning the image: `trivy image --config .github/trivy-image-vex.yaml <ref>`.
 - **Failing scans are announced:** a failed scan opens, or comments on, one issue `[vuln] <image>` and closes it when the
   scan passes (`scripts/ops/vuln-issue.sh`); an expired waiver does the same under `[vuln] VEX statements`. Before, a red
-  run was the only signal. HIGH findings are still not scanned. Only a scan that wrote a report does this. A scan that
+  run was the only signal. Each `gh` call of the script is tried three times (5 s, then 10 s apart) before the step fails: a
+  single 503 on `gh issue close` turned a clean weekly scan red on 2026-11-03 (#209). HIGH findings are still not scanned. Only a scan that wrote a report does this. A scan that
   did not run (a pull refused or rate limited, #197; no report on disk) is **only a red job**: it fails with a message
   and opens, comments on and closes no issue, so an open `[vuln]` issue stays as it was. **Residual:** nothing announces
-  an image that then stays unscanned until someone reads the run; there is no retry, and the next chance is the next
-  scheduled run (weekly). **The #197 change (the `ghcr.io` login with the workflow token, and the step that tells a
+  an image that then stays unscanned until someone reads the run; there is no retry of the scan itself (apps #208), and the
+  next chance is the next scheduled run (weekly). **The #197 change (the `ghcr.io` login with the workflow token, and the step that tells a
   finding from a scan that did not run) has run in Actions, on the branch.** Rung: workflow run 41927056554, a
   `workflow_dispatch` on `claude/0.4.3-rc1` at 9fb9035 (2026-11-04; six commits before the lab-proven head e8ca37f, and none of
   the six touches an image, a workflow or the VEX file). The step `Log in to ghcr.io` printed `Login Succeeded` (read in three of
   the eight ghcr scan jobs: both red ones and one green one), **all eight ghcr scans ran**, and 38 of the 40 scan jobs were
-  green. **The two red scans are `ghcr.io/cloudnative-pg/postgresql:16.15` and `:18.6`**, one CRITICAL each, certifi
-  GHSA-6q48-6c7w-9gw2 (installed 2026.7.22, fixed in 2026.10.18): known, no waiver, apps #162 and #163, deferred to 0.4.4. On
+  green. **The two red scans were `ghcr.io/cloudnative-pg/postgresql:16.15` and `:18.6`**, one CRITICAL each, certifi
+  GHSA-6q48-6c7w-9gw2 (installed 2026.7.22, fixed in 2026.10.18): known, no waiver, apps #162 and #163, replaced in 0.4.4 (above). On
   both, the step `Tell a finding from a scan that did not run` took its branch "report present, the scan ran". The 0.4.2
   failures read `TOOMANYREQUESTS ... allowed: 44000/minute`, a limit reported per runner address: none of the eight ghcr
   scans was refused in this run, but one run does not show that the login is what lifted the limit. **Still not run:** the
@@ -124,10 +136,14 @@ the three are not re-read again or removed.
 ## What is checked on every pull request
 
 - `scripts/check-image-pins.py`: no image floats (no tag, or `latest`/`main`...). It prints how many are pinned by
-  tag only (16 of 16 today). `--require-digest` is the next step, after Renovate has rewritten the lines.
+  tag only (16 of 16 today). `--require-digest` is the next step, after Renovate has rewritten the lines. For the CNPG
+  PostgreSQL image it also refuses a tag that is not `<major>.<minor>-<12 digits>-system-bookworm|trixie` (the plain
+  `MM.mm` tag is frozen) and two different tags for one major. It reads the rendered DAG: the three database-profile
+  Clusters and the bench Jobs are not in it, so the grep of [`patching.md`](patching.md) is what covers them
+  (`scripts/dev/test-cnpg-profiles.py` checks the form of the three Clusters, not that they equal the others).
 - `kubeconform` (strict) and `trivy config` on the rendered DAG, with the accepted findings in `.trivyignore.yaml`.
 - Renovate: `pinDigests` for the images of the hand-written bricks (`backup`, `foundation`), so a bump writes
-  `tag@sha256:...`. The Postgres images stay on the custom managers. Vendored dumps stay a human re-vendor.
+  `tag@sha256:...`. The Postgres images are bumped by hand ([`patching.md`](patching.md)). Vendored dumps stay a human re-vendor.
 
 ## The registry allow-list
 

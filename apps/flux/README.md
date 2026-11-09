@@ -59,7 +59,7 @@ To enable a profile: point the root Flux Kustomization at its path
 ## Health gates
 
 A Kustomization without `wait: true` or `healthChecks` is "Ready" as soon as its objects are applied, not when they work. In
-the `apps/flux/management` render (40 Kustomizations) these 14 have no health gate:
+the `apps/flux/management` render (41 Kustomizations) these 15 have no health gate:
 
 <!-- health-gates:begin (pinned by scripts/dev/test-flux-health-gates.sh) -->
 - backup-databases
@@ -73,12 +73,13 @@ the `apps/flux/management` render (40 Kustomizations) these 14 have no health ga
 - kyverno-policies-eso
 - kyverno-policies-cnpg
 - observability
+- observability-alert-egress
 - observability-openbao
 - services-gateway
 - storage-backup-target
 <!-- health-gates:end -->
 
-On a real management cluster `OpenAether-infra` adds a 15th (`openaether-platform`), absent from this repository: 15 of 40.
+On a real management cluster `OpenAether-infra` adds a 16th (`openaether-platform`), absent from this repository: 16 of 41.
 Adding or removing a `wait`/`healthChecks` changes this list; the test fails until it is updated.
 
 A gate is only as good as the verdict on each object. Two traps, both read in the sources of Flux 2.9.6 and 2.10.0:
@@ -115,6 +116,21 @@ point here.
   silent: the Flux alerts (FluxObjectNotReady, FluxReconciliationStalled) are rules of the observability bricks, which
   depend on this Kustomization, so read `kubectl -n flux-system get kustomization cnpg` directly when the databases are slow.
 - **The pin.** `scripts/dev/test-flux-health-gates.sh` pins that entry string for string and checks `timeout` >= 15m.
+- **The same entry on `forgejo-db` (#204).** `apps/flux/base/36-forgejo-db.yaml` (the opt-in forge, not in the `management`
+  render: the test reads `management-forge`) carries the identical entry, the same pin and the same `15m`. Before it, `wait: true`
+  alone left `forgejo-db` Ready while its Cluster was empty: on three Scaleway installs (3 CP + 6 W, forge turned on by the
+  documented patch, n=1 each, NOMINAL) it was Ready 6 s and 7 s after the patch with the Cluster at "Setting up primary", 0 of 3,
+  and once after a health check of 41 ms with the Cluster at 0 of 3 (3 of 3 about 73 s and 2 min later). The cause is the reading
+  above, not shown. The gate has been seen waiting on a fresh install for `cnpg` (lab 34, n=1; lab 35 cluster B, 6m5s) and for
+  `forgejo-db` (lab 35 cluster B, n=1, the candidate on a moving branch ref: Ready 5 s after its Cluster, where lab 34 cluster B,
+  the same order on 0.4.3 without the entry, had it Ready 73 s BEFORE its Cluster). That is ONE order, the forge turned on at
+  rc 0 while `cnpg` was still waiting: "forge enabled when `cnpg` is already Ready" was not run. **The gate does not hold an
+  image roll:** in lab 35 move 2 and in lab 36 the `forgejo-db` Kustomization was Ready 1 s BEFORE the operator began rolling
+  its Cluster (2 of 2 labs), and whether `cnpg` itself waits for a roll differed between the two (Ready 5 s after Progressing
+  in lab 35 move 2, 1:44 in lab 36; a race between Flux's health check and the operator is the hypothesis, not isolated): read
+  the Clusters, not Flux. Unlike `cnpg`, no brick but `forgejo` depends on
+  `forgejo-db`, so the observability bricks (and the Flux alerts, `FluxObjectNotReady` after 20 m) do not wait for it: a held
+  `forgejo-db` gate should not be silent (a reading of the `dependsOn`, not run).
 
 ## Invariant to maintain
 

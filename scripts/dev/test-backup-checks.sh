@@ -191,5 +191,31 @@ PY
   then ok "$f: stale locks are removed before the repository is read"; else bad "$f: restic unlock must come before restic cat config"; fi
 done
 
+echo "=== openbao snapshot pod: the ServiceAccount token reaches the snapshot init container only (apps #74) ==="
+# The auto-mounted token went to both containers; only `snapshot` logs in with it. The pod must not auto-mount one, and the
+# only container that mounts a projected serviceAccountToken volume is the init container `snapshot`.
+tokcheck() { python3 -I - "$1" <<'PY'
+import sys, yaml
+doc = next(d for d in yaml.safe_load_all(open(sys.argv[1])) if d and d.get("kind") == "CronJob")
+pod = doc["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+errs = []
+if pod.get("automountServiceAccountToken") is not False:
+    errs.append("the pod must set automountServiceAccountToken: false")
+vols = {v["name"] for v in pod.get("volumes", []) if any("serviceAccountToken" in s for s in (v.get("projected") or {}).get("sources", []))}
+if not vols:
+    errs.append("no projected serviceAccountToken volume: the snapshot container has no token to log in with")
+users = sorted(c["name"] for c in pod.get("initContainers", []) + pod["containers"] if any(m["name"] in vols for m in c.get("volumeMounts", [])))
+if users != ["snapshot"]:
+    errs.append(f"the token must reach the init container snapshot only, found {users}")
+print("\n".join(errs)); sys.exit(1 if errs else 0)
+PY
+}
+OBC="$ROOT/apps/base/backup/openbao/cronjob.yaml"
+expect "the shipped snapshot pod gives the token to the snapshot init container only" 0 tokcheck "$OBC"
+sed 's#automountServiceAccountToken: false#automountServiceAccountToken: true#' "$OBC" > "$W/ob-automount.yaml"
+expect "a pod that auto-mounts the token again fails" fail tokcheck "$W/ob-automount.yaml"
+sed 's#{ name: backup, mountPath: /backup, readOnly: true }#&\n                - { name: sa-token, mountPath: /var/run/secrets/kubernetes.io/serviceaccount }#' "$OBC" > "$W/ob-restic.yaml"
+expect "restic-push mounting the token fails" fail tokcheck "$W/ob-restic.yaml"
+
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$PASS" -gt 0 ] && [ "$FAIL" -eq 0 ]
