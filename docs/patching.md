@@ -203,8 +203,8 @@ Not shown without a cluster: that step 2 always clears the stale address. The te
 The management cluster runs Kubernetes 1.37.1 (the infra default). Upstream matrices list up to 1.36 for cert-manager 1.21 (1.33-1.36) and
 Cilium 1.20 (e2e 1.33-1.36); CloudNativePG 1.30 lists 1.34-1.36 and tests 1.37; Istio 1.31 is the one line that covers it. The management
 cluster's own Flux is 2.10 since 0.4.3 and needs Kubernetes 1.37.0 or later on the 1.37 line (OpenAether-infra `docs/upgrade.md`, "From 0.4.2 to
-0.4.3"); the Flux 2.9.6 that this repository pushes to CAPI children (`cluster-api-clusters/flux-gotk`) keeps the 2.9 matrix (1.34-1.36),
-against the children's 1.35/1.36. **Decision (owner, 2026-10-16): keep 1.37.1** and let real-cloud labs prove the pairing; the labs 15a to 15c ran this repository's pins on 1.37.1 on three
+0.4.3"); the Flux 2.10.0 that this repository pushes to CAPI children (`cluster-api-clusters/flux-gotk`, since apps 0.4.5; 2.9.6 before) takes the 2.10 matrix
+(1.35 from 1.35.2, 1.36 from 1.36.1, 1.37 from 1.37.0), against the children's 1.35/1.36. **Decision (owner, 2026-10-16): keep 1.37.1** and let real-cloud labs prove the pairing; the labs 15a to 15c ran this repository's pins on 1.37.1 on three
 providers without a Kubernetes-version failure being attributed to an add-on. That is evidence for these pins on that version, not an upstream
 statement of support: a problem on 1.37 is reported upstream as outside the tested range, and the fallback is the children's 1.35/1.36. At every
 hop, re-read the target's matrix for 1.37 before merging and note the result in the PR. No automated check exists: the matrices are prose on each

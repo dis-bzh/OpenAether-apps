@@ -36,7 +36,7 @@ def render(path):
 
 def crd_schemas():
     out = {}
-    for f in ("apps/base/cnpg/cnpg-1.30.1.yaml", "apps/base/cnpg/barman-cloud-plugin-0.15.1.yaml"):
+    for f in ("apps/base/cnpg/cnpg-1.30.1.yaml", "apps/base/cnpg/barman-cloud-plugin-0.16.0.yaml"):
         for d in yaml.safe_load_all((REPO / f).read_text()):
             if d and d.get("kind") == "CustomResourceDefinition":
                 v = next(v for v in d["spec"]["versions"] if v.get("storage"))
@@ -339,7 +339,7 @@ def main():
                 spec = by_kind(docs, "Cluster")[0]["spec"]
                 cons = [{"name": "postgres", "image": spec["imageName"], "resources": spec["resources"], "securityContext": sec}]
                 for st in by_kind(docs, "ObjectStore")[:1]:
-                    cons.append({"name": "plugin-barman-cloud", "image": "ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.15.1",
+                    cons.append({"name": "plugin-barman-cloud", "image": "ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.16.0",
                                  "resources": st["spec"]["instanceSidecarConfiguration"]["resources"], "securityContext": sec})
                 pods.append({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "i-" + p, "namespace": "shop"},
                              "spec": {"securityContext": {"runAsNonRoot": True, "seccompProfile": {"type": "RuntimeDefault"}},

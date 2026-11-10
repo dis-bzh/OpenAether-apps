@@ -161,9 +161,10 @@ def main(path="apps/base/cnpg"):
             errs.append("plugin: no memory limit")
         # lab 26 (B1): v0.15.1 starts the gRPC server (:9090) only on the pod holding the leader lease, so with --leader-elect the
         # second replica is never Ready (TCP readiness on 9090), Flux fails `cnpg` and the budget blocks every drain. Both
-        # replicas must serve. Put the flag back only with a plugin release that contains upstream PR 1105.
+        # replicas must serve. v0.16.0 contains upstream PR 1105 and could take the flag back; 0.4.5 keeps it OFF on purpose (the
+        # shape proven in labs 25 to 36): putting it back is a change of its own, with its own lab.
         if any(a.startswith("--leader-elect") for a in c["args"]):
-            errs.append("plugin: --leader-elect makes the standby never Ready on v0.15.1 (lab 26, B1); remove it, or bump to a release with upstream PR 1105")
+            errs.append("plugin: --leader-elect is kept off on purpose (labs 25 to 36 ran without it; v0.16.0 has upstream PR 1105 and could take it back, with a lab of its own)")
         for need in ("operator", "--server-address=:9090", "--log-level=info"):
             if need not in c["args"]:
                 errs.append(f"plugin: args lost {need!r}: {c['args']}")

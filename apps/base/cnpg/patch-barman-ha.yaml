@@ -10,10 +10,12 @@
 # the budget below blocked every drain. kustomization.yaml removes the flag, so BOTH pods serve and are Ready, and
 # the ObjectStore controller runs on both: all it does is patch the RBAC Roles of the Clusters from the ObjectStore
 # specs (idempotent, the same patch the gRPC handlers' pre-hook makes on every Cluster reconcile), so two of them
-# are harmless. Upstream fixed exactly this in cloudnative-pg/plugin-barman-cloud PR 1105 (merged 2026-10-02, after
-# v0.15.1, not in a release yet): the gRPC runnable opts out of the election and only the ObjectStore controller
-# keeps it. When the vendored plugin is bumped to a release that contains it, put `--leader-elect` back
-# (scripts/dev/test-cnpg-barman-plugin.py then needs its flag check changed).
+# are harmless. Upstream fixed exactly this in cloudnative-pg/plugin-barman-cloud PR 1105 (merged 2026-10-02, in v0.16.0,
+# the vendored release since apps 0.4.5): the gRPC runnable opts out of the election and only the ObjectStore controller
+# keeps it. The flag stays OFF in 0.4.5 on purpose: the shape proven in labs 25 to 36 is "no election, every replica
+# serves"; putting `--leader-elect` back is a change of its own with its own lab (scripts/dev/test-cnpg-barman-plugin.py
+# then needs its flag check changed). Upstream warns that RollingUpdate runs two plugin versions side by side during an
+# upgrade; v0.15.1 to v0.16.0 is read in the 0.4.5 lab.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

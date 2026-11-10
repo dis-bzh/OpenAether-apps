@@ -14,7 +14,11 @@
 # event
 # source on one namespace; scripts/dev/test-flux-notifications.py fails when a HelmRelease namespace of apps/base is
 # missing.
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+#
+# `v1` since apps 0.4.5 (apps #214): it is the storage version of both CRDs from Flux 2.10, which the management cluster
+# runs since OpenAether-infra 0.4.3; the 2.9 CRDs serve `v1beta3` only. The two objects use none of the fields `v1`
+# dropped (`Alert.spec.summary`, `Provider.spec.interval`, `Provider.spec.proxy`).
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Provider
 metadata:
   name: alertmanager
@@ -26,7 +30,7 @@ spec:
   type: alertmanager
   address: http://vmalertmanager-alertmanager.services-observability:9093/api/v2/alerts
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
 metadata:
   name: flux-errors
