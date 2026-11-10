@@ -123,9 +123,10 @@ Two follow-ups these bumps create and that nothing in the repository enforces ye
 
 ## Longhorn in-place hops (a running cluster pinned at 1.9.x)
 
-A **fresh install** takes the pin (1.12.1) directly. A cluster already running 1.9.x cannot: Longhorn only upgrades one
+A **fresh install** takes the pin (1.12.2) directly. A cluster on 1.12.1 takes the patch hop 1.12.2 (same minor, no skipped minor; since apps 0.4.5, which rebases the CSI sidecars too).
+A cluster already running 1.9.x cannot take the pin directly: Longhorn only upgrades one
 minor at a time (the chart's pre-upgrade job refuses a skip) and does not support downgrades. The path is
-**1.9.2 -> 1.10.2 -> 1.11.3 -> 1.12.1**, one `version:` change per PR, each hop finished (below) before the next.
+**1.9.2 -> 1.10.2 -> 1.11.3 -> 1.12.2**, one `version:` change per PR, each hop finished (below) before the next.
 Avoid 1.10.0 and 1.11.0 (manager and instance-manager regressions fixed by later patches). 1.13.0 needs Kubernetes
 1.34 or later and is not taken. The `HelmRelease` has `retries: 0` for install and upgrade and `timeout: 15m`: a failed
 upgrade is **not** rolled back automatically (the refused downgrade would strand the release); a person reads the
