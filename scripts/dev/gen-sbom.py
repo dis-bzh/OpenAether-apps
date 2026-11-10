@@ -4,7 +4,8 @@
 Built from the RENDERED output of every DAG path (scripts/dev/render-dag.py), because that is what Flux applies:
   - every Helm chart a HelmRelease installs (name, version, repository),
   - every container image named in the rendered manifests (Pods, Deployments, CronJobs, the vendored dumps...), and the
-    ones handed to another image as a `--*-image` argument or a `*_IMAGE` env value (Longhorn's engine and CSI sidecars),
+    ones handed to another image as a `--*-image` argument, a `*_IMAGE` env value or a `*_IMAGE` Secret key (Longhorn's engine
+    and CSI sidecars, the Barman Cloud plugin's sidecar),
   - with --helm, the images the charts themselves render (`helm template` with the HelmRelease's values; needs
     helm and the network; a chart that does not render is listed on stderr and fails the run unless --allow-chart-failures).
 
@@ -17,6 +18,7 @@ Usage: gen-sbom.py --rendered <dir> [--helm] [--version <tag>] [--timestamp <iso
 Dependencies: PyYAML; helm for --helm.
 """
 import argparse
+import base64
 import json
 import os
 import re
@@ -46,10 +48,26 @@ IMAGE_FLAG = re.compile(r"^--(?:\w+-)*image(?:=(.+))?$")
 IMAGE_ENV = re.compile(r"_IMAGE$")
 
 
+def secret_images(node, out):
+    """A Secret key that ends in `_IMAGE` holds an image reference: base64 in `data`, plain in `stringData` (the Barman Cloud
+    plugin ships its sidecar image as `data.SIDECAR_IMAGE` of a Secret that its Deployment reads, apps #219)."""
+    for key, enc in (node.get("data") or {}).items():
+        if IMAGE_ENV.search(str(key)) and isinstance(enc, str):
+            try:
+                out.add(base64.b64decode("".join(enc.split()), validate=True).decode().strip())
+            except (ValueError, UnicodeDecodeError):
+                pass
+    for key, val in (node.get("stringData") or {}).items():
+        if IMAGE_ENV.search(str(key)) and isinstance(val, str):
+            out.add(val.strip())
+
+
 def walk_images(node, out):
     """Every string under a key named `image`, every {repository, tag} pair (Pod specs and chart values), and the
-    references passed as `--*-image` arguments or `*_IMAGE` env values."""
+    references passed as `--*-image` arguments, `*_IMAGE` env values or `*_IMAGE` Secret keys."""
     if isinstance(node, dict):
+        if node.get("kind") == "Secret":
+            secret_images(node, out)
         if isinstance(node.get("name"), str) and IMAGE_ENV.search(node["name"]) and isinstance(node.get("value"), str):
             out.add(node["value"])
         for k, v in node.items():

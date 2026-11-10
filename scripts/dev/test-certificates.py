@@ -45,9 +45,16 @@ for f in sorted((REPO / "apps").rglob("*.yaml")):
             others.append((f.relative_to(REPO).as_posix(), d))
 
 check("found the Certificates", len(certs) >= 4)
+# The Barman Cloud plugin dump (v0.16.0) no longer names a rotation policy on its two leaves; the brick's kustomization.yaml patch
+# does (`barman-cloud-(client|server)`, Always), so for those two the patch is what is read.
+cnpg_kustomization = (REPO / "apps/base/cnpg/kustomization.yaml").read_text()
+barman_patched = "barman-cloud-(client|server)" in cnpg_kustomization and "rotationPolicy: Always" in cnpg_kustomization
 for path, d in certs:
     pk = d["spec"].get("privateKey", {})
-    check(f"{d['metadata']['name']} ({path}) names privateKey.rotationPolicy", pk.get("rotationPolicy") in ("Never", "Always"))
+    named = pk.get("rotationPolicy") in ("Never", "Always")
+    if not named and path.startswith("apps/base/cnpg/barman-cloud-plugin-") and d["metadata"]["name"] in ("barman-cloud-client", "barman-cloud-server"):
+        named = barman_patched
+    check(f"{d['metadata']['name']} ({path}) names privateKey.rotationPolicy", named)
 ca = next((d for p, d in certs if d["metadata"]["name"] == "openbao-ca"), None)
 check("openbao-ca keeps its key (rotationPolicy Never)", ca is not None and ca["spec"]["privateKey"].get("rotationPolicy") == "Never")
 

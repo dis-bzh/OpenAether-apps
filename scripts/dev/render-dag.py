@@ -4,7 +4,8 @@
 The shared first step of the manifest scan (kubeconform, trivy config) and of the SBOM:
 what the cluster is told to run is the rendered output, not the source tree.
 
-Usage: python3 scripts/dev/render-dag.py <out-dir>
+Usage: python3 scripts/dev/render-dag.py <out-dir> [--payloads]
+  --payloads also renders the bricks that no DAG path lists but a cluster is told to run (PAYLOADS below): only the SBOM wants them.
 Needs kubectl (kustomize is built in) and PyYAML (pick.py). Exits 1 if a brick does not build.
 """
 import subprocess
@@ -14,13 +15,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pick import REPO, load_dag  # noqa: E402
 
+# Bricks that no DAG path lists but that a cluster is told to run: the Flux copy that the `spec.kubeConfig` Kustomizations of
+# apps/clusters/edge-*.yaml apply into the CAPI children (apps #215). Rendered only with --payloads, for the SBOM and its
+# scan matrix; kubeconform and trivy config keep reading the DAG paths alone (a vendored upstream install is not ours to lint).
+PAYLOADS = ["./apps/base/cluster-api-clusters/flux-gotk"]
+
 
 def main():
-    if len(sys.argv) != 2:
+    args = [a for a in sys.argv[1:] if a != "--payloads"]
+    if len(args) != 1:
         sys.exit(__doc__)
-    out = Path(sys.argv[1])
+    out = Path(args[0])
     out.mkdir(parents=True, exist_ok=True)
-    paths = sorted({b.path for b in load_dag().values() if b.path})
+    paths = sorted({b.path for b in load_dag().values() if b.path} | (set(PAYLOADS) if "--payloads" in sys.argv[1:] else set()))
     failed = 0
     for path in paths:
         res = subprocess.run(["kubectl", "kustomize", str(REPO / path.lstrip("./"))],
