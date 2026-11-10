@@ -51,13 +51,15 @@ IMAGE_ENV = re.compile(r"_IMAGE$")
 def secret_images(node, out):
     """A Secret key that ends in `_IMAGE` holds an image reference: base64 in `data`, plain in `stringData` (the Barman Cloud
     plugin ships its sidecar image as `data.SIDECAR_IMAGE` of a Secret that its Deployment reads, apps #219)."""
-    for key, enc in (node.get("data") or {}).items():
+    data = node.get("data")
+    for key, enc in (data.items() if isinstance(data, dict) else ()):
         if IMAGE_ENV.search(str(key)) and isinstance(enc, str):
             try:
                 out.add(base64.b64decode("".join(enc.split()), validate=True).decode().strip())
             except (ValueError, UnicodeDecodeError):
                 pass
-    for key, val in (node.get("stringData") or {}).items():
+    plain = node.get("stringData")
+    for key, val in (plain.items() if isinstance(plain, dict) else ()):
         if IMAGE_ENV.search(str(key)) and isinstance(val, str):
             out.add(val.strip())
 

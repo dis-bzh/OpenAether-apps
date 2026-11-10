@@ -150,6 +150,11 @@ def main(path="apps/base/cnpg"):
         for part in ("wal", "data"):
             if d["spec"]["configuration"].get(part, {}).get("encryption") != "AES256":
                 errs.append(f"ObjectStore {name}: {part}.encryption must request server-side AES256")
+    # The plugin's two mTLS leaves come without a rotation policy since v0.16.0; the brick patch adds it, read on the RENDER.
+    for leaf in ("barman-cloud-client", "barman-cloud-server"):
+        cert = [d for d in docs if d["kind"] == "Certificate" and d["metadata"]["name"] == leaf]
+        if len(cert) != 1 or cert[0]["spec"].get("privateKey", {}).get("rotationPolicy") != "Always":
+            errs.append(f"plugin: the rendered Certificate {leaf} must name privateKey.rotationPolicy Always (cert-manager 1.18 flipped the unwritten default)")
     plugin = [d for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "barman-cloud"]
     if len(plugin) != 1:
         errs.append("the barman-cloud plugin Deployment is missing")

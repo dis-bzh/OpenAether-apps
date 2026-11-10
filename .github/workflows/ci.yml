@@ -692,7 +692,7 @@ jobs:
           # The Kubernetes minor of OpenAether-infra's kubernetes_version.
           K8S_SCHEMA_VERSION: "1.36.0"
           # yamllint disable-line rule:line-length
-          CRD_CATALOG: "https://raw.githubusercontent.com/datreeio/CRDs-catalog/63669a570e231d4f1f8396d229a1de512bcf0a34"
+          CRD_CATALOG: "https://raw.githubusercontent.com/datreeio/CRDs-catalog/49729e49e8f062933e3716a26540d41b0cd0856c"
         run: |
           set -euo pipefail
           mkdir "$RUNNER_TEMP/kubeconform-in"

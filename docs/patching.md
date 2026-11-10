@@ -112,7 +112,7 @@ roll CRDs back, and the Gateway API CRDs are not a Helm release at all.
 Same rules, one commit per component, offline only. Moved: Longhorn 1.12.1, cert-manager v1.21.2, Kyverno 1.19.1 and CNPG operator 1.30.1 (both
 re-vendored), grafana-db PostgreSQL 16.15, External Secrets 2.13.0 (re-vendored from the chart), Flux for the children 2.9.6, cluster-api-operator
 0.29.0, ORC v2.6.0, victoria-metrics-operator 0.68.1, Alloy 1.13.1, Zitadel chart 10.4.0 (v4.19.2), Loki 18.16.2 and Grafana 14.0.1 (both from the
-`grafana-community` chart repository, the old one no longer carries them), and the children's Cilium 1.19.9. **These pins describe a fresh install.**
+`grafana-community` chart repository, the old one no longer carries them), and the children's Cilium 1.19.9. **These pins describe a fresh install.** (Since moved: Longhorn to 1.12.2 and the Flux copy for the children to 2.10.0 in apps 0.4.5.)
 A cluster that already runs the old versions follows each project's own hop rule (one minor at a time for Longhorn, cert-manager and CNPG; a CNPG
 Backup before Zitadel or Grafana; the order above for the rest): the observations, rollbacks and the data-safety gates are the lab checklist's, not
 this page's. Not moved, with the reason: Istio (waived, needs the Gateway API CRDs and a chart repository decision; moved to 1.31.3 in 0.4.0), MinIO (dev profile, no maintained
@@ -123,7 +123,9 @@ Two follow-ups these bumps create and that nothing in the repository enforces ye
 
 ## Longhorn in-place hops (a running cluster pinned at 1.9.x)
 
-A **fresh install** takes the pin (1.12.2) directly. A cluster on 1.12.1 takes the patch hop 1.12.2 (same minor, no skipped minor; since apps 0.4.5, which rebases the CSI sidecars too).
+A **fresh install** takes the pin (1.12.2) directly. A cluster on 1.12.1 moves to 1.12.2 (same minor, no skipped minor; since apps 0.4.5, which rebases the CSI sidecars too). 1.12.2 fixes acknowledged writes that could be
+silently lost during a replica rebuild under concurrent writes smaller than 4 KiB (its release notes, Longhorn issues #14451 and #14447): that fix lives in the engine image, so a volume
+has it only after step 6 below (the engine image upgrade of the volume), not when the manager is updated.
 A cluster already running 1.9.x cannot take the pin directly: Longhorn only upgrades one
 minor at a time (the chart's pre-upgrade job refuses a skip) and does not support downgrades. The path is
 **1.9.2 -> 1.10.2 -> 1.11.3 -> 1.12.2**, one `version:` change per PR, each hop finished (below) before the next.

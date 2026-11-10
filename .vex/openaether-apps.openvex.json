@@ -2,14 +2,14 @@
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/dis-bzh/OpenAether-apps/.vex/openaether-apps.openvex.json",
   "author": "OpenAether maintainers",
-  "timestamp": "2026-11-06T23:20:00Z",
-  "version": 5,
+  "timestamp": "2026-11-10T12:00:00Z",
+  "version": 6,
   "statements": [
     {
       "vulnerability": {
         "name": "CVE-2026-60002"
       },
-      "timestamp": "2026-11-04T00:00:00Z",
+      "timestamp": "2026-11-10T00:00:00Z",
       "products": [
         {
           "@id": "pkg:oci/restic?repository_url=index.docker.io/restic/restic",
