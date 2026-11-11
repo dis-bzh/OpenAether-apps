@@ -158,7 +158,7 @@ Preconditions, to check before every hop (none was run from this repository; the
    detached). This step, not the manager hop, is what gives an existing volume the engine fix of 1.12.2 (above). One lab run
    (n=1, Scaleway, 3 control planes + 6 workers): the live upgrade of an attached volume took 9.3 s, with no rebuild and no write
    gap over 0.3 s; the offline upgrade of a detached one 2.4 s. Then wait for the old instance-manager pods to go, but an old
-   pod stays for as long as it hosts an engine process (Longhorn's page for 1.11.1; the page for 1.12 was not found): an
+   pod stays for as long as it hosts an engine process ([Longhorn's page, 1.12.0](https://longhorn.io/docs/1.12.0/deploy/upgrade/instance-manager-pods-during-upgrade/)): an
    attached volume upgraded live keeps its engine process in the old pod until it is detached, so the wait ends for idle volumes
    and not for an attached one. In that run 5 of the 6 old pods were removed and the sixth was still there 9 minutes later,
    hosting the engine of the attached volume whose engine image was already 1.12.2. To free it, detach the volume (restart its
