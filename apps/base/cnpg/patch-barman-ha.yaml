@@ -15,8 +15,14 @@
 # v0.16.0, the vendored release since apps 0.4.5): the gRPC runnable opts out of the election and only the ObjectStore
 # controller keeps it. The flag stays OFF in 0.4.5 on purpose: the shape proven in labs 25 to 36 is "no election,
 # every replica serves"; putting `--leader-elect` back is a change of its own with its own lab
-# (scripts/dev/test-cnpg-barman-plugin.py then needs its flag check changed). Upstream warns that RollingUpdate runs
-# two plugin versions side by side during an upgrade; v0.15.1 to v0.16.0 is read in the 0.4.5 lab.
+# (scripts/dev/test-cnpg-barman-plugin.py then needs its flag check changed).
+# UPSTREAM KEEPS `Recreate`. Its v0.16.0 installation page ("Running Multiple Replicas") says that during an upgrade all
+# replicas are replaced together, so the plugin is briefly unavailable whatever the replica count; the REASON is in the
+# description of its pull request 1105 (not on a documentation page): RollingUpdate "would run two plugin versions side
+# by side during an upgrade and turn gRPC compatibility between consecutive releases into a contract". Here it stays
+# RollingUpdate (a Recreate takes both pods away: lab 25, D3) and two versions run side by side for the length of a
+# bump, so a Renovate bump of the plugin is read for a changed gRPC contract; v0.15.1 to v0.16.0 is read in the 0.4.5
+# lab.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

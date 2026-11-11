@@ -145,11 +145,25 @@ Preconditions, to check before every hop (none was run from this repository; the
    was done on the current version (keep `longhorn-encryption-secret` for the encrypted volumes).
 3. All volumes `healthy` with 2 running replicas, nothing rebuilding, nodes Ready; `/var/mnt/longhorn` has the 15 % free
    `storageMinimalAvailablePercentage` plus room for the temporary doubled replicas of a live engine upgrade.
-4. No Talos reboot, CNPG operator roll or Kubernetes upgrade in the same window (with 2 replicas a drained node leaves one).
+4. No Talos reboot or Kubernetes upgrade in the same window (with 2 replicas a drained node leaves one), and nothing that restarts
+   the PostgreSQL pods at the same time. A CNPG operator roll does, and so does a change of the Barman Cloud plugin's sidecar image:
+   it restarts every PostgreSQL pod once (replicas first, then one planned switchover per Cluster), the same effect as an operator
+   roll. The 0.4.5 move brings both together (Longhorn 1.12.2 and plugin v0.16.0). One lab run of it (n=1, Scaleway, 3 control planes
+   + 6 workers, NOMINAL): no data lost, but each Cluster took about 210 s to roll, against about 90 to 96 s in two earlier image
+   rolls with no Longhorn wave, because the pull of the sidecar image queued behind the images of the Longhorn upgrade (the
+   figures are load-confounded and the cause is not isolated). When the two can be apart, wait until every Cluster is 3 of 3
+   after one before starting the other.
 5. `talosctl etcd snapshot` and a Longhorn `SystemBackup` just before.
 6. After the manager hop, upgrade the engine image of every volume (live when attached and healthy, offline when
-   detached) and wait for the old instance-manager pods to go; whether the next hop refuses volumes left on an old
-   engine image is not documented upstream, so treat it as a precondition.
+   detached). This step, not the manager hop, is what gives an existing volume the engine fix of 1.12.2 (above). One lab run
+   (n=1, Scaleway, 3 control planes + 6 workers): the live upgrade of an attached volume took 9.3 s, with no rebuild and no write
+   gap over 0.3 s; the offline upgrade of a detached one 2.4 s. Then wait for the old instance-manager pods to go, but an old
+   pod stays for as long as it hosts an engine process (Longhorn's page for 1.11.1; the page for 1.12 was not found): an
+   attached volume upgraded live keeps its engine process in the old pod until it is detached, so the wait ends for idle volumes
+   and not for an attached one. In that run 5 of the 6 old pods were removed and the sixth was still there 9 minutes later,
+   hosting the engine of the attached volume whose engine image was already 1.12.2. To free it, detach the volume (restart its
+   workload); that was not run, and whether the engine fix needs the engine process in the new instance manager was not tested.
+   Whether the next hop refuses volumes left on an old engine image is not documented upstream, so treat it as a precondition.
 7. Before the **1.9 -> 1.10 hop only**, take the conversion webhook off the five CRDs that still carry one
    (`backingimages`, `backuptargets`, `engineimages`, `nodes`, `volumes` under `longhorn.io`):
    `kubectl patch crd <name> --type=json -p '[{"op":"replace","path":"/spec/conversion","value":{"strategy":"None"}}]'`.
@@ -159,6 +173,14 @@ Preconditions, to check before every hop (none was run from this repository; the
    the release is Stalled. Attached volumes kept serving, but nothing could attach, detach or back up for about 14 minutes.
    The fix-forward after the fact is the same patch, then delete the manager pods and
    `flux reconcile helmrelease longhorn -n longhorn-system --reset --force`.
+
+**What a manager hop does to the instance managers (one lab run, n=1, Scaleway, 3 control planes + 6 workers, 1.12.1 to 1.12.2).**
+Longhorn removes the instance-manager pod of a node that has no engine or replica process before its replacement is Running. Three
+idle workers had no instance manager for 1 min 25 s to 2 min 10 s, because the replacements waited for their image pull behind the
+other Longhorn images (the manager, the CSI sidecars, the engine image). Nothing ran on them and nothing was lost, but a volume
+cannot be attached on such a node in that window: do not restart the workload of a Longhorn volume, or drain a node, in the first
+minutes of a hop. The manager DaemonSet itself is replaced on all nodes together (the chart's default `maxUnavailable: "100%"`,
+"matches the upgrade flow"); the attached volume of the run kept serving, with a write gap of 0.3 s at most.
 
 ### A first install that stalls
 
