@@ -17,7 +17,10 @@ not exist survived in the on-ramp example). Rules:
   5. no public IPv4 literal, no UUID, and backup values that are placeholders
      (this repository is public);
   6. an *.example child keeps the Cilium values of edge-1.yaml (the same
-     provider, proven end to end): the infra parity check only globs *.yaml.
+     provider, proven end to end): the infra parity check only globs *.yaml;
+  7. the Cilium agent and the cilium-envoy DaemonSet of every child restart one
+     node at a time (updateStrategy.rollingUpdate.maxUnavailable: 1, also under
+     envoy.): the chart default is 2.
 
 Static only: it proves the files are coherent, not that a child comes up.
 
@@ -139,6 +142,18 @@ def check_file(path, shared, served, bricks, cat, flux_dir, errs):
         for v in ("CHILD_BACKUP_S3_BUCKET", "CHILD_BACKUP_TARGET_URL"):
             if sub.get(v) and "<" not in str(sub[v]):
                 err(f"{name}: {v} is not a <placeholder>: this repository is public")
+
+    # 7. one Cilium agent at a time (owner decision 2026-11-11); the chart 1.19 default is maxUnavailable 2 for both
+    # DaemonSets
+    for d in ds:
+        if d.get("kind") != "HelmRelease" or not str((d.get("metadata") or {}).get("name", "")).endswith("-cilium"):
+            continue
+        vals = (d.get("spec") or {}).get("values") or {}
+        for where, node in (("updateStrategy", vals), ("envoy.updateStrategy", vals.get("envoy") or {})):
+            got = ((node.get("updateStrategy") or {}).get("rollingUpdate") or {}).get("maxUnavailable")
+            if got != 1:
+                err(f"{d['metadata']['name']}: values {where}.rollingUpdate.maxUnavailable is {got!r}, want 1 "
+                    "(one Cilium agent at a time; the chart default is 2)")
 
     # 5. public data
     text = path.read_text()
