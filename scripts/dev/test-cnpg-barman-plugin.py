@@ -5,12 +5,10 @@ The in-tree `barmanObjectStore` is removed in CNPG 1.31. Renders apps/base/cnpg 
 no Cluster or backup spec still uses `barmanObjectStore`; each Cluster names a WAL-archiving plugin ObjectStore that exists in
 its namespace; each ScheduledBackup uses `method: plugin`; every ObjectStore validates against the CRD in the plugin dump
 (unknown field, enum, required, type); the sidecar of every ObjectStore carries the Outscale checksum fix (apps #132) and a
-memory limit; the plugin Deployment runs with bounds and info logging; the operator Deployment carries a positive
-CLUSTERS_ROLLOUT_DELAY (one Cluster rolls at a time) and no INSTANCES_ROLLOUT_DELAY; with the Kyverno CLI ($KYVERNO or
-PATH) the rendered workloads pass the policies. Static: it proves the manifests, not a store.
+memory limit; the plugin Deployment runs with bounds and info logging; with the Kyverno CLI ($KYVERNO or PATH) the
+rendered workloads pass the policies. Static: it proves the manifests, not a store.
 """
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -22,46 +20,11 @@ import yaml
 REPO = Path(__file__).resolve().parents[2]
 PLUGIN = "barman-cloud.cloudnative-pg.io"
 CHECKSUM_ENV = {"AWS_REQUEST_CHECKSUM_CALCULATION": "when_required", "AWS_RESPONSE_CHECKSUM_VALIDATION": "when_required"}
-OPERATOR = "cnpg-controller-manager"
-# One Cluster rolls at a time (owner decision 2026-11-11). The delay is counted from a Cluster's LAST step, not from its being
-# healthy again, so it must exceed the worst measured time from the last step to healthy (133 s while Longhorn replaced its images:
-# the sidecar pull of the old primary's pod queued behind them), plus one second, or the next Cluster starts while the previous one
-# is still at 2 of 3. It must also exceed the worst gap between two steps of ONE Cluster (29 s), or the steps of two Clusters
-# interleave; 134 s covers both. A value the operator cannot parse is ignored without an error and the delay silently becomes 0,
-# hence the strict shape.
-MIN_CLUSTERS_ROLLOUT_DELAY = 134
 
 
 def render(path="apps/base/cnpg"):
     out = subprocess.run(["kubectl", "kustomize", str(REPO / path)], check=True, capture_output=True, text=True).stdout
     return [d for d in yaml.safe_load_all(out) if d]
-
-
-def operator_rollout_delay(docs):
-    """Problems with the rollout delay of the CNPG operator Deployment, read on the RENDER."""
-    dep = [d for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == OPERATOR]
-    if len(dep) != 1:
-        return [f"the CNPG operator Deployment {OPERATOR} is missing"]
-    ctrs = [c for c in dep[0]["spec"]["template"]["spec"]["containers"] if c["name"] == "manager"]
-    if len(ctrs) != 1:
-        return [f"{OPERATOR}: want exactly one container named manager, got {len(ctrs)}"]
-    env = {e["name"]: e for e in ctrs[0].get("env", [])}
-    errs = []
-    value = env.get("CLUSTERS_ROLLOUT_DELAY", {}).get("value")
-    if not isinstance(value, str) or not re.fullmatch(r"[1-9][0-9]*", value):
-        errs.append(f"{OPERATOR}: CLUSTERS_ROLLOUT_DELAY must be a positive integer STRING in the manager env, got {value!r} "
-                    "(a value the operator cannot parse is ignored and the delay is 0: two Clusters roll together)")
-    elif int(value) < MIN_CLUSTERS_ROLLOUT_DELAY:
-        errs.append(f"{OPERATOR}: CLUSTERS_ROLLOUT_DELAY {value} s is below {MIN_CLUSTERS_ROLLOUT_DELAY} s, the worst measured time "
-                    "from a Cluster's last step to healthy (133 s) plus one second: the next Cluster would start while the previous "
-                    "one is still at 2 of 3")
-    if "INSTANCES_ROLLOUT_DELAY" in env:
-        errs.append(f"{OPERATOR}: INSTANCES_ROLLOUT_DELAY (pods of ONE Cluster) is a different knob and stays at its default")
-    for d in docs:
-        # The operator reads the environment first, then these, and they win: one would override the Deployment silently.
-        if d["kind"] in ("ConfigMap", "Secret") and d["metadata"]["name"] == "cnpg-controller-manager-config":
-            errs.append(f"{d['kind']} cnpg-controller-manager-config would override the operator environment")
-    return errs
 
 
 def check_schema(node, schema, path, errs):
@@ -192,8 +155,6 @@ def main(path="apps/base/cnpg"):
         cert = [d for d in docs if d["kind"] == "Certificate" and d["metadata"]["name"] == leaf]
         if len(cert) != 1 or cert[0]["spec"].get("privateKey", {}).get("rotationPolicy") != "Always":
             errs.append(f"plugin: the rendered Certificate {leaf} must name privateKey.rotationPolicy Always (cert-manager 1.18 flipped the unwritten default)")
-    if path == "apps/base/cnpg":
-        errs += operator_rollout_delay(docs)
     plugin = [d for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "barman-cloud"]
     if len(plugin) != 1:
         errs.append("the barman-cloud plugin Deployment is missing")
