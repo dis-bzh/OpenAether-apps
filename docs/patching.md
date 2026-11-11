@@ -41,6 +41,10 @@ the tag on every line, and run `scripts/check-image-pins.py` (form, one tag per 
 profile Clusters and the three bench Jobs are not in it, so the grep above is what covers them.
 Both majors may go in one commit, but change the image and nothing else in a Cluster: with `primaryUpdateMethod: switchover` the
 CNPG webhook refuses an image change together with a `postgresql.parameters` change. A lab proves the rolling update, not this page.
+Since apps 0.4.5 the operator rolls the Clusters one after the other, 150 s apart (`CLUSTERS_ROLLOUT_DELAY`, see
+[`resilience.md`](resilience.md)): a bump that reaches three Clusters takes about 8.5 minutes to finish (an estimate, never run), and
+a delayed Cluster is Ready=False for that time, which the Flux Kustomizations `cnpg` and `forgejo-db` wait for. The move that first
+brings the setting is not protected by it.
 
 Two follow-ups are due. Bookworm: CNPG full support ended 2026-06-10 and Debian LTS ends 2028-06-30, so plan the trixie move
 before then. The `system` flavour is deprecated upstream, and the `verify` and `dump-load-test` CronJobs and the bench Job

@@ -115,6 +115,10 @@ point here.
   back, its dependents only wait. Their wait is
   silent: the Flux alerts (FluxObjectNotReady, FluxReconciliationStalled) are rules of the observability bricks, which
   depend on this Kustomization, so read `kubectl -n flux-system get kustomization cnpg` directly when the databases are slow.
+  A Cluster held back by the operator's `CLUSTERS_ROLLOUT_DELAY` (150 s, `docs/resilience.md`) is Ready=False while it waits:
+  three Clusters rolling in series take about 8.5 minutes by arithmetic on quiet-lab figures (an estimate, never run), inside
+  `15m` for `cnpg` (two Clusters) and for `forgejo-db` (its Cluster can be the third in line). No timeout was changed; a slower
+  roll makes the health check fail and be retried, nothing is rolled back.
 - **The pin.** `scripts/dev/test-flux-health-gates.sh` pins that entry string for string and checks `timeout` >= 15m.
 - **The same entry on `forgejo-db` (#204).** `apps/flux/base/36-forgejo-db.yaml` (the opt-in forge, not in the `management`
   render: the test reads `management-forge`) carries the identical entry, the same pin and the same `15m`. Before it, `wait: true`
