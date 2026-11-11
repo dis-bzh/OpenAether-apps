@@ -23,9 +23,12 @@ REPO = Path(__file__).resolve().parents[2]
 PLUGIN = "barman-cloud.cloudnative-pg.io"
 CHECKSUM_ENV = {"AWS_REQUEST_CHECKSUM_CALCULATION": "when_required", "AWS_RESPONSE_CHECKSUM_VALIDATION": "when_required"}
 OPERATOR = "cnpg-controller-manager"
-# One Cluster rolls at a time (owner decision 2026-11-11). The delay must exceed the worst measured gap between two steps of ONE
-# Cluster (133 s while Longhorn replaced its images), or the steps of two Clusters interleave. A value the operator cannot parse
-# is ignored without an error and the delay silently becomes 0, hence the strict shape.
+# One Cluster rolls at a time (owner decision 2026-11-11). The delay is counted from a Cluster's LAST step, not from its being
+# healthy again, so it must exceed the worst measured time from the last step to healthy (133 s while Longhorn replaced its images:
+# the sidecar pull of the old primary's pod queued behind them), plus one second, or the next Cluster starts while the previous one
+# is still at 2 of 3. It must also exceed the worst gap between two steps of ONE Cluster (29 s), or the steps of two Clusters
+# interleave; 134 s covers both. A value the operator cannot parse is ignored without an error and the delay silently becomes 0,
+# hence the strict shape.
 MIN_CLUSTERS_ROLLOUT_DELAY = 134
 
 
@@ -49,8 +52,9 @@ def operator_rollout_delay(docs):
         errs.append(f"{OPERATOR}: CLUSTERS_ROLLOUT_DELAY must be a positive integer STRING in the manager env, got {value!r} "
                     "(a value the operator cannot parse is ignored and the delay is 0: two Clusters roll together)")
     elif int(value) < MIN_CLUSTERS_ROLLOUT_DELAY:
-        errs.append(f"{OPERATOR}: CLUSTERS_ROLLOUT_DELAY {value} s is below {MIN_CLUSTERS_ROLLOUT_DELAY} s, the worst measured gap "
-                    "between two steps of one Cluster plus one second: the steps of two Clusters would interleave")
+        errs.append(f"{OPERATOR}: CLUSTERS_ROLLOUT_DELAY {value} s is below {MIN_CLUSTERS_ROLLOUT_DELAY} s, the worst measured time "
+                    "from a Cluster's last step to healthy (133 s) plus one second: the next Cluster would start while the previous "
+                    "one is still at 2 of 3")
     if "INSTANCES_ROLLOUT_DELAY" in env:
         errs.append(f"{OPERATOR}: INSTANCES_ROLLOUT_DELAY (pods of ONE Cluster) is a different knob and stays at its default")
     for d in docs:

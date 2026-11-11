@@ -53,18 +53,31 @@ patches:
 #   when the node of a primary is cordoned, are not delayed. INSTANCES_ROLLOUT_DELAY (the wait between the pods of ONE
 #   Cluster) is a different setting and stays at its default 0: inside a Cluster it already goes replicas first, one
 #   pod at a time, primary last by a planned switchover.
-# - D must exceed the worst gap between two steps of ONE Cluster, or the steps of two Clusters interleave and both stay
-#   at 2 of 3: 12 to 29 s in quiet labs, 124 to 133 s while Longhorn was replacing its images at the same time. 150 s.
+# - D must exceed BOTH (a) the worst gap between two steps of ONE Cluster (12 to 29 s measured) and (b) the time from a
+#   Cluster's LAST step to healthy (about 14 s in a quiet lab, 124 to 133 s in the run where Longhorn was replacing its
+#   images at the same time: the sidecar pull of the old primary's pod queued behind them). Under (a) the second Cluster
+#   takes the slot between two steps of the first and the steps interleave; under (b) it starts while the first is
+#   still at 2 of 3 (the delay is counted from the last step, not from the first Cluster being healthy again, so 60 s
+#   would overlap in that wave). 150 s.
+# - The delay is TIME, not health. A first Cluster that is stuck (for example ErrImagePull on the one sidecar image all
+#   Clusters share) does not hold the second one for more than D: the second starts D after the first one's last step
+#   and takes the same bad image. Watch the first Cluster before the second starts (kubectl get
+#   clusters.postgresql.cnpg.io); there is no automatic stop.
+# - A Cluster that rolls without converging (a pod spec difference that never settles) keeps refreshing the one slot
+#   and delays every other Cluster as long as it loops, a security image bump included. Failover is not affected. If a
+#   Cluster shows repeated Recreating events, fix it first, or restart the operator (the slot is in its memory).
 # - The cost: a delayed Cluster has the phase "Cluster upgrade delayed", the event RolloutDelayed and Ready=False, so
-#   the Flux Kustomizations `cnpg` and `forgejo-db` (wait: true, Cluster Ready gate, timeout 15m) wait while a Cluster
-#   is delayed. Three Clusters in series come to about 8.5 minutes by arithmetic on quiet-lab figures (an estimate,
-#   never run), under the 15 minutes; a slower roll makes the Kustomization fail its health check and be retried every
-#   2 minutes, nothing is rolled back. A move takes about 3 minutes longer per additional Cluster; no outage gets
-#   shorter.
+#   the Flux Kustomizations `cnpg` and `forgejo-db` (wait: true, Cluster Ready gate, timeout 15m) can wait while a
+#   Cluster is delayed (the check races the operator, apps/flux/README.md). By arithmetic on the figures of single lab
+#   runs, never run on a cluster, three Clusters in series take 7:25 to 8:15 for a quiet restart, 8:50 to 9:35 for an
+#   image bump with a cold pull and up to about 11:40 when Longhorn replaces its images at the same time, under the
+#   15 minutes; a slower roll makes the Kustomization fail its health check and be retried every 2 minutes, nothing is
+#   rolled back. Each extra Cluster costs about 3.5 minutes (3:15 to 4:05 by shape); no outage gets shorter.
 # - The operator reads this ONCE, at start (the environment first, then the ConfigMap/Secret named in the args, none
-#   shipped here: a key of the same name there would win), so it protects the NEXT rollout. It does not protect the move
-#   that introduces it when the sidecar change arrives in the same Flux sync: the operator pods restart in that sync and
-#   the slot is lost whenever the operator restarts (the next Cluster then starts at once).
+#   shipped here: a key of the same name there would win), so it protects the NEXT rollout. It is not expected to
+#   protect the move that introduces it when the sidecar change arrives in the same Flux sync: the operator pods
+#   restart in that sync, a race that was not run. The slot is lost whenever the operator restarts (the next Cluster
+#   then starts at once).
 # - A value that is not an integer is logged ("Skipping invalid integer value parsing configuration") and ignored: the
 #   delay silently falls back to 0. scripts/dev/test-cnpg-barman-plugin.py pins a positive integer of at least 134.
 # UNVERIFIED on a cluster: no run has yet shown the phase or the event with this value.
