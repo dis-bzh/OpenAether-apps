@@ -41,6 +41,9 @@ the tag on every line, and run `scripts/check-image-pins.py` (form, one tag per 
 profile Clusters and the three bench Jobs are not in it, so the grep above is what covers them.
 Both majors may go in one commit, but change the image and nothing else in a Cluster: with `primaryUpdateMethod: switchover` the
 CNPG webhook refuses an image change together with a `postgresql.parameters` change. A lab proves the rolling update, not this page.
+The operator rolls every Cluster that needs a pod rollout at the same time (one slot, no delay between Clusters; each Cluster still goes replicas first, then a planned switchover):
+read the Clusters (`kubectl get clusters.postgresql.cnpg.io`, phase `Cluster in healthy state`), not Flux, to know the roll is over, and expect about 15 s of
+interrupted writes per Cluster in a quiet restart ([`resilience.md`](resilience.md)).
 
 Two follow-ups are due. Bookworm: CNPG full support ended 2026-06-10 and Debian LTS ends 2028-06-30, so plan the trixie move
 before then. The `system` flavour is deprecated upstream, and the `verify` and `dump-load-test` CronJobs and the bench Job
@@ -112,7 +115,7 @@ roll CRDs back, and the Gateway API CRDs are not a Helm release at all.
 Same rules, one commit per component, offline only. Moved: Longhorn 1.12.1, cert-manager v1.21.2, Kyverno 1.19.1 and CNPG operator 1.30.1 (both
 re-vendored), grafana-db PostgreSQL 16.15, External Secrets 2.13.0 (re-vendored from the chart), Flux for the children 2.9.6, cluster-api-operator
 0.29.0, ORC v2.6.0, victoria-metrics-operator 0.68.1, Alloy 1.13.1, Zitadel chart 10.4.0 (v4.19.2), Loki 18.16.2 and Grafana 14.0.1 (both from the
-`grafana-community` chart repository, the old one no longer carries them), and the children's Cilium 1.19.9. **These pins describe a fresh install.**
+`grafana-community` chart repository, the old one no longer carries them), and the children's Cilium 1.19.9. **These pins describe a fresh install.** (Since moved: Longhorn to 1.12.2 and the Flux copy for the children to 2.10.0 in apps 0.4.5.)
 A cluster that already runs the old versions follows each project's own hop rule (one minor at a time for Longhorn, cert-manager and CNPG; a CNPG
 Backup before Zitadel or Grafana; the order above for the rest): the observations, rollbacks and the data-safety gates are the lab checklist's, not
 this page's. Not moved, with the reason: Istio (waived, needs the Gateway API CRDs and a chart repository decision; moved to 1.31.3 in 0.4.0), MinIO (dev profile, no maintained
@@ -123,9 +126,12 @@ Two follow-ups these bumps create and that nothing in the repository enforces ye
 
 ## Longhorn in-place hops (a running cluster pinned at 1.9.x)
 
-A **fresh install** takes the pin (1.12.1) directly. A cluster already running 1.9.x cannot: Longhorn only upgrades one
+A **fresh install** takes the pin (1.12.2) directly. A cluster on 1.12.1 moves to 1.12.2 (same minor, no skipped minor; since apps 0.4.5, which rebases the CSI sidecars too). 1.12.2 fixes acknowledged writes that could be
+silently lost during a replica rebuild under concurrent writes smaller than 4 KiB (its release notes, Longhorn issues #14451 and #14447): that fix lives in the engine image, so a volume
+has it only after step 6 below (the engine image upgrade of the volume), not when the manager is updated.
+A cluster already running 1.9.x cannot take the pin directly: Longhorn only upgrades one
 minor at a time (the chart's pre-upgrade job refuses a skip) and does not support downgrades. The path is
-**1.9.2 -> 1.10.2 -> 1.11.3 -> 1.12.1**, one `version:` change per PR, each hop finished (below) before the next.
+**1.9.2 -> 1.10.2 -> 1.11.3 -> 1.12.2**, one `version:` change per PR, each hop finished (below) before the next.
 Avoid 1.10.0 and 1.11.0 (manager and instance-manager regressions fixed by later patches). 1.13.0 needs Kubernetes
 1.34 or later and is not taken. The `HelmRelease` has `retries: 0` for install and upgrade and `timeout: 15m`: a failed
 upgrade is **not** rolled back automatically (the refused downgrade would strand the release); a person reads the
@@ -138,11 +144,25 @@ Preconditions, to check before every hop (none was run from this repository; the
    was done on the current version (keep `longhorn-encryption-secret` for the encrypted volumes).
 3. All volumes `healthy` with 2 running replicas, nothing rebuilding, nodes Ready; `/var/mnt/longhorn` has the 15 % free
    `storageMinimalAvailablePercentage` plus room for the temporary doubled replicas of a live engine upgrade.
-4. No Talos reboot, CNPG operator roll or Kubernetes upgrade in the same window (with 2 replicas a drained node leaves one).
+4. No Talos reboot or Kubernetes upgrade in the same window (with 2 replicas a drained node leaves one), and nothing that restarts
+   the PostgreSQL pods at the same time. A CNPG operator roll does, and so does a change of the Barman Cloud plugin's sidecar image:
+   it restarts every PostgreSQL pod once (replicas first, then one planned switchover per Cluster), the same effect as an operator
+   roll. The 0.4.5 move brings both together (Longhorn 1.12.2 and plugin v0.16.0). One lab run of it (n=1, Scaleway, 3 control planes
+   + 6 workers, NOMINAL): no data lost, but each Cluster took about 210 s to roll, against about 90 to 96 s in two earlier image
+   rolls with no Longhorn wave, because the pull of the sidecar image queued behind the images of the Longhorn upgrade (the
+   figures are load-confounded and the cause is not isolated). When the two can be apart, wait until every Cluster is 3 of 3
+   after one before starting the other.
 5. `talosctl etcd snapshot` and a Longhorn `SystemBackup` just before.
 6. After the manager hop, upgrade the engine image of every volume (live when attached and healthy, offline when
-   detached) and wait for the old instance-manager pods to go; whether the next hop refuses volumes left on an old
-   engine image is not documented upstream, so treat it as a precondition.
+   detached). This step, not the manager hop, is what gives an existing volume the engine fix of 1.12.2 (above). One lab run
+   (n=1, Scaleway, 3 control planes + 6 workers): the live upgrade of an attached volume took 9.3 s, with no rebuild and no write
+   gap over 0.3 s; the offline upgrade of a detached one 2.4 s. Then wait for the old instance-manager pods to go, but an old
+   pod stays for as long as it hosts an engine process ([Longhorn's page, 1.12.0](https://longhorn.io/docs/1.12.0/deploy/upgrade/instance-manager-pods-during-upgrade/)): an
+   attached volume upgraded live keeps its engine process in the old pod until it is detached, so the wait ends for idle volumes
+   and not for an attached one. In that run 5 of the 6 old pods were removed and the sixth was still there 9 minutes later,
+   hosting the engine of the attached volume whose engine image was already 1.12.2. To free it, detach the volume (restart its
+   workload); that was not run, and whether the engine fix needs the engine process in the new instance manager was not tested.
+   Whether the next hop refuses volumes left on an old engine image is not documented upstream, so treat it as a precondition.
 7. Before the **1.9 -> 1.10 hop only**, take the conversion webhook off the five CRDs that still carry one
    (`backingimages`, `backuptargets`, `engineimages`, `nodes`, `volumes` under `longhorn.io`):
    `kubectl patch crd <name> --type=json -p '[{"op":"replace","path":"/spec/conversion","value":{"strategy":"None"}}]'`.
@@ -152,6 +172,14 @@ Preconditions, to check before every hop (none was run from this repository; the
    the release is Stalled. Attached volumes kept serving, but nothing could attach, detach or back up for about 14 minutes.
    The fix-forward after the fact is the same patch, then delete the manager pods and
    `flux reconcile helmrelease longhorn -n longhorn-system --reset --force`.
+
+**What a manager hop does to the instance managers (one lab run, n=1, Scaleway, 3 control planes + 6 workers, 1.12.1 to 1.12.2).**
+Longhorn removes the instance-manager pod of a node that has no engine or replica process before its replacement is Running. Three
+idle workers had no instance manager for 1 min 25 s to 2 min 10 s, because the replacements waited for their image pull behind the
+other Longhorn images (the manager, the CSI sidecars, the engine image). Nothing ran on them and nothing was lost, but a volume
+cannot be attached on such a node in that window: do not restart the workload of a Longhorn volume, or drain a node, in the first
+minutes of a hop. The manager DaemonSet itself is replaced on all nodes together (the chart's default `maxUnavailable: "100%"`,
+"matches the upgrade flow"); the attached volume of the run kept serving, with a write gap of 0.3 s at most.
 
 ### A first install that stalls
 
@@ -197,13 +225,37 @@ a failed hop leaves the release `Failed`/Stalled on the new chart and a person (
 Not shown without a cluster: that step 2 always clears the stale address. The test `scripts/dev/test-loki-render.sh` only pins the values
 (timeout, no rollback, advertise address).
 
+## The Flux copy that CAPI children receive: the in-place move (0.4.5)
+
+`apps/base/cluster-api-clusters/flux-gotk` is re-vendored by hand (the table above) and the management applies it to every child through the
+child's `<child>-flux` Kustomization, so a child that already runs the previous copy moves in place when the management's apps ref moves: there
+is no separate step on the child. One lab run (n=1, Scaleway, a moving branch ref and not a tag, one child of 1 control plane + 1 worker, the
+move from 2.9.6 to 2.10.0): the Kustomization applied the copy in 3.25 s, the seven controllers ran the 2.10.0 images 23 s after the apps ref
+was read back, with no restart, no CRD update refused and the child's profile Kustomizations Ready throughout; the child's GitRepository was
+Unknown for 6 s. A child built fresh from 0.4.5 and a child moved in place do not end in the same state:
+
+- **`alerts` and `providers` keep `status.storedVersions` at `[v1beta3, v1]` on a moved child** (a fresh child has `[v1]`): the objects that
+  were stored under `v1beta3` stay stored that way. The API server refuses to update a CRD that drops a version still listed there, so the
+  first Flux release that stops serving `v1beta3` fails to apply on such a child until the stored objects are migrated: re-write every
+  `Alert` and `Provider` (`kubectl get alerts.notification.toolkit.fluxcd.io,providers.notification.toolkit.fluxcd.io -A -o json | kubectl replace -f -`)
+  or run a storage-version migration, then remove `v1beta3` from the list (`kubectl patch crd <name> --subresource=status --type=merge -p '{"status":{"storedVersions":["v1"]}}'`,
+  once per CRD). This is the generic Kubernetes procedure; **it was not run here**, read the list on your own child first
+  (`kubectl get crd alerts.notification.toolkit.fluxcd.io -o jsonpath='{.status.storedVersions}'`).
+- **The child's own Flux follows its `CHILD_REF`** (`refs/heads/main` when it is unset, as in the checked-in children). A child with a pinned
+  ref does not read the 0.4.5 tree until that ref is bumped, and its `flux-egress` declares `v1beta3` meanwhile (the controllers log INFO
+  deprecation lines); bumping `CHILD_REF` is the next step and was not run. A child that leaves it unset reads the 0.4.5 tree (`v1` `Alert`
+  and `Provider` in its own `flux-egress`) as soon as `main` does, and a child whose Flux copy is still 2.9.6 cannot apply `v1` (expected, not
+  run): move the management first, so that the 2.10.0 copy is on the child before its own ref reaches 0.4.5.
+
+Not run: a child of another provider (OVH, Outscale), a larger child, a child with the `cnpg` or `storage` profile, the migration above.
+
 ## Kubernetes 1.37 against the add-ons' support matrices (decision, apps #105, #120)
 
 The management cluster runs Kubernetes 1.37.1 (the infra default). Upstream matrices list up to 1.36 for cert-manager 1.21 (1.33-1.36) and
 Cilium 1.20 (e2e 1.33-1.36); CloudNativePG 1.30 lists 1.34-1.36 and tests 1.37; Istio 1.31 is the one line that covers it. The management
 cluster's own Flux is 2.10 since 0.4.3 and needs Kubernetes 1.37.0 or later on the 1.37 line (OpenAether-infra `docs/upgrade.md`, "From 0.4.2 to
-0.4.3"); the Flux 2.9.6 that this repository pushes to CAPI children (`cluster-api-clusters/flux-gotk`) keeps the 2.9 matrix (1.34-1.36),
-against the children's 1.35/1.36. **Decision (owner, 2026-10-16): keep 1.37.1** and let real-cloud labs prove the pairing; the labs 15a to 15c ran this repository's pins on 1.37.1 on three
+0.4.3"); the Flux 2.10.0 that this repository pushes to CAPI children (`cluster-api-clusters/flux-gotk`, since apps 0.4.5; 2.9.6 before) takes the 2.10 matrix
+(1.35 from 1.35.2, 1.36 from 1.36.1, 1.37 from 1.37.0), against the children's 1.35/1.36. **Decision (owner, 2026-10-16): keep 1.37.1** and let real-cloud labs prove the pairing; the labs 15a to 15c ran this repository's pins on 1.37.1 on three
 providers without a Kubernetes-version failure being attributed to an add-on. That is evidence for these pins on that version, not an upstream
 statement of support: a problem on 1.37 is reported upstream as outside the tested range, and the fallback is the children's 1.35/1.36. At every
 hop, re-read the target's matrix for 1.37 before merging and note the result in the PR. No automated check exists: the matrices are prose on each

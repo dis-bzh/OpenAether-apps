@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 LOCK="${VENDORED_LOCK:-apps/vendored-dumps.sha256}"
 DUMPS=(
-  apps/base/cnpg/barman-cloud-plugin-0.15.1.yaml
+  apps/base/cnpg/barman-cloud-plugin-0.16.0.yaml
   apps/base/cnpg/cnpg-1.30.1.yaml
   apps/base/cluster-api-clusters/flux-gotk/gotk-components.yaml
   apps/base/external-secrets/install.yaml
@@ -45,7 +45,7 @@ check_comment apps/base/platform/local-path-provisioner/kustomization.yaml \
 check_comment apps/base/platform/gateway-api/kustomization.yaml \
   "$(sed -n 's#.*gateway.networking.k8s.io/bundle-version: \(v[0-9.]*\).*#\1#p' "$T/apps/base/platform/gateway-api/standard-install.yaml" | head -1)"
 # The plugin dump's file name carries its version: it must be the image the Deployment runs.
-pv="$(sed -n 's#.*image: ghcr.io/cloudnative-pg/plugin-barman-cloud:v\([0-9.]*\).*#\1#p' "$T/apps/base/cnpg/barman-cloud-plugin-0.15.1.yaml" | head -1)"
-[[ "$pv" == 0.15.1 ]] || { echo "ERROR: barman-cloud-plugin-0.15.1.yaml runs plugin image ${pv:-none}" >&2; rc=1; }
+pv="$(sed -n 's#.*image: ghcr.io/cloudnative-pg/plugin-barman-cloud:v\([0-9.]*\).*#\1#p' "$T/apps/base/cnpg/barman-cloud-plugin-0.16.0.yaml" | head -1)"
+[[ "$pv" == 0.16.0 ]] || { echo "ERROR: barman-cloud-plugin-0.16.0.yaml runs plugin image ${pv:-none}" >&2; rc=1; }
 [[ $rc -eq 0 ]] && echo "vendored dumps match $LOCK (${#DUMPS[@]} files)"
 exit $rc

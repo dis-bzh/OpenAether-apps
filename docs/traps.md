@@ -71,17 +71,29 @@ belong to. What follows has no skill of its own yet.
   left behind), released in 1.23.3, 1.22.5 and 1.24.0: bumping the vendored operator is the real fix.
 - **Seed OpenBao app-DB secrets BEFORE the CNPG cluster's first `initdb`.** Seeding
   late leaves the live Postgres role out of sync with the Secret.
-- **Do not trust `kubectl cnpg promote` output; read the Cluster.** Measured once on a real cluster against the 1.23.1 operator
-  (PostgreSQL 18 `zitadel-db`, 3 instances, Scaleway, 2026-10-14), three promotions in a row, one per plugin, no repeat: plugin
-  **1.30.0** promoted the replica; about a minute later plugin **1.23.6** printed "will be promoted" and changed nothing
-  (`.status.targetPrimary` never moved), and the operator had just logged "Cluster is not healthy"; plugin
-  **1.23.1**, run later, promoted and the Cluster followed (#36). Two readings fit: a fault inside plugin 1.23.6, or a promote
-  ignored right after a switchover. They were not separated (no repeat of 1.23.6 on a settled cluster), so nothing here pins or
-  bans a plugin version. "Install a plugin at least as new as the operator" is not a remedy (1.23.6 is newer than the operator).
-  In every case check `.status.targetPrimary`, `.status.currentPrimary`, the conditions, that the target replica is streaming and
-  not lagging, and the `cnpg-system` operator log, and let the cluster settle between two switchovers. For 1.30.0 the two status
-  fields printed empty before and after, so that promotion is evidenced by the pod roles only. Operator 1.23 was end of support and
-  did not list PostgreSQL 18, which `zitadel-db` runs; the repository now vendors 1.30.1 (not re-measured).
+- **Do not trust `kubectl cnpg promote` output; read the Cluster, by its full resource name.** What is known (updated for apps 0.4.5):
+  - *It worked against operator 1.30.1.* One lab run (3 control planes + 6 workers, Scaleway, the `kubectl cnpg` plugin 1.30.0
+    against operator 1.30.1, one Cluster at a time, five Clusters under a write load): every promote returned rc 0 and moved the
+    primary, with a write interruption of 14.2 to 15.2 s on the three platform Clusters and 14.6 s on the `ha` profile Cluster, and
+    31.0 s on a two-instance `standard` profile Cluster (10 s of it waiting for the primary lease, the cause not established, one
+    run; under the 35 s target). That settles the question (#36) for this pair, on one run.
+  - *The old failure was never explained.* Measured once on a real cluster against the 1.23.1 operator (PostgreSQL 18 `zitadel-db`,
+    3 instances, Scaleway, 2026-10-14), three promotions in a row, one per plugin, no repeat: plugin **1.30.0** promoted the replica;
+    about a minute later plugin **1.23.6** printed "will be promoted" and changed nothing (`.status.targetPrimary` never moved), and
+    the operator had just logged "Cluster is not healthy"; plugin **1.23.1**, run later, promoted and the Cluster followed. The
+    readings that fit are a plugin and an operator that do not match (1.23.6 against 1.23.1) or a promote ignored right after a
+    switchover. They were not separated, so nothing here pins or bans a plugin version. "Install a plugin at least as new as the
+    operator" is not a remedy (1.23.6 is newer than the operator). Operator 1.23 was end of support and did not list PostgreSQL 18,
+    which `zitadel-db` runs; the repository vendors 1.30.1 since.
+  - *A second trap is in the reading, not in the promote: on a cluster that carries Cluster API, `kubectl get cluster` resolves to
+    `clusters.cluster.x-k8s.io`, not to the CNPG Cluster.* A readback of `.status.targetPrimary` or `.status.currentPrimary` through
+    that name prints an empty string. The infrastructure repository's roll gate compared that empty string to the old primary,
+    found them different and declared the primary moved within a second; that is why it dropped its explicit promote in 2026-08
+    (this reason still holds). Write `kubectl get clusters.postgresql.cnpg.io <name>` everywhere. The two status fields printed
+    empty for the 1.30.0 promotion above, which is what this trap looks like; which resource name was used was not checked, nor
+    whether the 1.23.6 "changed nothing" reading came from it.
+  - In every case check `.status.targetPrimary`, `.status.currentPrimary`, the conditions, that the target replica is streaming and
+    not lagging, and the `cnpg-system` operator log, and let the cluster settle between two switchovers.
 
 - **A cluster rebuilt on a bucket that still holds the old cluster's WAL archive does not archive.** CNPG's
   `barman-cloud-check-wal-archive` refuses a non-empty archive for a new cluster ("WAL archive check failed for server ...:

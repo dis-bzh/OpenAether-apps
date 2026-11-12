@@ -150,6 +150,11 @@ def main(path="apps/base/cnpg"):
         for part in ("wal", "data"):
             if d["spec"]["configuration"].get(part, {}).get("encryption") != "AES256":
                 errs.append(f"ObjectStore {name}: {part}.encryption must request server-side AES256")
+    # The plugin's two mTLS leaves come without a rotation policy since v0.16.0; the brick patch adds it, read on the RENDER.
+    for leaf in ("barman-cloud-client", "barman-cloud-server"):
+        cert = [d for d in docs if d["kind"] == "Certificate" and d["metadata"]["name"] == leaf]
+        if len(cert) != 1 or cert[0]["spec"].get("privateKey", {}).get("rotationPolicy") != "Always":
+            errs.append(f"plugin: the rendered Certificate {leaf} must name privateKey.rotationPolicy Always (cert-manager 1.18 flipped the unwritten default)")
     plugin = [d for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "barman-cloud"]
     if len(plugin) != 1:
         errs.append("the barman-cloud plugin Deployment is missing")
@@ -161,9 +166,10 @@ def main(path="apps/base/cnpg"):
             errs.append("plugin: no memory limit")
         # lab 26 (B1): v0.15.1 starts the gRPC server (:9090) only on the pod holding the leader lease, so with --leader-elect the
         # second replica is never Ready (TCP readiness on 9090), Flux fails `cnpg` and the budget blocks every drain. Both
-        # replicas must serve. Put the flag back only with a plugin release that contains upstream PR 1105.
+        # replicas must serve. v0.16.0 contains upstream PR 1105 and could take the flag back; 0.4.5 keeps it OFF on purpose (the
+        # shape proven in labs 25 to 36): putting it back is a change of its own, with its own lab.
         if any(a.startswith("--leader-elect") for a in c["args"]):
-            errs.append("plugin: --leader-elect makes the standby never Ready on v0.15.1 (lab 26, B1); remove it, or bump to a release with upstream PR 1105")
+            errs.append("plugin: --leader-elect is kept off on purpose (labs 25 to 36 ran without it; v0.16.0 has upstream PR 1105 and could take it back, with a lab of its own)")
         for need in ("operator", "--server-address=:9090", "--log-level=info"):
             if need not in c["args"]:
                 errs.append(f"plugin: args lost {need!r}: {c['args']}")

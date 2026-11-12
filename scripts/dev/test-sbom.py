@@ -125,6 +125,27 @@ with tempfile.TemporaryDirectory() as d:
           got == {("docker.io/acme/mgr", "v1"), ("docker.io/acme/engine", "v1"), ("docker.io/acme/im", "v1"),
                   ("docker.io/acme/bim", "v1"), ("docker.io/acme/attacher", "v4")})
 
+# A Secret key that ends in _IMAGE holds a reference (the Barman Cloud plugin's SIDECAR_IMAGE, apps #219): base64 in `data`,
+# plain in `stringData`; another key, and a value that is not base64, are not images.
+SECRET = textwrap.dedent("""
+    apiVersion: v1
+    kind: Secret
+    metadata: {name: plugin}
+    data:
+      SIDECAR_IMAGE: |
+        ZG9ja2VyLmlvL2FjbWUvc2lkZWNhcjp2MQ==
+      OTHER_VALUE: ZG9ja2VyLmlvL2FjbWUvbm90LWFuLWltYWdlOnYx
+      BROKEN_IMAGE: "not base64 !"
+    stringData:
+      WORKER_IMAGE: docker.io/acme/worker:v2
+""")
+with tempfile.TemporaryDirectory() as d:
+    (Path(d) / "s.yaml").write_text(SECRET)
+    bom, _ = gen.build(gen.load_docs(d), "t", "2026-01-01T00:00:00Z", False, False)
+    got = {(c["name"], c["version"]) for c in bom["components"] if c["type"] == "container"}
+    check("*_IMAGE keys of a Secret are read (base64 in data, plain in stringData); other keys and bad base64 are not",
+          got == {("docker.io/acme/sidecar", "v1"), ("docker.io/acme/worker", "v2")})
+
 with tempfile.TemporaryDirectory() as d:
     r = subprocess.run([sys.executable, str(HERE / "gen-sbom.py"), "--rendered", d], capture_output=True, text=True)
     check("an empty tree is an error, not an empty inventory", r.returncode == 1)
@@ -158,10 +179,13 @@ check("two tags for one PostgreSQL major are an error, one tag for the other maj
 
 if shutil.which("kubectl"):
     with tempfile.TemporaryDirectory() as d:
-        subprocess.run([sys.executable, str(HERE / "render-dag.py"), d], check=True, capture_output=True)
+        subprocess.run([sys.executable, str(HERE / "render-dag.py"), d, "--payloads"], check=True, capture_output=True)
         bom, _ = gen.build(gen.load_docs(d), "t", "2026-01-01T00:00:00Z", False, False)
         n = {t: len([c for c in bom["components"] if c["type"] == t]) for t in ("container", "application")}
         check(f"the real tree lists at least 10 images and 10 charts (got {n})", n["container"] >= 10 and n["application"] >= 10)
+        names = {c["name"] for c in bom["components"] if c["type"] == "container"}
+        check("the Barman Cloud sidecar (a Secret value) and the Flux copy for the children (a payload brick) are in the scan matrix",
+              {"ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar", "ghcr.io/fluxcd/kustomize-controller"} <= names)
 else:
     print("skip real tree: kubectl is missing")
 

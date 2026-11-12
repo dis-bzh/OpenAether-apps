@@ -1,4 +1,4 @@
-# Pinned Flux components (the install.yaml asset of Flux v2.9.6, under the `flux install --export` header)
+# Pinned Flux components (the install.yaml asset of Flux v2.10.0, under the `flux install --export` header)
 # applied REMOTELY into a CAPI child cluster through a `spec.kubeConfig` Kustomization on the management
 # side. Regenerate on a Flux bump: download the release's install.yaml, keep the 4 header lines (version updated),
 # update apps/vendored-dumps.sha256.

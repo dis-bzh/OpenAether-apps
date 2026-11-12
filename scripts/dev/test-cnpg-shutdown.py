@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A planned shutdown of a database instance is bounded (lab 27, FI).
 
-Lab 27: the in-place restart of the zitadel-db primary (forced by the Barman plugin sidecar) waited out the 180 s default
+Lab 27: the in-place restart of the zitadel-db primary (forced by the first enabling of the Barman plugin sidecar) waited out the 180 s default
 `smartShutdownTimeout` because the Zitadel pool kept sessions open: a 206.4 s write gap, not the 17-22 s measured without clients.
 The shared Kustomize component apps/components/cnpg-bounded-shutdown sets `spec.smartShutdownTimeout: 5` on every Cluster; this
 test renders every brick and profile that defines a Cluster and fails when one lacks it, when the value leaves the 30 s class, when

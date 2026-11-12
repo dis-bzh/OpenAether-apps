@@ -1,6 +1,6 @@
-f5d9bb757d9748229d32784ded8ece0be49379a042814c7615776e6ef4a8350c  apps/base/cnpg/barman-cloud-plugin-0.15.1.yaml
+5c266194f42473a4484afe4d3eb161e8ad20bc5fd5ed033f50220eb912bdf56f  apps/base/cnpg/barman-cloud-plugin-0.16.0.yaml
 37237f145d8138256ea25ae830f87759255665ff08f8d552fdd8224a5ec032fb  apps/base/cnpg/cnpg-1.30.1.yaml
-8d750a3672aed1443341a1970a7d3e46bfd8c580a436eeaf92b9cb5ab7a362f9  apps/base/cluster-api-clusters/flux-gotk/gotk-components.yaml
+880b857449c6c441530b59fb7941095c3baabaafddcd452d29470cd79ee73da1  apps/base/cluster-api-clusters/flux-gotk/gotk-components.yaml
 5738b13511b6dde140f9bb59b6f6831830990b5e9d4643c7f0cb7471fe0f13b3  apps/base/external-secrets/install.yaml
 d3322cb346d3d42dd0f41e230b0d1d7bc5619960e1c36fdac4d9151d724b88e6  apps/base/kyverno/kyverno-1.19.1.yaml
 affe57ece8c81001d4dacd35fe3bd5bf35662ed6b5c4b1da59f334c685bba109  apps/base/orc/install.yaml

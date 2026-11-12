@@ -1,6 +1,6 @@
 # Surviving a database failover from your own application
 
-A PostgreSQL primary of this platform (CloudNativePG, one writer, two synchronous replicas) can change under a running application: a node loss, a pod kill, a planned switchover or an upgrade. The platform makes the change **safe** (no acknowledged commit is lost, see `resilience.md`, "Data classes") and **short** (measured write gaps in lab 22: 12 s planned, 44-64 s for a powered-off worker, 122 s in one zone-loss case). It cannot make it invisible: for that time, writes fail or wait. Your application hides the gap, or shows it as a failure.
+A PostgreSQL primary of this platform (CloudNativePG, one writer, two synchronous replicas) can change under a running application: a node loss, a pod kill, a planned switchover or an upgrade. The platform makes the change **safe** (no acknowledged commit is lost, see `resilience.md`, "Data classes") and **short** (measured write gaps: 12 to 16 s for a planned switchover in quiet runs, 22 to 32 s measured once during the 0.4.4 to 0.4.5 move, 44-64 s for a powered-off worker, 122 s in one zone-loss case). It cannot make it invisible: for that time, writes fail or wait. Your application hides the gap, or shows it as a failure.
 
 Rung: the settings are static-checked in CI for Zitadel and Grafana; the behaviour of your own client is yours to test (the lab criteria of `resilience.md` give a writer you can copy).
 
@@ -27,4 +27,4 @@ Use `<cluster>-rw.foundation-databases.svc` (the read-write Service follows the 
 
 ## Checking your own client
 
-Run the writer of `resilience.md` ("Zero-loss proof"; the script is `scripts/ops/db-zeroloss.sh`, checker included) against your Cluster, or your application's own workload, while you delete the primary pod (`kubectl cnpg promote` for a planned switchover, whose output is not to be trusted: read the Cluster, and it was not re-measured on the vendored operator 1.30.1, `traps.md`; `kubectl delete pod <primary> --grace-period=0 --force` for a crash). Pass: no error reaches the user beyond the gap, no duplicate row, no lost row.
+Run the writer of `resilience.md` ("Zero-loss proof"; the script is `scripts/ops/db-zeroloss.sh`, checker included) against your Cluster, or your application's own workload, while you delete the primary pod (`kubectl cnpg promote` for a planned switchover, whose output is not to be trusted: read the Cluster; it worked against the vendored operator 1.30.1 in one lab run, with a write interruption of 14.2 to 15.2 s on the platform Clusters, `traps.md`; `kubectl delete pod <primary> --grace-period=0 --force` for a crash). Pass: no error reaches the user beyond the gap, no duplicate row, no lost row.

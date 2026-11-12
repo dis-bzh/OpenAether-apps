@@ -10,13 +10,14 @@
 # `.spec.stopDelay`
 # (default 1800): https://raw.githubusercontent.com/cloudnative-pg/cloudnative-
 # pg/v1.30.1/docs/src/instance_manager.md. With the
-# Zitadel pool connected, the in-place restart of the primary that the Barman plugin sidecar forces (the operator
-# recreates the
-# primary in place, `primaryUpdateMethod: switchover` does not apply to it) stayed in smart shutdown for the whole
-# 180 s: a
-# 206.4 s write gap on the platform, against the 17-22 s measured on a lab without clients. 5 s keeps a short window
-# for sessions
-# that are about to end and then disconnects the rest. Measured on a cluster with the pool connected: 26.3-33.6 s (labs
+# Zitadel pool connected, the in-place restart of the primary that the FIRST enabling of the Barman plugin sidecar
+# forces (the primary pod then lacks the sidecar container, and the operator recreates such a primary in place:
+# `primaryUpdateMethod: switchover` does not apply to it, v1.30.1 `cluster_upgrade.go`,
+# `archiverSidecarMissingOnPrimary`) stayed in smart shutdown for the whole 180 s: a 206.4 s write gap on the
+# platform, against the 17-22 s measured on a lab without clients. A later change of the sidecar IMAGE, on pods that
+# already carry the container (0.4.4 to 0.4.5), is not that case: one lab run rolled the replicas first and then made
+# ONE planned switchover per Cluster, and the 5 s bound applies to both. 5 s keeps a short window for sessions that
+# are about to end and then disconnects the rest. Measured on a cluster with the pool connected: 26.3-33.6 s (labs
 # 27B, 27C, 28B), inside the 35 s target (docs/resilience.md).
 #
 # NO RESTART NEEDED to apply it: the instance manager reads the value from its cached Cluster object at shutdown

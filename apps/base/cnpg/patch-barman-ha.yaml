@@ -4,16 +4,25 @@
 # 388-402 s (zero acknowledged commit lost), 81-89 s with a second pod outside the zone. RollingUpdate, not the
 # vendored Recreate: a rollout must not take both pods away.
 #
-# NO LEADER ELECTION (lab 26, B1). The vendored v0.15.1 runs with `--leader-elect`, and there the gRPC server
-# (:9090) is a controller-runtime runnable that does not opt out of the election, so only the lease holder listens:
+# NO LEADER ELECTION (lab 26, B1). v0.15.1 ran with `--leader-elect` (the raw v0.16.0 manifest still has the flag),
+# and there the gRPC server (:9090) is a controller-runtime runnable that does not opt out of the election, so only
+# the lease holder listens:
 # the standby was 0/1 (TCP readiness on 9090), the Deployment hit ProgressDeadlineExceeded, Flux failed `cnpg` and
 # the budget below blocked every drain. kustomization.yaml removes the flag, so BOTH pods serve and are Ready, and
 # the ObjectStore controller runs on both: all it does is patch the RBAC Roles of the Clusters from the ObjectStore
 # specs (idempotent, the same patch the gRPC handlers' pre-hook makes on every Cluster reconcile), so two of them
-# are harmless. Upstream fixed exactly this in cloudnative-pg/plugin-barman-cloud PR 1105 (merged 2026-10-02, after
-# v0.15.1, not in a release yet): the gRPC runnable opts out of the election and only the ObjectStore controller
-# keeps it. When the vendored plugin is bumped to a release that contains it, put `--leader-elect` back
+# are harmless. Upstream fixed exactly this in cloudnative-pg/plugin-barman-cloud PR 1105 (merged 2026-10-02, in
+# v0.16.0, the vendored release since apps 0.4.5): the gRPC runnable opts out of the election and only the ObjectStore
+# controller keeps it. The flag stays OFF in 0.4.5 on purpose: the shape proven in labs 25 to 36 is "no election,
+# every replica serves"; putting `--leader-elect` back is a change of its own with its own lab
 # (scripts/dev/test-cnpg-barman-plugin.py then needs its flag check changed).
+# UPSTREAM KEEPS `Recreate`. Its v0.16.0 installation page ("Running Multiple Replicas") says that during an upgrade all
+# replicas are replaced together, so the plugin is briefly unavailable whatever the replica count; the REASON is in the
+# description of its pull request 1105 (not on a documentation page): RollingUpdate "would run two plugin versions side
+# by side during an upgrade and turn gRPC compatibility between consecutive releases into a contract". Here it stays
+# RollingUpdate (a Recreate takes both pods away: lab 25, D3) and two versions run side by side for the length of a
+# bump, so a Renovate bump of the plugin is read for a changed gRPC contract; v0.15.1 to v0.16.0 is read in the 0.4.5
+# lab.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

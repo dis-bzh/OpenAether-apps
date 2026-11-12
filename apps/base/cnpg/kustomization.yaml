@@ -12,7 +12,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - cnpg-1.30.1.yaml  # vendored from v1.30.1 — avoids a remote fetch (DNS/IPv6)
-  - barman-cloud-plugin-0.15.1.yaml  # vendored from v0.15.1, installs into cnpg-system next to the operator
+  - barman-cloud-plugin-0.16.0.yaml  # vendored from v0.16.0, installs into cnpg-system next to the operator
   - networkpolicy.yaml
   - pdb.yaml
   - networkpolicy-db-restricted.yaml
@@ -51,7 +51,9 @@ patches:
         value: true
       # No `--leader-elect` (lab 26, B1). In v0.15.1 the gRPC server is a controller-runtime runnable that only starts
       # on the pod holding the lease, so the second replica never opened :9090 and stayed 0/1 for ever. Without the
-      # flag every replica serves. Args 0-4: operator, TLS and address flags; 5: --leader-elect; 6: the log level.
+      # flag every replica serves. v0.16.0 has the upstream fix (PR 1105) and keeps this args layout; the flag stays OFF
+      # on purpose in 0.4.5 (the shape proven in labs 25 to 36). Args 0-4: operator, TLS and address flags; 5:
+      # --leader-elect; 6: the log level.
       - op: remove
         path: /spec/template/spec/containers/0/args/5
       - op: replace

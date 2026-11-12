@@ -66,8 +66,9 @@ jobs:
       - name: Install PyYAML
         run: pip install -r scripts/ci-requirements.txt
 
+      # --payloads adds the Flux copy that the child clusters receive (not a DAG path, apps #215)
       - name: Render every DAG path
-        run: python3 scripts/dev/render-dag.py "$RUNNER_TEMP/rendered"
+        run: python3 scripts/dev/render-dag.py "$RUNNER_TEMP/rendered" --payloads
 
       # helm is on the runner image. A chart that does not render fails the run: an inventory that silently
       # drops a chart's images is the defect this exists to avoid.

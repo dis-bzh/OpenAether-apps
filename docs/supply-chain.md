@@ -9,7 +9,7 @@
 
 `scripts/dev/gen-sbom.py` writes a CycloneDX 1.5 file from the **rendered** DAG (`scripts/dev/render-dag.py`: what Flux
 applies, not the source tree): every Helm chart a HelmRelease installs, every image the manifests name (an image handed to
-another one as a `--*-image` argument or a `*_IMAGE` env value counts), and with `--helm`
+another one as a `--*-image` argument, a `*_IMAGE` env value or a `*_IMAGE` Secret key counts), and with `--helm`
 the images the charts render with the release's own values (a `valuesFrom` target gets a placeholder, as Flux fills it
 at run time). The `SBOM` workflow runs it weekly and on every pushed release tag, attaches it as
 `openaether-apps-<tag>.cdx.json` to the DRAFT release (it creates the draft when there is none: an immutable release takes no
@@ -23,12 +23,15 @@ CNPG pods), or what the child clusters' own profile deploys. On the 0.4.3 tag it
 40 with the charts (`--helm`), three of Longhorn's images among them (manager, ui, share-manager). Since it reads the images passed as arguments or env values
 (apps #210) it lists 51 with `--helm`: Longhorn's engine, instance-manager, backing-image-manager, support-bundle-kit and six
 CSI sidecars, and cert-manager's ACME solver. Each is a new scan job; the first scan of them was not run when this was written.
+Since apps 0.4.5 it also reads a Secret key that ends in `_IMAGE` (the Barman Cloud plugin's sidecar image, apps #219) and the
+SBOM workflow renders the Flux copy pushed to the CAPI children with `render-dag.py --payloads` (a brick no DAG path lists,
+apps #215): 59 images with `--helm` (24 without), 8 more scan jobs. The manifest jobs of CI still render the DAG alone.
 
 **Rebuilding an inventory by hand**, from a checkout of any tag, to keep elsewhere: the two commands of the workflow's
 inventory step.
 
 ```sh
-python3 scripts/dev/render-dag.py <dir>
+python3 scripts/dev/render-dag.py <dir> --payloads
 python3 -I scripts/dev/gen-sbom.py --rendered <dir> --helm --version <tag> --output openaether-apps-<tag>.cdx.json
 ```
 
@@ -89,14 +92,14 @@ the first scan on main after the merge is still to come. A tag pushed while a sc
 job is still green: observed at the 0.4.2 tag (run 41842416697: `Attach to a draft release` green, four scan jobs red,
 Forgejo, the CNPG operator and the two PostgreSQL images; the last three failed on a ghcr.io rate limit, #197).
 
-**Waivers: one VEX statement and one Trivy ignore entry, both renewed on 2026-11-04 after a re-reading and both ending on
-2026-12-04.** The statement: restic (CVE-2026-60002, OpenSSH in the image's alpine layer, never called; `restic` 0.19.1 is
-still the newest tag). The PyJWT statement for the CNPG PostgreSQL images (CVE-2026-102268) was dropped on 2026-11-06: the
-new images carry PyJWT 2.15.1 and Trivy reports no PyJWT finding at CRITICAL or HIGH on them. The
-ignore entry: libexpat in the Longhorn v1.12.1 images (SUSE-SU-2026:4619-1; a reading of package data and file searches: no Longhorn process was run or traced, only `wget --help` and `ldd` in the backing-image-manager image).
-The five statements of the list above were deleted, not renewed, because the fixed images carry no such finding. Nothing
-ends on 2026-11-20 any more: `scripts/check-vex.py` passes on 2026-11-21 and on 2026-12-03, fails on 2026-12-04 for the
-ignore entry (see **Expiry day** below) and from 2026-12-05 for the statement, if the two are not re-read again or removed.
+**Waivers: one VEX statement, renewed on 2026-11-10 after a re-reading, ending on 2027-01-09.** restic (CVE-2026-60002,
+OpenSSH in the image's alpine layer, never called; `restic` 0.19.1, built 2026-07-05, is still the newest tag and was not
+rebuilt, although Alpine has the fixed OpenSSH 10.3_p1-r1). The PyJWT statement for the CNPG PostgreSQL images
+(CVE-2026-102268) was dropped on 2026-11-06 (apps 0.4.4): the new images carry PyJWT 2.15.1. The Trivy ignore entry for
+libexpat in the Longhorn v1.12.1 images (SUSE-SU-2026:4619-1) was deleted with the move to Longhorn 1.12.2 (apps 0.4.5):
+a local Trivy 0.69.3 scan of the 13 Longhorn v1.12.2 images the chart renders (2026-11-10) shows 0 CRITICAL and no libexpat finding in
+the six SLE images. `.github/trivy-ignore.yaml` stays as an empty file because `.github/trivy-image-vex.yaml` names it.
+`scripts/check-vex.py` passes through 2027-01-09 and fails from 2027-01-10 for the statement if it is not re-read again or removed.
 
 - **VEX:** a finding that does not apply is an OpenVEX statement in `.vex/openaether-apps.openvex.json`
   (`not_affected` with a justification, an `impact_statement`, an `action_statement` and ONE `Expires: YYYY-MM-DD` in
@@ -104,10 +107,10 @@ ignore entry (see **Expiry day** below) and from 2026-12-05 for the statement, i
   dates, so `scripts/check-vex.py` (a CI step, and the `VEX statements` job of the SBOM workflow) fails on a missing
   justification or expiry and on an expired statement. A statement never covers a fixable, reachable CRITICAL. Docker Hub products are written with
   Trivy's `index.docker.io` repository URL. `.github/trivy-ignore.yaml` (Trivy's format, with its own `expired_at`) holds the
-  one accepted finding Trivy's VEX matching misses (libexpat in the Longhorn v1.12.1 images); `check-vex.py` holds it to the same rule.
+  accepted findings Trivy's VEX matching misses (none since apps 0.4.5; the last one was libexpat in the Longhorn v1.12.1 images); `check-vex.py` holds it to the same rule.
   **Expiry day:** Trivy stops applying an ignore entry from 00:00 UTC of its `expired_at` day (its source,
   `ExpiredAt.Before(now)`, read at v0.69.3), so `check-vex.py` fails an ignore entry on its `expired_at` day, the same
-  day the Longhorn scans can turn red (2026-12-04, a Friday: the scheduled scan runs on Tuesdays). A VEX statement still
+  day the scans can turn red (the scheduled scan runs on Tuesdays). A VEX statement still
   passes on its last day and fails from the next one, because Trivy does not read the dates of OpenVEX.
   Whether Trivy matches a product is only seen by scanning the image: `trivy image --config .github/trivy-image-vex.yaml <ref>`.
 - **Failing scans are announced:** a failed scan opens, or comments on, one issue `[vuln] <image>` and closes it when the
