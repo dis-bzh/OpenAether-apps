@@ -231,6 +231,7 @@ belong to. What follows has no skill of its own yet.
   for kind "VMCluster"`, and that text was not archived, only the timings. A missing ordering or health gate between the operator's
   HelmRelease and the custom resources is not diagnosed.
 
+- **Grafana restarts 2 to 3 times at a fresh install (`failed to obtain lock`, then `duplicate key value violates unique constraint "UQE_role_org_id_name"`): expected, no action (the only cost is restarts; left for 0.5.0 if it matters for the one-command goal).** The two replicas start against an empty database and race for the first migration lock; the cause is a reading, not shown. `grafana-db` was 3 of 3 before the first restart, so it is not a database that is not up (that is the `cnpg` race, which reads `connection refused`). Seen at the 0.4.2 tags, at the 0.4.3 candidate and at the 0.4.5 candidate (Scaleway, 3 CP + 6 W, n=1 per install; NOMINAL), not at every install; no data effect was seen. The restarts count in the restart figures of the proof runs (`CHANGELOG.md` `[0.4.5]`, W9). Decided 2026-11-12: accept and document (apps #206).
 - **`up == 0` only catches NODE-discovered targets.** A rule on a metric nobody
   produces never fires and never says so — that is what `task check-alerts` is for.
 - **kube-state-metrics needs `honorLabels: true`**, or its labels arrive as

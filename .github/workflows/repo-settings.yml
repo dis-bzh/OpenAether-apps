@@ -35,7 +35,12 @@ jobs:
 
       # A workflow token can never read a ruleset's bypass actors (that needs admin), so that one item is a
       # warning here; an admin's run verifies it. No `sandbox` environment: this repository has no cloud workflow.
+      # INFORMATIONAL until 1.0.0 (owner decision of 2026-11-12, apps #141): the step reports what differs from the
+      # settings (the five required checks bound to any app, the reported-but-not-required jobs, the ruleset against
+      # .github/rulesets) and never turns the job red. Binding the checks to the GitHub Actions app stays an owner
+      # action in GitHub settings, not done. Remove continue-on-error when the settings are applied, or at 1.0.0.
       - name: Compare with what GitHub enforces and reports
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
