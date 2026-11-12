@@ -3,10 +3,35 @@
 This layer: edge-1 (Scaleway) and edge-2 (OVH) were provisioned end to end
 from a real management cluster (2026-07-25/26), Cilium and Flux injected
 remotely, gitception included, but before the `CHILD_BACKUP_*` variables were
-added (2026-07-30). Since then the chain is validated **statically only**
-(`scripts/check-child-clusters.py`, CI), not replayed on a cluster. The template
-apiVersions are checked against the pinned providers (CAPS v0.2.1 →
-`v1alpha2`, CACPPT v0.5.13 / CABPT v0.6.12 → `v1alpha3`).
+added (2026-07-30). From then until 2026-11-11 the chain was validated
+**statically only** (`scripts/check-child-clusters.py`, CI), not replayed on a
+cluster. The template apiVersions are checked against the pinned providers
+(today CAPS v0.2.3 → `v1alpha2`, CACPPT v0.5.14 / CABPT v0.6.13 → `v1alpha3`,
+CAPI v1.14.3).
+
+On 2026-11-11 the chain ran on a cluster again, with those providers, on **one
+Scaleway management cluster, one run per figure, a moving branch ref, not a
+tag**:
+
+- **Run:** a fresh child (1 control plane + 1 worker, the `cluster-talos-scaleway`
+  template, the minimal profile) created, Ready and deleted through CAPI with
+  nothing left in the cloud account; the in-place move of an existing child's
+  Flux copy (2.9.6 to 2.10.0); a strategy-only change of the child's Cilium
+  `maxUnavailable` on a live child.
+- **Not run on 2026-11-11:** OVH (edge-2) and Outscale (edge-3), a child larger than 1 + 1, a
+  child with the `cnpg` or `storage` profile, the rest of the life cycle (Talos
+  and Kubernetes version bumps, scale, node replacement), an alert delivered
+  from a child, the child's own Flux moved to a new ref. The numbers are in
+  `CHANGELOG.md` under `[0.4.5]`.
+
+Two things to know before the first child. **The namespace `capi-clusters` is
+not there when `cluster-up` returns:** the Flux Kustomization that creates it
+waits for the CAPI operator and the providers, and it appeared about 1.5 to 2
+minutes later in the two runs that read it (a Secret created right after
+`cluster-up` returned failed with a missing namespace), so the hand-made Secrets
+of "Prerequisites outside git" must wait for it. **The Scaleway key of a lab is a
+full key, for labs only: production must use a restricted API key** (which
+permissions CAPS needs was not measured).
 
 A management cluster (with the `cluster-api-operator` + `cluster-api-providers`
 bricks picked) drives its client clusters from here: **one file per cluster**,
@@ -42,8 +67,10 @@ checks all of this, the example included. It checks that the placeholders exist 
 
 ## Prerequisites outside git (once per management cluster)
 
-Scaleway:
+Scaleway (the namespace `capi-clusters` does not exist right after `cluster-up`
+returns: wait for it first, and use a restricted API key outside a lab):
 ```bash
+until kubectl get namespace capi-clusters >/dev/null 2>&1; do sleep 5; done
 kubectl create secret generic scaleway-capi-credentials -n capi-clusters \
   --from-literal=SCW_ACCESS_KEY=… --from-literal=SCW_SECRET_KEY=…   # CAPS docs: only these 2 keys are read
 kubectl create secret generic <child>-substitutes -n flux-system \

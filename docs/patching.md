@@ -225,6 +225,27 @@ a failed hop leaves the release `Failed`/Stalled on the new chart and a person (
 Not shown without a cluster: that step 2 always clears the stale address. The test `scripts/dev/test-loki-render.sh` only pins the values
 (timeout, no rollback, advertise address).
 
+## The Flux copy that CAPI children receive: the in-place move (0.4.5)
+
+`apps/base/cluster-api-clusters/flux-gotk` is re-vendored by hand (the table above) and the management applies it to every child through the
+child's `<child>-flux` Kustomization, so a child that already runs the previous copy moves in place when the management's apps ref moves: there
+is no separate step on the child. One lab run (n=1, Scaleway, a moving branch ref and not a tag, one child of 1 control plane + 1 worker, the
+move from 2.9.6 to 2.10.0): the Kustomization applied the copy in 3.25 s, the seven controllers ran the 2.10.0 images 23 s after the apps ref
+was read back, with no restart, no CRD update refused and the child's profile Kustomizations Ready throughout; the child's GitRepository was
+Unknown for 6 s. A child built fresh from 0.4.5 and a child moved in place do not end in the same state:
+
+- **`alerts` and `providers` keep `status.storedVersions` at `[v1beta3, v1]` on a moved child** (a fresh child has `[v1]`): the objects that
+  were stored under `v1beta3` stay stored that way. The API server refuses to update a CRD that drops a version still listed there, so the
+  first Flux release that stops serving `v1beta3` fails to apply on such a child until the stored objects are migrated: re-write every
+  `Alert` and `Provider` (`kubectl get alerts.notification.toolkit.fluxcd.io,providers.notification.toolkit.fluxcd.io -A -o json | kubectl replace -f -`)
+  or run a storage-version migration, then remove `v1beta3` from the list (`kubectl patch crd <name> --subresource=status --type=merge -p '{"status":{"storedVersions":["v1"]}}'`,
+  once per CRD). This is the generic Kubernetes procedure; **it was not run here**, read the list on your own child first
+  (`kubectl get crd alerts.notification.toolkit.fluxcd.io -o jsonpath='{.status.storedVersions}'`).
+- **The child's own Flux keeps following its `CHILD_REF`**, so it does not read the 0.4.5 tree until that ref is bumped, and the child's
+  `flux-egress` declares `v1beta3` meanwhile (the controllers log INFO deprecation lines). Bumping `CHILD_REF` is the next step and was not run.
+
+Not run: a child of another provider (OVH, Outscale), a larger child, a child with the `cnpg` or `storage` profile, the migration above.
+
 ## Kubernetes 1.37 against the add-ons' support matrices (decision, apps #105, #120)
 
 The management cluster runs Kubernetes 1.37.1 (the infra default). Upstream matrices list up to 1.36 for cert-manager 1.21 (1.33-1.36) and
