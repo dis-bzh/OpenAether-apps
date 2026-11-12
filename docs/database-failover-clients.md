@@ -1,6 +1,6 @@
 # Surviving a database failover from your own application
 
-A PostgreSQL primary of this platform (CloudNativePG, one writer, two synchronous replicas) can change under a running application: a node loss, a pod kill, a planned switchover or an upgrade. The platform makes the change **safe** (no acknowledged commit is lost, see `resilience.md`, "Data classes") and **short** (measured write gaps in lab 22: 12 s planned, 44-64 s for a powered-off worker, 122 s in one zone-loss case). It cannot make it invisible: for that time, writes fail or wait. Your application hides the gap, or shows it as a failure.
+A PostgreSQL primary of this platform (CloudNativePG, one writer, two synchronous replicas) can change under a running application: a node loss, a pod kill, a planned switchover or an upgrade. The platform makes the change **safe** (no acknowledged commit is lost, see `resilience.md`, "Data classes") and **short** (measured write gaps: 12 to 16 s for a planned switchover in quiet runs, 22 to 32 s measured once during the 0.4.4 to 0.4.5 move, 44-64 s for a powered-off worker, 122 s in one zone-loss case). It cannot make it invisible: for that time, writes fail or wait. Your application hides the gap, or shows it as a failure.
 
 Rung: the settings are static-checked in CI for Zitadel and Grafana; the behaviour of your own client is yours to test (the lab criteria of `resilience.md` give a writer you can copy).
 
