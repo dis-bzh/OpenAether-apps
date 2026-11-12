@@ -79,6 +79,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
+          # 2: on a pull request, HEAD is GitHub's merge commit and HEAD^1 (its first parent) is the commit of the base
+          # branch the VEX step below judges the file at; checkout's own retries bring it, no extra fetch.
+          fetch-depth: 2
 
       - name: Install PyYAML
         run: pip install -r scripts/ci-requirements.txt
@@ -113,13 +116,26 @@ jobs:
           python3 scripts/check-eol.py --check-doc
 
       # Every VEX statement has a justification and one expiry date, and none is past it (Trivy ignores dates).
-      # An expired waiver fails every pull request until the image is fixed or the finding is re-read.
+      # The file is judged at the committer date of the commit of main the change is based on (the pushed commit on
+      # main), not at the clock: a waiver that runs out at midnight must not turn every open pull request red whatever
+      # it contains. A pull request cannot move that date (the merge commit checked out here is dated now, and a head
+      # commit date is the author's). The real date is the daily `VEX statements` job of sbom.yml, which opens the
+      # issue. An ignore entry is held to 90 days from that date: count from the base commit, not from today.
       - name: VEX statements
         run: |
           set -euo pipefail
           python3 scripts/dev/test-check-vex.py
           scripts/dev/test-vuln-issue.sh
-          python3 scripts/check-vex.py
+          # Only a pull request and a push are judged at a commit date. A trigger that runs at a chosen time (schedule,
+          # dispatch) must pass the real date instead: that run belongs in sbom.yml.
+          if [ "${GITHUB_EVENT_NAME}" = pull_request ]; then
+            commit="$(git rev-parse HEAD^1)"
+          else
+            commit="$(git rev-parse HEAD)"
+          fi
+          judged="$(date -u -d "@$(git show -s --format=%ct "${commit}")" +%F)"
+          echo "Judged at ${judged}, the commit date of ${commit}"
+          python3 scripts/check-vex.py --today "${judged}"
 
   build:
     name: Kustomize Build + Collision Check

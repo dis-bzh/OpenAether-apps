@@ -105,7 +105,12 @@ the six SLE images. `.github/trivy-ignore.yaml` stays as an empty file because `
   (`not_affected` with a justification, an `impact_statement`, an `action_statement` and ONE `Expires: YYYY-MM-DD` in
   `status_notes`, at most 90 days after the statement). Trivy reads the file once it has a statement but knows nothing of
   dates, so `scripts/check-vex.py` (a CI step, and the `VEX statements` job of the SBOM workflow) fails on a missing
-  justification or expiry and on an expired statement. A statement never covers a fixable, reachable CRITICAL. Docker Hub products are written with
+  justification or expiry and on an expired statement. Two dates: the `VEX statements` job runs **every day** (the scans
+  stay weekly) at the real date and opens the `[vuln] VEX statements` issue. The pull request step judges the file at
+  the committer date of the commit of main the change is based on, so the clock alone does not turn an open pull
+  request red: it goes red once main gets a commit dated after an expiry, and the renewal pull request is the way out
+  (an ignore entry's 90 days are counted from the judged date too). A statement never covers a fixable, reachable
+  CRITICAL. Docker Hub products are written with
   Trivy's `index.docker.io` repository URL. `.github/trivy-ignore.yaml` (Trivy's format, with its own `expired_at`) holds the
   accepted findings Trivy's VEX matching misses (none since apps 0.4.5; the last one was libexpat in the Longhorn v1.12.1 images); `check-vex.py` holds it to the same rule.
   **Expiry day:** Trivy stops applying an ignore entry from 00:00 UTC of its `expired_at` day (its source,
