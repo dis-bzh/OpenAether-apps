@@ -137,8 +137,11 @@ jobs:
           echo "Judged at ${judged}, the commit date of ${commit}"
           python3 scripts/check-vex.py --today "${judged}"
 
+  # Named "Kustomize Build + Collision Check" until the rename (phase A): besides rendering every DAG path and
+  # looking for collisions, the job runs the contract tests of the bricks (Kyverno, Forgejo, CNPG, the `dependsOn`
+  # mutants, ...), so the name now says what it guarantees. The old name lives on in `build-alias` below.
   build:
-    name: Kustomize Build + Collision Check
+    name: Platform contracts
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -355,6 +358,27 @@ jobs:
           set -euo pipefail
           python3 scripts/dev/test-check-externalsecret-namespaces.py
           python3 scripts/check-externalsecret-namespaces.py
+
+  # Rename, phase A. The ruleset on main still requires the check name "Kustomize Build + Collision Check", and a
+  # required name that nothing reports makes every pull request wait forever. This job reports it, and passes only
+  # when `build` ("Platform contracts") finished with exactly `success`. Phase B deletes it once the ruleset names
+  # only "Platform contracts".
+  # `always()`, not `!cancelled()`: a skipped required check passes, and `!cancelled()` skips this job when the run is
+  # cancelled, so a cancelled `build` would leave the old name green. There is no checkout and no network call here,
+  # which is what the usual warning against `always()` (a source fetch that outlives a cancel) is about.
+  build-alias:
+    name: Kustomize Build + Collision Check
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Platform contracts passed
+        env:
+          RESULT: ${{ needs.build.result }}
+        run: |
+          echo "Platform contracts: ${RESULT}"
+          test "${RESULT}" = success
 
   # The backup brick checks run as parallel jobs (the verifier test alone took 10 of the job's 16 minutes): 4 verifier
   # shards and two side jobs, joined by `backup-checks`. Only that one, which keeps the name "Backup brick checks", is
