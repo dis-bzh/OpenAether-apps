@@ -9,9 +9,9 @@ cluster. The template apiVersions are checked against the pinned providers
 (today CAPS v0.2.3 → `v1alpha2`, CACPPT v0.5.14 / CABPT v0.6.13 → `v1alpha3`,
 CAPI v1.14.3).
 
-On 2026-11-11 the chain ran on a cluster again, with those providers, on **one
-Scaleway management cluster, one run per figure, a moving branch ref, not a
-tag**:
+On 2026-11-11 the chain ran on a cluster again, with those providers, on **Scaleway
+management clusters (a fresh child on one, the in-place move and the Cilium change on
+another), one run per figure, a moving branch ref, not a tag**:
 
 - **Run:** a fresh child (1 control plane + 1 worker, the `cluster-talos-scaleway`
   template, the minimal profile) created, Ready and deleted through CAPI with
