@@ -241,8 +241,11 @@ Unknown for 6 s. A child built fresh from 0.4.5 and a child moved in place do no
   or run a storage-version migration, then remove `v1beta3` from the list (`kubectl patch crd <name> --subresource=status --type=merge -p '{"status":{"storedVersions":["v1"]}}'`,
   once per CRD). This is the generic Kubernetes procedure; **it was not run here**, read the list on your own child first
   (`kubectl get crd alerts.notification.toolkit.fluxcd.io -o jsonpath='{.status.storedVersions}'`).
-- **The child's own Flux keeps following its `CHILD_REF`**, so it does not read the 0.4.5 tree until that ref is bumped, and the child's
-  `flux-egress` declares `v1beta3` meanwhile (the controllers log INFO deprecation lines). Bumping `CHILD_REF` is the next step and was not run.
+- **The child's own Flux follows its `CHILD_REF`** (`refs/heads/main` when it is unset, as in the checked-in children). A child with a pinned
+  ref does not read the 0.4.5 tree until that ref is bumped, and its `flux-egress` declares `v1beta3` meanwhile (the controllers log INFO
+  deprecation lines); bumping `CHILD_REF` is the next step and was not run. A child that leaves it unset reads the 0.4.5 tree (`v1` `Alert`
+  and `Provider` in its own `flux-egress`) as soon as `main` does, and a child whose Flux copy is still 2.9.6 cannot apply `v1` (expected, not
+  run): move the management first, so that the 2.10.0 copy is on the child before its own ref reaches 0.4.5.
 
 Not run: a child of another provider (OVH, Outscale), a larger child, a child with the `cnpg` or `storage` profile, the migration above.
 
