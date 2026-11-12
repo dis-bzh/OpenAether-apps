@@ -8,6 +8,20 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 V="$ROOT/apps/base/backup/databases/verify"
+# CI runs it in 4 parallel shards (VERIFY_SHARD=1..4): the shared setup and the healthy pass, then only the scenarios of that shard,
+# in file order. VERIFY_SHARD unset runs everything in one process. A scenario is a block `if want NAME; then ... fi` (its lines are
+# not indented, to keep the diff small); each repairs what it damages and shares no variable with another, so it needs no other.
+# SHARD_OF must name every block once (test-backup-verify-listing.sh checks it); VERIFY_LIST=1 prints the table and exits.
+declare -A SHARD_OF=(
+  [corrupt-pack]=1 [raft-sums]=1
+  [etcd]=2 [wiped-primary]=2
+  [base-data-flip]=3 [end-wal]=3 [longhorn]=3
+  [wal-gap]=4 [replica-missing]=4 [store-down]=4
+)
+if [ -n "${VERIFY_LIST:-}" ]; then for k in "${!SHARD_OF[@]}"; do echo "${SHARD_OF[$k]} $k"; done | sort; exit 0; fi
+case "${VERIFY_SHARD:-1}" in 1|2|3|4) ;; *) echo "  FAIL VERIFY_SHARD must be 1, 2, 3 or 4, or unset"; exit 2 ;; esac
+want() { [ -z "${VERIFY_SHARD:-}" ] || [ "${SHARD_OF[$1]:-}" = "$VERIFY_SHARD" ] || return 1; echo "--- scenario $1 ($(date -u +%T))"; }
+stamp() { echo "  [$(date -u +%T)] $*"; }
 W="$(mktemp -d)"; trap 'kill $(jobs -p) 2>/dev/null; chmod -R u+rwx "$W" 2>/dev/null; rm -rf "$W"' EXIT
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); echo "  ok   $*"; }
@@ -24,11 +38,13 @@ PY
 RESTIC="$(img apps/base/backup/databases/verify-cronjob.yaml restic-stage)"
 PG="$(img apps/base/backup/databases/verify-cronjob.yaml barman-stage)"
 have() { docker image inspect "$1" >/dev/null 2>&1 || docker pull -q "$1" >/dev/null 2>&1; }
+stamp "setup: the two images (pulled if absent); shard ${VERIFY_SHARD:-all}"
 if ! command -v docker >/dev/null || ! have "$RESTIC" || ! have "$PG"; then
   echo "  SKIPPED the verifier test: docker or its images are not available"
   [ "${CI:-}" = true ] && { echo "  FAIL required in CI"; exit 1; }
   exit 0
 fi
+stamp "setup: images present, starting the two fake stores"
 U="--user $(id -u):$(id -g)"
 mkdir -p "$W"/{P,R,res,work,tmp,bin} "$W/P/bkp" "$W/R/bkr"; chmod 777 "$W"/{res,work,tmp}
 echo '{"bkp":["AKP"]}' >"$W/P/.acl"; echo '{"bkr":["AKR"]}' >"$W/R/.acl"
@@ -41,6 +57,7 @@ S3ENV=(-e PRIMARY_ENDPOINT="$PU" -e PRIMARY_BUCKET=bkp -e PRIMARY_ACCESS_KEY=AKP
        -e CLUSTER_NAME=lab -e RESTIC_PASSWORD=pw -e AWS_DEFAULT_REGION=us-east-1)
 
 # ── seed: restic repositories on both stores (openbao snapshot, cnpg dump, etcd snapshot) ──────────────────────────────
+stamp "setup: seed the restic repositories"
 mkdir -p "$W/seed/openbao/u" "$W/seed/cnpg" "$W/seed/etcd"
 echo '{"index":1}' >"$W/seed/openbao/u/meta.json"; head -c 4000 /dev/urandom >"$W/seed/openbao/u/state.bin"
 (cd "$W/seed/openbao/u" && sha256sum meta.json state.bin >SHA256SUMS && tar -czf ../raft.snap meta.json state.bin SHA256SUMS); rm -rf "$W/seed/openbao/u"
@@ -54,6 +71,7 @@ seed() { # store dataset
 for st in primary replica; do for ds in openbao cnpg etcd; do seed $st $ds || bad "seed $st $ds"; done; done
 
 # ── seed: a real Barman archive (PostgreSQL -> barman-cloud) on the primary, copied to the replica ────────────────────
+stamp "setup: generate the Barman archive"
 cat >"$W/gen.sh" <<'GEN'
 set -eu
 export AWS_ACCESS_KEY_ID=AKP AWS_SECRET_ACCESS_KEY=s AWS_DEFAULT_REGION=us-east-1 AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
@@ -76,6 +94,7 @@ docker run --rm --network host --user 26:26 -e S3URL="$PU" -e SRV=zitadel-db -v 
 find "$W/P/bkp/cnpg" -type f 2>/dev/null | grep -q . || { bad "no barman archive generated"; tail -5 "$W/gen.out"; }
 rm -rf "$W/P/.mp"; mkdir -p "$W/R/bkr"; cp -a "$W/P/bkp/cnpg" "$W/R/bkr/cnpg"
 mkdir -p "$W/P/bkp/cnpg/grafana-db" "$W/R/bkr/cnpg/grafana-db"   # an empty cluster archive: skipped, not failed
+stamp "setup: the Barman archive is on both stores"
 
 # ── the Longhorn objects, through a stub kubectl ────────────────────────────────────────────────────────────────────────
 cat >"$W/bin/kubectl" <<'KC'
@@ -94,6 +113,7 @@ lh() { # state
   echo '{"items":[{"metadata":{"name":"backup-1"},"status":{"state":"'"$1"'","error":"","size":"1048576","backupCreatedAt":"2026-10-19T03:37:00Z","volumeName":"vol1"}}]}' >"$W/kube/backups.json"
 }
 lh Completed
+stamp "setup done"
 
 run_all() { # runs the three stages as the CronJob does
   rm -rf "$W/res"/* "$W/work"/*
@@ -119,6 +139,7 @@ chk "the exposition holds the series of the contract and nothing without a datas
 T0="$(lastok openbao)"
 
 echo "=== damage ==="
+if want corrupt-pack; then
 # restic: a flipped byte in a data pack of the replica openbao repository
 pack="$(find "$W/R/bkr/lab/openbao/data" -type f | head -1)"; cp "$pack" "$W/pack.bak"
 printf '\xff\xff\xff\xff' | dd of="$pack" bs=1 seek=40 conv=notrunc 2>/dev/null
@@ -128,6 +149,8 @@ chk "the other datasets stay 1" "[ \"\$(okv etcd)\" = 1 ] && [ \"\$(okv cnpg)\" 
 chk "the last success of openbao is kept, not moved to the failed run (a day later)" "[ -n \"$T0\" ] && [ \"\$(lastok openbao)\" = \"$T0\" ]"
 cp "$W/pack.bak" "$pack"; run_all
 chk "repaired: openbao is 1 again" "[ \"\$(okv openbao)\" = 1 ]"
+fi
+if want etcd; then
 # etcd: a snapshot that restic stores faithfully but is truncated, then one with a flipped meta byte
 head -c 14000 "$ROOT/scripts/dev/testdata/etcd-snapshot-v3.6.db" >"$W/seed/etcd/etcd.snap"
 seed primary etcd; run_all
@@ -137,18 +160,24 @@ seed primary etcd; run_all
 chk "an etcd snapshot with a damaged meta page: etcd fails" "[ \"\$(okv etcd)\" = 0 ]"
 cp "$ROOT/scripts/dev/testdata/etcd-snapshot-v3.6.db" "$W/seed/etcd/etcd.snap"; seed primary etcd; run_all
 chk "a good etcd snapshot again: etcd is 1" "[ \"\$(okv etcd)\" = 1 ]"
+fi
+if want raft-sums; then
 # openbao: a snapshot whose SHA256SUMS does not match
 mkdir "$W/x"; (cd "$W/x" && echo '{"index":1}' >meta.json && head -c 4000 /dev/urandom >state.bin && sha256sum meta.json state.bin >SHA256SUMS && echo corrupt >>state.bin && tar -czf "$W/seed/openbao/raft.snap" meta.json state.bin SHA256SUMS)
 seed replica openbao; run_all
 chk "a raft snapshot whose sums do not match: openbao fails on replica" "[ \"\$(storeok openbao replica)\" = 0 ] && [ \"\$(okv openbao)\" = 0 ]"
 (cd "$W/x" && head -c 4000 /dev/urandom >state.bin && sha256sum meta.json state.bin >SHA256SUMS && tar -czf "$W/seed/openbao/raft.snap" meta.json state.bin SHA256SUMS); seed replica openbao; run_all
 chk "repaired: openbao is 1" "[ \"\$(okv openbao)\" = 1 ]"
+fi
 # barman: base backup data, a WAL gap, a missing end WAL, a replica that lags
+if want base-data-flip; then
 bk="$(find "$W/P/bkp/cnpg/zitadel-db" -name 'data.tar*' | head -1)"; cp "$bk" "$W/data.bak"
 printf '\x00\x01\x02\x03\x04\x05' | dd of="$bk" bs=1 seek=$(( $(stat -c %s "$bk") / 2 )) conv=notrunc 2>/dev/null
 run_all
 chk "a flipped byte inside the base backup data: cnpg fails on primary" "[ \"\$(okv cnpg)\" = 0 ] && [ \"\$(storeok cnpg primary)\" = 0 ] && grep -q 'corrupt' '$W/res/cnpg.tsv'"
 cp "$W/data.bak" "$bk"
+fi
+if want end-wal; then
 # the end WAL of the newest base backup is not archived yet (a plugin Backup says `completed` before that; seen in a proof lab): the
 # primary store fails and the message says what it means and what to do, with the segment names in hex
 segs() { find "$W/P/bkp/cnpg/zitadel-db" -path '*wals*' -name '*.gz' ! -name '*.backup.gz'; }
@@ -162,17 +191,23 @@ chk "...and the message names the newest archived segment, says it is no restore
   "grep -q 'newest archived: $newest' '$W/res/cnpg.tsv' && grep -q 'not a usable restore point' '$W/res/cnpg.tsv' && grep -q 'pg_switch_wal' '$W/res/cnpg.tsv' && grep -q 'verify again' '$W/res/cnpg.tsv'"
 mv "$W/walaway"/* "$wd/"; run_all
 chk "the end WAL archived: cnpg is 1 again" "[ \"\$(okv cnpg)\" = 1 ]"
+fi
+if want wal-gap; then
 wal="$(find "$W/P/bkp/cnpg/zitadel-db" -path '*wals*' -name '*0004.gz' | head -1)"; cp "$wal" "$W/wal.bak"; rm "$wal"
 cp -a "$W/P/bkp/cnpg/." "$W/R/bkr/cnpg/" 2>/dev/null; rm -f "$W/R/bkr/${wal#$W/P/bkp/}"
 run_all
 chk "a WAL segment missing in the middle: cnpg fails with the gap named" "[ \"\$(okv cnpg)\" = 0 ] && grep -q 'WAL gap' '$W/res/cnpg.tsv'"
 cp "$W/wal.bak" "$wal"; cp "$W/wal.bak" "$W/R/bkr/${wal#$W/P/bkp/}"
+fi
+if want replica-missing; then
 touch -d '5 hours ago' "$W/P/bkp/cnpg/zitadel-db/zitadel-db/base" 2>/dev/null
 lbl="$(find "$W/R/bkr/cnpg/zitadel-db" -name '*.backup.gz' | head -1)"; cp "$lbl" "$W/lbl.bak"; rm -f "$lbl"; find "$W/P/bkp/cnpg" -type f -exec touch -d '5 hours ago' {} +
 run_all
 chk "an object older than the grace period absent from the replica: cnpg fails on replica only" "[ \"\$(storeok cnpg replica)\" = 0 ] && [ \"\$(storeok cnpg primary)\" = 1 ] && grep -q 'missing from the replica' '$W/res/cnpg.tsv'"
 cp "$W/lbl.bak" "$lbl"; run_all
 chk "replica complete again: cnpg is 1" "[ \"\$(okv cnpg)\" = 1 ]"
+fi
+if want wiped-primary; then
 # a wiped primary store (apps #151): every repository and the cnpg archive gone from the primary, the replica intact
 mv "$W/P/bkp/lab" "$W/P/lab.away"; mv "$W/P/bkp/cnpg" "$W/P/cnpg.away"; mkdir "$W/P/bkp/cnpg"
 run_all
@@ -183,12 +218,18 @@ chk "the message says that the primary lost its copy" "grep -q 'MISSING' '$W/s3.
 chk "the grafana-db archive (empty on both stores) is still a skip, not a failure" "grep -q 'SKIP cnpg/primary: grafana-db' '$W/s3.out' || ! grep -q 'FAIL cnpg/primary: grafana-db' '$W/s3.out'"
 rm -rf "$W/P/bkp/cnpg"; mv "$W/P/lab.away" "$W/P/bkp/lab"; mv "$W/P/cnpg.away" "$W/P/bkp/cnpg"; run_all
 chk "the primary back: every dataset is 1 again" "[ \"\$(okv etcd)\" = 1 ] && [ \"\$(okv openbao)\" = 1 ] && [ \"\$(okv cnpg)\" = 1 ]"
+fi
+if want longhorn; then
 # longhorn
 lh Error; run_all
 chk "a Longhorn backup in Error: longhorn fails" "[ \"\$(okv longhorn)\" = 0 ]"
 lh Completed; run_all
 chk "Completed again: longhorn is 1" "[ \"\$(okv longhorn)\" = 1 ]"
+fi
+if want store-down; then
 # a store that is down
 kill "$(jobs -p | head -1)" 2>/dev/null; sleep 0.3; run_all
 chk "a store that is down: the datasets of that store fail, the verifier itself still publishes" "[ \"\$(okv cnpg)\" = 0 ] && grep -q 'published' '$W/s3.out'"
+fi
+stamp "end"
 echo "$PASS passed, $FAIL failed"; [ "$FAIL" = 0 ]
