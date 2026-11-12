@@ -194,6 +194,8 @@ pins this repository by tag), pull request and no force-push on `main`, private 
 maintainer cannot meet yet (0 approving reviews, signed commits, admin bypass) is a warning; `--strict-main` makes it a
 failure. Its 80 cases run against a canned API on every pull request.
 
+**Informational until 1.0.0 (owner decision of 2026-11-12, apps #141).** The workflow step has `continue-on-error: true`: it prints what differs from the settings and the job stays green. The five required checks are still not bound to the GitHub Actions app and nine jobs are still reported but not required; that is an owner action in GitHub settings (the 2026-10-21 decision stands for when it is done).
+
 - **Not done here:** `.github/rulesets/*.json`, the rulesets as code. They are the live ones exported by an admin, and
   this change could not read them. Once exported the same script compares them field for field:
   `gh api repos/dis-bzh/OpenAether-apps/rulesets` lists the ids, `gh api repos/dis-bzh/OpenAether-apps/rulesets/<id> >
