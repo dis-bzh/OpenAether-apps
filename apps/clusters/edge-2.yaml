@@ -128,7 +128,7 @@ spec:
     # One Cilium agent at a time (owner decision 2026-11-11: restarts of multi-instance components go one after the
     # other). The chart default is maxUnavailable 2 for the agent DaemonSet and for cilium-envoy: two nodes would lose
     # their CNI agent together while it restarts. `helm template` of chart 1.19.9 with these two keys shows both
-    # DaemonSets at 1 and nothing else changed in the render. Proven on one live 2-node child (0.4.5 lab, n=1): the
+    # DaemonSets at 1 and nothing else changed in the render. Read on one live 2-node child (0.4.5 lab, n=1): the
     # strategy-only Helm upgrade restarted no pod and a later rollout takes about twice as long, one agent out at a
     # time. A caution stays: a Helm upgrade of a LIVE child's Cilium degraded two children on 2026-07-26
     # (OpenAether-infra docs/admin-access.md), so watch the first upgrade of your own child.
