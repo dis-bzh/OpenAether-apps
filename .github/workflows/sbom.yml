@@ -14,12 +14,17 @@
 # run opens no issue.
 # Never on a pull request, so it joins no required check; no cloud credential, only registry reads (anonymous, and the
 # workflow token for ghcr.io).
+# The `VEX statements` job also runs on the six other days of the week (the second schedule line), alone: the scans stay
+# weekly. A waiver that has run out is seen within a day; the pull request check judges the same file at the date of the
+# PR's base commit, not at the real date (ci.yml).
 name: SBOM
 
 on:
   schedule:
     # Off the hour: a shared runner pool is busiest at :00.
     - cron: "41 5 * * 2"
+    # Every other day: only the VEX job. `inventory` and `scan-images` skip this exact string (keep the three in step).
+    - cron: "41 5 * * 0,1,3-6"
   push:
     tags: ["[0-9]*"]
   release:
@@ -41,7 +46,9 @@ permissions:
 jobs:
   inventory:
     name: Inventory
-    if: github.repository == 'dis-bzh/OpenAether-apps' && github.event_name != 'release'
+    if: >-
+      github.repository == 'dis-bzh/OpenAether-apps' && github.event_name != 'release'
+      && github.event.schedule != '41 5 * * 0,1,3-6'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -216,7 +223,7 @@ jobs:
   scan-images:
     name: Scan ${{ matrix.image }}
     needs: inventory
-    if: github.event_name != 'release'
+    if: github.event_name != 'release' && github.event.schedule != '41 5 * * 0,1,3-6'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
