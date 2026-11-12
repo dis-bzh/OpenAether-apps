@@ -157,19 +157,12 @@ jobs:
       - name: Provider S3 egress rules admit every region of the provider (#53)
         run: python3 -I scripts/dev/test-s3-egress-fqdns.py
 
-      - name: "CNPG archives through the Barman Cloud plugin and its objects match the CRDs (#114)"
-        run: python3 -I scripts/dev/test-cnpg-barman-plugin.py
       - name: "CNPG ObjectStores send checksums only when required (barman-cloud on Outscale OOS, #132)"
         run: python3 -I scripts/dev/test-cnpg-s3-checksum-env.py
       - name: "A rebuilt cluster archives under a new serverName, the verifier and restore tests follow it (#153)"
         run: python3 -I scripts/dev/test-cnpg-archive-generation.py
       - name: "A missing or empty cluster-identity replica key does not null the ObjectStores (lab 25, D9)"
         run: python3 -I scripts/dev/test-cnpg-identity-defaults.py
-
-      - name: "The Forgejo brick: seeded secrets, OCI chart source, its own database Kustomization (0.4.0, #170)"
-        run: |
-          python3 -I scripts/dev/test-forgejo-brick.py
-          python3 -I scripts/dev/test-forgejo-brick.py --selftest
 
       - name: "The restore tests stay scratch: RBAC, quota, ObjectStores, Jobs, exporter (0.4.0 M3)"
         run: python3 -I scripts/dev/test-restore-test-brick.py
@@ -264,6 +257,10 @@ jobs:
 
       # Runs the Audit policies against fixture pods. The release publishes no checksum file, only a cosign signature:
       # the sha256 below is the one of the tarball as first downloaded (trust on first use), so a changed asset fails.
+      # This step is also the ONLY run of test-cnpg-barman-plugin.py (#114) and of test-forgejo-brick.py with its
+      # --selftest (0.4.0, #170): with KYVERNO set each of them runs everything it runs without it (render, CRD shape,
+      # secrets, OCI chart source, database Kustomization, mutations) plus its Kyverno check, so a standalone step
+      # before this one only ran the same assertions a second time. Do not add one back; either failing fails this step.
       - name: Kyverno policies report what they should (Kyverno CLI 1.19.1, the vendored version)
         env:
           KYVERNO_CLI_SHA256: b38228f367fc0fdc2b08f4c83ea50ac5f16c60ff8d62d76a66157c33c47b70ae
