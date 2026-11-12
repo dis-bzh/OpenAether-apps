@@ -105,8 +105,13 @@ md_files() {
 # Code: the comment line of the languages this repository writes. `.example`
 # and the config dialects were outside this list, which is how a whole French
 # example file was never read.
+# Vendored upstream dumps are not read: they are third-party English text, pinned by sha256 in apps/vendored-dumps.sha256
+# (scripts/dev/check-vendored-lock.sh fails on any edit), and they were 70 % of the scan time (kyverno alone is 91,000
+# lines). A repository without that lock file reads everything, as before.
 code_files() {
-  git -C "$1" ls-files '*.tf' '*.tftpl' '*.yaml' '*.yml' '*.sh' '*.py' '*.example' '*.hcl' '*.json5' '*.tpl' '*.toml'
+  local lock="$1/apps/vendored-dumps.sha256"
+  git -C "$1" ls-files '*.tf' '*.tftpl' '*.yaml' '*.yml' '*.sh' '*.py' '*.example' '*.hcl' '*.json5' '*.tpl' '*.toml' |
+    if [ -f "$lock" ]; then grep -vxFf <(awk '{print $2}' "$lock") || true; else cat; fi
 }
 
 # Shared by both awk programs: is this prose line French? Word list (case-sensitive,
@@ -114,7 +119,7 @@ code_files() {
 # mawk is byte-oriented and a bracket of multibyte letters matches stray bytes of
 # em dashes and arrows.
 AWK_FRENCH='
-function french(text,    n, i, w, cap) {
+function french(text,    n, i, w, cap, alt) {
   # Cléa is the name of the dependency watcher (OpenAether-infra), not a French word. Only the name
   # is neutralised: an accented French word beside it is still caught.
   gsub(/Cléa/, "Clea", text)
@@ -124,26 +129,35 @@ function french(text,    n, i, w, cap) {
   # contractions put the apostrophe AFTER a word (dont, its), so they do not match.
   # (No apostrophes in this comment: the awk program is single-quoted.)
   if (text ~ ("(^|[^[:alnum:]_])(l|d|qu|n|s|j|c|m|t)" sprintf("%c", 39) "[[:alpha:]]")) return 1
-  n = split(words, w, "|")
-  for (i = 1; i <= n; i++) {
-    cap = toupper(substr(w[i], 1, 1)) substr(w[i], 2)
-    # Case-SENSITIVE, deliberately: `sans` is French, `SANs` is the
-    # certificate acronym, and a case-insensitive match calls the second
-    # one a translation defect on every TLS comment in the repository.
-    # A leading hyphen means a flag, not a word: `-le 15`, `-la`, `-du` are
-    # shell test operators and CLI switches. No French word in this repository
-    # follows a hyphen directly.
-    if (text ~ ("(^|[^[:alnum:]_-])(" w[i] "|" cap ")([^[:alnum:]_]|$)")) return 1
+  # ONE regex for the whole word list, built once per awk process. The loop it replaces compiled a dynamic
+  # regex per word per line (about 120 per line): 35 s on a fast workstation and 484 s on a GitHub runner.
+  # Same truth table: a line is French when ANY word matches with its boundaries.
+  # Case-SENSITIVE, deliberately: `sans` is French, `SANs` is the
+  # certificate acronym, and a case-insensitive match calls the second
+  # one a translation defect on every TLS comment in the repository.
+  # A leading hyphen means a flag, not a word: `-le 15`, `-la`, `-du` are
+  # shell test operators and CLI switches. No French word in this repository
+  # follows a hyphen directly.
+  if (re_words == "") {
+    n = split(words, w, "|")
+    for (i = 1; i <= n; i++) {
+      cap = toupper(substr(w[i], 1, 1)) substr(w[i], 2)
+      alt = alt (i > 1 ? "|" : "") w[i] "|" cap
+    }
+    re_words = "(^|[^[:alnum:]_-])(" alt ")([^[:alnum:]_]|$)"
   }
-  return 0
+  return (text ~ re_words)
 }
-function french_comment(text,    n, i, w, cap) {
-  n = split(wordsc, w, "|")
-  for (i = 1; i <= n; i++) {
-    cap = toupper(substr(w[i], 1, 1)) substr(w[i], 2)
-    if (text ~ ("(^|[^[:alnum:]_-])(" w[i] "|" cap "|" toupper(w[i]) ")([^[:alnum:]_]|$)")) return 1
+function french_comment(text,    n, i, w, cap, alt) {
+  if (re_wordsc == "") {
+    n = split(wordsc, w, "|")
+    for (i = 1; i <= n; i++) {
+      cap = toupper(substr(w[i], 1, 1)) substr(w[i], 2)
+      alt = alt (i > 1 ? "|" : "") w[i] "|" cap "|" toupper(w[i])
+    }
+    re_wordsc = "(^|[^[:alnum:]_-])(" alt ")([^[:alnum:]_]|$)"
   }
-  return 0
+  return (text ~ re_wordsc)
 }'
 
 hits=0
