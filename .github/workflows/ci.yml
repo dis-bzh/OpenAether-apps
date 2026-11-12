@@ -340,11 +340,18 @@ jobs:
           python3 scripts/dev/test-check-externalsecret-namespaces.py
           python3 scripts/check-externalsecret-namespaces.py
 
-  backup-checks:
-    name: Backup brick checks
+  # The backup brick checks run as parallel jobs (the verifier test alone took 10 of the job's 16 minutes): 4 verifier
+  # shards and two side jobs, joined by `backup-checks`. Only that one, which keeps the name "Backup brick checks", is
+  # to be required; the others are listed in .github/informational-checks.txt.
+  backup-verifier:
+    name: Backup verifier (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    # The verifier test runs 14 full passes of its three stages on real restic and Barman data (about 10 minutes).
-    timeout-minutes: 40
+    # Setup about 2 minutes, then the healthy pass and the shard's scenarios, about 25 s a pass (SHARD_OF: the script).
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
@@ -353,20 +360,28 @@ jobs:
       - name: Install PyYAML
         run: pip install -r scripts/ci-requirements.txt
 
-      # pg_dump cannot dump a server newer than itself: a Cluster bump that leaves
-      # the backup client image behind silently stops the daily dumps.
-      - name: Postgres client majors vs Cluster majors
-        run: ./scripts/dev/check-pg-dump-version.sh
-
-      # The restore-test scripts accept an intact dump / raft snapshot and reject a
-      # damaged one (docker is on the runner image; the pg part pulls the CNPG image).
-      - name: Test the restore-test checks
+      - name: "The backup verifier sees each damage (real restic, a real Barman archive, an etcd snapshot)"
+        env:
+          VERIFY_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          REQUIRE_PG_RESTORE=1 ./scripts/dev/test-backup-checks.sh | tee backup-checks.out
-          grep -qE '^[0-9]+ passed, 0 failed$' backup-checks.out
-          # The pg_restore tests are the main check: a skipped part must not pass.
-          ! grep -q 'SKIPPED' backup-checks.out
+          ./scripts/dev/test-backup-verify-listing.sh
+          python3 -I scripts/dev/test-backup-verify-aggregate.py
+          CI=true ./scripts/dev/test-backup-verify.sh | tee verify.out
+          grep -qE '^[0-9]+ passed, 0 failed$' verify.out
+          ! grep -q 'SKIPPED' verify.out
+
+  backup-stores:
+    name: Backup stores and Jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Install PyYAML
+        run: pip install -r scripts/ci-requirements.txt
 
       # A failed backup Job leaves its pod and its log (restartPolicy Never): the nightly dump once failed with
       # neither (lab 27 part B, D13).
@@ -392,14 +407,32 @@ jobs:
             if grep -q 'SKIPPED' "$t.out"; then exit 1; fi
           done
 
-      - name: "The backup verifier sees each damage (real restic, a real Barman archive, an etcd snapshot)"
+  backup-restore-tests:
+    name: Backup restore tests and bench
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Install PyYAML
+        run: pip install -r scripts/ci-requirements.txt
+
+      # pg_dump cannot dump a server newer than itself: a Cluster bump that leaves
+      # the backup client image behind silently stops the daily dumps.
+      - name: Postgres client majors vs Cluster majors
+        run: ./scripts/dev/check-pg-dump-version.sh
+
+      # The restore-test scripts accept an intact dump / raft snapshot and reject a
+      # damaged one (docker is on the runner image; the pg part pulls the CNPG image).
+      - name: Test the restore-test checks
         run: |
           set -euo pipefail
-          ./scripts/dev/test-backup-verify-listing.sh
-          python3 -I scripts/dev/test-backup-verify-aggregate.py
-          CI=true ./scripts/dev/test-backup-verify.sh | tee verify.out
-          grep -qE '^[0-9]+ passed, 0 failed$' verify.out
-          ! grep -q 'SKIPPED' verify.out
+          REQUIRE_PG_RESTORE=1 ./scripts/dev/test-backup-checks.sh | tee backup-checks.out
+          grep -qE '^[0-9]+ passed, 0 failed$' backup-checks.out
+          # The pg_restore tests are the main check: a skipped part must not pass.
+          ! grep -q 'SKIPPED' backup-checks.out
 
       - name: "The CNPG restore test: each damage found, the scratch Cluster removed (double, real PostgreSQL)"
         run: |
@@ -420,6 +453,26 @@ jobs:
           CI=true ./scripts/dev/test-db-bench.sh | tee db-bench.out
           grep -qE '^[0-9]+ passed, 0 failed$' db-bench.out
           ! grep -q 'SKIPPED' db-bench.out
+
+  # `always()`: a needed job that failed or was cancelled turns this one red instead of skipping it (a skipped required
+  # check passes).
+  backup-checks:
+    name: Backup brick checks
+    needs: [backup-verifier, backup-stores, backup-restore-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every part of the backup brick checks passed
+        env:
+          VERIFIER: ${{ needs.backup-verifier.result }}
+          STORES: ${{ needs.backup-stores.result }}
+          RESTORE: ${{ needs.backup-restore-tests.result }}
+        run: |
+          echo "verifier shards: $VERIFIER; stores and Jobs: $STORES; restore tests and bench: $RESTORE"
+          for r in "$VERIFIER" "$STORES" "$RESTORE"; do
+            case "$r" in success|skipped) ;; *) exit 1 ;; esac
+          done
 
   loki-render:
     name: Loki chart render

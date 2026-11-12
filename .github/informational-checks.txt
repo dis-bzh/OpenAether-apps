@@ -5,3 +5,10 @@ Commit messages
 Pipeline audit
 OpenBao bootstrap
 Zitadel and Grafana authentication
+# The backup brick checks run in parallel jobs; only the aggregator, Backup brick checks, is to be required.
+Backup verifier (shard 1/4)
+Backup verifier (shard 2/4)
+Backup verifier (shard 3/4)
+Backup verifier (shard 4/4)
+Backup stores and Jobs
+Backup restore tests and bench
