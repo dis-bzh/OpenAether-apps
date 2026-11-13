@@ -149,7 +149,7 @@ spec:
             failureThreshold: 3
           resources:
             requests:
-              cpu: 250m
+              cpu: 100m   # 10-15 m used at rest and under a zone loss (labs 38-41); limit unchanged
               memory: 512Mi
             limits:
               cpu: 1000m
