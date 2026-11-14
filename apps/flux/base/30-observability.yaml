@@ -17,6 +17,21 @@ spec:
   path: ./apps/base/observability
   prune: true
   wait: false
+  # Gate on the VictoriaMetrics operator only (apps #193): its CRDs are what `observability-vm-customresources` and
+  # `observability-openbao` need. Before this, `observability` was "Ready" as soon as its objects were applied
+  # (wait: false), the
+  # custom resources were applied at once, failed "no matches for kind VMAgent" and waited for their 1 minute
+  # retryInterval (about
+  # 2 minutes lost, three fresh installs). `wait` stays false on purpose: a broken Grafana or Loki must not hold
+  # the chain back,
+  # only the operator that installs the CRDs does. (healthChecks are read when wait is false; shown on a cluster
+  # by the lab that
+  # compares the Ready times, see the PR.)
+  healthChecks:
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: victoria-metrics-operator
+      namespace: services-observability
   dependsOn:
     - name: storage
     - name: cert-manager
