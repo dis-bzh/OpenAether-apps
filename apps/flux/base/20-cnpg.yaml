@@ -6,6 +6,29 @@
 # It is the only wait: true brick that reads an operator-seeded path (#50).
 # Isolation: a CNPG crash affects neither the foundation stack nor the storage layer.
 ---
+# Pre-pull of the PostgreSQL images (apps #180): applied as soon as the namespaces exist, NOT waited for (wait:
+# false), so the cold
+# pulls overlap with the cnpg Kustomization's wait for its dependencies. `cnpg` depends on it only so that a profile
+# that picks cnpg
+# carries it; nothing waits for the pulls. Pinned by scripts/dev/test-cnpg-image-prepull.py.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cnpg-image-prepull
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 3m
+  sourceRef:
+    kind: GitRepository
+    name: openaether
+  path: ./apps/base/cnpg-image-prepull
+  prune: true
+  wait: false
+  dependsOn:
+    - name: namespaces
+---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -49,3 +72,5 @@ spec:
     - name: external-secrets-stores  # ClusterSecretStore openbao (#38)
     - name: cert-manager  # the Barman Cloud plugin's mTLS certificates (Issuer + Certificate in cnpg-system)
     - name: platform-local-path-provisioner  # clusters zitadel-db/grafana-db en storageClass local-path-retain
+    # applied early, not waited for (wait: false): the PostgreSQL images are pulled while cnpg waits for the rest
+    - name: cnpg-image-prepull

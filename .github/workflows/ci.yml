@@ -220,6 +220,9 @@ jobs:
       - name: "VictoriaMetrics images are pinned and the operator values are chart keys (#117)"
         run: python3 -I scripts/dev/test-vm-pins.py
 
+      - name: The PostgreSQL pre-pull DaemonSet pulls the images the CNPG Clusters run (apps #180)
+        run: python3 -I scripts/dev/test-cnpg-image-prepull.py
+
       - name: The Gateway keeps two replicas and a disruption budget (lab 15c)
         run: python3 -I scripts/dev/test-gateway-ha.py
 
