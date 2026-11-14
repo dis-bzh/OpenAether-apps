@@ -1,11 +1,17 @@
 # Pre-pull of the PostgreSQL images of the CNPG Clusters (0.5.0 M2, apps #180).
-# Measured (lab 46, OVH, n=1): the `cnpg` Kustomization spends about 4 minutes Progressing after the operator is ready, and the
-# first minutes are COLD IMAGE PULLS: PG18 1 min 05 s and PG16 1 min 30 s on the primary's node, then the same again on each
-# replica's node, in series with initdb and the replica joins. The `cnpg` Kustomization itself waits about 5 minutes for its
-# dependencies (OpenBao, ESO stores): during that wait the nodes are idle. This DaemonSet is applied early (Kustomization
+# Measured (lab 46, OVH, n=1): the `cnpg` Kustomization spends about 4 minutes Progressing after the operator is
+# ready, and the
+# first minutes are COLD IMAGE PULLS: PG18 1 min 05 s and PG16 1 min 30 s on the primary's node, then the same again
+# on each
+# replica's node, in series with initdb and the replica joins. The `cnpg` Kustomization itself waits about 5 minutes
+# for its
+# dependencies (OpenBao, ESO stores): during that wait the nodes are idle. This DaemonSet is applied early
+# (Kustomization
 # cnpg-image-prepull, wait: false, depends only on the namespaces) so the pulls overlap with that wait.
-# It changes nothing else: if a pull fails the node pulls the image when the Cluster needs it, as before (no manual step).
-# The image tags MUST equal the Clusters' `imageName` (apps/base/cnpg/cluster.yaml, grafana-db-cluster.yaml, forgejo-db/cluster.yaml):
+# It changes nothing else: if a pull fails the node pulls the image when the Cluster needs it, as before (no manual
+# step).
+# The image tags MUST equal the Clusters' `imageName` (apps/base/cnpg/cluster.yaml, grafana-db-cluster.yaml,
+# forgejo-db/cluster.yaml):
 # scripts/dev/test-cnpg-image-prepull.py fails when they differ. Renovate moves them together (same package, same tag).
 apiVersion: apps/v1
 kind: DaemonSet
