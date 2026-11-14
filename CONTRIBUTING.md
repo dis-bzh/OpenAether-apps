@@ -72,6 +72,7 @@ that claims to fix something and shows no run is refused whoever wrote it.
 
 Disclose the assistance with the `Assisted-by:` git trailer, naming the tool
 (`Assisted-by: Claude Code`). `Co-Authored-By` and `Signed-off-by` from a tool
-are forbidden, and so is a commit authored by a tool: those assert authorship
-and certify origin, which a model cannot do. The human submitting is the author
-and answers for every line. CI enforces it (`commits` job).
+are forbidden: those assert authorship and certify origin, which a model cannot
+do. A commit whose git author is the tool is accepted as long as it carries the
+`Assisted-by:` trailer; the human submitting still answers for every line. CI
+enforces the trailer rule (`commits` job).
