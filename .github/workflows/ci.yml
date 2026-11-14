@@ -359,10 +359,10 @@ jobs:
           python3 scripts/dev/test-check-externalsecret-namespaces.py
           python3 scripts/check-externalsecret-namespaces.py
 
-  # Rename, phase A. The ruleset on main still requires the check name "Kustomize Build + Collision Check", and a
-  # required name that nothing reports makes every pull request wait forever. This job reports it, and passes only
-  # when `build` ("Platform contracts") finished with exactly `success`. Phase B deletes it once the ruleset names
-  # only "Platform contracts".
+  # The ruleset on main requires both "Platform contracts" and the old check name "Kustomize Build + Collision Check",
+  # and a required name that nothing reports makes every pull request wait forever. This job reports the old name,
+  # and passes only when `build` ("Platform contracts") finished with exactly `success`. It stays for good (owner
+  # decision of 2026-11-12: no phase B).
   # `always()`, not `!cancelled()`: a skipped required check passes, and `!cancelled()` skips this job when the run is
   # cancelled, so a cancelled `build` would leave the old name green. There is no checkout and no network call here,
   # which is what the usual warning against `always()` (a source fetch that outlives a cancel) is about.
