@@ -81,6 +81,7 @@ descriptions:
   istio-authorizationpolicies: mesh AuthorizationPolicies
   services-gateway: north-south Gateway + openaether TLS cert
   cnpg: CloudNativePG (operator + zitadel-db/grafana-db clusters)
+  cnpg-image-prepull: pre-pull of the PostgreSQL images of the CNPG clusters (not waited for; applied early)
   storage: Longhorn (replicated volumes, LUKS through OpenBao)
   storage-backup-target: S3 target for Longhorn volume backups (credentials through OpenBao)
   storage-settings: Longhorn Setting objects the platform owns (node-down-pod-deletion-policy)
