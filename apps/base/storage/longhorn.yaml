@@ -82,9 +82,10 @@ spec:
       # Default replica count for new volumes.
       # Overridden per StorageClass (numberOfReplicas).
       defaultReplicaCount: 2
-      # The instance-manager CPU request is a PERCENTAGE of the node's allocatable CPU (chart default 12: 954 m on an 8 vCPU
-      # node, 474 m on a 4 vCPU node) and 3 to 4 m were used at rest (labs 38-41). 5 keeps a floor of about 200 m on 4 vCPU. FRESH installs
-      # only: a running cluster keeps its current setting until it is changed deliberately (the instance managers restart).
+      # The instance-manager CPU request is a PERCENTAGE of the node's allocatable CPU (chart default 12: 954 m on an
+      # 8 vCPU node, 474 m on a 4 vCPU node) and 3 to 4 m were used at rest (labs 38-41). 5 keeps a floor of about
+      # 200 m on 4 vCPU. FRESH installs only: a running cluster keeps its current setting until it is changed
+      # deliberately (the instance managers restart).
       guaranteedInstanceManagerCPU: 5
       # Minimum free space before refusing new volumes.
       storageMinimalAvailablePercentage: 15
