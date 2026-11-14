@@ -8,7 +8,10 @@
 # dependencies (OpenBao, ESO stores): during that wait the nodes are idle. This DaemonSet is applied early
 # (Kustomization
 # cnpg-image-prepull, wait: false, depends only on the namespaces) so the pulls overlap with that wait.
-# It changes nothing else: if a pull fails the node pulls the image when the Cluster needs it, as before (no manual
+# It runs in kube-system on purpose: it is applied BEFORE the cnpg Kustomization, which is the one that creates the
+# foundation-databases namespace (lab 49 found the deadlock: cnpg depends on this Kustomization, which could not apply
+# into a namespace that did not exist yet). It changes nothing else: if a pull fails the node pulls the image when
+# the Cluster needs it, as before (no manual
 # step).
 # The image tags MUST equal the Clusters' `imageName` (apps/base/cnpg/cluster.yaml, grafana-db-cluster.yaml,
 # forgejo-db/cluster.yaml):
@@ -17,7 +20,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: cnpg-image-prepull
-  namespace: foundation-databases
+  namespace: kube-system
   labels:
     app.kubernetes.io/name: cnpg-image-prepull
     app.kubernetes.io/part-of: cnpg

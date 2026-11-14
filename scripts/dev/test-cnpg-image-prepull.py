@@ -24,6 +24,9 @@ if clusters and pulled == clusters: ok(f"the DaemonSet pulls exactly the {len(cl
 else: bad(f"Cluster images {sorted(clusters)} != pre-pulled {sorted(pulled)}")
 if all(c.get("imagePullPolicy") == "IfNotPresent" for c in pod.get("initContainers", []) + pod["containers"]): ok("imagePullPolicy IfNotPresent everywhere")
 else: bad("a pre-pull container does not use IfNotPresent")
+ns_early = {"kube-system", "flux-system"} | {d["metadata"]["name"] for d in docs("apps/base/namespaces/namespaces.yaml") if d.get("kind") == "Namespace"}
+if ds["metadata"]["namespace"] in ns_early: ok(f"the DaemonSet namespace ({ds['metadata']['namespace']}) exists before cnpg runs (lab 49: foundation-databases is created BY cnpg: deadlock)")
+else: bad(f"the DaemonSet is in {ds['metadata']['namespace']}, which only the cnpg Kustomization creates: cnpg depends on this one, so it deadlocks (lab 49)")
 ks = {d["metadata"]["name"]: d for d in docs("apps/flux/base/20-cnpg.yaml") if d["kind"] == "Kustomization"}
 pre = ks.get("cnpg-image-prepull")
 if pre and pre["spec"].get("wait") is False: ok("cnpg-image-prepull is wait: false")
