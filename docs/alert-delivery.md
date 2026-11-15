@@ -24,6 +24,11 @@ one URL per Alertmanager pod (`http://vmalertmanager-alertmanager-<i>.vmalertman
 the pod FQDN the VM operator builds for its own discovery), and vmalert sends to all of them. `test-alert-delivery.py` fails
 when the list and the `replicaCount` of the VMAlertmanager disagree: raise one, raise the other.
 
+Flux error events follow the same rule (apps #218): `apps/base/flux/notification-alertmanager.yaml` holds one Provider and one
+Alert per Alertmanager pod, on the same per-pod URLs, because a Provider takes one address. `test-flux-notifications.py` fails
+when their count and the `replicaCount` disagree, or when the Alerts' sources differ. Offline only: no Flux error event has been
+read on both pods of a cluster yet.
+
 - `VMAlertNotifierErrors` (critical) now means every address fails; before, one pod being replaced would have paged "every alert
   is lost". `VMAlertNotifierPodErrors` (warning) means ONE address has failed for 30 minutes: the redundancy is gone. A pod that
   is down is also `AlertmanagerClusterDegraded`; a pod that is up but that vmalert cannot reach (its name does not resolve, a

@@ -445,7 +445,7 @@ of a REAL interrupted push in 5.
 0. **The lab enables the brick explicitly** (`apps/flux/management-forge`, or the instance profile): a default install does not carry it,
    so a lab that does not turn it on proves nothing about it. Also there: the default install still renders and converges without it.
 1. A **fresh install converges** with the brick: `forgejo-db` then `forgejo` Ready, the four OpenBao paths exist (`forgejo/metrics` since 0.4.3) and `forgejo-admin` has
-   both keys, `cluster-verify` green, the flux-errors Alert quiet. The Flux source controller pulls the chart from `code.forgejo.org`
+   both keys, `cluster-verify` green, the flux-errors Alerts quiet. The Flux source controller pulls the chart from `code.forgejo.org`
    under the restricted egress policy (the registry's token request and blob download on 443, no redirect to another host).
 2. **`forgejo-db` synchronous replication and archiving**: `cluster-verify` shows the same lines as for `grafana-db` (sync replicas,
    `ContinuousArchiving`, a first base backup right after the database is healthy: `immediate: true`, not 03:40), `cnpg-store-replicate` copies its archive to the replica store.
