@@ -442,6 +442,14 @@ expect "admin can not mount an engine"           '403'     "$(rq "$T/tok-openaet
 expect "admin can not write a PKI role (allow_any_name would issue for anything)" '403' "$(rq "$T/tok-openaether-admin" POST /v1/pki/roles/evil '{"allow_any_name":true}')"
 expect "admin can not touch the PKI root"        '403'     "$(rq "$T/tok-openaether-admin" DELETE /v1/pki/root)"
 allowed "admin may import a signed intermediate"          "$(rq "$T/tok-openaether-admin" POST /v1/pki/intermediate/set-signed '{"certificate":"x"}')"
+# apps #130: force a full CRL rebuild after a revocation and read the CRL config, nothing wider. A throwaway root gives the
+# mount an issuer, so the rotation really runs (without one the engine refuses on its own and nothing would be exercised).
+printf '{"common_name":"throwaway-root","key_type":"ec","key_bits":256}' | curl -s --cacert "$CAB" -H "@$T/bg.root" -X POST -d @- -o /dev/null "$U/v1/pki/root/generate/internal"
+expect "admin forces a full CRL rebuild (pki/crl/rotate)" '200'  "$(rq "$T/tok-openaether-admin" GET  /v1/pki/crl/rotate)"
+expect "admin reads the CRL configuration"        '200'     "$(rq "$T/tok-openaether-admin" GET  /v1/pki/config/crl)"
+expect "admin can not write the CRL configuration" '403'    "$(rq "$T/tok-openaether-admin" POST /v1/pki/config/crl '{"expiry":"1h"}')"
+expect "admin can not read the other PKI configuration (pki/config/urls)" '403' "$(rq "$T/tok-openaether-admin" GET /v1/pki/config/urls)"
+expect "admin can not rotate the delta CRL (only the full one is granted)" '403' "$(rq "$T/tok-openaether-admin" GET /v1/pki/crl/rotate-delta)"
 expect "admin can list the PKI roles"            '200|404' "$(rq "$T/tok-openaether-admin" LIST /v1/pki/roles)"
 expect "admin can not mint a token"              '403'     "$(rq "$T/tok-openaether-admin" POST /v1/auth/token/create '{"policies":["root"]}')"
 expect "admin can not write an auth role"        '403'     "$(rq "$T/tok-openaether-admin" POST /v1/auth/kubernetes/role/evil '{"bound_service_account_names":"*"}')"
