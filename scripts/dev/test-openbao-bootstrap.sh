@@ -247,13 +247,13 @@ ROLES="$(curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X LIST https://127.0.0.1:
 for r in backup-snapshot cert-manager-issuer external-secrets-operator openaether-admin openaether-reader openbao-bootstrap openbao-breakglass secret-seeder; do
   grep -qw "$r" <<<"$ROLES" && ok "role $r" || bad "role $r missing ($ROLES)"
 done
-for kv in grafana/admin grafana/db minio/root longhorn/encryption zitadel/db zitadel/masterkey zitadel/admin zitadel/session-cookie backup/restic forgejo/db forgejo/admin forgejo/oidc forgejo/metrics; do
+for kv in grafana/admin grafana/db grafana/oidc minio/root longhorn/encryption zitadel/db zitadel/masterkey zitadel/admin zitadel/session-cookie backup/restic forgejo/db forgejo/admin forgejo/oidc forgejo/metrics; do
   [ -n "$(bao_get "/v1/secret/data/$kv" | jq -r '.data.data | keys[0] // empty')" ] && ok "secret/$kv exists" || bad "secret/$kv missing"
 done
 CSR1="$(bao_get /v1/secret/data/pki/intermediate-csr | jq -r '.data.data.csr // empty')"
 grep -q "BEGIN CERTIFICATE REQUEST" <<<"$CSR1" && ok "the intermediate CSR is stored in secret/pki/intermediate-csr (outlives the Job's log)" || bad "no CSR in secret/pki/intermediate-csr"
 LEAK=0
-for kv in grafana/admin grafana/db minio/root longhorn/encryption zitadel/db zitadel/masterkey zitadel/admin zitadel/session-cookie backup/restic forgejo/db forgejo/admin forgejo/oidc forgejo/metrics; do
+for kv in grafana/admin grafana/db grafana/oidc minio/root longhorn/encryption zitadel/db zitadel/masterkey zitadel/admin zitadel/session-cookie backup/restic forgejo/db forgejo/admin forgejo/oidc forgejo/metrics; do
   while IFS= read -r val; do
     [ -n "$val" ] && grep -qF -- "$val" "$T/dev/configure.sh.out" && { LEAK=1; bad "the value of secret/$kv is in the output"; }
   done < <(bao_get "/v1/secret/data/$kv" | jq -r '.data.data | to_entries[] | select(.key != "username" and .key != "accessKey") | .value')
@@ -275,6 +275,9 @@ FGPW="$(bao_get /v1/secret/data/forgejo/admin | jq -r '.data.data.password')"
 [ "$(bao_get /v1/secret/data/forgejo/db | jq -r '.data.data.password')" != "$FGPW" ] && ok "...and the two Forgejo passwords differ" || bad "forgejo/db and forgejo/admin share a password"
 [ "$(bao_get /v1/secret/data/forgejo/oidc | jq -r '.data.data | [.key, .secret] | join(",")')" = "oidc-not-configured,oidc-not-configured" ] \
   && ok "forgejo/oidc holds the public placeholder (the auth source is disabled)" || bad "forgejo/oidc is not the placeholder"
+# grafana/oidc: the same public placeholder, so its ExternalSecret is Ready on a default install (apps #191); Zitadel knows no such client.
+[ "$(bao_get /v1/secret/data/grafana/oidc | jq -r '.data.data | [."client-id", ."client-secret"] | join(",")')" = "oidc-not-configured,oidc-not-configured" ] \
+  && ok "grafana/oidc holds the public placeholder" || bad "grafana/oidc is not the placeholder"
 # The token of Forgejo's /metrics: 40 characters, not the password of the database or of the admin.
 FGTOK1="$(bao_get /v1/secret/data/forgejo/metrics | jq -r '.data.data.token')"
 [ "${#FGTOK1}" = 40 ] && ok "the Forgejo metrics token has 40 characters" || bad "forgejo/metrics token length ${#FGTOK1}"
@@ -282,10 +285,13 @@ FGTOK1="$(bao_get /v1/secret/data/forgejo/metrics | jq -r '.data.data.token')"
 RESTIC1="$(bao_get /v1/secret/data/backup/restic | jq -r '.data.data.password')"
 FGDB1="$(bao_get /v1/secret/data/forgejo/db | jq -r '.data.data.password')"
 echo "--- a second run changes no secret"
+bao_post_kv() { printf '%s' "$2" | curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X POST -d @- "https://127.0.0.1:18211/v1/secret/data/$1" >/dev/null; }
+bao_post_kv grafana/oidc '{"data":{"client-id":"operator-client-id","client-secret":"operator-client-secret"}}'
 run_script dev 18211 configure.sh OA_TEST_TOKEN_FILE="$BOOT" && ok "second configure.sh exits 0" || bad "second configure.sh failed: $(tail -4 "$T/dev/configure.sh.out")"
 [ "$(bao_get /v1/secret/data/backup/restic | jq -r '.data.data.password')" = "$RESTIC1" ] && ok "backup/restic is unchanged" || bad "backup/restic was rotated"
 [ "$(bao_get /v1/secret/data/forgejo/db | jq -r '.data.data.password')" = "$FGDB1" ] && ok "forgejo/db is unchanged (a rotation would lock the app out of its database)" || bad "forgejo/db was rotated"
 [ "$(bao_get /v1/secret/data/forgejo/metrics | jq -r '.data.data.token')" = "$FGTOK1" ] && ok "forgejo/metrics is unchanged (a rotation would cut the forge's scrape until both Secrets and the pod follow)" || bad "forgejo/metrics was rotated"
+[ "$(bao_get /v1/secret/data/grafana/oidc | jq -r '.data.data."client-id"')" = operator-client-id ] && ok "grafana/oidc written by an operator is not put back to the placeholder" || bad "the placeholder overwrote the operator's grafana/oidc"
 grep -q "already present" "$T/dev/configure.sh.out" && ok "it reports the secrets as already present" || bad "no 'already present'"
 NKEYS="$(curl -s --cacert "$T/tls/ca.crt" -H "@$BOOT" -X LIST https://127.0.0.1:18211/v1/pki/keys | jq -r '.data.keys | length')"
 [ "$NKEYS" = 1 ] && ok "two runs, one pending PKI key (no key per sync)" || bad "pki keys after two runs: $NKEYS"
@@ -436,6 +442,14 @@ expect "admin can not mount an engine"           '403'     "$(rq "$T/tok-openaet
 expect "admin can not write a PKI role (allow_any_name would issue for anything)" '403' "$(rq "$T/tok-openaether-admin" POST /v1/pki/roles/evil '{"allow_any_name":true}')"
 expect "admin can not touch the PKI root"        '403'     "$(rq "$T/tok-openaether-admin" DELETE /v1/pki/root)"
 allowed "admin may import a signed intermediate"          "$(rq "$T/tok-openaether-admin" POST /v1/pki/intermediate/set-signed '{"certificate":"x"}')"
+# apps #130: force a full CRL rebuild after a revocation and read the CRL config, nothing wider. A throwaway root gives the
+# mount an issuer, so the rotation really runs (without one the engine refuses on its own and nothing would be exercised).
+printf '{"common_name":"throwaway-root","key_type":"ec","key_bits":256}' | curl -s --cacert "$CAB" -H "@$T/bg.root" -X POST -d @- -o /dev/null "$U/v1/pki/root/generate/internal"
+expect "admin forces a full CRL rebuild (pki/crl/rotate)" '200'  "$(rq "$T/tok-openaether-admin" GET  /v1/pki/crl/rotate)"
+expect "admin reads the CRL configuration"        '200'     "$(rq "$T/tok-openaether-admin" GET  /v1/pki/config/crl)"
+expect "admin can not write the CRL configuration" '403'    "$(rq "$T/tok-openaether-admin" POST /v1/pki/config/crl '{"expiry":"1h"}')"
+expect "admin can not read the other PKI configuration (pki/config/urls)" '403' "$(rq "$T/tok-openaether-admin" GET /v1/pki/config/urls)"
+expect "admin can not rotate the delta CRL (only the full one is granted)" '403' "$(rq "$T/tok-openaether-admin" GET /v1/pki/crl/rotate-delta)"
 expect "admin can list the PKI roles"            '200|404' "$(rq "$T/tok-openaether-admin" LIST /v1/pki/roles)"
 expect "admin can not mint a token"              '403'     "$(rq "$T/tok-openaether-admin" POST /v1/auth/token/create '{"policies":["root"]}')"
 expect "admin can not write an auth role"        '403'     "$(rq "$T/tok-openaether-admin" POST /v1/auth/kubernetes/role/evil '{"bound_service_account_names":"*"}')"

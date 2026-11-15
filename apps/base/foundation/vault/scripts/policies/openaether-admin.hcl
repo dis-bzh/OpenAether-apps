@@ -23,6 +23,9 @@ path "pki/issue/openaether"        { capabilities = ["create", "update"] }
 path "pki/sign/openaether"         { capabilities = ["create", "update"] }
 path "pki/revoke"                  { capabilities = ["create", "update"] }
 path "pki/tidy"                    { capabilities = ["create", "update"] }
+# After a revocation the full CRL waits for its scheduled rebuild: this forces it, and the CRL settings stay read-only (#130).
+path "pki/crl/rotate"              { capabilities = ["read"] }
+path "pki/config/crl"              { capabilities = ["read"] }
 path "pki/cert/*"                  { capabilities = ["read", "list"] }
 path "pki/certs"                   { capabilities = ["list"] }
 path "pki/issuers"                 { capabilities = ["list"] }

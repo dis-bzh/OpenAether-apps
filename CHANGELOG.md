@@ -17,6 +17,12 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+- **The vault configure Job seeds a public placeholder in `grafana/oidc`, create-only (#191).** `ExternalSecret services-observability/grafana-oidc` is Ready on a default install; a real value is never overwritten, and Zitadel knows no such client. Upgrading re-runs both vault Jobs once (the script is in the hashed ConfigMap). Rung: the bootstrap harness against a real OpenBao (red 223/2, green 225/0); not read on a cluster.
+
+- **`openaether-admin` may force a full CRL rebuild (#130).** It gains `read pki/crl/rotate` and `read pki/config/crl`, nothing wider (owner decision of 2026-11-15), so a revocation reaches full-CRL readers without a break-glass token; the runbooks say so. Rung: the same harness, with a throwaway root on the mount (red 228/2, green 230/0); the drill was not re-read on a cluster.
+
+- **`configure.sh` no longer states the `//metrics` exposure as measured at 0.4.1 (#213, one of the seven sites).**
+
 - **Security: CVE-2026-123158 (OpenSSH, sshd side) on kustomize-controller v1.10.1, restic 0.19.1 and Forgejo 15.0.11-rootless is recorded as `not_affected` (#220, #221, #224).** The images carry the client packages only, no `sshd`; no fixed kustomize-controller or restic image exists upstream on 2026-11-15. Statements expire 2027-01-09. Rung: local Docker and Trivy 0.69.3 for the first two (red without, green with). The Forgejo statement was written from the manifests and the CI scan rows, without a local scan and without reading upstream: the next scheduled scan shows whether it matches.
 
 - **Renovate runs in `mode: full` with the Dependency Dashboard, approval kept (#212).** The config validates; whether the dashboard issue appears is read on GitHub after the next run.

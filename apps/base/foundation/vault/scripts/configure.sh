@@ -157,13 +157,17 @@ application_secrets() {
   # password the symbols and digits it may require), and a PLACEHOLDER for the Zitadel OIDC client: the auth source ships
   # disabled, nothing reads these two values until an operator writes the real client id and secret over them (kv_create
   # never overwrites). The placeholder is a fixed, public string on purpose: it protects nothing and must not look like it does.
+  # Grafana's OIDC client, the same public placeholder (apps #191): its ExternalSecret is Ready on a default install and
+  # Zitadel knows no such client, so the button stays inert until an operator writes the real client over it.
+  d='{"client-id":"oidc-not-configured","client-secret":"oidc-not-configured"}'; D="$d" kv_create grafana/oidc D
   d="$(P="$(rand 32 32)" jq -nc '{password:$ENV.P}')";                    D="$d" kv_create forgejo/db D
   d="$(P="$(rand 28 28)Aa1!" jq -nc '{password:$ENV.P}')";                D="$d" kv_create forgejo/admin D
   d='{"key":"oidc-not-configured","secret":"oidc-not-configured"}';       D="$d" kv_create forgejo/oidc D
   # The bearer token of Forgejo's /metrics ([metrics] TOKEN): the forge answered /metrics without a credential and, through
-  # //metrics, reached the Internet at 0.4.1 and 0.4.2. The forge (GITEA__metrics__TOKEN) and vmagent (the VMPodScrape
-  # forgejo) both read this one value, through two ExternalSecrets. Create only: a re-run never rotates it, an upgraded
-  # cluster gains it when this Job runs again; a rotation is an operator's edit followed by a restart of the forge pod.
+  # //metrics, reached the Internet at 0.4.2 (measured; 0.4.1 has the same `apps/` tree, not run). The forge
+  # (GITEA__metrics__TOKEN) and vmagent (the VMPodScrape forgejo) both read this one value, through two ExternalSecrets.
+  # Create only: a re-run never rotates it, an upgraded cluster gains it when this Job runs again; a rotation is an
+  # operator's edit followed by a restart of the forge pod.
   d="$(P="$(rand 40 40)" jq -nc '{token:$ENV.P}')";                       D="$d" kv_create forgejo/metrics D
   d=""
 }

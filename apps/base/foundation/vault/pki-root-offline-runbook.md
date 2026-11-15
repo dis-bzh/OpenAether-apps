@@ -146,7 +146,8 @@ that does not check, for up to 90 days. Revocation is therefore best combined wi
   followed by "Response Verify Failure", because the listener CA does not vouch for the PKI. The shape of this command was run offline against a
   local `openssl ocsp` responder behind TLS, not against OpenBao.)
   Delta CRL: `curl -s --cacert <openbao-ca> https://openbao.foundation-vault.svc.cluster.local:8200/v1/pki/crl/delta/pem | openssl crl -noout -text`
-  (the endpoints are not authenticated). The admin identity cannot force a rebuild (`pki/crl/rotate` answers 403): that takes a break-glass root token.
+  (the endpoints are not authenticated). To put the serial in the full CRL now, force a rebuild: `bao_admin read pki/crl/rotate` (the admin identity may
+  read it and `pki/config/crl`, nothing else of the CRL configuration; apps #130).
 
 - **Intermediate compromised or suspected** (the seal key leaked together with a snapshot, a readable backup, an admin
   token): with a break-glass root token (the admin identity can not touch mounts) disable and re-enable the `pki/` mount, which
