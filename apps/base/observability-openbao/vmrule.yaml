@@ -42,6 +42,31 @@ spec:
               issued. Look at raft first: bao operator raft list-peers from a pod that answers.
             runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/apps/base/foundation/vault/README.md"
 
+        # A standby that follows no active node (apps #187): OpenBaoNoActiveNode stays quiet while another pod is
+        # active, yet this pod answers 500. A standby that found the leader echoes it every 5 s (`ha.rpc.client.echo`,
+        # OpenBao 2.7.1 source); no echo, or only failed ones, for 5 minutes means it follows nobody.
+        - alert: OpenBaoStandbyWithoutActive
+          expr: |
+            (max by (pod) (vault_core_unsealed{namespace="foundation-vault"}) == 1)
+              and on (pod) (max by (pod) (vault_core_active{namespace="foundation-vault"}) == 0)
+              unless on (pod) (
+                sum by (pod) (rate(vault_ha_rpc_client_echo_count{namespace="foundation-vault"}[5m]))
+                  > (sum by (pod) (rate(vault_ha_rpc_client_echo_errors{namespace="foundation-vault"}[5m]))
+                     or sum by (pod) (rate(vault_ha_rpc_client_echo_count{namespace="foundation-vault"}[5m])) * 0)
+              )
+          for: 5m
+          labels:
+            severity: warning
+            component: openbao
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              openbaostandbywithoutactive"
+            summary: "OpenBao standby {{ $labels.pod }} follows no active node"
+            description: >-
+              The pod is unsealed and standby but has not reached the active node for 5 minutes: requests it receives
+              answer 500 (local node not active but active cluster node not found). bao status on the pod; restart it
+              (kubectl -n foundation-vault delete pod {{ $labels.pod }}), the PVC stays.
+
         # Fewer unsealed replicas than the StatefulSet asks for: a pod is gone (a lost worker holds its volume) or
         # sealed.
         # With two of three the cluster works, one more loss stops it.

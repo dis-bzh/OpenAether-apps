@@ -323,6 +323,12 @@ vault_core_active:
 vault_core_unsealed:
   source: openbao
   status: existing
+vault_ha_rpc_client_echo_count:
+  source: openbao
+  status: UNVERIFIED
+vault_ha_rpc_client_echo_errors:
+  source: openbao
+  status: UNVERIFIED
 vault_raft_storage_stats_applied_index:
   source: openbao
   status: existing

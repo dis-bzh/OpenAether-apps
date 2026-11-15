@@ -60,6 +60,11 @@ Lab 22 added `process_start_time_seconds` of the Flux controllers (the standard 
 
 Added after lab 22 and still UNVERIFIED: `cnpg_pg_replication_streaming_replicas` (the number of rows of `pg_stat_replication`, a column of the CNPG default `pg_replication` query; read by `CnpgSyncReplicaMissing`; only the primary reports more than 0). Read it on the primary and on a replica in the next lab, and with a replica scaled down: it must reach 0 on the primary.
 
+Added with `OpenBaoStandbyWithoutActive` (apps #187) and UNVERIFIED: `vault_ha_rpc_client_echo_count` and `vault_ha_rpc_client_echo_errors`
+(the standby-to-active heartbeat, `ha.rpc.client.echo`, every 5 s). Read once on a two-node raft of OpenBao 2.7.1 in Docker: the
+standby served the count, and with the active node paused both rose by one per echo. Only a standby reports them, so the single-node
+`test-openbao-bootstrap.sh` exempts them: read them with `task check-alerts` on a 3-replica OpenBao.
+
 Added with the audit sink (infra #318) and UNVERIFIED, read only with the opt-in component `audit-log-sink` on: `oa_audit_sink_ok{sink}`,
 `oa_audit_sink_last_check_timestamp_seconds{sink}`, `oa_audit_sink_nodes{sink}` and `oa_audit_sink_last_object_age_seconds{sink,node}` (exported by
 `audit-sink-check`, scraped on 9101; the age is computed at each scrape from the LastModified of the newest snapshot object). Read them with

@@ -1614,3 +1614,40 @@ tests:
         values: '1x20'
     alert_rule_test:
       - {eval_time: 20m, alertname: ForgejoScrapeDown, exp_alerts: []}
+  # apps #187: a standby that follows no active node answers 500 while OpenBaoNoActiveNode is quiet (another pod is active).
+  # openbao-1 echoes the leader every 5 s (+6 per 30 s); openbao-2 never does; openbao-3 echoes but every echo fails;
+  # openbao-4 is sealed (OpenBaoWorkloadSealed's business).
+  - name: a standby with no successful echo to the active node alerts, an echoing or sealed one does not (apps issue 187)
+    interval: 30s
+    input_series:
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-0"}'
+        values: '1x40'
+      - series: 'vault_core_active{namespace="foundation-vault", pod="openbao-0"}'
+        values: '1x40'
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-1"}'
+        values: '1x40'
+      - series: 'vault_core_active{namespace="foundation-vault", pod="openbao-1"}'
+        values: '0x40'
+      - series: 'vault_ha_rpc_client_echo_count{namespace="foundation-vault", pod="openbao-1", peer_id="openbao-1"}'
+        values: '0+6x40'
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-2"}'
+        values: '1x40'
+      - series: 'vault_core_active{namespace="foundation-vault", pod="openbao-2"}'
+        values: '0x40'
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-3"}'
+        values: '1x40'
+      - series: 'vault_core_active{namespace="foundation-vault", pod="openbao-3"}'
+        values: '0x40'
+      - series: 'vault_ha_rpc_client_echo_count{namespace="foundation-vault", pod="openbao-3", peer_id="openbao-3"}'
+        values: '0+6x40'
+      - series: 'vault_ha_rpc_client_echo_errors{namespace="foundation-vault", pod="openbao-3"}'
+        values: '0+6x40'
+      - series: 'vault_core_unsealed{namespace="foundation-vault", pod="openbao-4"}'
+        values: '0x40'
+    alert_rule_test:
+      - {eval_time: 3m, alertname: OpenBaoStandbyWithoutActive, exp_alerts: []}   # inside `for`
+      - eval_time: 15m
+        alertname: OpenBaoStandbyWithoutActive
+        exp_alerts:
+          - exp_labels: {pod: openbao-2, severity: warning, component: openbao}
+          - exp_labels: {pod: openbao-3, severity: warning, component: openbao}
