@@ -2,8 +2,8 @@
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/dis-bzh/OpenAether-apps/.vex/openaether-apps.openvex.json",
   "author": "OpenAether maintainers",
-  "timestamp": "2026-11-10T12:00:00Z",
-  "version": 6,
+  "timestamp": "2026-11-15T00:00:00Z",
+  "version": 7,
   "statements": [
     {
       "vulnerability": {
@@ -31,6 +31,87 @@
       "impact_statement": "OpenSSH host key handling use-after-free. The restic image carries the ssh client binaries (openssh-client-common, openssh-client-default and openssh-keygen 10.3_p1-r0) in its Alpine layer. Nothing that runs the image starts ssh: restic runs it for an sftp: repository (observed), and all nine workloads (the database, OpenBao and etcd backup CronJobs, the two restore tests, the dump load test, the backup verifier and the two audit-sink shippers) build their repository URL with a fixed `s3:` prefix (in the script, or in the ExternalSecret template for the shippers); none of their scripts calls ssh, sftp, scp or ssh-keygen.",
       "action_statement": "Re-check on restic 0.19.2 (0.19.1, built 2026-07-05, is still the newest tag on GitHub and Docker Hub on 2026-11-10; no rebuilt tag exists: Alpine has OpenSSH 10.3_p1-r1, the image still carries 10.3_p1-r0, three CRITICAL rows, all CVE-2026-60002, local Trivy 0.69.3). Drop this statement once a fixed tag is pinned. Re-read at once if a script ever uses an sftp: or rclone: repository or runs ssh.",
       "status_notes": "Expires: 2027-01-09. Renewed 2026-11-10 (first recorded 2026-10-22, renewed 2026-11-04). Re-read on 2026-11-10 at the apps 0.4.5 candidate: the same nine manifests carry the image line (databases, openbao and etcd backup, both restore tests, dump-load-test with restic-dump.sh, backup-verify with restic-stage.sh, both audit-sink shippers with ship.sh); every repository URL is built with the `s3:` prefix (RESTIC_REPOSITORY in the scripts, RESTIC_REPO_BASE in the two shipper ExternalSecrets); a search of apps/base/backup and of both audit-sink bricks for ssh, sftp, scp, ssh-keygen and rclone finds no call. The run of 2026-11-04 in the image against a fake S3 store with failing ssh stand-ins (0 calls; the same image on an sftp: repository calls ssh at once) was not repeated. No cluster was used."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-123158"
+      },
+      "timestamp": "2026-11-15T00:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/kustomize-controller@sha256%3A37db29b25dae35b881a5e064acedb0cc954442da453a39eaa0eab7a90dbecc4e?repository_url=ghcr.io/fluxcd/kustomize-controller",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/openssh-client-common@10.3_p1-r1"
+            },
+            {
+              "@id": "pkg:apk/alpine/openssh-client-default@10.3_p1-r1"
+            },
+            {
+              "@id": "pkg:apk/alpine/openssh-keygen@10.3_p1-r1"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "OpenSSH password authentication bypass, exploitable through sshd's password check on musl; the client packages carry no password check. The kustomize-controller v1.10.1 image of the Flux copy pushed to CAPI children (apps/base/cluster-api-clusters/flux-gotk) carries only the OpenSSH client packages (openssh-client-common, openssh-client-default, openssh-keygen 10.3_p1-r1): no openssh-server, no sshd binary, no sshd_config, no host key, no PAM, no account with a password hash. The entrypoint is tini then kustomize-controller, the pod listens on 8080 (metrics) and 9440 (health) only, and every GitRepository in this repository uses an https:// URL.",
+      "action_statement": "Drop this statement when a kustomize-controller image carrying OpenSSH 10.3_p1-r2 or later is in gotk-components.yaml (a rebuilt v1.10.1 digest stops matching this product on its own). Upstream read on 2026-11-15: v1.10.1 is the newest tag on ghcr.io and still resolves to the digest above. Re-read at once if an sshd or an ssh:// source ever appears. Same statement as OpenAether-infra's (#455 there); issue #224.",
+      "status_notes": "Expires: 2027-01-09. Recorded 2026-11-15: in the image (docker run --network none, as root) apk lists only the three client packages, find finds no sshd, sftp-server or PAM file, /etc/shadow has no $-hash; local Trivy 0.69.3 (database of 2026-11-15) reads the three CRITICAL rows of this CVE without this file and none with it, and three again with the same statement on another digest. No cluster was used."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-123158"
+      },
+      "timestamp": "2026-11-15T00:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/restic@sha256%3A136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510?repository_url=index.docker.io/restic/restic",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/openssh-client-common@10.3_p1-r0"
+            },
+            {
+              "@id": "pkg:apk/alpine/openssh-client-default@10.3_p1-r0"
+            },
+            {
+              "@id": "pkg:apk/alpine/openssh-keygen@10.3_p1-r0"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "OpenSSH password authentication bypass, exploitable through sshd's password check on musl; the client packages carry no password check. The restic 0.19.1 image carries only the OpenSSH client packages (openssh-client-common, openssh-client-default, openssh-keygen 10.3_p1-r0): no openssh-server, no sshd binary, no sshd_config, no host key, no PAM, no account with a password hash; the entrypoint is /entrypoint.sh and the nine workloads that run it are CronJobs and shippers that listen on no port. They reach their repositories with a fixed s3: prefix and call no ssh, sftp, scp or ssh-keygen (the same reading as the CVE-2026-60002 statement above).",
+      "action_statement": "Drop this statement, with the CVE-2026-60002 one, when a restic image carrying OpenSSH 10.3_p1-r2 or later is pinned (issue #221, which also asks to re-read the HIGH rows then). Upstream read on 2026-11-15: 0.19.1 (pushed 2026-07-05, the digest above) is still the newest tag on Docker Hub, not rebuilt. Re-read at once if an sshd or an sftp: repository ever appears.",
+      "status_notes": "Expires: 2027-01-09. Recorded 2026-11-15: in the image (docker run --network none, as root) apk lists only the three client packages, find finds no sshd, sftp-server or PAM file, /etc/shadow has no $-hash; local Trivy 0.69.3 (database of 2026-11-15) reads three CRITICAL rows of this CVE without this file and none with it. The s3: prefix and the absence of ssh calls were re-read in the manifests on 2026-11-15. No cluster was used."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-123158"
+      },
+      "timestamp": "2026-11-15T00:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:oci/forgejo?repository_url=code.forgejo.org/forgejo/forgejo",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/openssh-client-common@10.2_p1-r0"
+            },
+            {
+              "@id": "pkg:apk/alpine/openssh-client-default@10.2_p1-r0"
+            },
+            {
+              "@id": "pkg:apk/alpine/openssh-keygen@10.2_p1-r0"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "OpenSSH password authentication bypass, exploitable through sshd's password check on musl; the client packages carry no password check. The scan of forgejo 15.0.11-rootless lists only the OpenSSH client packages (openssh-client-common, openssh-client-default, openssh-keygen 10.2_p1-r0); Trivy matches every binary package built from the openssh source, so no openssh-server is installed. The forge runs with DISABLE_SSH and START_SSH_SERVER false (git over HTTPS only, port 3000; Forgejo's own SSH server is not OpenSSH anyway), and the two lock-cleaner containers run a shell loop that calls no ssh.",
+      "action_statement": "Drop this statement when a Forgejo chart whose rootless image carries OpenSSH 10.2_p1-r1 or later is pinned (issue #220). Re-read at once if SSH is enabled on the forge. Upstream was NOT read on 2026-11-15: code.forgejo.org is not reachable from the session that wrote this, so whether a fixed 15.0.x image exists is unknown; read it first at the next review.",
+      "status_notes": "Expires: 2027-01-09. Recorded 2026-11-15 from the manifests and the CI scan rows (run 43718431384); the image could not be pulled here, so neither the in-image reading of 2026-11-12 (#455 in OpenAether-infra) was repeated nor was the product match of this statement seen in a local Trivy scan: the next scheduled scan shows it. No cluster was used."
     }
   ]
 }
