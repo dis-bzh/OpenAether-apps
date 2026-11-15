@@ -91,9 +91,9 @@ spec:
         passwordSecret:
           name: zitadel-db-app
 
-  # Monitoring
+  # Monitoring: the `cnpg` VMPodScrape scrapes the instance pods; a PodMonitor needs CRDs we do not install.
   monitoring:
-    enablePodMonitor: true
+    enablePodMonitor: false
 
   # Affinity: preferred anti-affinity to spread the 3 instances across nodes
   # (same config as grafana-db-cluster.yaml)

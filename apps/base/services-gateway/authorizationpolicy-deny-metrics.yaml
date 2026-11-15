@@ -25,7 +25,8 @@
 # repository agrees: the targetPort of service-nodeport.yaml and the ingress ports of the openaether-gateway
 # CiliumNetworkPolicy are 80 and 443. A listener added to the Gateway must be added here:
 # scripts/check-gateway-routes.py fails when a port is left out (a metrics path served there would not be refused).
-# NOT RUN on a cluster: the proof is a sweep that still reads 403 on /metrics.
+# Sweep and Istio warnings read on a cluster in lab 35 (n=1, moving branch ref, not a tag); the proof stays a sweep
+# that reads 403 on /metrics.
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
