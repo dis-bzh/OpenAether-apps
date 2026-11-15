@@ -163,12 +163,10 @@ spec:
     # The key must be named GF_DATABASE_PASSWORD so that grafana.ini resolves
     # it through $__env{GF_DATABASE_PASSWORD}.
     envFromSecret: grafana-db-credentials
-    # OIDC credentials — `optional: true` is ESSENTIAL: until
-    # `secret/grafana/oidc` is seeded into OpenBao, the Secret does not exist.
-    # Without `optional` the pod would stay stuck and Grafana would be TOTALLY
-    # unreachable for want of a not-yet-configured SSO — the opposite of the goal.
-    # With it, Grafana starts, the Zitadel button is simply inert, and
-    # the local admin keeps working.
+    # OIDC credentials — `optional: true` is ESSENTIAL: if the Secret is missing
+    # (no OpenBao, ESO not synced yet) Grafana must still start with its local
+    # admin. Until a real client is written, the configure Job's placeholder
+    # makes the Zitadel button inert (externalsecret-grafana-oidc.yaml).
     envValueFrom:
       GF_AUTH_GENERIC_OAUTH_CLIENT_ID:
         secretKeyRef:
