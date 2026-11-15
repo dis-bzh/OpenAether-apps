@@ -92,14 +92,17 @@ the first scan on main after the merge is still to come. A tag pushed while a sc
 job is still green: observed at the 0.4.2 tag (run 41842416697: `Attach to a draft release` green, four scan jobs red,
 Forgejo, the CNPG operator and the two PostgreSQL images; the last three failed on a ghcr.io rate limit, #197).
 
-**Waivers: one VEX statement, renewed on 2026-11-10 after a re-reading, ending on 2027-01-09.** restic (CVE-2026-60002,
+**Waivers: four VEX statements, all ending on 2027-01-09.** restic (CVE-2026-60002,
 OpenSSH in the image's alpine layer, never called; `restic` 0.19.1, built 2026-07-05, is still the newest tag and was not
-rebuilt, although Alpine has the fixed OpenSSH 10.3_p1-r1). The PyJWT statement for the CNPG PostgreSQL images
+rebuilt, although Alpine has the fixed OpenSSH 10.3_p1-r1), renewed on 2026-11-10 after a re-reading. CVE-2026-123158
+(OpenSSH, exploitable through `sshd` only) on the client packages of the kustomize-controller v1.10.1, restic 0.19.1 and
+Forgejo 15.0.11-rootless images, none of which has an `sshd` (#224, #221, #220), recorded on 2026-11-15; each statement
+names what removes it, and the Forgejo one was written without a local scan (see its `status_notes`). The PyJWT statement for the CNPG PostgreSQL images
 (CVE-2026-102268) was dropped on 2026-11-06 (apps 0.4.4): the new images carry PyJWT 2.15.1. The Trivy ignore entry for
 libexpat in the Longhorn v1.12.1 images (SUSE-SU-2026:4619-1) was deleted with the move to Longhorn 1.12.2 (apps 0.4.5):
 a local Trivy 0.69.3 scan of the 13 Longhorn v1.12.2 images the chart renders (2026-11-10) shows 0 CRITICAL and no libexpat finding in
 the six SLE images. `.github/trivy-ignore.yaml` stays as an empty file because `.github/trivy-image-vex.yaml` names it.
-`scripts/check-vex.py` passes through 2027-01-09 and fails from 2027-01-10 for the statement if it is not re-read again or removed.
+`scripts/check-vex.py` passes through 2027-01-09 and fails from 2027-01-10 for each statement that is not re-read again or removed.
 
 - **VEX:** a finding that does not apply is an OpenVEX statement in `.vex/openaether-apps.openvex.json`
   (`not_affected` with a justification, an `impact_statement`, an `action_statement` and ONE `Expires: YYYY-MM-DD` in
