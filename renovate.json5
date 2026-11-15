@@ -20,6 +20,13 @@
   minimumReleaseAge: "7 days",
   schedule: ["before 6am on monday"],
   timezone: "Europe/Paris",
+  // Mend can run a repository in `mode: silent` (scans, writes no issue and no PR); this turns the App on, as in
+  // OpenAether-infra (#88). The dashboard is the heartbeat: if its issue does not appear, the App is not running.
+  mode: "full",
+  dependencyDashboard: true,
+  // Canary: the dashboard lists every update and none opens a PR until its box is ticked. Dropping this gate
+  // is the owner's call.
+  dependencyDashboardApproval: true,
   labels: ["dependencies"],
   flux: { enabled: true },
 
