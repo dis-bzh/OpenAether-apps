@@ -564,7 +564,9 @@ for d in yaml.safe_load_all(open(sys.argv[1])):
     for g in d["spec"]["groups"]:
         for r in g["rules"]:
             names |= set(re.findall(r'\b(vault_[A-Za-z0-9_]+)', r["expr"]))
-missing = sorted(names - served)
+# Only a standby that has found the active node echoes it (OpenBaoStandbyWithoutActive); this single node is active.
+STANDBY_ONLY = {"vault_ha_rpc_client_echo_count", "vault_ha_rpc_client_echo_errors"}
+missing = sorted(names - served - STANDBY_ONLY)
 print("  rules read:", ", ".join(sorted(names)), "| missing:", missing or "none")
 sys.exit(1 if missing or not names else 0)
 PY

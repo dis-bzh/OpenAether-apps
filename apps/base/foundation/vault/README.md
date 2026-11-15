@@ -188,8 +188,8 @@ the recovery shares that apply afterwards are the SOURCE cluster's:
    must show an `Active Node Address`. A pod that shows none answers `local node not active but active cluster node not found`
    (logins 500) until it is restarted: `kubectl -n foundation-vault delete pod openbao-N` (the PVC stays). In lab 28B (Scaleway, 3 CP + 6 W,
    DR chain) it was `openbao-0` and logins failed for 25+ minutes (INCIDENT: the time until a person restarted it), while only `openbao-1`
-   and `openbao-2` had been restarted: check all three, whoever ran the restore. No alert sees it while another pod is active
-   (`docs/detection.md`).
+   and `openbao-2` had been restarted: check all three, whoever ran the restore. `OpenBaoStandbyWithoutActive` names such a pod after 5 minutes
+   (mocked; not yet fired on a cluster).
 4. Put the source's shares back (delete the fresh `openbao-recovery-shares`, then
    `kubectl create secret generic openbao-recovery-shares --from-file=share-1=openbao-share-1.b64 …`), then resume Flux.
 
@@ -228,7 +228,7 @@ retries does the Job end Failed and come back about 70 minutes later by itself. 
 and clearing on a real cluster. It can NOT show a failed first install, because the VMRule is deployed by `observability`, which waits for
 OpenBao-fed secrets; after an interruption inside the root window, `openbao-init` fails again (see above) and you see it with
 `kubectl -n foundation-vault get jobs` and the dependents staying NotReady. The OpenBao alerts (`OpenBaoWorkloadSealed`,
-`OpenBaoNoActiveNode`, `OpenBaoRaftNoFailureTolerance`, `OpenBaoRaftApplyLag`, `OpenBaoMetricsDown`) and the scrape are in
+`OpenBaoNoActiveNode`, `OpenBaoStandbyWithoutActive`, `OpenBaoRaftNoFailureTolerance`, `OpenBaoRaftApplyLag`, `OpenBaoMetricsDown`) and the scrape are in
 `apps/base/observability-openbao` (see "Metrics, TLS and certificate renewal" below); they are mocked/static, not yet fired on a
 cluster. `networkpolicy.yaml`: the OpenBao policy admits ESO, cert-manager, the snapshot job, vmagent (port 8202 only), the raft
 peers and the two Jobs; each Job has an egress policy of its own (DNS and OpenBao; only `openbao-init` also reaches the

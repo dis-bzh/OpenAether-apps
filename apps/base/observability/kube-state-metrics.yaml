@@ -59,9 +59,11 @@ spec:
     # kube_secret_* or kube_configmap_*. A list REPLACES the default: a collector added upstream later must be
     # added here.
     # The node labels the loss alerts read: the failure domain of each node (topology.kubernetes.io/zone, set by the
-    # Talos machine config) for FailureDomainLost. Only this key: other labels can carry free text.
+    # Talos machine config) for FailureDomainLost. Only this key: other labels can carry free text. The namespace
+    # Enforce label of require-security-context tells KyvernoSecurityContextDenied which fails were denials (apps #82).
     metricLabelsAllowlist:
       - nodes=[topology.kubernetes.io/zone]
+      - namespaces=[kyverno.openaether.io/enforce-require-security-context]
     collectors:
       - certificatesigningrequests
       - cronjobs

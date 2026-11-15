@@ -17,6 +17,12 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+- **Flux error events reach every Alertmanager pod (#218).** One Provider and one Alert per replica, on the pod addresses vmalert already uses; `test-flux-notifications.py` fails when their count differs from the VMAlertmanager `replicaCount` or when the Alerts list different sources. The old `alertmanager` Provider and `flux-errors` Alert are pruned. Rung: mocked; a real Flux error read on both pods is still to do.
+
+- **`OpenBaoStandbyWithoutActive`: an unsealed standby that follows no active node now alerts (#187).** No successful echo to the active node for 5 minutes. The metric names were read on a 2-node OpenBao 2.7.1 raft in Docker (count and errors rise together with the active node paused). Rung: mocked rule tests; the raft-restore state of the issue was not reproduced, and a forwarding client that keeps echoing there would keep the rule quiet.
+
+- **`KyvernoSecurityContextDenied`: denials by `require-security-context` in Enforce-labelled namespaces now alert (#82).** Kyverno counts them as audit, so the rule joins on the namespace label, which kube-state-metrics now exports for that one key. The policy and the Kyverno limits are unchanged. Rung: mocked; the sanitized label name is not read on a cluster yet.
+
 - **The vault configure Job seeds a public placeholder in `grafana/oidc`, create-only (#191).** `ExternalSecret services-observability/grafana-oidc` is Ready on a default install; a real value is never overwritten, and Zitadel knows no such client. Upgrading re-runs both vault Jobs once (the script is in the hashed ConfigMap). Rung: the bootstrap harness against a real OpenBao (red 223/2, green 225/0); not read on a cluster.
 
 - **`openaether-admin` may force a full CRL rebuild (#130).** It gains `read pki/crl/rotate` and `read pki/config/crl`, nothing wider (owner decision of 2026-11-15), so a revocation reaches full-CRL readers without a break-glass token; the runbooks say so. Rung: the same harness, with a throwaway root on the mount (red 228/2, green 230/0); the drill was not re-read on a cluster.

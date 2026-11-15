@@ -257,6 +257,11 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: `kubectl get polr -A` (see `docs/detection.md`).
 - Do: Fix the offending object, or decide the policy is wrong.
 
+### KyvernoSecurityContextDenied
+
+- Check: `kubectl get events -n <namespace> --field-selector reason=PolicyViolation`; the namespace carries `kyverno.openaether.io/enforce-require-security-context=true`, so the object was refused, not admitted.
+- Do: Give the workload a container-level `securityContext` (drop ALL, `allowPrivilegeEscalation: false`, `runAsNonRoot`, seccomp), or roll the flip back: `kubectl label ns <namespace> kyverno.openaether.io/enforce-require-security-context-` (`docs/kyverno-enforcement.md`).
+
 ### KyvernoAdmissionDown
 
 - Check: `kubectl -n kyverno get pods`.
@@ -367,10 +372,11 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: The OpenBao VMServiceScrape (TLS) and the metrics listener.
 - Do: Restore the scrape; the seal alerts are blind meanwhile.
 
-### After an OpenBao raft restore (no alert)
+### OpenBaoStandbyWithoutActive
 
-- Check: `bao status` on each of the three pods, `openbao-0` (the pod the restore ran on) included; every standby must show an `Active Node Address` (#184: lab 28B noted "no active address"; the exact field name was not re-read on a cluster).
-- Do: restart a pod that shows none (logins answer 500, `local node not active but active cluster node not found`): `kubectl -n foundation-vault delete pod openbao-N`, the PVC stays. No alert sees it while another pod is active (`docs/detection.md`). In lab 28B (Scaleway, 3 CP + 6 W, DR chain, INCIDENT) it was `openbao-0`, and logins failed for 25+ minutes, the time until a person restarted it. `apps/base/foundation/vault/README.md`, Disaster recovery, step 3.
+- Check: `bao status` on the pod named by the alert: a standby that follows the leader shows its address; this one answers logins with 500 (`local node not active but active cluster node not found`). `kubectl -n foundation-vault logs <pod>`.
+- Do: restart the pod (`kubectl -n foundation-vault delete pod <pod>`, the PVC stays). Seen after a raft restore into a rebuilt cluster (lab 28B, INCIDENT: 25+ minutes until a person restarted it); the DR chain restarts such a pod itself (`apps/base/foundation/vault/README.md`, Disaster recovery, step 3).
+- How it is seen: an unsealed standby echoes the active node every 5 s (`vault_ha_rpc_client_echo_count`); no echo, or only failed ones (`vault_ha_rpc_client_echo_errors`), for 5 minutes fires it. Mocked on synthetic series; the series names read on a two-node OpenBao in Docker, not on a cluster (`docs/monitoring-0.4.md`).
 
 ### After revoking a certificate of the OpenBao PKI (no alert)
 

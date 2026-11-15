@@ -14,15 +14,16 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 | Loki refusing pushes, a replica down, lines discarded, an ingestion burst | `LokiPushErrors`, `LokiReplicaNotReady`, `LokiDiscardingLogs`, `LokiIngestionBurst` | `vmrule-logging.yaml` |
 | A rule blind because its metrics vanished (Kyverno's only when Kyverno is deployed) | `AlloyMetricsAbsent`, `LokiMetricsAbsent`, `KyvernoMetricsAbsent`, `FluxStateMetricsAbsent`, `CnpgMetricsAbsent` | several |
 | A new object breaks a Kyverno policy (Audit or Enforce) | `KyvernoPolicyViolation` | `vmrule-security.yaml` |
+| `require-security-context` denies an object in a namespace that carries its Enforce label | `KyvernoSecurityContextDenied` | `vmrule-security.yaml` |
 | The Kyverno webhook is down | `KyvernoAdmissionDown`, `KyvernoControllerNotReady` | `vmrule-security.yaml` |
 | Flux object not Ready, or suspended for a day (the HelmRelease `alloy-audit`, suspended by design, is excluded); a commit whose signature Flux rejected | `FluxObjectNotReady`, `FluxObjectSuspended`, `FluxSourceNotVerified` | `vmrule-security.yaml` |
-| Flux itself reports an `error` event (reconciliation failure, rejected signature), whatever the metrics say | Alert `flux-errors` and Provider `alertmanager` (`flux-system`), routed by Alertmanager like the rules | `apps/base/flux/notification-alertmanager.yaml` |
+| Flux itself reports an `error` event (reconciliation failure, rejected signature), whatever the metrics say | Alerts `flux-errors-<i>` and Providers `alertmanager-<i>` (`flux-system`, one pair per Alertmanager pod), routed by Alertmanager like the rules | `apps/base/flux/notification-alertmanager.yaml` |
 | Network policy denials in a loop (no Hubble) | `CiliumPolicyDeniedBurst` | `vmrule-platform.yaml` |
 | `/var` (EPHEMERAL, local-path volumes) filling | `NodeFilesystemFillingUp`, `NodeFilesystemFullIn24h` | `vmrule-cluster.yaml` |
 | A CNPG instance pod left Completed after a node reboot without a drain (CNPG 1.23.1 never restarts it) | `CnpgInstancePodSucceeded` | `vmrule-platform.yaml` |
 | Node clock drift | `NodeClockSkew`, `NodeClockNotSynchronised` | `vmrule-cluster.yaml` |
 | The forge's metrics scrape down for 3 minutes (only where the forge brick is on: no target, no `up` series, no alert) | `ForgejoScrapeDown` | `vmrule-platform.yaml` |
-| An OpenBao pod sealed, no active node, raft without failure tolerance or lagging in applying entries, its metrics not scraped | `OpenBaoWorkloadSealed`, `OpenBaoNoActiveNode`, `OpenBaoRaftNoFailureTolerance`, `OpenBaoRaftApplyLag`, `OpenBaoMetricsDown` | `observability-openbao/vmrule.yaml` |
+| An OpenBao pod sealed, no active node, a standby that follows no active node, raft without failure tolerance or lagging in applying entries, its metrics not scraped | `OpenBaoWorkloadSealed`, `OpenBaoNoActiveNode`, `OpenBaoStandbyWithoutActive`, `OpenBaoRaftNoFailureTolerance`, `OpenBaoRaftApplyLag`, `OpenBaoMetricsDown` | `observability-openbao/vmrule.yaml` |
 | The OpenBao seal-key escrow not attested, or attested too long ago (also when the check has never succeeded) | `OpenBaoEscrowNotAttested` | `vmrule-backup.yaml` |
 | Backups: a restore test or CronJob that no longer runs, WAL archive failing (`CnpgWalNeverArchived`: a Cluster that has never archived a segment and fails now, about 10 to 15 minutes after its creation, which `CnpgWalArchiveFailing` reports later), base backup failed or stale (`CnpgBackupFailed` and `CnpgBackupStale` read the Barman Cloud plugin's `barman_cloud_cloudnative_pg_io_last_*_backup_timestamp` as well as the CNPG collector's: for a plugin backup the collector reports 0, lab 28E; `docs/runbooks.md`) | `RestoreTestStale`, `BackupCronJobMissing`, `CnpgWalArchiveFailing`, `CnpgWalNeverArchived`, `CnpgBackupFailed`, `CnpgBackupStale` | `vmrule-backup.yaml` |
 | The last SUCCESS of a backup or restore test too old (the schedule alone is not enough); the verification alerts on the M2 verifier's series | `BackupNotSucceededRecently`, `RestoreTestNotSucceeding`, `BackupVerificationStale`, `BackupVerificationFailed` | `vmrule-backup-signals.yaml` |
@@ -70,11 +71,6 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 - **Data written by the delivery test to a muted channel.** The receiver answering 2xx is the only acknowledgement.
 - **Alloy keeps log batches in memory only (#119, #80).** Its write-ahead log was tried with the real Alloy of the pinned chart
   and does not replay after a hard restart (`scripts/dev/probe-alloy-wal.sh`): not enabled.
-- **An OpenBao standby that cannot find the active node.** After a raft restore into a rebuilt cluster, `openbao-0` answered `local node not
-  active but active cluster node not found` (logins 500) for 25+ minutes, the time until a person restarted it (lab 28B, Scaleway, 3 CP + 6 W,
-  DR chain, INCIDENT). `OpenBaoNoActiveNode` sums
-  `vault_core_active` over the pods, so it stays quiet while another pod is active, and no rule reads a standby's view of the leader. Run
-  `bao status` on each pod after a restore (`apps/base/foundation/vault/README.md`, Disaster recovery).
 - **`ContinuousArchiving=False` itself.** Only the archiver's counters are read, and a False condition with another cause is not seen.
   `CnpgWalNeverArchived` is a proxy: a Cluster whose counters show no archived segment and a failure in the last 5 minutes. The counters
   restart at 0 after a crash recovery, on a promotion and on a re-cloned instance (so it can name a Cluster that did archive), and it fires on a
@@ -98,7 +94,8 @@ Kyverno records every Audit violation in a policy report, whether or not an aler
 
 `KyvernoPolicyViolation` ignores `require-security-context` until its known violations (vendored charts) are fixed, and
 `require-ro-rootfs` and `require-limits` (informational by design), and ignores background scans (they recount existing
-violations on every pass); the report above is where those are read.
+violations on every pass); the report above is where those are read. A DENIAL by `require-security-context` (a namespace with its
+Enforce label) is `KyvernoSecurityContextDenied`.
 Review it before switching any policy from Audit to Enforce.
 
 ## Log formats and levels

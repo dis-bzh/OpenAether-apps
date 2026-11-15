@@ -1,46 +1,51 @@
 # Flux failures reach the cluster's Alertmanager (#139). Before this, Flux errors (a Kustomization that fails, a
-# HelmRelease that
-# does not install, a commit whose signature is rejected) were seen only through the VMRules, so a cluster whose
-# receiver
-# was not wired showed nothing from Flux itself.
+# HelmRelease that does not install, a commit whose signature is rejected) were seen only through the VMRules, so a
+# cluster whose receiver was not wired showed nothing from Flux itself.
 #
-# The Provider is of type `alertmanager` and points at the in-cluster VMAlertmanager, through its headless Service
-# (vmalert sends to each pod; a Provider takes ONE address, so an event reaches one Alertmanager pod at a time, apps
-# #207): Alertmanager is the one place that knows the receivers (Slack, the dead-man's switch). No URL or credential
-# is needed here, so
-# there is
-# nothing to seed. If the receiver is not configured, Alertmanager is the component that says so.
+# One Provider of type `alertmanager` and one Alert PER Alertmanager pod (apps #218): an alert is held only by the pods
+# it was posted to, and a Provider takes ONE address, so a single Provider on the Service reached one pod at a time.
+# The addresses are the pod FQDNs vmalert sends to (apps #207); scripts/dev/test-flux-notifications.py fails when the
+# count differs from the VMAlertmanager `replicaCount` or when the Alerts' sources differ. Nothing to seed.
 # Only `error` events are sent. A HelmRelease is listed per namespace because the notification controller matches an
-# event
-# source on one namespace; scripts/dev/test-flux-notifications.py fails when a HelmRelease namespace of apps/base is
-# missing.
+# event source on one namespace; the same test fails when a HelmRelease namespace of apps/base is missing.
 #
-# `v1` since apps 0.4.5 (apps #214): it is the storage version of both CRDs from Flux 2.10, which the management cluster
-# runs since OpenAether-infra 0.4.3; the 2.9 CRDs serve `v1beta3` only. The two objects use none of the fields `v1`
-# dropped (`Alert.spec.summary`, `Provider.spec.interval`, `Provider.spec.proxy`).
+# `v1` since apps 0.4.5 (apps #214): the storage version of both CRDs from Flux 2.10. The objects use none of the fields
+# `v1` dropped (`Alert.spec.summary`, `Provider.spec.interval`, `Provider.spec.proxy`).
 apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Provider
 metadata:
-  name: alertmanager
+  name: alertmanager-0
   namespace: flux-system
   labels:
     openaether.io/managed: "true"
     openaether.io/component: flux-notifications
 spec:
   type: alertmanager
-  address: http://vmalertmanager-alertmanager.services-observability:9093/api/v2/alerts
+  address: http://vmalertmanager-alertmanager-0.vmalertmanager-alertmanager.services-observability.svc:9093/api/v2/alerts  # yamllint disable-line rule:line-length
+---
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Provider
+metadata:
+  name: alertmanager-1
+  namespace: flux-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: flux-notifications
+spec:
+  type: alertmanager
+  address: http://vmalertmanager-alertmanager-1.vmalertmanager-alertmanager.services-observability.svc:9093/api/v2/alerts  # yamllint disable-line rule:line-length
 ---
 apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
 metadata:
-  name: flux-errors
+  name: flux-errors-0
   namespace: flux-system
   labels:
     openaether.io/managed: "true"
     openaether.io/component: flux-notifications
 spec:
   providerRef:
-    name: alertmanager
+    name: alertmanager-0
   eventSeverity: error
   eventSources:
     - kind: GitRepository
@@ -70,6 +75,63 @@ spec:
     # The forgejo brick added this repository's first HelmRelease in services-git
     # (git forge, dogfooding V1): without an entry here its install/upgrade errors
     # reach no Alertmanager — the controller matches one namespace per source.
+    - kind: HelmRelease
+      name: "*"
+      namespace: services-git
+    - kind: HelmRelease
+      name: "*"
+      namespace: services-identity
+    - kind: HelmRelease
+      name: "*"
+      namespace: services-observability
+    - kind: HelmRelease
+      name: "*"
+      namespace: services-observability-audit
+    - kind: HelmRelease
+      name: "*"
+      namespace: services-observability-node
+    - kind: HelmRelease
+      name: "*"
+      namespace: capi-clusters
+---
+# Same sources as flux-errors-0 (the test compares them).
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Alert
+metadata:
+  name: flux-errors-1
+  namespace: flux-system
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: flux-notifications
+spec:
+  providerRef:
+    name: alertmanager-1
+  eventSeverity: error
+  eventSources:
+    - kind: GitRepository
+      name: "*"
+      namespace: flux-system
+    - kind: Kustomization
+      name: "*"
+      namespace: flux-system
+    - kind: HelmRelease
+      name: "*"
+      namespace: capi-operator-system
+    - kind: HelmRelease
+      name: "*"
+      namespace: cert-manager
+    - kind: HelmRelease
+      name: "*"
+      namespace: foundation-service-mesh
+    - kind: HelmRelease
+      name: "*"
+      namespace: foundation-storage
+    - kind: HelmRelease
+      name: "*"
+      namespace: kube-system
+    - kind: HelmRelease
+      name: "*"
+      namespace: longhorn-system
     - kind: HelmRelease
       name: "*"
       namespace: services-git

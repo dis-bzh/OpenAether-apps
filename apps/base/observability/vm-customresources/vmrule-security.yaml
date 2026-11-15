@@ -42,6 +42,35 @@ spec:
               An object created in the last 15 min breaks the policy (blocked if Enforce, admitted if Audit).
               kubectl get polr -A | grep fail, then kubectl describe on the report.
 
+        # 1b) A denial by require-security-context (apps #82), which rule 1 leaves out. Kyverno counts it
+        #     policy_validation_mode="audit" even under the Enforce label (computed from the policy, not from
+        #     failureActionOverrides), so the label of the namespace says which admission fails were denials.
+        - alert: KyvernoSecurityContextDenied
+          expr: |
+            sum by (policy_name, rule_name, resource_namespace) (
+              increase(kyverno_policy_results_total{
+                policy_name="require-security-context", rule_result="fail", rule_execution_cause="admission_request"
+              }[15m])
+            ) > 0
+            and on (resource_namespace)
+              label_replace(
+                kube_namespace_labels{label_kyverno_openaether_io_enforce_require_security_context="true"},
+                "resource_namespace", "$1", "namespace", "(.*)"
+              )
+          for: 0m
+          labels:
+            severity: warning
+            component: kyverno
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#\
+              kyvernosecuritycontextdenied"
+            summary: "Kyverno require-security-context denied an object in {{ $labels.resource_namespace }}"
+            description: >-
+              Rule {{ $labels.rule_name }} refused a create in the last 15 min (the namespace carries the Enforce
+              label). kubectl get events -n {{ $labels.resource_namespace }} --field-selector reason=PolicyViolation;
+              roll back with kubectl label ns {{ $labels.resource_namespace }}
+              kyverno.openaether.io/enforce-require-security-context- (docs/kyverno-enforcement.md).
+
         # 2) The admission controller serves the webhook the API server calls. At 0 replicas the policies either block
         #    every create (failurePolicy Fail) or silently stop applying (Ignore); both are an outage of the control.
         - alert: KyvernoAdmissionDown
