@@ -1673,3 +1673,23 @@ tests:
         exp_alerts:
           - exp_labels: {policy_name: require-security-context, rule_name: check-run-as-non-root, resource_namespace: ns-enforced, severity: warning, component: kyverno}
       - {eval_time: 30m, alertname: KyvernoSecurityContextDenied, exp_alerts: []}   # the denial left the 15 min window
+  # infra #430: the ContinuousArchiving condition through kube-state-metrics (customResourceState kube_cnpg_cluster_info).
+  # db-polluted reads False from minute 2; db-ok True; db-new has no condition yet (empty label), which is not False.
+  - name: a Cluster whose ContinuousArchiving condition is False alerts within minutes, True or absent does not (infra issue 430)
+    interval: 1m
+    input_series:
+      - series: 'kube_cnpg_cluster_info{namespace="services-observability", exported_namespace="ns1", name="db-polluted", continuous_archiving="True"}'
+        values: '1x1'
+      - series: 'kube_cnpg_cluster_info{namespace="services-observability", exported_namespace="ns1", name="db-polluted", continuous_archiving="False"}'
+        values: '_x1 1x40'
+      - series: 'kube_cnpg_cluster_info{namespace="services-observability", exported_namespace="ns1", name="db-ok", continuous_archiving="True"}'
+        values: '1x40'
+      - series: 'kube_cnpg_cluster_info{namespace="services-observability", exported_namespace="ns2", name="db-new"}'
+        values: '1x40'
+    alert_rule_test:
+      - {eval_time: 0m, alertname: CnpgContinuousArchivingFalse, exp_alerts: []}
+      - {eval_time: 10m, alertname: CnpgContinuousArchivingFalse, exp_alerts: []}   # pending: rules run every 10m in this file
+      - eval_time: 20m
+        alertname: CnpgContinuousArchivingFalse
+        exp_alerts:
+          - exp_labels: {namespace: ns1, cnpg_io_cluster: db-polluted, severity: critical, component: backup}

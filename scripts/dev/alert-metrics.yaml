@@ -110,6 +110,9 @@ istio_request_duration_milliseconds_bucket:
 istio_requests_total:
   source: istio-gateway
   status: existing
+kube_cnpg_cluster_info:
+  source: kube-state-metrics
+  status: UNVERIFIED
 kube_cronjob_created:
   source: kube-state-metrics
   status: existing

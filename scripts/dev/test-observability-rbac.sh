@@ -121,6 +121,10 @@ if "kube-state-metrics" in charts:
     check("kube-state-metrics: cannot read configmaps", not reads("kube-state-metrics", "configmaps"))
     check("kube-state-metrics: still lists the four Flux kinds (gotk_resource_info) and cronjobs",
           all(reads("kube-state-metrics", k) for k in ("kustomizations", "helmreleases", "gitrepositories", "helmrepositories", "cronjobs")))
+    # CnpgContinuousArchivingFalse (infra #430): list/watch on CNPG Clusters, nothing more on that group.
+    cnpg = [(res, set(verbs)) for r in rs for groups, res, verbs in grants(r) if "postgresql.cnpg.io" in groups]
+    check("kube-state-metrics: lists and watches clusters.postgresql.cnpg.io, nothing else of that group",
+          cnpg == [("clusters", {"list", "watch"})])
     args = [a for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "kube-state-metrics"
             for c in d["spec"]["template"]["spec"]["containers"] for a in c.get("args", []) if a.startswith("--resources")]
     check("kube-state-metrics: --resources lists neither secrets nor configmaps",

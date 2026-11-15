@@ -118,3 +118,25 @@ spec:
             description: >-
               WAL accumulates when archiving or a replication slot lags: the volume fills until PostgreSQL stops.
               Usually seen with CnpgWalArchiveFailing.
+
+        # The ContinuousArchiving condition itself (infra #430), through kube-state-metrics: the counter rules of
+        # vmrule-backup.yaml (CnpgWalNeverArchived, CnpgWalArchiveFailing) see it 10 to 25 minutes late, in a 5m group.
+        # `for` covers a condition that might read False briefly on a new Cluster (not measured).
+        - alert: CnpgContinuousArchivingFalse
+          expr: |
+            max by (namespace, cnpg_io_cluster) (
+              label_replace(label_replace(
+                kube_cnpg_cluster_info{continuous_archiving="False"},
+                "namespace", "$1", "exported_namespace", "(.*)"), "cnpg_io_cluster", "$1", "name", "(.*)")
+            ) == 1
+          for: 3m
+          labels:
+            severity: critical
+            component: backup
+          annotations:
+            runbook_url: "https://github.com/dis-bzh/OpenAether-apps/blob/main/docs/runbooks.md#cnpgcontinuousarchivingfalse"
+            summary: "CNPG {{ $labels.namespace }}/{{ $labels.cnpg_io_cluster }}: ContinuousArchiving is False"
+            description: >-
+              No WAL leaves the Cluster, and its first failover can wedge if the archive path holds another database's
+              WAL (docs/traps.md). kubectl get clusters.postgresql.cnpg.io -n {{ $labels.namespace }} {{ $labels.cnpg_io_cluster }}
+              -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'.
