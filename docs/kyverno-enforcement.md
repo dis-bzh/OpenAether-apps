@@ -126,9 +126,9 @@ The webhook of a policy that matches Pods is `failurePolicy: Fail` (the Kyverno 
 so enforcing a second policy adds no new way to be locked out: with the admission controller down, pod creation is refused in every
 namespace the webhook matches, `kube-system` and `kyverno` excepted (`resourceFilters`). `KyvernoAdmissionDown` alerts. The vendored
 install runs one admission replica: **Kyverno HA is not done here** and belongs with the Kyverno upgrade. Until then, flip no more than one
-policy per release. Note `KyvernoPolicyViolation` ignores `require-security-context`, so a denial by that policy does not page: watch
-`kyverno_policy_results_total{rule_result="fail"}` and the Events of the namespace by hand after its flip.
-No alert is shipped for those denials (apps #82, still open). The label `policy_validation_mode` of that metric is computed from the policy's
+policy per release. `KyvernoPolicyViolation` ignores `require-security-context`; its denials are `KyvernoSecurityContextDenied` (apps #82),
+which reads the admission fails of that policy in the namespaces carrying its Enforce label (kube-state-metrics exports that one namespace
+label). Mocked only: still watch the Events of the namespace after a flip. The label `policy_validation_mode` of that metric is computed from the policy's
 `spec.validationFailureAction` and the rules' `failureAction` (Kyverno 1.19.1, `Spec.HasValidateEnforce` in `api/kyverno/v1/spec_types.go`, used by
 `pkg/metrics/policy_engine.go`), not from `failureActionOverrides`. These policies are Audit with an override per labelled namespace, so a denial there
 is counted as `policy_validation_mode="audit"` (read from the source, then seen once on a cluster: lab 35 move 1, n=1, a really denied Pod was counted `audit`), and a rule on `"enforce"` would never fire.

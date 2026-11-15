@@ -257,6 +257,11 @@ Commands assume `kubectl` access as an operator. Rung of this page: written, not
 - Check: `kubectl get polr -A` (see `docs/detection.md`).
 - Do: Fix the offending object, or decide the policy is wrong.
 
+### KyvernoSecurityContextDenied
+
+- Check: `kubectl get events -n <namespace> --field-selector reason=PolicyViolation`; the namespace carries `kyverno.openaether.io/enforce-require-security-context=true`, so the object was refused, not admitted.
+- Do: Give the workload a container-level `securityContext` (drop ALL, `allowPrivilegeEscalation: false`, `runAsNonRoot`, seccomp), or roll the flip back: `kubectl label ns <namespace> kyverno.openaether.io/enforce-require-security-context-` (`docs/kyverno-enforcement.md`).
+
 ### KyvernoAdmissionDown
 
 - Check: `kubectl -n kyverno get pods`.

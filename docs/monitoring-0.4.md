@@ -65,6 +65,10 @@ Added with `OpenBaoStandbyWithoutActive` (apps #187) and UNVERIFIED: `vault_ha_r
 standby served the count, and with the active node paused both rose by one per echo. Only a standby reports them, so the single-node
 `test-openbao-bootstrap.sh` exempts them: read them with `task check-alerts` on a 3-replica OpenBao.
 
+Added with `KyvernoSecurityContextDenied` (apps #82) and UNVERIFIED: `kube_namespace_labels` with the label
+`label_kyverno_openaether_io_enforce_require_security_context` (kube-state-metrics `metricLabelsAllowlist`, the label name as its
+sanitizer should write it). Read it on a namespace that carries the Enforce label, and deny one Pod there: the alert must fire.
+
 Added with the audit sink (infra #318) and UNVERIFIED, read only with the opt-in component `audit-log-sink` on: `oa_audit_sink_ok{sink}`,
 `oa_audit_sink_last_check_timestamp_seconds{sink}`, `oa_audit_sink_nodes{sink}` and `oa_audit_sink_last_object_age_seconds{sink,node}` (exported by
 `audit-sink-check`, scraped on 9101; the age is computed at each scrape from the LastModified of the newest snapshot object). Read them with

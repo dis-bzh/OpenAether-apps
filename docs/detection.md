@@ -14,6 +14,7 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 | Loki refusing pushes, a replica down, lines discarded, an ingestion burst | `LokiPushErrors`, `LokiReplicaNotReady`, `LokiDiscardingLogs`, `LokiIngestionBurst` | `vmrule-logging.yaml` |
 | A rule blind because its metrics vanished (Kyverno's only when Kyverno is deployed) | `AlloyMetricsAbsent`, `LokiMetricsAbsent`, `KyvernoMetricsAbsent`, `FluxStateMetricsAbsent`, `CnpgMetricsAbsent` | several |
 | A new object breaks a Kyverno policy (Audit or Enforce) | `KyvernoPolicyViolation` | `vmrule-security.yaml` |
+| `require-security-context` denies an object in a namespace that carries its Enforce label | `KyvernoSecurityContextDenied` | `vmrule-security.yaml` |
 | The Kyverno webhook is down | `KyvernoAdmissionDown`, `KyvernoControllerNotReady` | `vmrule-security.yaml` |
 | Flux object not Ready, or suspended for a day (the HelmRelease `alloy-audit`, suspended by design, is excluded); a commit whose signature Flux rejected | `FluxObjectNotReady`, `FluxObjectSuspended`, `FluxSourceNotVerified` | `vmrule-security.yaml` |
 | Flux itself reports an `error` event (reconciliation failure, rejected signature), whatever the metrics say | Alerts `flux-errors-<i>` and Providers `alertmanager-<i>` (`flux-system`, one pair per Alertmanager pod), routed by Alertmanager like the rules | `apps/base/flux/notification-alertmanager.yaml` |
@@ -93,7 +94,8 @@ Kyverno records every Audit violation in a policy report, whether or not an aler
 
 `KyvernoPolicyViolation` ignores `require-security-context` until its known violations (vendored charts) are fixed, and
 `require-ro-rootfs` and `require-limits` (informational by design), and ignores background scans (they recount existing
-violations on every pass); the report above is where those are read.
+violations on every pass); the report above is where those are read. A DENIAL by `require-security-context` (a namespace with its
+Enforce label) is `KyvernoSecurityContextDenied`.
 Review it before switching any policy from Audit to Enforce.
 
 ## Log formats and levels

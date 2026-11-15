@@ -1651,3 +1651,25 @@ tests:
         exp_alerts:
           - exp_labels: {pod: openbao-2, severity: warning, component: openbao}
           - exp_labels: {pod: openbao-3, severity: warning, component: openbao}
+  # apps #82: a denial by require-security-context is counted policy_validation_mode="audit" (lab 35), so only the namespace's
+  # Enforce label tells it from an Audit fail. ns-enforced carries it; ns-audit does not; a background scan is never a denial.
+  - name: a require-security-context fail at admission alerts only in a namespace with its Enforce label (apps issue 82)
+    interval: 1m
+    input_series:
+      - series: 'kube_namespace_labels{namespace="ns-enforced", label_kyverno_openaether_io_enforce_require_security_context="true"}'
+        values: '1x40'
+      - series: 'kube_namespace_labels{namespace="ns-audit"}'
+        values: '1x40'
+      - series: 'kyverno_policy_results_total{policy_name="require-security-context", rule_name="check-run-as-non-root", rule_result="fail", rule_execution_cause="admission_request", resource_namespace="ns-enforced", policy_validation_mode="audit"}'
+        values: '0x10 1x30'
+      - series: 'kyverno_policy_results_total{policy_name="require-security-context", rule_name="check-run-as-non-root", rule_result="fail", rule_execution_cause="admission_request", resource_namespace="ns-audit", policy_validation_mode="audit"}'
+        values: '0x10 1x30'
+      - series: 'kyverno_policy_results_total{policy_name="require-security-context", rule_name="check-run-as-non-root", rule_result="fail", rule_execution_cause="background_scan", resource_namespace="ns-enforced", policy_validation_mode="audit"}'
+        values: '0x20 5x20'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: KyvernoSecurityContextDenied, exp_alerts: []}   # rules run every 10m here (evaluation_interval)
+      - eval_time: 20m
+        alertname: KyvernoSecurityContextDenied
+        exp_alerts:
+          - exp_labels: {policy_name: require-security-context, rule_name: check-run-as-non-root, resource_namespace: ns-enforced, severity: warning, component: kyverno}
+      - {eval_time: 30m, alertname: KyvernoSecurityContextDenied, exp_alerts: []}   # the denial left the 15 min window
