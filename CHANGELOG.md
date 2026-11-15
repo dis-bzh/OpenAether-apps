@@ -17,6 +17,14 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+- **Security: CVE-2026-123158 (OpenSSH, sshd side) on kustomize-controller v1.10.1, restic 0.19.1 and Forgejo 15.0.11-rootless is recorded as `not_affected` (#220, #221, #224).** The images carry the client packages only, no `sshd`; no fixed kustomize-controller or restic image exists upstream on 2026-11-15. Statements expire 2027-01-09. Rung: local Docker and Trivy 0.69.3 for the first two (red without, green with). The Forgejo statement was written from the manifests and the CI scan rows, without a local scan and without reading upstream: the next scheduled scan shows whether it matches.
+
+- **Renovate runs in `mode: full` with the Dependency Dashboard, approval kept (#212).** The config validates; whether the dashboard issue appears is read on GitHub after the next run.
+
+- **`zitadel-db` no longer sets `monitoring.enablePodMonitor` (#213, partly).** The `cnpg` VMPodScrape is the scrape path, as for every other Cluster. The deny-metrics policy comment says what lab 35 read. Rung: static; not read on a cluster.
+
+- **Docs: the stuck Zitadel migration script does not recover a kill inside `03_default_instance` (#144).** `docs/traps.md` says what does.
+
 ## [0.5.0] — 2026-11-15
 
 Performance and sizing release (paired with OpenAether-infra 0.5.0). Theme: use the resources well, neither too much nor too little, without lowering security, resilience or the availability of client apps and data. Measured on real clouds (Scaleway, OVH, Outscale; labs 38 to 56, mostly n=1 or n=2: every figure says its n and its shape, NOMINAL or INCIDENT, in `LAB-*-RESULTS` of the owner's journal). What is not proven is in the entries below and in the infra changelog: write gap on OVH 71-119 s (n=2), write gap during worker rolls not measured, zone loss on Outscale not measured, CAPI child bump not run, one CNPG instance-manager hang seen once (worked around by `stopDelay`, root cause not captured).
