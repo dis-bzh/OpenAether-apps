@@ -20,6 +20,15 @@ spec:
   # promotes one, so the write gap is a failover, not a restart of the only writer.
   primaryUpdateStrategy: unsupervised
   primaryUpdateMethod: switchover
+  # A node drain must not wait for a stuck instance manager (0.5.0 M4, lab 52): after the evicted primary's
+  # PostgreSQL stopped in
+  # 7 s the instance manager (PID 1) hung after "failed waiting for all runnables to end within grace period" and
+  # exited only at
+  # stopDelay (default 1800 s), so `cluster-roll` timed out at 900 s on the first worker. 300 s keeps the 180 s
+  # smart shutdown
+  # window and leaves 120 s for the fast shutdown, and ends a hung manager well inside the drain timeout.
+  # Pinned by scripts/dev/test-cnpg-stop-delay.py.
+  stopDelay: 300
 
   # HA Configuration
   postgresql:
