@@ -10,6 +10,7 @@ carries such a label (the default is today's Audit everywhere), the two policies
 document names every label. It does NOT run Kyverno: that the override denies a pod is in LAB-CHECKLIST (B29).
 Rung: mocked/static.   Usage: python3 scripts/dev/test-kyverno-enforcement.py   (needs kubectl and PyYAML)
 """
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -110,9 +111,11 @@ check("the Cluster guard enforces, ignores a Kyverno outage, and matches Cluster
           for n in CLUSTER_GUARD))
 check("no other policy exists unlisted", set(pol) - MUTATIONS == set(FLIPPABLE) | ALREADY_ENFORCE | ALWAYS_AUDIT | CLUSTER_GUARD, sorted(pol))
 
-# Default off: nothing shipped labels a namespace for Enforce (policies and docs excluded: they spell the label).
+# Default off: nothing shipped SETS the label (a YAML key). Naming it is fine: alert rules and the
+# kube-state-metrics allowlist read it.
+SETS_LABEL = re.compile(re.escape(PREFIX) + r"""[\w-]*["']?\s*:""")
 hits = [str(p.relative_to(REPO)) for p in (REPO / "apps").rglob("*.yaml")
-        if "kyverno-policies" not in p.parts and PREFIX in p.read_text()]
+        if "kyverno-policies" not in p.parts and SETS_LABEL.search(p.read_text())]
 check("no manifest under apps/ labels a namespace for Enforce (the shipped default is Audit everywhere)", not hits, hits)
 
 doc = (REPO / "docs/kyverno-enforcement.md").read_text()
