@@ -58,6 +58,10 @@ belong to. What follows has no skill of its own yet.
   database that holds more than the bootstrap admin; (3) reset the release: `flux reconcile helmrelease zitadel -n services-identity --reset --force`.
   The script is tested against a real Zitadel and PostgreSQL (`scripts/dev/test-zitadel-migration-lock.sh`); its kubectl path (CNPG primary of
   `zitadel-db`) has not run on a cluster. The same two rows can be deleted by hand with `kubectl cnpg psql zitadel-db -n foundation-databases -- -d zitadel`.
+  **The script does NOT recover a kill inside `03_default_instance`** (about 13 s, it writes instance events and unique constraints before its `done`;
+  lab 18, apps #144): clearing the `started` lock lets the next setup run, which then fails `Errors.Instance.Domain.AlreadyExists` for ever. That
+  case needs the whole Zitadel eventstore wiped (first install only) or a restore from the CNPG backup. A plain `kubectl delete pod` does not cause
+  it (Zitadel handles SIGTERM and writes `system.migration.failed`); it takes a hard kill (lost database connection, OOM, node loss).
   A pre-install step that clears a stale `started` migration by itself is not written: it would edit the event store from a hook, which needs a
   cluster to prove (0.4.0, resilience).
 - **A node reboot WITHOUT a drain leaves the CNPG instance pods Completed, and CNPG 1.23.1 never restarts them.** The kubelet's
