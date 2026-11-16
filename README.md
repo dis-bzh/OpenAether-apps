@@ -6,7 +6,7 @@
 
 🇫🇷 [Version française](README.fr.md)
 
-**Versions.** The current version is apps 0.5.0, a performance and sizing release (changelog cut 2026-11-15; notes under `[0.5.0]` in CHANGELOG.md, with what is not proven), paired with OpenAether-infra 0.5.0. It pre-pulls the PostgreSQL images while `cnpg` waits for its dependencies, gates `observability` on the VictoriaMetrics operator, lowers the Longhorn instance-manager CPU and the OpenBao request so that three workers of one zone each can lose a zone, and bounds a node drain behind a stuck CNPG instance manager (`stopDelay: 300`). Upgrade supported from 0.4.5 only.
+**Versions.** The current version is apps 0.5.1, a fix release of 0.5.0 (changelog cut 2026-11-16; notes under `[0.5.1]` in CHANGELOG.md, with what is not proven), paired with OpenAether-infra 0.5.1. No component moves. It adds three alerts (broken CNPG WAL archiving, an OpenBao standby without an active node, Kyverno security-context denials), sends Flux error events to every Alertmanager pod, seeds a placeholder `grafana/oidc` secret so a default install leaves no ExternalSecret stuck, and lets `openaether-admin` force a CRL rebuild. Upgrade supported from 0.5.0 only.
 needs its VictoriaMetrics volumes recreated, which loses their metric history (CHANGELOG, Upgrade notes; #71). It pairs with OpenAether-infra 0.2.1, not with
 0.2.0. The pairing table, what was validated where and what is not fixed are in [CHANGELOG.md](CHANGELOG.md).
 
