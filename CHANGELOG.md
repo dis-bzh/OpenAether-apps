@@ -17,6 +17,8 @@ depuis (#86 côté infra) : ses tâches sont des issues GitHub, ses pièges sont
 
 ## [Unreleased]
 
+- **`CnpgContinuousArchivingFalse`: a CNPG Cluster whose WAL archiving is broken now alerts on the condition itself (infra #430).** kube-state-metrics exports the `ContinuousArchiving` condition of each Cluster (customResourceState, with the RBAC to read Clusters). Rung: real cloud (lab 0.5.1 L1, Scaleway, n=1): metric present for both Clusters, condition False about 40 s after archiving was broken on purpose, alert firing about 5 min after, resolved after the restore.
+
 - **Flux error events reach every Alertmanager pod (#218).** One Provider and one Alert per replica, on the pod addresses vmalert already uses; `test-flux-notifications.py` fails when their count differs from the VMAlertmanager `replicaCount` or when the Alerts list different sources. The old `alertmanager` Provider and `flux-errors` Alert are pruned. Rung: mocked; a real Flux error read on both pods is still to do.
 
 - **`OpenBaoStandbyWithoutActive`: an unsealed standby that follows no active node now alerts (#187).** No successful echo to the active node for 5 minutes. The metric names were read on a 2-node OpenBao 2.7.1 raft in Docker (count and errors rise together with the active node paused). Rung: mocked rule tests; the raft-restore state of the issue was not reproduced, and a forwarding client that keeps echoing there would keep the rule quiet.
