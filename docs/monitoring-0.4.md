@@ -69,6 +69,11 @@ Added with `KyvernoSecurityContextDenied` (apps #82) and UNVERIFIED: `kube_names
 `label_kyverno_openaether_io_enforce_require_security_context` (kube-state-metrics `metricLabelsAllowlist`, the label name as its
 sanitizer should write it). Read it on a namespace that carries the Enforce label, and deny one Pod there: the alert must fire.
 
+Added with `CnpgContinuousArchivingFalse` (infra #430) and UNVERIFIED: `kube_cnpg_cluster_info{exported_namespace,name,continuous_archiving}`
+(kube-state-metrics `customResourceState` on `clusters.postgresql.cnpg.io`). The config was compiled with the kube-state-metrics 2.20.0
+library on sample Clusters (False, True, no condition), not run by a real kube-state-metrics. Read it on a cluster with CNPG: one series
+per Cluster, `continuous_archiving="True"` on a healthy one, the other kube-state-metrics series still there, and no `failed to create metrics factory` in its log.
+
 Added with the audit sink (infra #318) and UNVERIFIED, read only with the opt-in component `audit-log-sink` on: `oa_audit_sink_ok{sink}`,
 `oa_audit_sink_last_check_timestamp_seconds{sink}`, `oa_audit_sink_nodes{sink}` and `oa_audit_sink_last_object_age_seconds{sink,node}` (exported by
 `audit-sink-check`, scraped on 9101; the age is computed at each scrape from the LastModified of the newest snapshot object). Read them with

@@ -21,6 +21,7 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 | Network policy denials in a loop (no Hubble) | `CiliumPolicyDeniedBurst` | `vmrule-platform.yaml` |
 | `/var` (EPHEMERAL, local-path volumes) filling | `NodeFilesystemFillingUp`, `NodeFilesystemFullIn24h` | `vmrule-cluster.yaml` |
 | A CNPG instance pod left Completed after a node reboot without a drain (CNPG 1.23.1 never restarts it) | `CnpgInstancePodSucceeded` | `vmrule-platform.yaml` |
+| A CNPG Cluster whose `ContinuousArchiving` condition is False (kube-state-metrics `customResourceState`; minutes, where the counter rules below take 10 to 25: `docs/runbooks.md#cnpgcontinuousarchivingfalse`) | `CnpgContinuousArchivingFalse` | `vmrule-database.yaml` |
 | Node clock drift | `NodeClockSkew`, `NodeClockNotSynchronised` | `vmrule-cluster.yaml` |
 | The forge's metrics scrape down for 3 minutes (only where the forge brick is on: no target, no `up` series, no alert) | `ForgejoScrapeDown` | `vmrule-platform.yaml` |
 | An OpenBao pod sealed, no active node, a standby that follows no active node, raft without failure tolerance or lagging in applying entries, its metrics not scraped | `OpenBaoWorkloadSealed`, `OpenBaoNoActiveNode`, `OpenBaoStandbyWithoutActive`, `OpenBaoRaftNoFailureTolerance`, `OpenBaoRaftApplyLag`, `OpenBaoMetricsDown` | `observability-openbao/vmrule.yaml` |
@@ -71,15 +72,6 @@ OpenAether-infra) asks a running cluster which metrics the rules read have no da
 - **Data written by the delivery test to a muted channel.** The receiver answering 2xx is the only acknowledgement.
 - **Alloy keeps log batches in memory only (#119, #80).** Its write-ahead log was tried with the real Alloy of the pinned chart
   and does not replay after a hard restart (`scripts/dev/probe-alloy-wal.sh`): not enabled.
-- **`ContinuousArchiving=False` itself.** Only the archiver's counters are read, and a False condition with another cause is not seen.
-  `CnpgWalNeverArchived` is a proxy: a Cluster whose counters show no archived segment and a failure in the last 5 minutes. The counters
-  restart at 0 after a crash recovery, on a promotion and on a re-cloned instance (so it can name a Cluster that did archive), and it fires on a
-  new Cluster whose S3 keys are not seeded yet; the rule is mocked, and fired once on a cluster. **It is not instant: about 10 to 15 minutes after
-  the Cluster is created** (its group is evaluated every 5 minutes; figures: `docs/runbooks.md#cnpgwalneverarchived`). `CnpgWalArchiveFailing` is slower: by its rule
-  (10 minutes of window, then `for: 15m`) about 25 minutes for a Cluster that archived before (not measured). The fast signal is the Cluster's
-  `ContinuousArchiving` condition, read by hand (`docs/traps.md` has the command). A rule on the condition needs kube-state-metrics to
-  read the `Cluster` objects (a `customResourceState` entry and `list`/`watch` on `clusters.postgresql.cnpg.io`, new RBAC): not done, infra #430
-  stays open. The jsonpath command prints it (the bare `kubectl get clusters.postgresql.cnpg.io -A` does not show the condition).
 - **Metrics no cluster has shown.** `docs/monitoring-0.4.md` lists them; `scripts/dev/test-alert-metrics.py` checks offline that
   every metric an alert reads is catalogued with a scrape that exists.
 

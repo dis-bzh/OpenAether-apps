@@ -126,7 +126,7 @@ spec:
     # reconcile durations (kustomize-controller v1.8.5 records no gotk_reconcile_condition), so
     # FluxObjectNotReady (vmrule-platform.yaml) reads this. The mapping is the one of the Flux docs
     # (monitoring/custom-metrics), cut to the four kinds this repo reconciles. The core collectors stay on:
-    # the node, pod and backup rules read them. list+watch on the Flux objects only, no secrets.
+    # the node, pod and backup rules read them. list+watch on the Flux objects and CNPG Clusters only, no secrets.
     customResourceState:
       enabled: true
       config:
@@ -192,6 +192,21 @@ spec:
                     exported_namespace: [metadata, namespace]
                     ready: [status, conditions, "[type=Ready]", status]
                     suspended: [spec, suspend]
+            # The ContinuousArchiving condition of each CNPG Cluster, read by CnpgContinuousArchivingFalse (infra #430):
+            # the archiver counters see a failure only after minutes. KSM skips a GVK whose CRD is absent (no CNPG).
+            - groupVersionKind: {group: postgresql.cnpg.io, version: v1, kind: Cluster}
+              metricNamePrefix: kube_cnpg
+              metrics:
+                - name: cluster_info
+                  help: The ContinuousArchiving condition of a CloudNativePG Cluster.
+                  each:
+                    type: Info
+                    info:
+                      labelsFromPath:
+                        name: [metadata, name]
+                  labelsFromPath:
+                    exported_namespace: [metadata, namespace]
+                    continuous_archiving: [status, conditions, "[type=ContinuousArchiving]", status]
     rbac:
       extraRules:
         - apiGroups:
@@ -199,6 +214,9 @@ spec:
             - kustomize.toolkit.fluxcd.io
             - helm.toolkit.fluxcd.io
           resources: [gitrepositories, helmrepositories, kustomizations, helmreleases]
+          verbs: [list, watch]
+        - apiGroups: [postgresql.cnpg.io]
+          resources: [clusters]
           verbs: [list, watch]
     # podDisruptionBudget: the kube-state-metrics chart expects the raw PDB spec
     # (minAvailable/maxUnavailable), WITHOUT an `enabled` field, which breaks the schema.

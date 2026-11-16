@@ -129,8 +129,8 @@ belong to. What follows has no skill of its own yet.
   `CnpgWalNeverArchived` fires for a Cluster whose archiver counters show no archived segment and a failure in the last 5
   minutes (`for: 5m`): a proxy for the condition with the limits listed in `docs/detection.md`, mocked with the pinned `vmalert-tool`. It is NOT
   immediate: about 10 to 15 minutes after the Cluster is created (`docs/runbooks.md#cnpgwalneverarchived` has the figures). Read the condition yourself after creating a Cluster.
-  **Not in 0.4.1:** an alert on the condition itself (it needs new RBAC for kube-state-metrics, `docs/detection.md`) and a `serverName` chosen
-  per incarnation of a profile Cluster for you (today you set `archiveServerName` yourself, below); both are deferred and infra #430 stays open.
+  `CnpgContinuousArchivingFalse` reads the condition itself through kube-state-metrics (`for: 3m`, mocked, not fired on a cluster).
+  **Not done:** a `serverName` chosen per incarnation of a profile Cluster for you (today you set `archiveServerName` yourself, below; infra #430).
   *Prevent.* Give every incarnation of a Cluster a NEW `serverName` (the `archiveServerName` value of a database profile, `<name>-g2`, see
   `docs/database-profiles.md`) or an EMPTY archive path, and never create a Cluster over a path that holds files; the DR chain already rebuilds on a
   new generation. On a Cluster already running, delete the foreign objects from its path (once you are sure nobody needs them): in lab 28C,
