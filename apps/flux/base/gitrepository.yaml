@@ -22,4 +22,6 @@ spec:
   url: https://github.com/dis-bzh/OpenAether-apps.git
   ref:
     name: ${GIT_REF:=refs/heads/main}
+    # Supply-chain pin (infra #385): the infra side substitutes GIT_COMMIT when git_commit is set; empty = follow the ref only.
+    commit: ${GIT_COMMIT:=}
   timeout: 60s
