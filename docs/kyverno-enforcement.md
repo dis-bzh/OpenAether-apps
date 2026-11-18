@@ -48,7 +48,7 @@ Reasons:
   `securityContext` missing in chart pods), 5 for `restrict-privileged` (ztunnel `hostPath`, exemption since fixed) and 0 for `restrict-image-registries`.
   On a live cluster whose policies were upgraded in place, results for pods that are now exempt stayed in the report for at least 40 minutes (a fresh
   cluster did not list them), so "zero" has to be read on a fresh or refreshed report.
-- The webhook of a Pod policy is `failurePolicy: Fail` and the vendored install runs one admission replica (see "A Kyverno outage" below).
+- The webhook of a Pod policy is `failurePolicy: Fail` and `apps/base/kyverno/patch-ha.yaml` runs two admission replicas (see "A Kyverno outage" below).
 
 What the labs proved: the label mechanism denies on real clusters. Lab 15A (OVH): a hostNetwork pod was admitted with a warning under the old spec-level
 spelling and denied once the rule-level spelling was applied. Lab 16 (Scaleway and OVH, fresh install): the five Enforce policies and the
@@ -124,9 +124,9 @@ reviewed edit of the policy, with the reason in the comment.
 
 The webhook of a policy that matches Pods is `failurePolicy: Fail` (the Kyverno default), and `disallow-root-user` already enforces on Pods,
 so enforcing a second policy adds no new way to be locked out: with the admission controller down, pod creation is refused in every
-namespace the webhook matches, `kube-system` and `kyverno` excepted (`resourceFilters`). `KyvernoAdmissionDown` alerts. The vendored
-install runs one admission replica: **Kyverno HA is not done here** and belongs with the Kyverno upgrade. Until then, flip no more than one
-policy per release. `KyvernoPolicyViolation` ignores `require-security-context`; its denials are `KyvernoSecurityContextDenied` (apps #82),
+namespace the webhook matches, `kube-system` and `kyverno` excepted (`resourceFilters`). `KyvernoAdmissionDown` alerts. The admission
+controller runs two replicas (`apps/base/kyverno/patch-ha.yaml`, apps #82; read from the manifests, not yet on a cluster under load).
+The other three controllers stay single. Still, flip no more than one policy per release. `KyvernoPolicyViolation` ignores `require-security-context`; its denials are `KyvernoSecurityContextDenied` (apps #82),
 which reads the admission fails of that policy in the namespaces carrying its Enforce label (kube-state-metrics exports that one namespace
 label). Mocked only: still watch the Events of the namespace after a flip. The label `policy_validation_mode` of that metric is computed from the policy's
 `spec.validationFailureAction` and the rules' `failureAction` (Kyverno 1.19.1, `Spec.HasValidateEnforce` in `api/kyverno/v1/spec_types.go`, used by
