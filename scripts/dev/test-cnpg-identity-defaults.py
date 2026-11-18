@@ -40,6 +40,7 @@ KNOWN_EMPTY_DEFAULTS = {
     ("apps/components/cnpg-profile-backup/objectstores.yaml", "BACKUP_S3_ENDPOINT"),
     ("apps/base/forgejo-db/objectstores.yaml", "BACKUP_S3_ENDPOINT"),         # the same primary store, for forgejo-db
     ("apps/base/cnpg/restore-scratch.yaml", "BACKUP_S3_ENDPOINT"),             # the scratch copy of the primary store
+    ("apps/flux/base/gitrepository.yaml", "GIT_COMMIT"),                      # optional commit pin (infra #385): null on a CRD string field is pruned; read at the lab
     ("apps/base/backup/databases-identity/configmap.yaml", "CNPG_ARCHIVE_SUFFIX"),  # a ConfigMap value, empty by design (no generation suffix)
 }
 
