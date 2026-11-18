@@ -47,6 +47,11 @@ def gitrepos(docs):
     return [d for d in docs if d["kind"] == "GitRepository"]
 
 
+# Commit pin (infra #385): the source keeps ref.commit as a substitution that defaults to empty, so an infra side that sets GIT_COMMIT
+# is not undone at the first reconcile, and one that does not is unchanged. Static: whether Flux reads an empty commit as unset is a lab question.
+gr = yaml.safe_load((REPO / "apps/flux/base/gitrepository.yaml").read_text().split("\n---\n", 1)[1])
+check("the base GitRepository carries ref.commit as ${GIT_COMMIT:=} (empty by default)", gr["spec"]["ref"].get("commit") == "${GIT_COMMIT:=}", gr["spec"]["ref"])
+
 for name in ("base", "workload", "management"):
     path = REPO / "apps/flux" / name
     if not (path / "kustomization.yaml").exists():
