@@ -1,0 +1,48 @@
+# yamllint disable rule:line-length
+# Audit-only guard on the openbao-ca ClusterIssuer (apps #73). A ClusterIssuer is cluster-scoped, so anyone who can create a
+# Certificate in ANY namespace could otherwise ask the 10-year internal CA for a leaf. It REPORTS (PolicyReport) a
+# Certificate or CertificateRequest outside the namespaces below; it blocks nothing: move to Enforce once the reports are
+# clean on a cluster. failurePolicy Ignore and CREATE/UPDATE only, for the reasons given in kyverno-policies-eso.
+# The excluded namespaces MUST equal the namespaces that really consume the issuer (scripts/check-openbao-ca-consumers.py).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-openbao-ca-issuer
+  annotations:
+    policies.kyverno.io/title: Restrict the openbao-ca ClusterIssuer to its consumers
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/subject: Certificate
+    policies.kyverno.io/description: >-
+      Only the namespaces that hold OpenBao's own certificates may request one from the openbao-ca ClusterIssuer.
+spec:
+  validationFailureAction: Audit
+  failurePolicy: Ignore
+  background: false
+  rules:
+    - name: openbao-ca-consumers-only
+      match:
+        any:
+          - resources:
+              kinds:
+                - cert-manager.io/v1/Certificate
+                - cert-manager.io/v1/CertificateRequest
+              operations:
+                - CREATE
+                - UPDATE
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - foundation-vault
+                - services-gateway
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.issuerRef.name || '' }}"
+            operator: Equals
+            value: openbao-ca
+          - key: "{{ request.object.spec.issuerRef.kind || '' }}"
+            operator: Equals
+            value: ClusterIssuer
+      validate:
+        message: "The openbao-ca ClusterIssuer is reserved for OpenBao's own certificates (foundation-vault, services-gateway)."
+        deny: {}

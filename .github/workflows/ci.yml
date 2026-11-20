@@ -365,6 +365,13 @@ jobs:
           python3 scripts/dev/test-check-externalsecret-namespaces.py
           python3 scripts/check-externalsecret-namespaces.py
 
+      # The Audit policy on the openbao-ca ClusterIssuer names exactly the namespaces that use it (apps #73).
+      - name: openbao-ca consumers match the Kyverno policy
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test-check-openbao-ca-consumers.py
+          python3 scripts/check-openbao-ca-consumers.py
+
   # The ruleset on main requires both "Platform contracts" and the old check name "Kustomize Build + Collision Check",
   # and a required name that nothing reports makes every pull request wait forever. This job reports the old name,
   # and passes only when `build` ("Platform contracts") finished with exactly `success`. It stays for good (owner
