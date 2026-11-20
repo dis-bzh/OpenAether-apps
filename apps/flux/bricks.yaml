@@ -100,7 +100,7 @@ descriptions:
   kyverno: Kyverno (policy engine)
   kyverno-policies: OpenAether Kyverno policies
   kyverno-policies-eso: Audit-only Kyverno policy, External Secrets objects outside the platform namespaces
-  kyverno-policies-cert-manager: Audit-only Kyverno policy, the openbao-ca ClusterIssuer is for OpenBao's own certificates
+  kyverno-policies-cert-manager: Audit-only Kyverno policy, the openbao-ca ClusterIssuer stays OpenBao's own
   kyverno-policies-cnpg: Enforce Kyverno policy, the scratch Clusters of the restore tests stay scratch
   cluster-api-operator: CAPI operator (management layer)
   cluster-api-providers: CAPI providers (Talos, Scaleway, OpenStack, Outscale)

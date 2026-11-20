@@ -1,3 +1,4 @@
+# yamllint disable rule:line-length
 # Audit-only guard on the openbao-ca ClusterIssuer (apps #73). A ClusterIssuer is cluster-scoped, so anyone who can create a
 # Certificate in ANY namespace could otherwise ask the 10-year internal CA for a leaf. It REPORTS (PolicyReport) a
 # Certificate or CertificateRequest outside the namespaces below; it blocks nothing: move to Enforce once the reports are
