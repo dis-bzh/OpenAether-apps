@@ -3,6 +3,9 @@
 # value: a seeding run can never rotate a secret that is already there, and it can not read one back.
 path "secret/data/backup/s3-primary"                      { capabilities = ["create"] }
 path "secret/data/backup/s3-replica"                      { capabilities = ["create"] }
+# The verifier's read-only pairs (apps #148), seeded only when the operator gives them.
+path "secret/data/backup/s3-verify-primary"               { capabilities = ["create"] }
+path "secret/data/backup/s3-verify-replica"               { capabilities = ["create"] }
 path "secret/data/observability/loki-s3"                  { capabilities = ["create"] }
 path "secret/data/observability/alertmanager-slack"       { capabilities = ["create"] }
 path "secret/data/observability/alertmanager-deadmansswitch" { capabilities = ["create"] }

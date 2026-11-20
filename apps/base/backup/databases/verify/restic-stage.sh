@@ -5,9 +5,13 @@
 #   dataset <TAB> store <TAB> 1|0|skip <TAB> time of the latest snapshot <TAB> message
 # A repository that does not exist, or has no snapshot, is "skip" (a fresh cluster, or a brick that is not picked):
 # the dedicated freshness alerts of the backup jobs own that case. Anything else wrong is 0.
+# Every restic call runs --no-lock: the pair of the verifier may be read-only (apps #148, README "Verification"), and a
+# lock is a write. Unsafe against a concurrent `forget --prune`; the verifier runs hours after the backup jobs.
 set -u
 RESULTS="${RESULTS:-/results}"; WORK="${WORK:-/work}"; OUT="$RESULTS/restic.tsv"; : > "$OUT"
 : "${CLUSTER_NAME:?}"
+[ "${VERIFY_KEYS:-}" = read-only ] && echo "verifier keys: read-only pair (backup-verify-env)" \
+  || echo "WARNING verifier keys: the write-capable pair of the backup jobs (seed backup/s3-verify-primary and -replica, apps #148)" >&2
 M="${RESTIC_SUBSET_PARTS:-10}"
 N=$(( $(date -u +%j | sed 's/^0*//') % M + 1 ))
 export RESTIC_CACHE_DIR="${RESTIC_CACHE_DIR:-/tmp/restic-cache}"
@@ -16,7 +20,7 @@ one() { # dataset store endpoint bucket path host restore(yes|no) ak sk
   ds="$1"; store="$2"; host="$6"; restore="$7"
   export RESTIC_REPOSITORY="s3:${3}/${4}/${CLUSTER_NAME}/${5}" AWS_ACCESS_KEY_ID="$8" AWS_SECRET_ACCESS_KEY="$9"
   err="$(mktemp)"
-  if ! timeout "${RESTIC_CAT_TIMEOUT:-120}" restic cat config >/dev/null 2>"$err"; then
+  if ! timeout "${RESTIC_CAT_TIMEOUT:-120}" restic --no-lock cat config >/dev/null 2>"$err"; then
     if grep -qiE 'does not exist|Is there a repository|unable to open config file: .*(NoSuchKey|not found|does not exist)' "$err"; then
       emit "$ds" "$store" skip "" "no repository at ${5}"
     else
@@ -25,21 +29,21 @@ one() { # dataset store endpoint bucket path host restore(yes|no) ak sk
     return
   fi
   # A failed listing is a failure, not "no snapshot yet": a skip leaves no series and no alert (lab 19: the daily openbao-snapshot
-  # held the repository's lock while the verifier read it, and the dataset was reported as a skip). --retry-lock waits for it.
-  if ! list="$(timeout 600 restic snapshots --json --latest 1 --host "$host" --retry-lock 3m 2>"$err")"; then
+  # held the repository's lock while the verifier read it, and the dataset was reported as a skip; --no-lock never waits on one).
+  if ! list="$(timeout 600 restic --no-lock snapshots --json --latest 1 --host "$host" 2>"$err")"; then
     emit "$ds" "$store" 0 "" "snapshots unreadable: $(tail -1 "$err" | tr '\t' ' ')"; return
   fi
   snap="$(printf '%s' "$list" | sed -n 's/.*"time":"\([^"]*\)".*/\1/p' | head -1)"
   if [ -z "$snap" ]; then emit "$ds" "$store" skip "" "no snapshot yet"; return; fi
-  if ! timeout 3000 restic check --retry-lock 3m --read-data-subset="${N}/${M}" >"$err" 2>&1; then
+  if ! timeout 3000 restic --no-lock check --read-data-subset="${N}/${M}" >"$err" 2>&1; then
     emit "$ds" "$store" 0 "$snap" "restic check ${N}/${M} failed: $(grep -iE 'error|fatal|pack|id' "$err" | head -2 | tr '\n\t' '  ')"; return
   fi
   if [ "$restore" = yes ]; then
     rm -rf "${WORK:?}/$ds/$store"; mkdir -p "$WORK/$ds/$store"
-    if ! restic restore latest --retry-lock 3m --host "$host" --target "$WORK/$ds/$store" >"$err" 2>&1; then
+    if ! restic --no-lock restore latest --host "$host" --target "$WORK/$ds/$store" >"$err" 2>&1; then
       emit "$ds" "$store" 0 "$snap" "restore of the latest snapshot failed: $(tail -1 "$err" | tr '\t' ' ')"; return
     fi
-  elif ! restic ls latest --retry-lock 3m --host "$host" 2>/dev/null | grep -q '\.dump$'; then
+  elif ! restic --no-lock ls latest --host "$host" 2>/dev/null | grep -q '\.dump$'; then
     emit "$ds" "$store" 0 "$snap" "the latest snapshot holds no .dump file"; return
   fi
   emit "$ds" "$store" 1 "$snap" "restic check ${N}/${M} passed"
