@@ -12,7 +12,8 @@
 # observability brick), see verify/collect.py. A failed check is a metric and a log line, not a failed Job: the Job
 # fails only when the verifier itself cannot run. Only stage 3 holds a ServiceAccount token (apps #74), and only the
 # right to patch one ConfigMap and, through storage/backup-target, to read the Longhorn backup objects.
-# The key pairs are the ones of the backup jobs (restic needs to write its lock files): a read-only pair is a follow-up.
+# Key pairs: the READ-ONLY ones of backup-verify-env when seeded (restic --no-lock, Barman reads only), else, with a
+# warning in the log, those of the backup jobs, which can delete (apps #148).
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -70,6 +71,7 @@ spec:
               command: ["/bin/sh", "/scripts/restic-stage.sh"]
               envFrom:
                 - secretRef: { name: backup-restic-env }
+                - secretRef: { name: backup-verify-env, optional: true }  # read-only pair, if seeded
                 - configMapRef: { name: cluster-identity }
               securityContext:
                 capabilities: { drop: ["ALL"] }
@@ -95,6 +97,7 @@ spec:
                 - { name: HOME, value: /tmp }
               envFrom:
                 - secretRef: { name: backup-restic-env }
+                - secretRef: { name: backup-verify-env, optional: true }  # read-only pair, if seeded
                 - configMapRef: { name: cluster-identity }   # CNPG_ARCHIVE_SUFFIX: the archive the clusters write now
               securityContext:
                 capabilities: { drop: ["ALL"] }

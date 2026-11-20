@@ -324,8 +324,11 @@ cluster for `cnpg`) passed its check**: then the store without repository or arc
 (`oa_backup_verify_ok{dataset} 0`, `oa_backup_verify_store_ok{dataset,store} 0`, message `MISSING ...`; apps #151). Not detected: both
 stores wiped at once (nothing is left to compare; the freshness alerts of the jobs and `BackupNotSucceededRecently` are the only signal). What it does NOT prove: that a restore into a running
 database or etcd works (the restore tests, M3), and that a byte flipped inside an etcd snapshot's data pages (no hash trailer) is
-seen (`etcdutl snapshot status` would; restic's own authentication covers the stored copy). It uses the key pairs of the backup
-Jobs (restic needs to write its lock files); a read-only pair is a follow-up.
+seen (`etcdutl snapshot status` would; restic's own authentication covers the stored copy). Key pairs (apps #148): restic runs `--no-lock` (unsafe against a concurrent
+`forget --prune`; the verifier runs hours after the backup Jobs) and Barman only reads, so the verifier can run on READ-ONLY pairs: seed
+`backup/s3-verify-primary` and `backup/s3-verify-replica` (`access_key`, `secret_key`; OpenAether-infra `backup-key-recipe.sh verify-primary|verify-replica`).
+`backup-verify-env` is optional: without those paths the verifier keeps the write-capable pairs of the backup Jobs and logs a WARNING. Not proven on a
+real store: that a read-only pair is enough for `restic check` and the Barman read (lab), and the isolation assertion of the pair (OVH has no bucket policy, infra #379).
 
 ## A completed Backup is not a restore point yet (the end WAL)
 
