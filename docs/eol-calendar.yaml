@@ -76,6 +76,18 @@ components:
   note: a fresh install lands on 1.21.2; a running 1.15 cluster steps one minor at a time (docs/patching.md)
   owner: '@vde-dis'
   next_review: '2026-12-14'
+- id: trust-manager
+  brick: trust-manager
+  component: trust-manager
+  pin: v0.26.0
+  file: apps/base/trust-manager/helmrelease.yaml
+  pattern: chart:\s*trust-manager\s*\n\s*version:\s*"?([^"\s]+)
+  cycle: trust-manager 0.26
+  eol: unknown
+  eol_source: https://cert-manager.io/docs/trust/trust-manager
+  note: not consumed yet (apps #78, step 1); the project publishes no support schedule, so none is assumed
+  owner: '@vde-dis'
+  next_review: '2026-12-14'
 - id: longhorn
   brick: storage
   component: longhorn

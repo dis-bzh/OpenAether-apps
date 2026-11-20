@@ -1,0 +1,52 @@
+# yamllint disable rule:line-length
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: trust-manager
+  namespace: cert-manager
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: trust-manager
+spec:
+  description: "trust-manager: webhook ingress from the kube-apiserver, metrics from vmagent; egress DNS and kube-apiserver only."
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: trust-manager
+  ingress:
+    # kube-apiserver -> Bundle validating webhook. On Talos the static apiserver pod is a node identity (remote-node), as for cert-manager.
+    - fromEntities:
+        - kube-apiserver
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: services-observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "9402"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            serviceName: kubernetes
+            namespace: default
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

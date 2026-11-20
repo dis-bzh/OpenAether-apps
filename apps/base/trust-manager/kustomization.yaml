@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# trust-manager (apps #78): copies a CA bundle from the cert-manager namespace (its trust namespace) into ConfigMaps of
+# other namespaces, so a client can verify a server certificate and follow a CA renewal. It is the operator only: the
+# Bundles live with the CA they publish (apps/base/cnpg-ca), because a Bundle needs the CRDs this brick installs.
+resources:
+  - helmrelease.yaml
+  - networkpolicy.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      openaether.io/managed: "true"
+      openaether.io/component: "trust-manager"
