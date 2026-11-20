@@ -1,3 +1,4 @@
+# yamllint disable rule:line-length
 # Group 13d — trust-manager and the CNPG CA (apps #78, step 1: nothing consumes the Bundle yet).
 # Two Kustomizations: the Bundle CRD exists only once the trust-manager HelmRelease is installed (an operator and its own
 # CRs need two, see the flux-dag skill).
