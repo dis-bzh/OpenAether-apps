@@ -1,0 +1,47 @@
+# The CA behind the CNPG server certificates (apps #78), in the cert-manager namespace for the reason given in
+# foundation/vault-ca: a ClusterIssuer resolves its CA Secret there, and trust-manager reads its sources there.
+# Dedicated and self-signed on purpose, like openbao-ca: CNPG must not depend on OpenBao to get a certificate.
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: cnpg-selfsigned
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg-ca
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cnpg-ca
+  namespace: cert-manager
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg-ca
+spec:
+  isCA: true
+  commonName: openaether-cnpg-ca
+  secretName: cnpg-ca
+  duration: 87600h
+  renewBefore: 8760h
+  # Never re-keyed on renewal: a new key would need every server certificate and every client bundle replaced in one step.
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Never
+  issuerRef:
+    name: cnpg-selfsigned
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: cnpg-ca
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg-ca
+spec:
+  ca:
+    secretName: cnpg-ca

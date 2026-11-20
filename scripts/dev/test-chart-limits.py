@@ -25,6 +25,7 @@ TARGETS = {
     "observability/alloy.yaml": {"DaemonSet/alloy": 380},
     "observability/alloy-audit.yaml": {"DaemonSet/alloy-audit": 0},
     "cert-manager/helmrelease.yaml": {"Deployment/cert-manager-cainjector": 0, "Deployment/cert-manager-webhook": 0},
+    "trust-manager/helmrelease.yaml": {"Deployment/trust-manager": 0},
     "identity/zitadel/helmrelease.yaml": {"Deployment/zitadel-login": 0},
     "observability/grafana.yaml": {"Deployment/grafana": 0},
     "forgejo/helmrelease.yaml": {"Deployment/forgejo": 0},

@@ -1,0 +1,26 @@
+# Publishes the PUBLIC half of the CNPG CA (key ca.crt of the cnpg-ca Secret) as a ConfigMap `cnpg-ca-bundle` in the namespaces
+# of the PostgreSQL clients (apps #78), listed by name: a label selector would hand it to whoever can label a namespace.
+# Nothing mounts it yet; the clients switch to verify-full in step 2, after a lab.
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: cnpg-ca-bundle
+  labels:
+    openaether.io/managed: "true"
+    openaether.io/component: cnpg-ca
+spec:
+  sources:
+    - secret:
+        name: cnpg-ca
+        key: ca.crt
+  target:
+    configMap:
+      key: ca.crt
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            - services-identity
+            - services-observability
+            - services-git

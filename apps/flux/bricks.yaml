@@ -78,6 +78,8 @@ descriptions:
   external-secrets-stores: shared openbao ClusterSecretStore
   cert-manager: cert-manager (TLS webhooks, internal certs)
   cert-manager-issuers: openbao ClusterIssuer (OpenBao PKI)
+  trust-manager: trust-manager (copies a CA bundle into other namespaces)
+  cnpg-ca: stable CA for the CNPG server certificates, and its Bundle (apps #78)
   istio: Istio ambient (istiod, CNI, ztunnel)
   istio-authorizationpolicies: mesh AuthorizationPolicies
   services-gateway: north-south Gateway + openaether TLS cert
