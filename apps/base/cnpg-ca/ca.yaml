@@ -1,3 +1,4 @@
+# yamllint disable rule:line-length
 # The CA behind the CNPG server certificates (apps #78), in the cert-manager namespace for the reason given in
 # foundation/vault-ca: a ClusterIssuer resolves its CA Secret there, and trust-manager reads its sources there.
 # Dedicated and self-signed on purpose, like openbao-ca: CNPG must not depend on OpenBao to get a certificate.
