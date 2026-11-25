@@ -51,7 +51,8 @@ spec:
   # install every retryInterval WITHOUT the uninstall that remediation would run (Longhorn's pre-delete Job refuses
   # it while deleting-confirmation-flag is false, checked in longhorn-manager v1.12.1 and not re-read at 1.12.2, and
   # could remove data if true).
-  # The upgrade path keeps retries 0 and the default strategy on purpose.
+  # The upgrade path retries the same way (no remediation, so no rollback; measured in lab 66: recovered <= 30 s after
+  # the cause was removed, never retried without the strategy; apps #143).
   install:
     crds: CreateReplace
     strategy:
@@ -61,6 +62,9 @@ spec:
       retries: 0
   upgrade:
     crds: CreateReplace
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 2m
     remediation:
       retries: 0
       remediateLastFailure: false

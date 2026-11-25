@@ -48,7 +48,9 @@ for phase in ("install", "upgrade"):
 # the cluster runs (vendored gotk-components.yaml) and be valid there: name in the enum, retryInterval matching its pattern.
 strat = spec["install"].get("strategy", {})
 check(strat.get("name") == "RetryOnFailure", "install.strategy.name is RetryOnFailure (a transient first-install error is retried, apps #134)")
-check("strategy" not in spec["upgrade"], "the upgrade path keeps the default strategy (a failed engine upgrade is not retried)")
+ustrat = spec["upgrade"].get("strategy", {})
+check(ustrat.get("name") == "RetryOnFailure" and ustrat.get("retryInterval") == strat.get("retryInterval"),
+      "upgrade.strategy is RetryOnFailure too (retried without rollback; remediation.retries stays 0, apps #143)")
 gotk = (REPO / "apps/base/cluster-api-clusters/flux-gotk/gotk-components.yaml").read_text()
 crd = next(d for d in yaml.safe_load_all(gotk) if d and d.get("kind") == "CustomResourceDefinition" and d["spec"]["names"]["kind"] == "HelmRelease")
 sch = next(v for v in crd["spec"]["versions"] if v["name"] == "v2")["schema"]["openAPIV3Schema"]["properties"]["spec"]["properties"]["install"]["properties"]["strategy"]
