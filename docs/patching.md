@@ -189,7 +189,7 @@ once on a transient `etcdserver: request timed out` (server-side apply of `longh
 pre-delete Job refuses it while `deleting-confirmation-flag` is `false` (the default, and what this repository keeps), and with the flag `true` an
 uninstall could remove data, so `install.remediation.retries` stays 0. Since 0.3.2 the HelmRelease sets `install.strategy: RetryOnFailure`
 (`retryInterval: 2m`, helm-controller 1.6): a failed install is retried by itself with no uninstall, the next attempt applying over the failed one.
-The upgrade path is unchanged (no retry). Verified on a manifest check only; a cluster has to show it (see the 0.3.2 changelog). If a release is
+The upgrade path retries the same way (`upgrade.strategy: RetryOnFailure`, no remediation, so still no rollback; apps #143): a lab held the cause for 4 min 30 and the release recovered within 30 s of its removal, while a release without the strategy was never retried. If a release is
 nevertheless Stalled, read the failure, then reset it:
 
 ```
